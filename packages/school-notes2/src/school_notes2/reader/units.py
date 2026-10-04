@@ -11,9 +11,9 @@ from ..wiki import banners, frontmatter
 from ..wiki.pages import links, resolve, wiki_pages
 
 
-def page_key(repo: Path, page: str, *, banner_image: str | None = None) -> str:
+def page_key(repo: Path, page: str, *, banner_image: str | None = None, legacy_notices=False) -> str:
     from ..wiki.author import part
-    text = part(safefs.read_text(repo, page))
+    text = part(safefs.read_text(repo, page), legacy_notices=legacy_notices)
     text = re.sub(r"\n?" + commissions.MARKER.pattern + r"\n{0,2}", "", text)
     meta = frontmatter.split(safefs.read_text(repo, page)).meta
     if meta.get("banner_from"):

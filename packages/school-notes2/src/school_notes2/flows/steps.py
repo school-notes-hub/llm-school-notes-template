@@ -2,7 +2,6 @@
 check, generation. Steps 5–6 also run after a rebase (G4) and for the MCP `check`."""
 
 import hashlib
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -19,7 +18,7 @@ from ..state.files import write_json
 from ..state.phase import Task
 from ..wiki.author import part as _llm_part
 from ..wiki import check as wiki_check
-from ..wiki import frontmatter, generate, guard, machine, markers, public
+from ..wiki import generate, guard, machine, public
 from ..wiki import order as wiki_order
 from ..wiki.check_result import check_result
 from . import fetch as fetch_flow

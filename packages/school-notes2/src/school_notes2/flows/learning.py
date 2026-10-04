@@ -4,6 +4,7 @@ No new phase: each deterministic write is recorded BEFORE replacement so a crash
 between writes (or before replacement) can resume through the normal path guard.
 """
 
+import json
 from datetime import date
 
 import yaml
@@ -96,8 +97,21 @@ def _metadata_problems(rel: str, text: str, repo=None, banner_reader=read_page) 
     return messages
 
 
+def migrate(ctx: Ctx, task: Task) -> None:
+    """Replay-safe hotfix bookkeeping, before assignment or generated-page writes."""
+    from ..reader import verdicts
+    from ..review import generated
+    journal.settle(ctx, task)
+    records = verdicts.rekeyed(ctx.notes_path)
+    if records is not None:
+        journal.write(ctx, task, verdicts.PATH, json.dumps(records, ensure_ascii=False, indent=2) + "\n", whole=True)
+    for rel, text in generated.owner_updates(ctx.notes_path):
+        journal.write(ctx, task, rel, text, whole=True)
+
+
 def refresh(ctx: Ctx, task: Task, *, today: date | None = None) -> None:
     repo = ctx.notes_path
+    migrate(ctx, task)
     today = observation_date(task, today)
     validate(ctx, task)
     journal.settle(ctx, task)

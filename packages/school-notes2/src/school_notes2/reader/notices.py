@@ -4,7 +4,7 @@ import hashlib
 import re
 
 from ..figures import commissions, pending, requests
-from ..review import figure_waiting, relations
+from ..review import figure_waiting, generated, relations
 from ..state import safefs
 from ..wiki import drafts, frontmatter, lesson_log, markers
 from . import verdicts
@@ -18,64 +18,65 @@ def refresh(repo, pages):
     known = relations.inventory(repo)["items"]
     waiting = pending.load(repo)
     waiting += [{"commission": r} for r in requests.active(repo)]
-    waiting = list({e["commission"]["id"]: e for e in waiting}.values())
+    waiting = sorted({e["commission"]["id"]: e for e in waiting}.values(),
+                     key=lambda e: (e["commission"]["page"], e["commission"]["id"]))
     nightly_waiting = figure_waiting.active(repo)
     written = []
     for page in sorted(set(pages)):
         if not safefs.is_file(repo, page) or not page.endswith(".md"):
             continue
         original = safefs.read_text(repo, page)
-        text = original
-        for name in markers.names(text):
-            if name.startswith(("pending-section-", "pending-figure-")):
-                text = markers.replace(text, name, "")
-        items = [i for i in known.values() if i.get("file") == page and i["status"] in ("open", "owner")]
-        page_notice = verdicts.valid(repo, page) is None or any(i.get("unlocated") for i in items)
-        sections = set()
-        for item in items:
-            quote = item.get("quote", "")
-            pattern = r"\s+".join(re.escape(w) for w in quote.split())
-            found = re.search(pattern, text) if pattern else None
-            headings = list(re.finditer(r"^#{1,6} .+$", text[:found.start()], re.M)) if found else []
-            if headings:
-                sections.add(headings[-1][0])
-            else:
-                page_notice = True
-        for heading in sorted(sections):
-            name = "pending-section-" + hashlib.sha256(heading.encode()).hexdigest()[:12]
-            if name in markers.names(text):
-                text = markers.replace(text, name, SECTION)
-            else:
-                text = text.replace(heading + "\n", heading + "\n\n" + markers.wrap(name, SECTION) + "\n", 1)
-        notice = PAGE if page_notice else drafts.NOTICE if frontmatter.split(text).meta.get("status") == "draft" else ""
-        text = lesson_log.after_header(text, "pending", notice)
-        for entry in sorted(waiting, key=lambda e: (e["commission"]["page"], e["commission"]["id"])):
-            brief = entry["commission"]
-            if brief["page"] != page:
-                continue
-            name = "pending-figure-" + brief["id"]
-            if name in markers.names(text):
-                text = markers.replace(text, name, FIGURE)
-            else:
-                pattern = re.compile(commissions.MARKER.pattern + r"(?:\n|$)")
-                text = pattern.sub(lambda m: m[0] + "\n" + markers.wrap(name, FIGURE) + "\n"
-                                   if m[1] == brief["id"] else m[0], text)
-        for entry in nightly_waiting:
-            spec = entry["spec"]
-            if spec["page"] == page:
-                text = _night_figure(text, spec)
+        text = markers.clean_nested_notices(original)
+        names = {name for _, _, name in markers.spans(text)
+                 if markers.is_notice(name)}
+        text = markers.remove(text, names)
+        items = [i for i in known.values() if i.get("file") == page and i["status"] in ("open", "owner")
+                 and not generated.only_literals(original, i.get("quote", ""))]
+        placements = _placements(text, items, waiting, nightly_waiting, page, verdicts.valid(repo, page) is None)
+        for cut, (_, name, body) in sorted(placements.items(), reverse=True):
+            text = text[:cut] + "\n" + markers.wrap(name, body) + "\n" + text[cut:]
         if text != original:
             safefs.write_text(repo, page, text)
             written.append(page)
     return written
 
 
-def _night_figure(text, spec):
-    name = "pending-figure-" + spec["id"]
-    if name in markers.names(text):
-        return markers.replace(text, name, FIGURE)
-    heading = next((h[0] for h in re.finditer(r"^#{1,6} (.+)$", text, re.M)
-                    if h[1] == spec["anchor"]), None)
-    if heading:
-        return text.replace(heading + "\n", heading + "\n\n" + markers.wrap(name, FIGURE) + "\n", 1)
-    return lesson_log.after_header(text, name, FIGURE)
+def _placements(text, items, waiting, nightly_waiting, page, page_notice):
+    placements = {}
+    def add(cut, priority, name, body):
+        cut = markers.outside(text, cut)
+        candidate = (priority, name, body)
+        placements[cut] = min(placements.get(cut, candidate), candidate)
+    headings = list(re.finditer(r"^#{1,6} .+$", text, re.M))
+    blocks = markers.spans(text)
+    for item in items:
+        found = generated.matches(text, item.get("quote", ""))
+        # Prefer an authored occurrence when the same words also occur in tool text.
+        found = [m for m in found if not any(a <= m.start() and m.end() <= b for a, b, _ in blocks)]
+        preceding = [h for h in headings if found and h.start() <= found[0].start()]
+        if item.get("unlocated") or not preceding:
+            page_notice = True
+            continue
+        heading = preceding[-1]
+        occurrence = sum(h[0] == heading[0] for h in preceding)
+        identity = heading[0] + (f"\n{occurrence}" if occurrence > 1 else "")
+        name = "pending-section-" + hashlib.sha256(identity.encode()).hexdigest()[:12]
+        add(heading.end() + int(text[heading.end():heading.end() + 1] == "\n"), 2, name, SECTION)
+    if page_notice:
+        add(lesson_log.header_end(text), 1, "pending", PAGE)
+    elif frontmatter.split(text).meta.get("status") == "draft":
+        add(lesson_log.header_end(text), 4, "pending", drafts.NOTICE)
+    for entry in waiting:
+        brief = entry["commission"]
+        if brief["page"] == page:
+            for match in re.finditer(commissions.MARKER.pattern + r"(?:\n|$)", text):
+                if match[1] == brief["id"]:
+                    add(match.end(), 0, "pending-figure-" + brief["id"], FIGURE)
+    for entry in nightly_waiting:
+        spec = entry["spec"]
+        if spec["page"] == page:
+            heading = next((h for h in headings if h[0].split(" ", 1)[1] == spec["anchor"]), None)
+            cut = heading.end() + int(text[heading.end():heading.end() + 1] == "\n") if heading \
+                else lesson_log.header_end(text)
+            add(cut, 0, "pending-figure-" + spec["id"], FIGURE)
+    return placements

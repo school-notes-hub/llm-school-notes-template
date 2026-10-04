@@ -5,10 +5,14 @@ import re
 from . import frontmatter, machine, markers
 
 
-def part(text: str) -> str:
+def part(text: str, *, legacy_notices=False) -> str:
     """The text without generated blocks and machine frontmatter keys."""
     from ..figures.commissions import MARKER
     from ..wiki.banners import canonical_reference
+    # Strip notices before normalizing figure and banner blocks, including old nesting.
+    if not legacy_notices:
+        text = markers.clean_nested_notices(text)
+        text = markers.remove(text, {name for _, _, name in markers.spans(text) if markers.is_notice(name)})
     text = canonical_reference(text)
     text = markers.BLOCK.sub(lambda m: f"<!-- figure: {m['name'][7:]} -->"
                              if m["name"].startswith("figure-") else m[0], text)

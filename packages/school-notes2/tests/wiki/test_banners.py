@@ -74,3 +74,31 @@ def test_candidate_banner_key_matches_final_publication_not_preview_png(repo):
     safefs.write_text(repo, brief["page"], '---\ntype: topic\n---\n![New banner](../assets/new-banner.svg)\n')
     safefs.write_text(repo, LESSON, banners.update(repo, LESSON, safefs.read_text(repo, LESSON)))
     assert units.page_key(repo, LESSON) == key
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_banner_preview_key_supports_notice_compatibility(repo, legacy):
+    from school_notes2.wiki import author
+    from school_notes2.flows import steps
+    text = banners.update(repo, LESSON, reuse(repo))
+    safefs.write_text(repo, LESSON, text)
+    image = "![Preview](<../assets/preview.svg>)"
+    safefs.write_bytes(repo, "wiki/assets/preview.svg", b"preview")
+    key = units.page_key(repo, LESSON, banner_image=image, legacy_notices=legacy)
+    noticed = lesson_log.after_header(text, "pending", "Pending\n")
+    safefs.write_text(repo, LESSON, noticed)
+    assert steps._llm_part is author.part
+    noticed_key = units.page_key(repo, LESSON, banner_image=image, legacy_notices=legacy)
+    # Compatibility deliberately retains the old notice-dependent whitespace key.
+    assert (noticed_key == key) is not legacy
+    safefs.write_bytes(repo, "wiki/assets/preview.svg", b"changed preview")
+    assert units.page_key(repo, LESSON, banner_image=image, legacy_notices=legacy) != noticed_key
+
+
+def test_nested_notice_cleanup_preserves_reused_banner_author_key(repo):
+    from school_notes2.wiki import author
+    text = reuse(repo).replace("# Mit tanultunk", "![Old](../assets/old.png)\n\n# Mit tanultunk")
+    updated = banners.update(repo, LESSON, text)
+    banner = markers.read(updated, banners.BLOCK)
+    nested = markers.replace(updated, banners.BLOCK, markers.wrap("pending", "Pending\n") + banner)
+    assert author.part(nested) == author.part(updated) == author.part(text)

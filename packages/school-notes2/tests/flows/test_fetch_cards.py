@@ -252,3 +252,38 @@ def test_invalid_subject_list_blocks_before_move_and_resumes_on_a_fresh_base(
     fetch.advance(ctx, task, lambda: object())
     assert moved == ["pkg"] and task.phase == "prepared"
     assert task.get("preparation_base") == "b" * 40
+
+
+@pytest.mark.parametrize("student", LEARNERS)
+@pytest.mark.parametrize("boundary", ["before", "after"])
+def test_legacy_literals_migrate_before_assignment_and_resume(tmp_path, monkeypatch, student, boundary):
+    from school_notes2.state import safefs
+    from school_notes2.wiki import frontmatter, markers
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    shared(repo)
+    ctx = context(repo, monkeypatch)
+    page, report = "wiki/statika/index.md", "docs/review/legacy.md"
+    safefs.write_text(repo, page, markers.wrap("notes", "# 📝 Jegyzetek\n\nSzerzői leírás.\n"))
+    safefs.write_text(repo, report, frontmatter.set_keys("# Review\n", {
+        "items": {"R1": "open", "R2": "open"}, "status": "open", "item_details": {
+            "R1": {"file": page, "quote": "Jegyzetek"},
+            "R2": {"file": page, "quote": "Szerzői leírás."}}}))
+    task = phase.create(tmp_path / "tasks", student, "notes", "cron", "moved")
+    task.update(selected=[])
+    original, fired = safefs.write_text, []
+    def interrupted(root, path, text, **kwargs):
+        if path != report or fired:
+            return original(root, path, text, **kwargs)
+        fired.append(path)
+        if boundary == "after":
+            original(root, path, text, **kwargs)
+        raise RuntimeError("migration write")
+    monkeypatch.setattr(safefs, "write_text", interrupted)
+    with pytest.raises(RuntimeError, match="migration write"):
+        fetch.prepare(ctx, task, new_subject_index=fetch.new_subject)
+    task = phase.load(task.dir)
+    fetch.prepare(ctx, task, new_subject_index=fetch.new_subject)
+    assert [(i["file"], i["item_id"]) for i in task.get("open_review_items")] == [(report, "R2")]
+    assert report in task.get("tool_writes")
+    assert task.get("learning_pending") is None

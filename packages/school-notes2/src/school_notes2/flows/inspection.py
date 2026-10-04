@@ -190,6 +190,8 @@ def figure_findings(batch, receipt):
 
 
 def _apply(ctx, task, saved):
+    findings, notes, pages = report.prepare(ctx.notes_path, saved["findings"], saved["notes"], saved["pages"])
+    saved = {**saved, "findings": findings, "notes": notes, "pages": pages}
     path = f"docs/review/{task.data['created'][:10]}-{task.run_id}-run.md"
     if not task.get("inspection_figures") and not any(saved[k] for k in ("findings", "notes", "pages", "receipts")):
         task.update(inspection_report=None, inspection_receipts={}, reader_pages=[])

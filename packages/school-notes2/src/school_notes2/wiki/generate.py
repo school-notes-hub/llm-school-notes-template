@@ -170,7 +170,7 @@ def notes_block(subject: Subject) -> str:
 
 def subject_index(repo: Path, slug: str) -> str:
     """The subject index text with every generated block refreshed."""
-    text = read_text(repo, f"wiki/{slug}/index.md")
+    text = markers.clean_nested_notices(read_text(repo, f"wiki/{slug}/index.md"))
     subject = load_subject(repo, slug)
     bodies = {"chapters": chapters_block(subject), "lessons": lessons_block(subject),
               "review": review_block(subject), "notes": notes_block(subject)}
@@ -219,7 +219,7 @@ def root_block(repo: Path) -> str:
 
 
 def root_index(repo: Path) -> str:
-    text = read_text(repo, "wiki/index.md")
+    text = markers.clean_nested_notices(read_text(repo, "wiki/index.md"))
     if "subjects" in markers.names(text):
         text = markers.replace(text, "subjects", root_block(repo))
     return text
