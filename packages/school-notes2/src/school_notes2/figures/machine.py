@@ -43,6 +43,11 @@ def report(repo: Path, brief: dict, candidate: dict, *, generated=None, request=
 
 def rights_errors(repo, brief, candidate, *, generated=None, request=None):
     """Resolve a candidate's publication route before spending a review call."""
+    def fallback(rel):
+        return (rights.rendered(repo)(rel) or rights.media(repo)(rel) or
+                (("authored", rel) if rights.authored_candidate(repo, candidate) else None) or
+                (generated(rel) if generated else None))
+
     asset, source, receipt = (candidate.get(k) for k in ("asset", "source", "render"))
     errors = []
     if asset and not receipt:
@@ -60,15 +65,14 @@ def rights_errors(repo, brief, candidate, *, generated=None, request=None):
     elif asset and Path(asset).suffix == ".svg":
         if not source:
             errors.append("SVG candidate needs editable source or render.json")
-    if asset and not receipt and not rights.authored_candidate(repo, candidate):
-        known = rights.media(repo)(asset)
+    if asset:
         request = request or licenses.request_for(repo, brief["id"])
         if request:
             licenses.candidate(repo, brief, candidate, request)
-        elif not (known and known[0] == "generated") and not (generated and generated(asset)):
-            errors.append("candidate has no rights path: provide a matching render.json output, "
-                          "generation record, licensed request, or an own SVG with an identical "
-                          "SVG source under wiki/assets/")
+        elif not rights.lookup(repo, fallback)(asset):
+            errors.append("candidate has no rights path: render the drawing with tools/visual_tools.py, "
+                          "use a generation record or licensed request, or use an own SVG with an "
+                          "identical SVG source under wiki/assets/")
     return errors
 
 

@@ -144,8 +144,7 @@ def apply(ctx, task, root, saved, edits=None):
         task.update(**state, correction_state_applied=str(root))
     from . import licensing
     licensing.refresh(ctx, task, result, task.get("pages", []))
-    if result.get("figures"):
-        generation_receipts.refresh(ctx, task)
+    generation_receipts.refresh(ctx, task)
     outcome = files.apply_closure(ctx.notes_path, f"{task.run_id}-fix-a{task.get('attempt', 1)}", result.get("review_closure", []),
                                   task.get("correction_items", []), ctx.cfg.limits.owner_after_open)
     steps.record_tool_files(task, ctx.notes_path, outcome.written)

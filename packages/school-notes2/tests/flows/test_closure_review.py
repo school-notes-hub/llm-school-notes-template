@@ -39,7 +39,8 @@ def granted(repo):
 @pytest.mark.parametrize("crash", ["before", "after"])
 def test_p4_request_filing_resumes_without_replacing_its_journal(repo, tmp_path, monkeypatch, crash):
     result = {"status": "done", "figure_requests": [request(repo)]}
-    ctx = SimpleNamespace(notes_path=repo, cfg=SimpleNamespace(limits=SimpleNamespace(owner_after_open=5)))
+    ctx = SimpleNamespace(notes_path=repo, cfg=SimpleNamespace(limits=SimpleNamespace(owner_after_open=5)),
+                          image_settings=lambda: SimpleNamespace(learner="sample", ledger=lambda: {"jobs": {}}))
     task = phase.create(tmp_path / "tasks", "sample", "notes", "cron", "correcting")
     root = task.dir / "correction"
     saved = {"status": "done", "result": result, "tool_state": {"tool_writes": {}, "tool_parts": {}, "tool_hashes": {}}}

@@ -33,7 +33,12 @@ def check(g) -> list:
 
 
 def _images(g, page, text, violation):
+    from ..wiki import markers
+    from ..wiki.guard import parts_hash
     out = []
+    base = (g.base_content(page) or b"").decode("utf-8", "replace")
+    previous = {resolve(page, link.target) for link in links(base) if link.image}
+    tool_banner = g.tool_parts.get(page) == parts_hash(text)
     for link in links(text):
         asset = resolve(page, link.target)
         if not link.image or not asset or not asset.startswith("wiki/"):
@@ -42,14 +47,13 @@ def _images(g, page, text, violation):
         if not safefs.is_file(g.worktree, asset):
             continue  # the link check reports missing assets
         current = safefs.read_bytes(g.worktree, asset)
-        if old == current or asset in g.tool_files:
+        if asset in previous and old == current:
             continue
         # Tool-generated figure blocks are checked byte-for-byte by the existing guard.
-        from ..wiki import markers
-        if any(_accepted(g.worktree, page, name[7:])
-               and any(asset == resolve(page, child.target)
-                       for child in links(markers.read(text, name) or "") if child.image)
-               for name in markers.names(text) if name.startswith("figure-")):
+        if any(text.count("\n", 0, start) + 1 < link.line < text.count("\n", 0, end) + 1
+               and (name == "lesson-banner" and tool_banner or
+                    name.startswith("figure-") and _accepted(g.worktree, page, name[7:]))
+               for start, end, name in markers.spans(text)):
             continue
         out.append(violation(page, "new or changed image must remain a figure/image marker until independent acceptance", False))
     return out

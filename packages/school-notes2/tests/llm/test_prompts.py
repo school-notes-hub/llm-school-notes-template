@@ -10,6 +10,7 @@ ROLES = ['writer', 'fix', 'reviewer', 'figure-review', 'reader-1', 'reader-2', '
 def prompt(role, mode='file', grade=9):
     return argv.prompt(role, mode, grade=grade)
 
+
 PRINCIPLE = (
     'A cél a termék lehető legjobbra fejlesztése: segítsen egy 14–17 éves gyereknek tanulni, '
     'a modern technikával egyszerűsítse és könnyítse meg a tananyag megtanulását. '
@@ -146,3 +147,11 @@ def test_figure_review_considers_teacher_ownership_and_request_route():
     assert 'valószínűleg a tanár saját műve-e (vízjel, kiadói tördelés, fotó)' in text
     assert 'Kétség esetén `repair`; a külön engedélyt a kérelemlista útján kell tisztázni.' in text
     assert '`approved_figure_requests`' in prompt('writer')
+
+
+@pytest.mark.parametrize('role', ['writer', 'fix'])
+def test_writer_requires_own_svg_source_and_tool_render_for_raster(role):
+    text = prompt(role)
+    assert ('Saját SVG-nél a `source` maga az SVG; saját raszterhez a '
+            '`tools/visual_tools.py` rajzolóeszközzel készült render kell.') in text
+    assert 'maga az SVG is lehet' not in text

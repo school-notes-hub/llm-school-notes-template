@@ -164,6 +164,8 @@ def render(args, config):
     if not source.is_relative_to(ROOT) or source.relative_to(ROOT).parts[0] in ('sources', 'references', '.git'):
         raise ValueError('Execute reviewed visual source inside this Git checkout, outside raw sources/references/.git')
     extra = [Path(p).expanduser().resolve() for p in args.input]
+    if any(p.is_relative_to(ROOT / folder) for p in extra for folder in ('sources', 'references')):
+        raise ValueError('Additional input cannot be inside raw sources/references')
     if any(not p.is_file() for p in extra):
         raise ValueError('Every declared additional input must be an existing file')
     out = Path(args.output).expanduser().resolve()

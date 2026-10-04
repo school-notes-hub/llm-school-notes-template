@@ -71,6 +71,28 @@ class VisualExecutionTests(unittest.TestCase):
             self.assertNotEqual(self.render('--expect', name).returncode, 0)
             self.assertFalse(self.out.exists())
 
+    def test_private_additional_inputs_rejected_before_render(self):
+        for folder in ('sources', 'references'):
+            private = self.repo / folder / 'image.png'
+            private.parent.mkdir()
+            private.write_bytes(b'private image')
+            alias = self.repo / (folder + '-alias.png')
+            alias.symlink_to(private)
+            for path in (private, alias):
+                with self.subTest(path=path):
+                    result = self.render('--input', path)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn('input cannot be inside raw sources/references', result.stderr)
+                    self.assertFalse(self.out.exists())
+
+    def test_authored_additional_input_is_recorded(self):
+        data = self.repo / 'data.csv'
+        data.write_text('x,y\n1,2\n')
+        result = self.render('--input', data)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        record = json.loads((self.out / 'render.json').read_text())
+        self.assertEqual(list(record['additional_inputs']), [str(data)])
+
     def test_exit_zero_without_requested_artifact_is_failure(self):
         self.source.write_text('pass\n')
         self.assertNotEqual(self.render().returncode, 0)

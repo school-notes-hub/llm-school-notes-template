@@ -80,7 +80,7 @@ def entry(kind, *, manual=False):
                         return result
                     finally:
                         try:
-                            if kind in ("run", "nightly", "repair", "chat", "owner"):
+                            if kind in ("run", "nightly", "repair", "chat", "owner", "clear"):
                                 operational_report.ended(ctx, kind, started, before, successful=successful)
                         except Exception as exc:
                             ctx.log.error("report.failed", exc)

@@ -6,6 +6,25 @@ from ..state import safefs
 from .pages import sha256
 
 
+def lookup(repo: Path, fallback, *, known=None, recorded=None):
+    """Share publication inheritance and revocable-license precedence with preflight."""
+    from ..figures import licenses
+    if known is None:
+        existing = safefs.read_json(repo, "publication/public.json", {})
+        known = {a["path"]: a for a in existing.get("assets", [])}
+    recorded = licenses.records(repo) if recorded is None else recorded
+
+    def resolve(rel):
+        if recorded.get(rel):
+            return licenses.rights(repo, rel, recorded=recorded)
+        old = known.get(rel)
+        if old and old.get("sha256") == sha256(repo, rel) and old.get("rights") in (
+                "authored", "generated", "public-domain", "standard", "licensed"):
+            return old["rights"], old.get("rightsEvidence", "")
+        return fallback(rel)
+    return resolve
+
+
 def media(repo: Path):
     records = []
     authored = []

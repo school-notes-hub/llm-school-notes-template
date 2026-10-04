@@ -25,7 +25,8 @@ def setup(tmp_path, log, monkeypatch):
     cfg = SimpleNamespace(role=lambda _: (role, harness), limits=Limits(), state_dir=tmp_path / "state",
                           provider_domains=("test.invalid",), browser=tmp_path / "browser", timeouts=Timeouts())
     ctx = SimpleNamespace(notes_path=repo, name="tester", cfg=cfg, log=log, student=SimpleNamespace(grade=9),
-                          worktree=lambda _: wt, image_tag=lambda: "image", release=lambda: tmp_path)
+                          worktree=lambda _: wt, image_tag=lambda: "image", release=lambda: tmp_path,
+                          image_settings=lambda: SimpleNamespace(learner="tester", ledger=lambda: {"jobs": {}}))
     task = phase.create(tmp_path / "state", "tester", "notes", "cron", "figures", "20261004-unit")
     task.update(base="base", inspection_result={"status": "done"}, attempt=1, max_agents=3,
                 ranges=[[0, 0]], packages=[], pages=[])

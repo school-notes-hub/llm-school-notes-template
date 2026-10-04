@@ -8,7 +8,7 @@ from ..llm import launch
 from ..reader import calls, inputs, report, units, verdicts
 from ..state import safefs
 from ..wiki import banners, frontmatter
-from . import steps
+from . import generation_receipts, steps
 
 
 def folder(task):
@@ -67,7 +67,8 @@ def candidate_state(ctx, task, brief):
     try:
         candidate = commissions.candidate(ctx.notes_path, brief)
         if candidate["state"] == "candidate":
-            errors = commissions.preflight(ctx.notes_path, brief)
+            errors = commissions.preflight(ctx.notes_path, brief,
+                                            generated=lambda rel: generation_receipts.rights(ctx)(rel))
             if errors:
                 raise ValueError("; ".join(errors))
             if "mermaid" in candidate or candidate.get("asset", "").endswith(".svg"):

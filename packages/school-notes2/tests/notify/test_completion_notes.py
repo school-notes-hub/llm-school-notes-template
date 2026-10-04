@@ -97,13 +97,19 @@ def test_owner_stop_defers_all_notes_until_final_completion(tmp_path, log, monke
     assert len(delivered) == 1
     assert "N1" not in delivered[0].get_content()
     assert read_json(task.dir / "report.json")["owner_notes"] == ["N1: első megjegyzés."]
-    assert "review_ready" in clear.clear(ctx, "notes", "continue")
+    if ending != "closed":
+        assert "review_ready" in clear.clear(ctx, "notes", "continue")
     task = phase.load(task.dir)
     # The first stage no longer supplies N1; the saved report must retain it.
     task.update(reader_owner_notes=[], recheck_owner_notes=["N2: új megjegyzés."])
     if ending == "closed":
-        task.data["closed"] = True
-        task.save()
+        from school_notes2.state.lock import StudentLock
+        ctx.cfg.root = tmp_path
+        ctx.lock = lambda: StudentLock(ctx.cfg.state_dir, learner)
+        monkeypatch.setattr(clear.git_discard, "discard", lambda *a: None)
+        assert "eldobva" in clear.clear(ctx, "notes", "discard")
+        assert len(delivered) == 2  # The real CLI path must deliver before any later run.
+        assert "nincs nyitott" in clear.clear(ctx, "notes", "discard")
     else:
         task.set_phase("committed" if ending == "finish" else "done")
     if ending in ("finish", "done"):
