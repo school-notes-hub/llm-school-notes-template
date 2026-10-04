@@ -210,17 +210,51 @@ def test_reviewer_inventory_is_grouped_filtered_and_deterministic(tmp_path, repo
     assert relations.reviewer_inventory(tmp_path) == actual
 
 
-def test_missing_decision_evidence_is_invalid_output_not_unlocated(tmp_path, report):
+@pytest.mark.parametrize("target", [PAGE, "wiki/assets/a.svg"])
+def test_missing_decision_evidence_is_invalid_output_not_unlocated(tmp_path, report, target):
     from school_notes2.review import nightly
     from school_notes2.state import phase
     from school_notes2.state.errors import BadWork
     task = phase.create(tmp_path / "tasks", "tester", "review", "cron", "reviewing")
-    finding = {"id": "R1", "file": PAGE, "problem": "Más adat.", "relates_to": "tema-nev"}
+    page = tmp_path / PAGE
+    page.write_text(page.read_text() + '\n![Ábra](../assets/a.svg)\n')
+    finding = {"id": "R1", "file": target, "problem": "Más adat.", "relates_to": "tema-nev"}
     with pytest.raises(BadWork, match="requires new_evidence"):
         nightly.record_review(task, {"verdict": "changes", "findings": [finding]}, tmp_path)
     assert task.phase == "reviewing" and not (task.dir / "review.json").exists()
     nightly.record_review(task, {"verdict": "changes", "findings": [{**finding, "new_evidence": "Új bizonyíték."}]}, tmp_path)
     assert task.phase == "reviewed"
+
+
+@pytest.mark.parametrize("embedded", [True, False])
+def test_asset_routes_using_embedding_page_questions_and_decisions(tmp_path, report, embedded):
+    from school_notes2.review import nightly
+    from school_notes2.state import phase
+    page = tmp_path / PAGE
+    image = '\n![Ábra](../assets/a.svg)\n'
+    page.write_text(page.read_text() + (image if embedded else '\n```md\n' + image + '```\n'))
+    other = tmp_path / "wiki/proba/masik.md"
+    other.write_text(QUESTION.replace("tema-datum", "masik-datum") + image)
+    asset = "wiki/assets/a.svg"
+    known = relations.inventory(tmp_path)["pages"][asset]
+    q, d = relations.related_ids(tmp_path, asset)
+    assert known == {"questions": sorted(q), "decisions": sorted(d)}
+    assert known["questions"] == (["masik-datum", "tema-datum"] if embedded else ["masik-datum"])
+    assert relations.reviewer_inventory(tmp_path)["pages"][asset] == {**known, "items": {}}
+    review = {"verdict": "changes", "findings": [
+        {"id": "R1", "file": asset, "problem": "Kérdés.", "relates_to": "tema-datum"},
+        {"id": "R2", "file": asset, "problem": "Döntés.", "relates_to": "tema-nev", "new_evidence": "Új adat."}]}
+    task = phase.create(tmp_path / "tasks", "tester", "review", "cron", "reviewing")
+    nightly.record_review(task, review, tmp_path)
+    path = files.write_review(tmp_path, "2026-10-05", nightly.load_review(task), "r", "b", "c")
+    meta = frontmatter.split(path.read_text()).meta
+    assert meta["items"] == ({"R2": "owner"} if embedded else {"R1": "open", "R2": "open"})
+    assert meta["item_details"]["R2"]["unlocated"] is not embedded
+    assert ("## Függő" in path.read_text()) is embedded
+    assert ("### R1" not in path.read_text()) is embedded
+    if embedded:
+        assert not any(i["file"] == path.relative_to(tmp_path).as_posix()
+                       for i in files.open_items(tmp_path, "cron"))
 
 
 def test_duplicate_responses_drop_both_without_choosing_a_verdict(tmp_path, report):

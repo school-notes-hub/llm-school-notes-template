@@ -1,11 +1,12 @@
 """Three-way merge of independent tool-written review transitions and appended sections."""
 
+import json
 import re
 
 import yaml
 
 from ..wiki import frontmatter
-from .files import compute_status
+from .files import BEFORE, DONE_HEADING, compute_status
 
 MISSING = object()
 SECTION = re.compile(r"^## (?:Végrehajtva|Válasz) \([^)]+\)$", re.M)
@@ -46,11 +47,28 @@ def _body(base: str, origin: str, own: str) -> str:
     return prefix + "\n\n" + "\n\n".join(sections[k] for k in sorted(sections)) + "\n"
 
 
+def _closure_conflict(base, origin, own) -> bool:
+    """A rerun restores its before map: it must not undo an upstream transition."""
+    for heading in DONE_HEADING.finditer(own.body):
+        nxt = re.search(r"^## ", own.body[heading.end():], re.M)
+        end = heading.end() + nxt.start() if nxt else len(own.body)
+        section = own.body[heading.start():end].strip()
+        if section in base.body:
+            continue
+        before = BEFORE.search(section)
+        if before and any(base.meta["items"].get(key) != origin.meta["items"].get(key)
+                          for key in json.loads(before.group("items"))):
+            return True
+    return False
+
+
 def merge(versions: list[bytes]) -> bytes | None:
     """None leaves genuine content/status conflicts for the owner; never choose a side."""
     try:
         pages = [frontmatter.split(v.decode("utf-8")) for v in versions]
         if not all(isinstance(p.meta.get("items"), dict) and "reviewer" in p.meta for p in pages):
+            return None
+        if _closure_conflict(*pages):
             return None
         meta = _value(*[{k: v for k, v in p.meta.items() if k != "status"} for p in pages])
         meta["status"] = compute_status(meta["items"])

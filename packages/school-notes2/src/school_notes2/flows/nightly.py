@@ -132,8 +132,8 @@ def _review(ctx: Ctx, task: phase.Task) -> None:
 def _notify_owners(ctx: Ctx, task: phase.Task) -> None:
     from .run import owner_items
     if task.get("notify_owner_items") and not task.get("owners_notified"):
-        owner_items(ctx, task, task.get("notify_owner_items"))
-        task.update(owners_notified=True)
+        if owner_items(ctx, task, task.get("notify_owner_items")):
+            task.update(owners_notified=True)
 
 
 def _close(ctx: Ctx, task: phase.Task) -> None:

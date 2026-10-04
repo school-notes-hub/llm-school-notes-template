@@ -57,20 +57,32 @@ def related_ids(repo: Path, rel: str) -> tuple[set[str], set[str]]:
     if rel.endswith(".md"):
         return page_ids(repo, rel)
     questions, confirmed = set(), set()
-    for page in sorted(wiki_pages(repo)):
-        text = frontmatter.split(safefs.read_text(repo, page)).body
-        if any(link.image and resolve(page, link.target) == rel for link in links(text)):
-            q, d = page_ids(repo, page)
-            questions.update(q)
-            confirmed.update(d)
+    for page in sorted(related_pages(repo).get(rel, [])):
+        q, d = page_ids(repo, page)
+        questions.update(q)
+        confirmed.update(d)
     return questions, confirmed
+
+
+def related_pages(repo: Path) -> dict[str, set[str]]:
+    """Use the same embedding-page relation for closures, routing and reviewer input."""
+    pages = {rel: {rel} for rel in sorted(wiki_pages(repo))}
+    for rel in sorted(pages):
+        text = frontmatter.split(safefs.read_text(repo, rel)).body
+        for link in links(text):
+            asset = resolve(rel, link.target)
+            if link.image and asset and not asset.endswith(".md"):
+                pages.setdefault(asset, set()).add(rel)
+    return pages
 
 
 def inventory(repo: Path) -> dict:
     from . import files
     pages = {}
-    for rel in sorted(wiki_pages(repo)):
-        q, d = page_ids(repo, rel)
+    ids = {rel: page_ids(repo, rel) for rel in sorted(wiki_pages(repo))}
+    for rel, related in sorted(related_pages(repo).items()):
+        q = set().union(*(ids[page][0] for page in sorted(related)))
+        d = set().union(*(ids[page][1] for page in sorted(related)))
         if q or d:
             pages[rel] = {"questions": sorted(q), "decisions": sorted(d)}
     items = {}

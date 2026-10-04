@@ -22,15 +22,12 @@ def serve(sock_path: Path, handle: Callable[[object], dict | None], sockets: lis
         raise PermissionError(f"{folder} must be a private directory (0700) of this user")
     sock_path.unlink(missing_ok=True)
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    listener.bind(str(sock_path))
-    os.chmod(sock_path, 0o600)
-    listener.listen(4)
-    listener.setblocking(False)
     sockets[:] = [listener]
     sel = selectors.DefaultSelector()
-    sel.register(listener, selectors.EVENT_READ, None)
     buffers: dict[socket.socket, bytes] = {}
     try:
+        _listen(sock_path, listener)
+        sel.register(listener, selectors.EVENT_READ, None)
         while not stop():
             for key, _ in sel.select(timeout=0.5):
                 if key.fileobj is listener:
@@ -41,9 +38,24 @@ def serve(sock_path: Path, handle: Callable[[object], dict | None], sockets: lis
                 except Exception:  # noqa: BLE001 - drop this client only
                     _close(key.fileobj, sel, buffers, sockets)
     finally:
+        sel.close()
         for s in list(sockets):
             s.close()
         sock_path.unlink(missing_ok=True)
+
+
+def _listen(sock_path: Path, listener: socket.socket) -> None:
+    """Publish the socket name atomically, only once permissions and listen are ready."""
+    temporary = sock_path.with_name(".mcp.tmp")
+    temporary.unlink(missing_ok=True)
+    try:
+        listener.bind(str(temporary))
+        os.chmod(temporary, 0o600)
+        listener.listen(4)
+        listener.setblocking(False)
+        os.replace(temporary, sock_path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _accept(listener, sel, buffers, sockets) -> None:

@@ -187,9 +187,11 @@ def test_close_decision_owner_notification_survives_crash(tmp_path, repos, monke
     assert resumed.phase == "pushing" and len(resumed.get("notify_owner_items")) == 1
     monkeypatch.setattr(close, "_finish", real_finish)
     close.close(resumed, repos.repo, repos.wt, IDENT)
-    delivered = {}
-    ctx = SimpleNamespace(name="benedek", mailer=SimpleNamespace(send_once=lambda notice:
-                          delivered.setdefault(notice.kind, notice)))
+    from school_notes2.notify import Mailer
+    delivered = []
+    monkeypatch.setattr(Mailer, "_deliver", lambda self, message: delivered.append(message) or True)
+    ctx = SimpleNamespace(name="benedek", mailer=Mailer(
+        tmp_path / "rc", "owner@example.com", tmp_path / "notify.json", repos.repo.log))
     # Simulate a crash after send_once; its stable key prevents a second delivery.
     real_owner = run.owner_items
     def interrupted(*args):
@@ -203,7 +205,7 @@ def test_close_decision_owner_notification_survives_crash(tmp_path, repos, monke
     flow._notify_owners(ctx, phase.load(task.dir))
     assert len(delivered) == 1
     assert phase.load(task.dir).get("owners_notified")
-    assert "five times" not in str(next(iter(delivered.values())))
+    assert "five times" not in delivered[0].get_content()
 
 
 def test_resume_rebuilds_legacy_relation_input_at_pinned_commit(tmp_path, repos):

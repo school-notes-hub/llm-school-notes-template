@@ -47,8 +47,8 @@ class Mailer:
         self.log.event("notify.mail", target=key)
         return True
 
-    def send_once(self, notice: Notice) -> bool:
-        """Mail a notice only once ever (4.7, 5.5: \"egyszer e-mail megy\")."""
+    def send_once(self, notice: Notice) -> bool | None:
+        """Mail once ever: True means sent, False already sent, None delivery failed."""
         path = self.state.with_name("notify-once.json")
         done = set(read_json(path, []) or [])
         key = f"{notice.student}:{notice.kind}"
@@ -58,7 +58,7 @@ class Mailer:
             write_json(path, sorted(done | {key}))
             self.log.event("notify.mail_once", target=key)
             return True
-        return False
+        return None
 
     def _deliver(self, message: EmailMessage) -> bool:
         try:

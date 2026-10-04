@@ -131,6 +131,8 @@ MCP check returns errors first, full counts, `truncated` and the full-list path.
 counter permits three checks per invocation, including across background-job restarts;
 fetch of the same interactive run does not reset it; a new run gets its own budget.
 The last own check's warning IDs must have decisions.
+An unfinished question session keeps its result and returns to `needs_owner` when those
+decisions are missing; cron cannot overwrite the owner's answer.
 Later tool warnings without decisions are persisted with `unhandled` for reviewer handoff.
 Accepted/false-positive list verdicts use `review.warnings.record` and the private
 `warning-verdicts.json`; repeating a write is idempotent, content changes invalidate it.
@@ -139,14 +141,20 @@ the storage API returns `hiba` findings for their review-item creation.
 
 Review metadata is additive `item_details`, keeping old `items: {R1: status}` maps readable.
 Legacy headings supply the page when metadata is absent. Full keys avoid cross-report R1
-collisions. Question/decision references are page-local. Existing question/open-item
-and disagreement references go to the pending section, decisions to owner, unknown references
+collisions. Question/decision references are page-local; asset findings also use the
+questions and decisions of their embedding pages, excluding links in code blocks.
+Existing question/open-item and disagreement references go to the pending section,
+decisions to owner, unknown references
 to unlocated. A decision reference without new evidence is invalid reviewer output.
 The tool inherits the related item's chain; findings about fixed/settled items escalate to
 chain 1 and owner. Owner items use the existing once-per-item notification path, with
-a durable handoff across closing restarts. Invalid or stale responses are dropped and logged.
+a durable handoff across closing restarts. Failed deliveries retry on later nights;
+the per-item receipt skips already delivered notices, and the handoff completes only
+after every notice has a receipt. Invalid or stale responses are dropped and logged.
 Reviewer input groups only open, owner and disagree items by page. Independent review
 transitions and appended tool sections merge during rebase; contradictory edits still stop.
+An upstream transition to an item in a new closure's `before` map also stops the merge,
+so repeated finish cannot restore an obsolete status.
 The full nightly targeting/blame policy remains later work.
 No new phase, LLM role or call is added; persisted checks, verdict writes and replies have
 interruption/resume coverage.

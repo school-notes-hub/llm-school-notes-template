@@ -132,13 +132,17 @@ def advance(ctx: Ctx, task: Task) -> None:
         raise
 
 
-def owner_items(ctx: Ctx, task: Task, items: list[dict]) -> None:
-    """Items requiring an owner decision use the existing once-per-item mail path."""
-    for item in items:
-        ctx.mailer.send_once(Notice(ctx.name, f"review_owner:{item['file']}:{item['item_id']}",
+def owner_items(ctx: Ctx, task: Task, items: list[dict]) -> bool:
+    """Mail once per owner item; return True only when all have delivery receipts."""
+    delivered = True
+    for item in sorted(items, key=lambda i: (i["file"], i["item_id"])):
+        sent = ctx.mailer.send_once(Notice(ctx.name, f"review_owner:{item['file']}:{item['item_id']}",
                                task.run_id, "finish", "owner", f"{item['file']} {item['item_id']}: "
                                + item.get("reason", "stayed open five times"),
                                "settle it in `school-notes chat`"))
+        if sent is None:
+            delivered = False
+    return delivered
 
 
 def image_notices(ctx: Ctx) -> None:
@@ -186,5 +190,3 @@ def _other_limit_h(ctx: Ctx) -> float:
 def _daily(ctx: Ctx, kind: str, run_id: str, message: str, todo: str) -> None:
     ctx.log.event("run.skip", kind, target=run_id)
     ctx.mailer.send(Notice(ctx.name, kind, run_id, "run", "stopped", message, todo))
-
-

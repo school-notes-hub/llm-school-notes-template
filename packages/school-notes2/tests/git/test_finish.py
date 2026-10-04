@@ -370,6 +370,34 @@ def test_review_merge_does_not_hide_conflicting_status_or_prose():
     assert merge([s.encode() for s in (base, fixed.replace("Tárgy.", "Átírva."), disagree)]) is None
 
 
+def test_review_before_map_conflict_reaches_owner_during_rebase(env):
+    from school_notes2.review import files
+    report = files.write_review(env.path, "2026-10-03", {"verdict": "changes", "findings": [
+        {"id": key, "file": "wiki/a.md", "problem": "Javítandó."} for key in ("R1", "R3")
+    ]}, "r", "a", "b")
+    rel = report.relative_to(env.path).as_posix()
+    base = report.read_text()
+    env.other_push(rel, base)
+    report.unlink()
+    repos.fetch(env.bare, 60)
+    task = env.start_run()
+    files.apply_closure(env.path, task.run_id,
+                        [{"file": rel, "item_id": "R1", "status": "fixed"}],
+                        [{"file": rel, "item_id": "R3"}])
+    upstream = env.tmp / "upstream"
+    (upstream / rel).parent.mkdir(parents=True)
+    (upstream / rel).write_text(base)
+    files.apply_closure(upstream, "owner", [{"file": rel, "item_id": "R3", "status": "fixed"}], [])
+    env.other_push(rel, (upstream / rel).read_text())
+    hooks = env.hooks()
+    hooks.message = fixed_message(task)
+    with pytest.raises(NeedsOwner):
+        finish.run(task, env.wt, hooks, T, {})
+    assert task.get("conflict_files") == [rel]
+    assert conflicts.has_markers(report.read_text())
+    assert not env.published
+
+
 @pytest.mark.parametrize("crash", [False, True])
 def test_no_push_stops_after_commit_and_only_explicit_release_continues(env, monkeypatch, crash):
     task = env.start_run()

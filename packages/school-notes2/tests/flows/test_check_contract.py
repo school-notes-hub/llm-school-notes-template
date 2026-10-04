@@ -230,9 +230,10 @@ def test_question_session_accounting_feedback_and_resume(learning_run, monkeypat
     assert answer["state"] == "check_failed" and answer["errors"] == 1
     assert "missing decision for missed" in answer["problems"][0]["message"]
     assert safefs.read_json(ctx.notes_path, answer["full_list"]) == answer["problems"]
-    with pytest.raises(steps.CheckFailed) as caught:
-        chat._after_question_session(ctx, phase.load(task.dir))
-    assert "missing decision" in caught.value.items[0]["message"]
+    chat._after_question_session(ctx, phase.load(task.dir))
+    fresh = phase.load(task.dir)
+    assert fresh.data["needs_owner"]["reason"] == "the session result lacks warning decisions"
+    assert chat._settle(ctx, fresh, lambda _: "f", lambda _: None)
     assert not (task.dir / "result-1.json").exists()
     safefs.write_json(ctx.notes_path, ".school-notes/result.json", {"status": "done", "warnings": [
         {"id": "missed", "action": "kept", "reason": "Példa."}]})
@@ -240,3 +241,30 @@ def test_question_session_accounting_feedback_and_resume(learning_run, monkeypat
     fresh = phase.load(task.dir)
     assert not fresh.get("question") and fresh.get("writing_k") == 2
     assert not chat.save_session_result(ctx, fresh)
+
+
+@pytest.mark.parametrize("call_finish", [False, True])
+def test_incomplete_question_chat_stays_with_owner(learning_run, monkeypatch, call_finish):
+    from school_notes2.flows import chat, run
+    ctx, task = learning_run
+    task.data["mode"] = "cron"
+    task.update(question=[{"text": "Dátum?"}], ranges=[[0, 0], [0, 0]], writing_k=1)
+    task.mark_needs_owner("question", "answer in chat", "needs_owner")
+    own = {"status": "done"}
+    def session(ctx, task, harness):
+        assert not task.data["needs_owner"]
+        checks.remember(task, [{"severity": "warning", "id": "missed"}])
+        safefs.write_json(ctx.notes_path, ".school-notes/result.json", own)
+        if call_finish:
+            assert chat.session_finish(ctx)["state"] == "check_failed"
+    monkeypatch.setattr(chat.setup, "ensure", lambda _: None)
+    monkeypatch.setattr(chat, "_launch", session)
+    assert chat.chat(ctx, None, ask=lambda _: "f", say=lambda _: None) == 0
+    fresh = phase.load(task.dir)
+    assert fresh.data["needs_owner"]["reason"] == "the session result lacks warning decisions"
+    assert fresh.get("question") and fresh.get("writing_k") == 1
+    assert fresh.data["llm_failures"] == 0 and fresh.mode == "cron"
+    assert not run._may_run(ctx, fresh)
+    assert safefs.read_json(ctx.notes_path, ".school-notes/result.json") == own
+    assert "missing decision for missed" in safefs.read_json(ctx.notes_path, ".school-notes/check.json")[0]["message"]
+    assert not (task.dir / "result-1.json").exists()

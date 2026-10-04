@@ -141,7 +141,13 @@ def _current_run(ctx: Ctx) -> str:
 def _after_question_session(ctx: Ctx, task: phase.Task) -> None:
     """5.3: the session's result.json replaces result-<k>; cron goes on with range k+1.
     A question the session did not settle goes back to the owner."""
-    if task.get("question") and not save_session_result(ctx, task):
+    try:
+        saved = save_session_result(ctx, task) if task.get("question") else True
+    except steps.CheckFailed:
+        task.mark_needs_owner("the session result lacks warning decisions",
+                              f"complete it in `school-notes chat {ctx.name}`", "needs_owner")
+        return
+    if not saved:
         task.mark_needs_owner("the blocking question is still open",
                               f"answer it in `school-notes chat {ctx.name}`", "needs_owner")
 
