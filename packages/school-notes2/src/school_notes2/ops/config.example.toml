@@ -45,7 +45,7 @@ nested_sandbox = false   # bwrap cannot mount /proc in the container (VM check 2
 harness = "claude-review"     # no MCP for the reviewer (plan 7.4)
 model = "claude-opus-5-5"
 effort = "high"
-timeout_s = 600
+timeout_s = 5400
 
 # The harness templates live in llm/templates.toml of the release; copy them here
 # (or override single keys) – see that file.

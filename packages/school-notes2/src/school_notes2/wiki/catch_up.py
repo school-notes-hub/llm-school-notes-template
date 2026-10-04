@@ -21,6 +21,7 @@ def update(text: str, pages: list) -> str:
     """
     lines = [f"* [{p.meta.get('title', p.file)}]({p.file})" for p in pages
              if p.meta.get("catch_up") == "open"]
+    # Hungarian renderer wording, like generate.TABLE_HEAD; see README localization note.
     body = "# 📝 Pótolandó\n\n" + "\n".join(lines) + "\n" if lines else ""
     if NAME in markers.names(text):
         return markers.replace(text, NAME, body)

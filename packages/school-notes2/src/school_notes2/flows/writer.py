@@ -87,14 +87,14 @@ def merge(results_: list[dict]) -> dict:
     """4.5: notes by file with page union, closures last-wins per item, lists concatenated."""
     notes: dict[str, set] = {}
     closures: dict[tuple, dict] = {}
-    merged = {"status": "done", "questions": [], "new_subjects": [], "checks": [], "owner_notes": []}
+    lists = ("questions", "new_subjects", "checks", "owner_notes", "figures",
+             "notebook_drawings", "figure_requests", "warnings", "coverage")
+    merged = {"status": "done", **{key: [] for key in lists}}
     for r in results_:
         if r["status"] == "question":
             merged["status"] = "question"
-        merged["questions"] += r.get("questions", [])
-        merged["new_subjects"] += r.get("new_subjects", [])
-        merged["checks"] += r.get("checks", [])
-        merged["owner_notes"] += r.get("owner_notes", [])
+        for key in lists:
+            merged[key] += r.get(key, [])
         for note in r.get("notes", []):
             notes.setdefault(note["file"], set()).update(note["pages"])
         for c in r.get("review_closure", []):

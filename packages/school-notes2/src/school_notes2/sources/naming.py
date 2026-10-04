@@ -40,11 +40,11 @@ def subject_key(drive_name: str, repo: Path) -> tuple[str, bool]:
     if safefs.is_file(repo, "tools/subjects.json"):
         subjects = json.loads(safefs.read_text(repo, "tools/subjects.json")).get("subjects", {})
     wanted = _norm(drive_name)
-    for key, entry in subjects.items():
+    for key, entry in sorted(subjects.items()):
         if _norm(entry.get("name", "")) == wanted:
-            return key, False
+            return key, not safefs.is_file(repo, f"wiki/{key}/index.md")
     key = slug(drive_name)
-    return key, key not in subjects
+    return key, not safefs.is_file(repo, f"wiki/{key}/index.md")
 
 
 def _norm(text: str) -> str:

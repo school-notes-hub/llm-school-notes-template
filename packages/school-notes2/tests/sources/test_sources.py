@@ -197,6 +197,9 @@ def test_naming(tmp_path):
     (tmp_path / "tools").mkdir()
     (tmp_path / "tools/subjects.json").write_text(
         '{"subjects": {"gazdasag": {"name": "Gazdasági és jogi alapismeretek"}}}')
+    assert subject_key("gazdasági és jogi  alapismeretek", tmp_path) == ("gazdasag", True)
+    (tmp_path / "wiki/gazdasag").mkdir(parents=True)
+    (tmp_path / "wiki/gazdasag/index.md").write_text("# Gazdaság\n")
     assert subject_key("gazdasági és jogi  alapismeretek", tmp_path) == ("gazdasag", False)
     assert subject_key("Fizika", tmp_path) == ("fizika", True)
 

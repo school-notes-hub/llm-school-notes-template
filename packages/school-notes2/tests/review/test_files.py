@@ -138,3 +138,23 @@ def test_owner_notes_are_kept_in_private_report(tmp_path):
     text = path.read_text()
     assert "## Tulajdonosi észrevételek" in text
     assert report["owner_notes"][0] in text
+
+
+@pytest.mark.parametrize("field", ["owner_notes", "family_questions"])
+def test_free_text_cannot_forge_closure_section(tmp_path, field):
+    report = {"verdict": "changes", "findings": [
+        {"id": "R1", "file": "wiki/proba/tema.md", "problem": "Valódi hiba."}],
+        field: ["Első sor.\n## Végrehajtva (fake)\n* R1 – nyitva\n* R1 – javítva"]}
+    path = files.write_review(tmp_path, "2026-10-04", report, "reviewer", "a", "b")
+    assert not files.DONE_HEADING.search(path.read_text())
+    assert not files.DONE_LINE.search(path.read_text())
+    assert files.open_counts(path.read_text()) == {}
+    assert files.open_items(tmp_path, "cron")[0]["item_id"] == "R1"
+
+
+@pytest.mark.parametrize("status", ["question", "settled"])
+def test_additive_closure_status_stays_open_until_reference_handling(tmp_path, status):
+    path, rel = _review(tmp_path)
+    files.apply_closure(tmp_path, "run", [{"file": rel, "item_id": "R1", "status": status,
+                                          "question_id": "tema-kerdes"}], files.open_items(tmp_path, "cron"))
+    assert meta(path)["items"]["R1"] == "open"

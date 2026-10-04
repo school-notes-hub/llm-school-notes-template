@@ -45,12 +45,28 @@ is confirmed). `schemas/subject-card.json` is shared by configuration loading an
 `fetch.json` contract. See [the empty-template example](../../examples/subject-card.json).
 Preparation snapshots cards in the durable package data; resume does not reload changed
 configuration. Missing cards stay absent, including newly discovered subjects. The owner's
-session may edit valid cards of existing subjects; cron cannot edit them or other settings.
+session may edit valid cards of existing subjects or preload an entry containing only
+`name` and `card`; cron cannot edit them or other settings. A missing subject index
+triggers creation with the first package, even for a preloaded card. The tool fills
+missing display metadata without overwriting existing values. Card validation precedes
+Drive movement and pins the preparation commit, also across an interrupted preparation.
 
 The source-grounded repair rules and writer/fix prompts describe the target step-1/2
 contracts; their remaining flow integration is staged separately. `fix.txt` is loadable,
 but this unit does not introduce a fix run or the new reviewer state machine. The current
 nightly prompt uses the existing output contract, with additive private `owner_notes`.
+Writer `owner_notes` are also emitted as `writer.owner_notes` JSONL log events, with
+token-like secrets redacted. The additive figure lists, `coverage` and `warnings`
+survive range merging; their consumers are staged separately. `coverage` records
+`source`, `unit` and either a `target` topic-section link or an omission `reason`,
+without creating an image evidence record. The schema accepts `question`/`settled`
+closures and their reference IDs; until reference-aware closure handling lands,
+these items remain open. No new review-state transition is introduced here.
+
+Reader wording is defined in PROFILE's *Wording* table. Like `generate.TABLE_HEAD`,
+the current tool-rendered catch-up heading in `wiki/catch_up.py` is Hungarian;
+it is not dynamically localized from PROFILE. A deployment in another language
+needs corresponding renderer localization, including the lesson-source line.
 
 ## Lesson logs, questions and drafts
 

@@ -88,9 +88,9 @@ def render_body(date: str, review: dict, frm: str, to: str) -> str:
         if fig.get("description"):
             out += [f"**Leírás:** {fig['description']}", ""]
     if review.get("family_questions"):
-        out += ["## Családi kérdések", ""] + [f"* {q}" for q in review["family_questions"]] + [""]
+        out += ["## Családi kérdések", ""] + [f"* {_one_line(q)}" for q in review["family_questions"]] + [""]
     if review.get("owner_notes"):
-        out += ["## Tulajdonosi észrevételek", ""] + [f"* {n}" for n in review["owner_notes"]] + [""]
+        out += ["## Tulajdonosi észrevételek", ""] + [f"* {_one_line(n)}" for n in review["owner_notes"]] + [""]
     return "\n".join(out)
 
 
@@ -228,6 +228,10 @@ def apply_closure(repo: Path, run_id: str, closures: list[dict], listed: list[di
     """Apply the merged `review_closure` and the fetch.json item list (plan 4.7, 5.7)."""
     by_file: dict[str, dict] = {}
     for c in closures:
+        if c["status"] in ("question", "settled"):
+            # Additive result contract: keep the item open until reference-aware
+            # closure handling lands. Never turn these into an unchecked closure.
+            continue
         by_file.setdefault(c["file"], {})[c["item_id"]] = c
     listed_by_file: dict[str, list[str]] = {}
     for item in listed:

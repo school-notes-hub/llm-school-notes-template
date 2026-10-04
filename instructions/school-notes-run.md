@@ -15,7 +15,7 @@ The tool does everything that can be computed: Drive download and filing into `s
 
 ## Fixed prompt
 
-Read `AGENTS.md`, `PROFILE.md` and the rules the rule map requires for ingest, in that order. Read `fetch.json`, `changes.json` and `check.json` to identify scope and existing work. First perform the independent whole-page checklist, including when resuming; then decide the machine findings. Do the work, write `result.json`, and call MCP `check` at most three times per invocation. Fix errors; decide every warning from the last own check in `warnings[]`. The check does not find everything; zero warnings do not mean the page is complete. Fix mode checks its own changes first and never edits outside assigned items because of a warning.
+Read `AGENTS.md`, `PROFILE.md` and the rules the rule map requires for ingest, in that order. Read `fetch.json`, `changes.json` and `check.json` to identify scope and existing work. For ingest, first perform the independent whole-page checklist, including when resuming; in fix mode, first independently check only your own repair. Then decide the machine findings. Do the work, write `result.json`, and call MCP `check` at most three times per invocation. Fix errors; decide every warning from the last own check in `warnings[]`. The check does not find everything; zero warnings do not mean the page is complete. Fix mode checks its own changes first and never edits outside assigned items because of a warning.
 
 ## result.json
 
@@ -24,6 +24,7 @@ Read `AGENTS.md`, `PROFILE.md` and the rules the rule map requires for ingest, i
  "questions": [{"text": "..."}],
  "notes": [{"file": "wiki/<subject>/<date>-<topic>-jegyzet.md", "pages": [1, 2]}],
  "new_subjects": [{"subject": "<short-name>", "emoji": "...", "color": "#rrggbb"}],
+ "coverage": [{"source": "sources/...", "unit": "<source unit>", "target": "wiki/<subject>/<topic>.md#<section>"}],
  "figures": [{"id": "...", "kind": "notebook-drawing | teacher-drawing | figure | banner", "page": "wiki/..."}],
  "notebook_drawings": [{"source": "sources/...", "crop": "...", "figure": "..."}],
  "figure_requests": [{"id": "...", "page": "wiki/...", "source": "sources/...", "crop": "...", "purpose": "...", "origin": "teacher-own | third-party | unknown"}],
@@ -36,11 +37,12 @@ Read `AGENTS.md`, `PROFILE.md` and the rules the rule map requires for ingest, i
 * `notes`: every non-duplicate page of the range belongs to a lesson-notes page; you name the page `<date>-<topic>-jegyzet.md`. The tool writes its machine fields from this.
 * `question`: only for a blocking problem (not a notebook, a textbook page, unreadable, a subject other than the Drive folder's). A non-blocking uncertainty goes under the page's open questions.
 * `review_closure`: at most 20 closed items per run. Never edit a review file. Only fix when you agree; `disagree` requires a nonempty reason. One reviewer response may follow; in `round: 2` close only as `fixed` or `question`. `question` requires the public-safe open-question anchor (`question_id`); `settled` points to an existing question or decision. Questions concern the material, not the reviewers' dispute.
+* `coverage`: the private source-unit → teaching-section ledger, separate from image observations. Each entry has `source` (repository path), `unit` (the definition, exercise, drawing or other source unit) and exactly one of `target` (`wiki/...md#section`) or `reason` (why it has no learning value). Use source reading order, then target path as a tie-breaker. In fix mode record only units affected by the assigned repair.
 * `checks`: what you looked at, what you saw and what you decided for each image-dependent claim (see *Visual evidence checks*). `image` is a page `seq` or a repository path under `sources/` or `wiki/assets/`.
 
 ## Where you may write
 
-`wiki/**` (except generated blocks and machine frontmatter keys) and `wiki/assets/**`; in the owner's session also `references/**` and valid `card` fields of existing entries in `tools/subjects.json` (no other subject metadata); while resolving a conflict also the conflicting files. A file that existed before the run is never renamed or deleted; a file created in this run may be deleted. No symlinks, no dotfiles under `wiki/`. The tool's path guard refuses everything else.
+`wiki/**` (except generated blocks and machine frontmatter keys) and `wiki/assets/**`; in the owner's session also `references/**` and valid `card` fields of existing entries in `tools/subjects.json`, or new entries containing only `name` and `card` (no other subject metadata); while resolving a conflict also the conflicting files. A file that existed before the run is never renamed or deleted; a file created in this run may be deleted. No symlinks, no dotfiles under `wiki/`. The tool's path guard refuses everything else.
 
 ## MCP tools
 
@@ -48,9 +50,9 @@ Read `AGENTS.md`, `PROFILE.md` and the rules the rule map requires for ingest, i
 
 ## Subject cards and figure handoff
 
-The subject's `tools/subjects.json` entry is the only canonical place for `card`: nonempty `role` and `style` strings, and an ordered `conventions` array of distinct nonempty strings. An empty convention list means no confirmed local convention; it never grants permission to invent one. A missing card is omitted from `fetch.json` for existing configurations and newly discovered subjects. Preparation copies a validated card into each package and persists it for resume; an interactive update affects a later preparation. The configured `grade` stays separate. Only the owner's interactive session may edit cards; cron cannot. See [the template example](../examples/subject-card.json), which does not initialize a subject.
+The subject's `tools/subjects.json` entry is the only canonical place for `card`: nonempty `role` and `style` strings, and an ordered `conventions` array of distinct nonempty strings. An empty convention list means no confirmed local convention; it never grants permission to invent one. A missing card is omitted from `fetch.json` for existing configurations and newly discovered subjects. Preparation copies a validated card into each package and persists it for resume; an interactive update affects a later preparation. The configured `grade` stays separate. Only the owner's interactive session may edit cards or preload a new subject with only `name` and `card`; cron cannot. The tool creates its index with the first package and fills missing emoji/colors without overwriting the card or existing settings. See [the template example](../examples/subject-card.json), which does not initialize a subject.
 
-In state A the writer also draws; visual-module routing is unchanged. Every figure assignment in `.school-notes/figures/<id>.json` has `id`, `page`, `anchor` (section title), `kind`, `source_image` (path and crop, required for either drawing route), `purpose`, `must_show[]`, `avoid_misreading`, `taught_conventions[]` and `text_complete_without_figure: true`; replacement also has `replaces` and `decision_reason` (a/b/c plus explanation, per visual policy). The candidate's `figures/<id>/figure.json` records form, tool, elements and meanings, visible texts, `attempt` and private `corrections[]` for a notebook drawing. Leave `<!-- figure: <id> -->` or `<!-- image: <id> -->`; the writer does not self-accept. The tool inserts only after the independent figure check. Teacher-image requests use `<!-- figure-request: <id> -->` and the private request list, never a public license question.
+In state A the writer also draws; visual-module routing is unchanged. Every figure assignment in `.school-notes/figures/<id>.json` has `id`, `page`, `anchor` (section title), `kind`, `source_image` (path and crop, required for either drawing route), `purpose`, `must_show[]`, `avoid_misreading`, `taught_conventions[]` and `text_complete_without_figure: true`; replacement also has `replaces` and `decision_reason` (a/b/c plus explanation, per visual policy). The candidate's `figures/<id>/figure.json` records form, tool, elements and meanings, visible texts, `attempt` and private `corrections[]` for a notebook drawing. Leave `<!-- figure: <id> -->` or `<!-- image: <id> -->`; leave the marker and the commission; the tool queues it. The writer does not self-accept. The tool inserts only after the independent figure check. Teacher-image requests use `<!-- figure-request: <id> -->` and the private request list, never a public license question.
 
 ## Visual engines
 

@@ -63,11 +63,15 @@ Every reader-facing string the rules prescribe lives here, in the wiki language 
 | textbook label | `📗 Based on the textbook` | `📗 A tankönyv alapján` |
 | background label | `📗 From background material` | `📗 Háttéranyagból` |
 | teacher-material words | *to learn* / *background* | `tanulni` / `olvasnivaló` |
+| lesson-log heading | `# What we learned in this lesson` | `# Mit tanultunk ezen az órán` |
+| lesson-log source line | `📎 Notebook: <lesson dates> · Teacher material: <name>; <name>` | `📎 Füzet: <óradátumok> · Tanári anyag: <név>; <név>` |
+| undated source lesson | `undated lesson` | `dátum nélküli óra` |
+| notebook correction request | `Correct this in your notebook too: <correct statements>.` | `Javítsd a füzetedben is: <helyes állítások>.` |
 | lesson line | `🗓️ Lesson: <date>` | `🗓️ Óra: <dátum>` |
 | correction label | `⚠️ 🤖 machine correction` | `⚠️ 🤖 gépi javítás` |
 | unknown-author label | `<role icon> 🤖 machine <role>` | `<szerepikon> 🤖 gépi <szerep>` |
 | machine-authorship legend | `🤖 marks a machine-authored explanation, addition or correction. It is not a verification mark.` | `A 🤖 gépi magyarázatot, kiegészítést vagy javítást jelöl. Nem hitelesítési jel.` |
-| catch-up notice | `**Catch-up material** – copy this into your notebook too (or learn it), and say when you are done.` | `**Pótolandó anyag** – írd be ezt a füzetedbe is (vagy tanuld meg), és szólj, ha megvan.` |
+| catch-up notice | `**Catch-up material** - copy this into your notebook too (or learn it), and say when you are done.` | `**Pótolandó anyag** - írd be ezt a füzetedbe is (vagy tanuld meg), és szólj, ha megvan.` |
 | synthesis notice | `*This page was put together by the LLM (not from the notebook).*` | `*Ezt az oldalt az LLM állította össze (nem a füzetből).*` |
 | in words | `in words:` | `szövegesen:` |
 | conventional headings | `# Open questions`, `# Examples`, `# Schema`, `# Computation` | `# Nyitott kérdések`, `# Példák`, `# Séma`, `# Számítás` |

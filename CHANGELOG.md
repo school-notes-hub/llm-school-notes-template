@@ -2,6 +2,13 @@
 
 Newest first. Each entry says what changed in the shared files and what an existing wiki must do when it applies the update (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)). A wiki records the version it is on in `PROFILE.md`.
 
+## Unreleased - unit 1a review corrections
+
+- Align the additive result schema and prompts, separating `coverage[]` from image `checks`; narrow fix mode to assigned repairs. Figure handoff now says to leave the marker and commission. Zero daily image budget keeps the pending generation list empty. The example nightly reviewer timeout is 5400 s; deployment remains the controller's work.
+- Allow interactive preloading of a new subject with only `name` and a validated `card`. Validate cards before Drive movement and pin the preparation commit; preserve cards and existing display settings when completing a new subject. Writer owner notes reach the run log; private report list text cannot inject closure lines.
+- Migration (controller-owned): add PROFILE Wording keys `lesson-log heading`, `lesson-log source line`, `undated source lesson`, `notebook correction request`; use ASCII ` - ` in the catch-up notice. Synchronize the changed shared rules through Template updates. New subject cards may be preloaded before first ingest; conventions require source-image verification or owner confirmation. No learner data is copied here. The template stays uninitialized; no version bump or release is made by this correction.
+- The new result lists are preserved but their later pipeline consumers remain staged. `question`/`settled` are schema-valid and stay open until reference-aware closure handling is implemented; the review dialogue is not introduced here. This replaces the former claim that all result fields were still pending. The removed whole-ingest instructions in `fix.txt` are replaced by checks of the repair itself; the nightly reviewer measures the teaching goal rather than writing notes.
+
 ## 1.17.0 - 2026-10-04
 
 - Source-grounded teaching rules (v2 repair plan, unit 1a): visible notes teach the subject without private sources; lesson-notes become short lesson logs. Removed the verbatim-notebook plain-language exception and visible source-error reproduction. Corrections teach the right content, retain a model-free role label and use one neutral notebook-correction question. Source details remain in private footnotes/evidence. Added reader checks, didactic section order, integrated updates, stable question anchors and decisions rules.

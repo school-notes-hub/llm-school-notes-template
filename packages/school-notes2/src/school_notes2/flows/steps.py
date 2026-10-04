@@ -9,6 +9,7 @@ from pathlib import Path
 from ..evidence import records
 from ..git import workbranch
 from ..log import now_iso
+from ..mcp.redact import redact
 from ..review import files as review_files
 from ..review import index as review_index
 from ..schemas import validate
@@ -115,7 +116,10 @@ def merged_result(ctx: Ctx, task: Task) -> dict:
                                                   for p in task.get("pages", [])):
             return {"status": "done"}     # free editing in a session needs no result.json
         raise BadWork("no result.json for this run")
-    return writer.merge(found)
+    result = writer.merge(found)
+    if result["owner_notes"]:
+        ctx.log.event("writer.owner_notes", notes=redact(result["owner_notes"]))
+    return result
 
 
 def content_steps(ctx: Ctx, task: Task) -> Prepared:

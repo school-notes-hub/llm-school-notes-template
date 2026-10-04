@@ -112,3 +112,21 @@ def test_subject_cards_only_in_owner_session(repo):
     data["subjects"]["proba"]["name"] = "Más tárgy"
     (repo / rel).write_text(json.dumps(data))
     assert run(repo, base, [(rel, "modified")], interactive=True)
+
+
+def test_owner_can_preload_only_name_and_valid_card(repo):
+    import json
+    from tests.sources.test_cards import CARD
+    base = snapshot(repo)
+    rel = "tools/subjects.json"
+    data = json.loads((repo / rel).read_text())
+    data["subjects"]["uj"] = {"name": "Új tárgy", "card": CARD}
+    (repo / rel).write_text(json.dumps(data))
+    assert run(repo, base, [(rel, "modified")], interactive=True) == []
+    assert run(repo, base, [(rel, "modified")])
+    for entry in ({"card": CARD}, {"name": " ", "card": CARD},
+                  {"name": "Új tárgy", "card": {}},
+                  {"name": "Új tárgy", "card": CARD, "emoji": "X"}):
+        data["subjects"]["uj"] = entry
+        (repo / rel).write_text(json.dumps(data))
+        assert run(repo, base, [(rel, "modified")], interactive=True)

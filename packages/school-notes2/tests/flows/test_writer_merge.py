@@ -25,3 +25,25 @@ def test_owner_notes_survive_range_merge():
     merged = merge(results)
     validate("result", merged)
     assert merged["owner_notes"] == ["Kihagyott lépés és indoka.", "Jobb javaslat."]
+
+
+def test_owner_notes_reach_run_log_for_cron_and_interactive(tmp_path, log):
+    import json
+    from types import SimpleNamespace
+    from school_notes2.flows import steps
+    from school_notes2.state import phase
+    from school_notes2.state.files import write_json
+    for mode in ("cron", "interactive"):
+        root = tmp_path / mode
+        root.mkdir()
+        task = phase.create(root / "tasks", "benedek", "notes", mode, "writing")
+        task.update(ranges=[[0, 0]])
+        result = {"status": "done", "owner_notes": ["Kihagyott lépés; indok; jobb javaslat."]}
+        output = root / ".school-notes/result.json" if mode == "interactive" else task.dir / "result-1.json"
+        write_json(output, result)
+        ctx = SimpleNamespace(notes_path=root, log=log)
+        assert steps.merged_result(ctx, task)["owner_notes"] == result["owner_notes"]
+    events = [json.loads(line) for line in log.main.read_text().splitlines()]
+    assert len(events) == 2
+    assert all(e["action"] == "writer.owner_notes" and e["notes"] == result["owner_notes"]
+               for e in events)

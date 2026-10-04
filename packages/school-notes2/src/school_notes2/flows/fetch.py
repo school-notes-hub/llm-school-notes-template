@@ -19,6 +19,7 @@ from ..images import plans as image_plans
 from ..log import today
 from ..review import files as review_files
 from ..schemas import validate
+from ..sources import cards
 from ..sources.batch import select_batch, split_ranges
 from ..sources.duplicates import known_hashes
 from ..sources.naming import subject_key
@@ -99,6 +100,7 @@ def _pages(pkg: Package, files: list[dict]) -> int:
 
 def move(ctx: Ctx, task: Task, drive) -> None:
     """`downloaded` → `moved`: each package to Feldolgozva unless it changed meanwhile."""
+    _validated_base(ctx, task)
     kept = []
     for item in task.get("selected", []):
         pkg = item["package"]
@@ -117,7 +119,7 @@ def prepare(ctx: Ctx, task: Task, *, new_subject_index) -> None:
     `new_subject_index(repo, subject, drive_name) -> list[str]` writes a new subject's
     index skeleton."""
     wt = ctx.worktree("notes")
-    base = _base(ctx, task, wt)
+    base = _validated_base(ctx, task)
     workbranch.start(wt, task.run_id, base, interactive=task.mode == "interactive")
     workbranch.reset_workdir(ctx.notes_path)
     packages, pages, written = _place_all(ctx, task, new_subject_index)
@@ -146,6 +148,20 @@ def _base(ctx: Ctx, task: Task, wt) -> str:
     return repos.rev(wt, "refs/remotes/origin/main")
 
 
+def _validated_base(ctx: Ctx, task: Task) -> str:
+    """Pin the checked base before moving sources; resume prepares that exact commit."""
+    base = task.get("preparation_base")
+    if base:
+        return base
+    wt = ctx.worktree("notes")
+    base = _base(ctx, task, wt)
+    config = wt.run("show", f"{base}:tools/subjects.json", check=False)
+    if config.returncode == 0:
+        cards.preflight(config.stdout)
+    task.update(preparation_base=base)
+    return base
+
+
 def _place_all(ctx: Ctx, task: Task, new_subject_index):
     repo = ctx.notes_path
     known = known_hashes(repo)
@@ -172,6 +188,7 @@ def advance(ctx: Ctx, task: Task, drive_factory) -> None:
     """`downloading` … `prepared` from the recorded phase (8.2); shared by cron and chat.
     `drive_factory()` returns the Drive client, or None when a session works offline."""
     if task.phase in ("downloading", "downloaded"):
+        _validated_base(ctx, task)
         drive = drive_factory()
         if drive is None:
             task.set_phase("moved", selected=[])        # offline session: no new packages

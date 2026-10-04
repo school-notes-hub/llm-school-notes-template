@@ -149,13 +149,16 @@ def add_subjects(repo: Path, new_subjects: list[dict], names: dict[str, str]) ->
     data = generate.load_subjects_json(repo)
     subjects = data.setdefault("subjects", {})
     added = False
-    for item in new_subjects:
+    for item in sorted(new_subjects, key=lambda s: (s["subject"], s["emoji"], s["color"])):
         slug = item["subject"]
-        if slug in subjects:
-            continue
-        subjects[slug] = {"name": names.get(slug, slug), "emoji": item["emoji"],
-                          "dark": item["color"].lower(), "light": light_tint(item["color"])}
-        added = True
+        entry = subjects.setdefault(slug, {})
+        defaults = {"name": names.get(slug, slug), "emoji": item["emoji"],
+                    "dark": item["color"].lower(),
+                    "light": light_tint(entry.get("dark", item["color"]))}
+        for key, value in defaults.items():
+            if key not in entry:
+                entry[key] = value
+                added = True
     if added:
         safefs.write_text(repo, "tools/subjects.json",
                           json.dumps(data, ensure_ascii=False, indent=2) + "\n")

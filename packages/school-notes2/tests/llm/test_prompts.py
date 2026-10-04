@@ -33,9 +33,11 @@ def test_writer_role_and_independent_check_contract(role):
     text = prompt(role)
     assert 'A jegyzetíró szerepe: az adott terület (tantárgy) szakértője és tanára, nem szövegátíró.' in text
     assert '„1 kg = 1000 m” → javítás és jelzés; „1 kg = 1000” (lemaradt mértékegység) → „1 kg = 1000 g”' in text
-    assert 'Mielőtt a `check`-et hívod, menj végig a checklistán az egész oldalon:' in text
+    scope = 'az egész oldalon:' if role == 'writer' else 'a saját módosításodon.'
+    assert 'Mielőtt a `check`-et hívod, menj végig a checklistán ' + scope in text
     assert 'A `check` nem talál meg mindent; a nulla figyelmeztetés nem jelenti, hogy kész vagy.' in text
-    assert 'Ha a téma már létezik, az új órát oda építsd be, ahol a tanulás logikája kéri; a nem érintett bekezdéseket ne írd át.' in text
+    if role == 'writer':
+        assert 'Ha a téma már létezik, az új órát oda építsd be, ahol a tanulás logikája kéri; a nem érintett bekezdéseket ne írd át.' in text
     assert 'Tulajdonos: az ábra helyes legyen' in text
     assert '„A lektor és a jegyzetíró nem ért egyet a 3. bekezdésben.”' in prompt('fix')
     assert '„A tankönyv szerint X, a füzetben Y áll. Melyiket tanultátok az órán? Addig X-et használjuk.”' in prompt('fix')
@@ -53,3 +55,25 @@ def test_nightly_uses_current_output_contract_without_transcription_goal():
     assert '`family_questions` []' in file_text
     with pytest.raises(ValueError):
         prompt('unknown')
+
+
+def test_fix_has_no_ingest_or_whole_page_assignment():
+    text = prompt('fix')
+    for ingest in ('Olvasd végig a kijelölt forrásoldalakat', 'Minden tanulható elemet',
+                   'az új órát oda építsd be', 'Az órai jegyzetoldal rövid',
+                   'az egész oldalon', 'Minden füzethibát javítottál'):
+        assert ingest not in text
+    assert 'kizárólag a kiosztott review-tételeket kezeld' in text
+    assert 'Tételen kívüli sort figyelmeztetés miatt sem írsz át' in text
+    assert '`coverage[]`' in text
+
+
+@pytest.mark.parametrize('role', ['writer', 'fix', 'reviewer'])
+def test_prompts_use_role_names(role):
+    text = prompt(role)
+    assert 'Astra' not in text and 'Claude-review' not in text
+    if role == 'reviewer':
+        assert 'jegyzetet készítesz' not in text
+        assert 'a jegyzetnek ezt kell elérnie; te ezt méred' in text
+    else:
+        assert '- Kérdés a forrásról.\n' in text
