@@ -13,7 +13,7 @@ LIMIT = {"limit_reached": True, "message": "Check limit reached: write result.js
 
 
 def begin(task) -> None:
-    """Only the launcher starts an invocation; MCP fetch/check cannot reset its budget."""
+    """A launcher invocation or a new interactive run starts its own budget."""
     task.update(writer_check={"count": 0, "warnings": []})
 
 
@@ -31,11 +31,17 @@ def ordered(items: list[dict]) -> list[dict]:
                                         i.get("line") or 0, i["message"], i.get("id", "")))
 
 
-def identify(items: list[dict]) -> list[dict]:
-    counts, out = Counter(), []
+def identify(items: list[dict], repo=None) -> list[dict]:
+    counts, out, lines = Counter(), [], {}
     for i in ordered(items):
         if i.get("severity") == "warning" and "id" not in i:
-            digest = source_refs.line_hash(f"{i.get('line')}:{i['message']}")
+            rel, n = i["file"], i.get("line")
+            if repo is not None and rel not in lines:
+                lines[rel] = (safefs.read_text(repo, rel).splitlines()
+                              if safefs.is_file(repo, rel) else [])
+            content = lines.get(rel, [])
+            raw = content[n - 1] if n and 0 < n <= len(content) else ""
+            digest = source_refs.line_hash(f"{raw}:{i['message']}")
             counts[(i["file"], digest)] += 1
             i = {**i, "id": f"{i['file']}:{digest}:{counts[(i['file'], digest)]}"}
         out.append(i)
@@ -105,7 +111,7 @@ def tool_errors(ctx, task, items: list[dict]) -> None:
 def after_writer(ctx, task, result: dict, items: list[dict]) -> list[dict]:
     """New warnings after the last own check are reviewer work, never bad writer work."""
     decided = {i["id"] for i in result.get("warnings", [])}
-    warnings = [{**i, "unhandled": i["id"] not in decided} for i in identify(items)
+    warnings = [{**i, "unhandled": i["id"] not in decided} for i in identify(items, ctx.notes_path)
                 if i.get("severity") == "warning"]
     task.update(check_warnings=warnings)
     return warnings

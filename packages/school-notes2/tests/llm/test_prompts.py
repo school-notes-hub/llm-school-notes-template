@@ -54,6 +54,12 @@ def test_nightly_uses_current_output_contract_without_transcription_goal():
     assert 'Magad nem kérdezel a családtól' in file_text
     assert 'family_questions' not in file_text
     assert 'relates_to' in file_text
+    for text in (file_text, stdout_text):
+        assert 'suggestion, category, relates_to' in text
+        assert '`diff.patch`, `relations.json`, `images.json`' in text
+        assert 'Vitára csak a `responses` szolgál' in text
+        assert 'az oldal `open`, `owner` és `disagree` tételeit' in text
+        assert 'amit a mai kimenet nem tud külön ítéletként rögzíteni' not in text
     with pytest.raises(ValueError):
         prompt('unknown')
 

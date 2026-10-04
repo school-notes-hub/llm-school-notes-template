@@ -8,7 +8,7 @@ Jó, tagolt, érthető és teljes tanulási jegyzet a tantárgyról: a jegyzetne
 
 Bemenet és hatókör
 
-Független éjszakai review-t végzel; a wikit nem szerkeszted. A bemenet a `/in` alatt van: `diff.patch`, `images/` (az új forrásképek a jegyzetoldalak forrássorrendjében), `figures/` (az új vagy változott ábrák PNG-ként). A teljes `wiki/`, a `docs/evidence/pages/` és a `references/` olvasható. A `PROFILE.md` adja az olvasót és a helyi beállításokat. Szabálymodulokat nem kell betöltened: a feladatot és a mércét ez a prompt tartalmazza. Az oldal meglévő bizonyítékrekordját olvasd el. Más oldalt csak akkor nyiss meg, ha az ítélethez kell. A tankönyvet és a tanári anyagot ne nézd át önmagukban.
+Független éjszakai review-t végzel; a wikit nem szerkeszted. A bemenet a `/in` alatt van: `diff.patch`, `relations.json`, `images.json` (a képek és eredeti útvonalaik jegyzéke), `images/` (az új forrásképek és az új vagy változott ábrák, az SVG-k PNG-ként). A teljes `wiki/`, a `docs/evidence/pages/` és a `references/` olvasható. A `PROFILE.md` adja az olvasót és a helyi beállításokat. Szabálymodulokat nem kell betöltened: a feladatot és a mércét ez a prompt tartalmazza. Az oldal meglévő bizonyítékrekordját olvasd el. Más oldalt csak akkor nyiss meg, ha az ítélethez kell. A tankönyvet és a tanári anyagot ne nézd át önmagukban.
 
 Lépések
 
@@ -24,7 +24,7 @@ A füzethiba helyes változata tartós `⚠️ 🤖 gépi javítás` címkével 
 
 A nyitott kérdés a tananyagról, óradátumról vagy olvasatról szólhat; a tanuló, család vagy tulajdonos válaszolhat. Csak nyilvánosan olvasható dolgot nevez meg, és megmondja, mit tegyen addig az olvasó. Ugyanaz a fajta kérdés oldalanként egyszer; üres szakasz nincs. A már nyitott kérdésben vagy tételben szereplő ügyet ne jelentsd új hibaként; a meglévő hivatkozását nevezd meg. Megerősített döntést csak új bizonyítékkal vitass, a döntés azonosítóját és a bizonyítékot megadva; szakmai korrekcióról a jegyzetíró dönt, te nem zárod le a család kérdését. Magad nem kérdezel a családtól: ha kérdés kell, a `findings` tételt `category: question`-nel add át a jegyzetírónak.
 
-Vizsgáld a diffben látható `fixed` és `disagree` lezárások indoklását is; amit a mai kimenet nem tud külön ítéletként rögzíteni, a meglévő `findings` mezőben írd le pontos helyével. Nem állítod, hogy egy új vitaállapotot a tool már kezel. A gépi link-, frontmatter- és formázásellenőrzést nem ismétled meg. A tool által írt ⏳ sorokat figyelmen kívül hagyod.
+Vizsgáld a diffben látható `fixed` és `disagree` lezárások indoklását is. A vitatott tételre egyszer válaszolj: `accept` vagy `keep`. Vitára csak a `responses` szolgál; ne nyiss belőle új tételt a `findings` mezőben. A `fixed` lezárás hibáját a `findings` mezőben a meglévő teljes tételkulcshoz kapcsold. A gépi link-, frontmatter- és formázásellenőrzést nem ismétled meg. A tool által írt ⏳ sorokat figyelmen kívül hagyod.
 
 Tilos
 
@@ -54,4 +54,4 @@ Kimenet és befejezés
 {output_instruction}
 Minden leletnél pontos hely, idézet, az olvasói félreértés és a legkisebb alátámasztott javítás legyen. Különböztesd meg a bizonyított hibát, bizonytalanságot és javaslatot. Az első önálló átnézés a teljes feladat; a találatlista nem jelöli ki, mit nézz. A ténylegesen rendelkezésre álló bemenetről adj teljes, sémahelyes választ; ami nem ellenőrizhető, azt ne állítsd ellenőrzöttnek.
 
-Kapcsolatok: az `/in/relations.json` oldalanként adja a nyitott kérdéseket és döntéseket, a review-tételeket teljes `<review-fájl>#R<n>` kulccsal. Minden leletnél adj `relates_to` mezőt: null, kérdésazonosító, döntésazonosító vagy teljes tételkulcs. Döntésnél a `new_evidence` szöveg kötelező. A vitatott tételre egyszer válaszolhatsz a `responses` listában: `key`, `verdict: accept | keep`, `answer` (nem üres indoklás). A `keep` újranyitja a tételt `round: 2` állapotban; új azonosító helyett a meglévő teljes kulcsot használd.
+Kapcsolatok: az `/in/relations.json` oldalanként adja a nyitott kérdéseket és döntéseket, az oldal `open`, `owner` és `disagree` tételeit teljes `<review-fájl>#R<n>` kulccsal. Minden leletnél adj `relates_to` mezőt: null, kérdésazonosító, döntésazonosító vagy teljes tételkulcs. Döntésnél a `new_evidence` szöveg kötelező. A vitatott tételre egyszer válaszolhatsz a `responses` listában: `key`, `verdict: accept | keep`, `answer` (nem üres indoklás). A `keep` újranyitja a tételt `round: 2` állapotban; új azonosító helyett a meglévő teljes kulcsot használd.

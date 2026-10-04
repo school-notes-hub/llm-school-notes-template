@@ -324,3 +324,12 @@ def test_stop_all_handles_a_job_record_without_pid(make):
     assert server.jobs.stop_all(timeout_s=1) == ["check-0000"]
     assert time.monotonic() - began < 10
     assert server.jobs.get("check-0000")["state"] == "error"
+
+
+def test_image_accept_waits_for_check_without_touching_state(make, monkeypatch):
+    server = make(image_accept=lambda *a: pytest.fail("image_accept must not run beside check"))
+    monkeypatch.setattr(server.jobs, "running", lambda names: {"id": "check-job", "tool": "check"}
+                        if "check" in names else None)
+    answer = call(server, "image_accept", {"plan_id": "banner", "review": {}})
+    assert answer["error"]["code"] == "busy"
+    assert answer["error"]["job_id"] == "check-job"

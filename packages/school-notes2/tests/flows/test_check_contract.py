@@ -123,15 +123,29 @@ def test_g5_build_failure_twice_and_success_reset(learning_run, monkeypatch):
     assert resumed.phase == "built" and resumed.data["llm_failures"] == 0
 
 
-def test_interactive_fetch_new_task_does_not_reset_invocation_budget(learning_run):
+def test_interactive_fetch_new_task_has_own_budget(learning_run, monkeypatch):
+    from school_notes2.flows import chat
     ctx, task = learning_run
-    handlers.check(ctx, task)
-    handlers.check(ctx, task)
+    h = handlers.build(ctx)
+    for _ in range(3):
+        h.check()
+    assert h.check() == checks.LIMIT
+    chat.session_fetch(ctx)  # Same task must not reset.
+    assert h.check() == checks.LIMIT
+    task.reload()
+    task.set_phase("done")
     other = phase.create(ctx.task_root(), ctx.name, "notes", "interactive", "writing")
     other.update(**task.data["data"])
-    checks.begin(other)
-    handlers.check(ctx, other, budget_dir=task.dir)
-    assert handlers.check(ctx, phase.load(other.dir), budget_dir=task.dir) == checks.LIMIT
+    # Make fetch create the next task, whose stale copied count must be reset.
+    other.set_phase("done")
+    def start(ctx):
+        other.set_phase("writing")
+        return other
+    monkeypatch.setattr(chat, "interactive_fetch", start)
+    assert chat.session_fetch(ctx)["run_id"] == other.run_id
+    for _ in range(3):
+        assert "limit_reached" not in h.check()
+    assert h.check() == checks.LIMIT
 
 
 def test_tool_svg_warnings_and_status_counts(learning_run):
@@ -155,3 +169,74 @@ def test_machine_stamp_does_not_transfer_author_error_to_tool(learning_run):
     checks.tool_errors(ctx, task, [item(TOPIC, 1, "invalid link")])
     with pytest.raises(steps.CheckFailed):
         steps.check_changed(ctx, task)
+
+
+def test_non_source_warning_survives_machine_stamp(learning_run):
+    from school_notes2.wiki import frontmatter
+    ctx, task = learning_run
+    path = ctx.notes_path / TOPIC
+    path.write_text(path.read_text() + '\n[^hely]: [Forrás](../../sources/missing.pdf)\n')
+    own = handlers.check(ctx, task)["problems"]
+    warning = next(i for i in own if "cited source" in i["message"])
+    result = {"status": "done", "warnings": [{"id": warning["id"], "action": "kept", "reason": "Hivatkozás."}]}
+    path.write_text(frontmatter.set_keys(path.read_text(), {"generated": {"by": "tool", "at": "2026-10-04"}}))
+    later = checks.after_writer(ctx, task, result, steps.check_items(ctx, task))
+    actual = next(i for i in later if "cited source" in i["message"])
+    assert actual["line"] != warning["line"]
+    assert actual["id"] == warning["id"] and not actual["unhandled"]
+
+
+def test_writer_call_accounting_failure_is_bad_work(learning_run, monkeypatch):
+    from contextlib import nullcontext
+    from school_notes2.llm import launch
+    ctx, task = learning_run
+    role, harness = ctx.cfg.role("writer")
+    monkeypatch.setattr(writer, "mcp", lambda *a: nullcontext(task.dir))
+    def call(*args, **kwargs):
+        fresh = phase.load(task.dir)
+        checks.remember(fresh, [{"severity": "warning", "id": "missed"}])
+        return SimpleNamespace(output={"status": "done"})
+    monkeypatch.setattr(launch, "run_headless", call)
+    with pytest.raises(steps.CheckFailed) as caught:
+        writer._call(ctx, task, 1, role, harness, None)
+    assert "missing decision for missed" in caught.value.items[0]["message"]
+    assert safefs.read_json(ctx.notes_path, ".school-notes/check.json") == caught.value.items
+    policy.on_error(caught.value, task=task, student=ctx.name, step="writer", log=ctx.log, mailer=None)
+    assert task.data["llm_failures"] == 1 and not task.data.get("needs_owner")
+
+
+def test_interactive_merged_result_accounting(learning_run):
+    ctx, task = learning_run
+    checks.remember(task, [{"severity": "warning", "id": "missed"}])
+    safefs.write_json(ctx.notes_path, ".school-notes/result.json", {"status": "done"})
+    with pytest.raises(steps.CheckFailed) as caught:
+        steps.merged_result(ctx, task)
+    assert "missing decision" in caught.value.items[0]["message"]
+    assert not (task.dir / "result-1.json").exists()
+    own = {"status": "done", "warnings": [{"id": "missed", "action": "kept", "reason": "Példa."}]}
+    safefs.write_json(ctx.notes_path, ".school-notes/result.json", own)
+    assert steps.merged_result(ctx, task)["warnings"] == own["warnings"]
+
+
+def test_question_session_accounting_feedback_and_resume(learning_run, monkeypatch):
+    from school_notes2.flows import chat
+    ctx, task = learning_run
+    task.data["mode"] = "cron"
+    task.update(question=[{"text": "Dátum?"}], ranges=[[0, 0], [0, 0]], writing_k=1)
+    checks.remember(task, [{"severity": "warning", "id": "missed"}])
+    safefs.write_json(ctx.notes_path, ".school-notes/result.json", {"status": "done"})
+    monkeypatch.setattr(type(ctx), "lock", lambda _: SimpleNamespace(note=lambda _: None))
+    answer = chat.session_finish(ctx)
+    assert answer["state"] == "check_failed" and answer["errors"] == 1
+    assert "missing decision for missed" in answer["problems"][0]["message"]
+    assert safefs.read_json(ctx.notes_path, answer["full_list"]) == answer["problems"]
+    with pytest.raises(steps.CheckFailed) as caught:
+        chat._after_question_session(ctx, phase.load(task.dir))
+    assert "missing decision" in caught.value.items[0]["message"]
+    assert not (task.dir / "result-1.json").exists()
+    safefs.write_json(ctx.notes_path, ".school-notes/result.json", {"status": "done", "warnings": [
+        {"id": "missed", "action": "kept", "reason": "Példa."}]})
+    assert chat.session_finish(ctx)["state"] == "saved"
+    fresh = phase.load(task.dir)
+    assert not fresh.get("question") and fresh.get("writing_k") == 2
+    assert not chat.save_session_result(ctx, fresh)

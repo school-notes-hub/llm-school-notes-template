@@ -15,7 +15,7 @@ from ..git import repos
 from ..git.run import Git, with_retries
 from ..schemas import validate
 from ..state import phase
-from ..state.errors import NeedsOwner, Transient
+from ..state.errors import BadWork, NeedsOwner, Transient
 from ..sources.order import natural_key
 from ..state import safefs
 from ..state.files import read_json, write_bytes, write_json, write_text
@@ -152,7 +152,7 @@ def write_input(repo: Git, wt: Git, rng: Range, in_dir: Path, rasterize: Rasteri
     if svgs:
         rasterize(svgs, out_dir)  # network-less container (plan 5.6/3), never on the host
     write_json(in_dir / "images.json", listing, 0o644)
-    write_json(in_dir / "relations.json", relations.inventory(wt.work_tree), 0o644)
+    write_json(in_dir / "relations.json", relations.reviewer_inventory(wt.work_tree), 0o644)
 
 
 def prepare(root: Path, student: str, repo: Git, wt: Git, *, max_images: int, max_diff_kb: int,
@@ -172,7 +172,8 @@ def prepare(root: Path, student: str, repo: Git, wt: Git, *, max_images: int, ma
 
 def resume_prepared(task: phase.Task, repo: Git, wt: Git, rasterize: Rasterize) -> None:
     """Rebuild a half-written input folder from the recorded H/T (crash after create)."""
-    if task.get("input_ready") and (task.dir / "in" / "relations.json").is_file():
+    known = read_json(task.dir / "in" / "relations.json")
+    if task.get("input_ready") and known is not None and "items" not in known:
         return
     base, end = task.get("base"), task.get("T")
     rng = Range(base, task.get("H"), end, task.get("commits"), build_patch(repo, base, end),
@@ -195,10 +196,16 @@ def record_review(task: phase.Task, review: dict, worktree: Path | None = None) 
     they are dropped (listed in the task as `dropped_figures`) instead of failing the close
     every night. The image may be the input name (`images/003-x.png`) or a repo path."""
     validate("review", review)
+    known = relations.inventory(worktree) if worktree is not None else {"pages": {}, "items": {}}
+    for finding in review["findings"]:
+        page = known["pages"].get(finding["file"], {})
+        if finding.get("relates_to") in page.get("decisions", []) and not finding.get("new_evidence", "").strip():
+            raise BadWork(f"review.json: {finding['id']}: a decision reference requires new_evidence")
+    responses, dropped_responses = relations.valid_responses(review.get("responses", []), known)
     kept, dropped = _valid_figures(task, review.get("figures") or [], worktree)
-    review = {**review, "figures": kept}
+    review = {**review, "figures": kept, "responses": responses}
     write_json(task.dir / "review.json", review)
-    task.set_phase("reviewed", dropped_figures=dropped)
+    task.set_phase("reviewed", dropped_figures=dropped, dropped_responses=dropped_responses)
 
 
 def _valid_figures(task: phase.Task, figures: list[dict], worktree: Path | None):
@@ -251,7 +258,9 @@ def pending_close(tasks: list[phase.Task]) -> phase.Task | None:
 def load_review(task: phase.Task) -> dict:
     review = json.loads((task.dir / "review.json").read_text(encoding="utf-8"))
     # Already saved reports from the previous contract remain resumable.
-    legacy = {**review, "findings": [{"relates_to": None, **f} for f in review["findings"]]}
+    legacy = {**review, "findings": [{"relates_to": None, **{
+        k: v for k, v in f.items() if k not in ("origin", "chain", "unlocated")}}
+        for f in review["findings"]]}
     legacy.pop("family_questions", None)
     validate("review", legacy)
     return {**legacy, **({"family_questions": review["family_questions"]}

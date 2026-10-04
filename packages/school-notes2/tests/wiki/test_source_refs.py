@@ -1,5 +1,6 @@
 """Fixed warning corpus: public surfaces, structural exceptions and content identity."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,14 @@ CORPUS = [
     (PAGE, "A 3. fotón látható.", True),
     (PAGE, "Az 5. oldalon olvasható.", True),
     (PAGE, "A diák megértik a témát.", False),
+    (PAGE, "A háromszög 3 oldala.", False),
+    (PAGE, "A háromszögnek 3 oldala van; 2 oldal egyenlő.", False),
+    ("wiki/assets/a.svg", '<svg><text>2 oldal</text></svg>', False),
+    (PAGE, "Az 5 oldalon és a 6 oldalán, a 7 oldali ábra.", True),
+    (PAGE, "A 12–13. oldal.", True),
+    (PAGE, "<sub>🗓️ Óra: 2026-09-11 · 🔖 Tankönyv: 1. lecke, 12-13. oldal.</sub>", False),
+    (PAGE, "A 2. dia. <sub>🗓️ Óra: 2026-09-11 · 🔖 Tankönyv: 12. oldal.</sub>", True),
+    (PAGE, "<sub>🔖 Tankönyv: 12. oldal.</sub> A 2. dia.", True),
     (PAGE, "A fenti fotón látható a beágyazott kép.", False),
     (PAGE, "![A 3. fotó](../assets/kep.png)", True),
     (PAGE, "<details>\n<summary>Kérdés</summary>\nA 2. dia.\n</details>", True),
@@ -74,7 +83,13 @@ def test_verdicts_persist_by_content_not_line_number(tmp_path):
 
 @pytest.mark.parametrize("learner", ["benedek", "barna"])
 def test_corpus_and_read_only_scan_on_both_local_wikis(learner):
-    repo = Path(__file__).resolve().parents[5] / f"school-notes-{learner}-active"
+    name = f"school-notes-{learner}-active"
+    configured = os.environ.get("SN_LEARNER_REPOS")
+    candidates = [Path(p) for p in configured.split(os.pathsep)] if configured else []
+    repo = next((p for p in candidates if p.name == name), None)
+    if configured and repo is None:
+        pytest.fail(f"SN_LEARNER_REPOS must include {name}")
+    repo = repo or Path(__file__).resolve().parents[5] / name
     if not repo.is_dir():
         pytest.skip("optional local learner checkout is unavailable")
     found = []
@@ -124,3 +139,13 @@ def test_verdict_atomic_write_crash_resume(tmp_path, monkeypatch, when):
 ])
 def test_visible_labels_and_code_boundaries(text, hit):
     assert bool(refs.scan(PAGE, text)) == hit
+
+
+@pytest.mark.parametrize("entity", ["&#10;", "&#x2028;", "&#13;"])
+def test_svg_entities_keep_original_lines_hashes_and_changed_filter(entity):
+    text = f'<svg>\n<text>Előtte{entity}A 2. dia.</text>\n<text>A 3. dia.</text>\n</svg>\n'
+    found = refs.scan("wiki/assets/a.svg", text)
+    assert [i["line"] for i in found] == [2, 3]
+    assert found[1]["line_hash"] == refs.line_hash(text.splitlines()[2])
+    old = text.replace("A 3. dia.", "Tananyag.")
+    assert refs.scan("wiki/assets/a.svg", text, old) == found[1:]

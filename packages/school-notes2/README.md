@@ -119,11 +119,15 @@ uses changed lines, including Markdown title/description, Mermaid and SVG labels
 structural exceptions from repair plan 8.2. `source_refs.scan(full=True)` and task data
 `mode: repair` support the later repair entry point. No rule enters the publication gate.
 The fixed corpus is tested against both optional local learner checkouts, read-only.
+`SN_LEARNER_REPOS` may supply their paths as a colon-separated list (directories named
+`school-notes-benedek-active` and `school-notes-barna-active`); absent that variable,
+the tests search the usual sibling directories.
 Per-file counts (before verdict suppression) appear in logs and status.
 
 MCP check returns errors first, full counts, `truncated` and the full-list path. A durable
 counter permits three checks per invocation, including across background-job restarts;
-interactive fetch does not reset it. The last own check's warning IDs must have decisions.
+fetch of the same interactive run does not reset it; a new run gets its own budget.
+The last own check's warning IDs must have decisions.
 Later tool warnings without decisions are persisted with `unhandled` for reviewer handoff.
 Accepted/false-positive list verdicts use `review.warnings.record` and the private
 `warning-verdicts.json`; repeating a write is idempotent, content changes invalidate it.
@@ -133,10 +137,20 @@ the storage API returns `hiba` findings for their review-item creation.
 Review metadata is additive `item_details`, keeping old `items: {R1: status}` maps readable.
 Legacy headings supply the page when metadata is absent. Full keys avoid cross-report R1
 collisions. Question/decision references are page-local. Existing question/open-item
-references go to the pending section, decisions to owner, unknown references to unlocated.
-Owner notification and the full nightly targeting/chain policy remain controller-layer work.
+and disagreement references go to the pending section, decisions to owner, unknown references
+to unlocated. A decision reference without new evidence is invalid reviewer output.
+The tool inherits the related item's chain; findings about fixed/settled items escalate to
+chain 1 and owner. Owner items use the existing once-per-item notification path, with
+a durable handoff across closing restarts. Invalid or stale responses are dropped and logged.
+Reviewer input groups only open, owner and disagree items by page. Independent review
+transitions and appended tool sections merge during rebase; contradictory edits still stop.
+The full nightly targeting/blame policy remains later work.
 No new phase, LLM role or call is added; persisted checks, verdict writes and replies have
 interruption/resume coverage.
+
+Deployment requires no open notes runs: old saved `result-<k>.json` disagreements
+without a substantive `note` cannot satisfy the new closure contract. The controller
+checks this before installation; the tool does not invent a historical justification.
 
 `llm_failures` resets with the successful G5 build checkpoint. T-016 uses last-written
 whole-file hashes plus provenance: stamping machine fields cannot turn a changed author

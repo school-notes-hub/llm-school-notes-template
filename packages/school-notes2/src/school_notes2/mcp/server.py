@@ -191,6 +191,10 @@ class McpServer:
         """A running fetch/finish owns the worktree and phase.json: anything else is told to
         wait (a repeated fetch/finish gets the running job id, 7.5). The other way round
         too: while a check or image job still writes in the worktree, fetch/finish wait."""
+        checking = self.jobs.running(("check",)) if name == "image_accept" else None
+        if checking:
+            raise ToolError("busy", "check is running; wait for it first",
+                            job_id=checking["id"], tool="check")
         busy = self.jobs.running(STATE_CHANGING)
         if busy and name in WORKTREE_WRITERS:
             raise ToolError("busy", f"{busy['tool']} is running; wait for it first",

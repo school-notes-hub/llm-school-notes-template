@@ -182,7 +182,7 @@ def check_items(ctx: Ctx, task: Task) -> list[dict]:
     paths = sorted(llm_snapshot(ctx, task))
     items = wiki_check.check_files(ctx.notes_path, paths, today=today)
     checks.tool_errors(ctx, task, items)
-    return checks.identify(items + checks.source_warnings(ctx, task, changed_paths(ctx, task)))
+    return checks.identify(items + checks.source_warnings(ctx, task, changed_paths(ctx, task)), ctx.notes_path)
 
 
 def check_changed(ctx: Ctx, task: Task, *, result: dict | None = None) -> None:
@@ -217,7 +217,7 @@ def generate_all(ctx: Ctx, task: Task) -> None:
 
 
 def write_check_items(ctx: Ctx, items: list[dict]) -> None:
-    items = checks.identify(items)
+    items = checks.identify(items, ctx.notes_path)
     validate("check", items)
     safefs.write_json(ctx.notes_path, f"{workbranch.WORKDIR}/check.json", items)
 

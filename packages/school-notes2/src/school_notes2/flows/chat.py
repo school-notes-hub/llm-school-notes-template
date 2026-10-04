@@ -153,8 +153,10 @@ def save_session_result(ctx: Ctx, task: phase.Task) -> bool:
     own = safefs.read_json(ctx.notes_path, ".school-notes/result.json")
     if own is None or schema_errors("result", own) or own.get("status") != "done":
         return False
-    if checks.accounting(task, own):
-        return False
+    problems = checks.accounting(task, own)
+    if problems:
+        steps.write_check_items(ctx, problems)
+        raise steps.CheckFailed(problems)
     n = len(task.get("ranges"))
     k = min(task.get("writing_k", 1), n)
     write_json(task.dir / f"result-{k}.json", own)
@@ -171,6 +173,7 @@ def session_fetch(ctx: Ctx) -> dict:
     task = phase.open_task(ctx.task_root(), ctx.name, "notes")
     if task is None:
         task = interactive_fetch(ctx)
+        checks.begin(task)
     elif task.phase in ("downloading", "downloaded", "moved"):
         fetch_flow.advance(ctx, task, lambda: _drive_or_none(ctx))
     writer.write_inputs(ctx, task, min(task.get("writing_k", 1), len(task.get("ranges"))))
@@ -187,19 +190,19 @@ def session_finish(ctx: Ctx) -> dict:
     n = len(task.get("ranges"))
     if task.mode == "cron" and not task.get("question") and task.get("writing_k", 1) <= n:
         return {"state": "saved", "message": "the remaining ranges continue in cron"}
-    if task.get("question"):
-        if not save_session_result(ctx, task):
-            return {"state": "question_open", "message": "write a result.json with status done"}
-        task = phase.load(task.dir)
-        if task.get("writing_k") <= len(task.get("ranges")):
-            return {"state": "saved", "message": "the remaining ranges continue in cron"}
     try:
+        if task.get("question"):
+            if not save_session_result(ctx, task):
+                return {"state": "question_open", "message": "write a result.json with status done"}
+            task = phase.load(task.dir)
+            if task.get("writing_k") <= len(task.get("ranges")):
+                return {"state": "saved", "message": "the remaining ranges continue in cron"}
         state = finish_flow.finish(ctx, task, notify_owner_items=lambda items: run_flow.owner_items(
             ctx, task, items))
     except steps.CheckFailed as exc:
         steps.write_check_items(ctx, exc.items)
         task.set_phase("writing")
-        return {"state": "check_failed", "problems": exc.items[:50]}
+        return {"state": "check_failed", **checks.response(exc.items)}
     except finish_flow.git_finish.EditedDuringFinish:
         return {"state": "edited", "message": "files changed during finish; call finish again"}
     except Transient as exc:

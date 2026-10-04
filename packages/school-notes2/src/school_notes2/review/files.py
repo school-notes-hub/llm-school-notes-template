@@ -116,8 +116,8 @@ def write_review(repo: Path, date: str, review: dict, reviewer: str, frm: str, t
             continue
         active.append(f)
         items[f["id"]] = status
-        records[f["id"]] = {"file": f["file"], "round": 1, "chain": f.get("chain", 0),
-                            "origin": f.get("origin", "nightly"), "category": f.get("category"),
+        records[f["id"]] = {"file": f["file"], "round": 1, "chain": relations.chain(f, known),
+                            "origin": "nightly", "category": f.get("category"),
                             "relates_to": f.get("relates_to"), "unlocated": unlocated}
     body = render_body(date, {**review, "findings": active}, frm, to)
     if pending:

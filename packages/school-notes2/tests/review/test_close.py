@@ -120,3 +120,101 @@ def test_discard_timeout_steps_marker_past_commit(tmp_path, repos):
     r, m = close.discard_timeout(task, repos.repo, repos.wt, IDENT, stuck)
     assert m == stuck and repos.remote("claude-reviewed") == stuck and repos.remote("main") == r
     assert "Nem átnézve" in file_at(repos, r, "docs/review/2026-10-04-review.md")
+
+
+def disputed_report(repos):
+    from school_notes2.review import files
+    report = files.write_review(repos.laptop, "2026-10-03", {"verdict": "changes", "findings": [
+        {"id": "R1", "file": "wiki/a.md", "problem": "Vita.", "relates_to": None},
+        {"id": "R2", "file": "wiki/a.md", "problem": "Nyitott.", "relates_to": None}]}, "r", "a", "b")
+    rel = report.relative_to(repos.laptop).as_posix()
+    files.apply_closure(repos.laptop, "writer", [{"file": rel, "item_id": "R1", "status": "disagree", "note": "Indok."}], [])
+    repos.commit({"wiki/a.md": "Tananyag.\n"})
+    return rel
+
+
+@pytest.mark.parametrize("verdict", ["accept", "keep"])
+def test_close_valid_and_invalid_responses_keeps_good_findings(tmp_path, repos, verdict):
+    from school_notes2.review import relations
+    from school_notes2.state.files import read_json
+    rel = disputed_report(repos)
+    task = reviewed(tmp_path, repos)
+    responses = [{"key": key, "verdict": verdict, "answer": "Válasz."} for key in
+                 (f"{rel}#R1", f"{rel}#R2", "docs/review/missing.md#R1")]
+    nightly.record_review(task, {**REVIEW, "responses": responses}, repos.wt_path)
+    assert len(task.get("dropped_responses")) == 2
+    assert len(read_json(task.dir / "review.json")["responses"]) == 1
+    r, _ = close.close(task, repos.repo, repos.wt, IDENT)
+    text = file_at(repos, r, rel) + "\n"
+    assert relations.details(text, "R1")["round"] == (2 if verdict == "keep" else 1)
+    assert fm.split(text).meta["items"]["R1"] == ("open" if verdict == "keep" else "disagree")
+    assert "Elírás." in file_at(repos, r, "docs/review/2026-10-04-review.md")
+    assert task.phase == "done"
+
+
+def test_close_revalidates_response_after_upstream_answer(tmp_path, repos):
+    from school_notes2.review import relations
+    rel = disputed_report(repos)
+    task = reviewed(tmp_path, repos)
+    nightly.record_review(task, {**REVIEW, "responses": [
+        {"key": f"{rel}#R1", "verdict": "keep", "answer": "Későbbi válasz."}]}, repos.wt_path)
+    relations.reply(repos.laptop, f"{rel}#R1", "accept", "Korábbi válasz.")
+    repos.commit({"wiki/a.md": "Tananyag.\nÚj mondat.\n"})
+    r, _ = close.close(task, repos.repo, repos.wt, IDENT)
+    assert len(task.get("dropped_responses_at_close")) == 1
+    assert "Korábbi válasz." in file_at(repos, r, rel)
+    assert "Későbbi válasz." not in file_at(repos, r, rel)
+    assert "review.dropped_responses" in repos.repo.log.main.read_text()
+    assert task.phase == "done"
+
+
+def test_close_decision_owner_notification_survives_crash(tmp_path, repos, monkeypatch):
+    from types import SimpleNamespace
+    from school_notes2.flows import nightly as flow
+    from school_notes2.flows import run
+    text = fm.set_keys("Tananyag.\n", {"decisions": [{"id": "nev", "claim": "Név", "answer": "Válasz",
+                                                     "by": "owner", "on": "2026-10-04"}]})
+    repos.commit({"wiki/a.md": text})
+    task = reviewed(tmp_path, repos)
+    review = {"verdict": "changes", "findings": [{"id": "R1", "file": "wiki/a.md", "problem": "Új adat.",
+                                                "relates_to": "nev", "new_evidence": "Bizonyíték."}]}
+    nightly.record_review(task, review, repos.wt_path)
+    real_finish = close._finish
+    monkeypatch.setattr(close, "_finish", lambda *a: (_ for _ in ()).throw(RuntimeError("power loss after push")))
+    with pytest.raises(RuntimeError):
+        close.close(task, repos.repo, repos.wt, IDENT)
+    resumed = phase.load(task.dir)
+    assert resumed.phase == "pushing" and len(resumed.get("notify_owner_items")) == 1
+    monkeypatch.setattr(close, "_finish", real_finish)
+    close.close(resumed, repos.repo, repos.wt, IDENT)
+    delivered = {}
+    ctx = SimpleNamespace(name="benedek", mailer=SimpleNamespace(send_once=lambda notice:
+                          delivered.setdefault(notice.kind, notice)))
+    # Simulate a crash after send_once; its stable key prevents a second delivery.
+    real_owner = run.owner_items
+    def interrupted(*args):
+        real_owner(*args)
+        raise RuntimeError("power loss after email")
+    with monkeypatch.context() as m:
+        m.setattr(run, "owner_items", interrupted)
+        with pytest.raises(RuntimeError):
+            flow._notify_owners(ctx, resumed)
+    flow._notify_owners(ctx, phase.load(task.dir))
+    flow._notify_owners(ctx, phase.load(task.dir))
+    assert len(delivered) == 1
+    assert phase.load(task.dir).get("owners_notified")
+    assert "five times" not in str(next(iter(delivered.values())))
+
+
+def test_resume_rebuilds_legacy_relation_input_at_pinned_commit(tmp_path, repos):
+    from school_notes2.state.files import read_json, write_json
+    rel = disputed_report(repos)
+    task = reviewed(tmp_path, repos)
+    path = task.dir / "in" / "relations.json"
+    grouped = read_json(path)
+    assert f"{rel}#R1" in grouped["pages"]["wiki/a.md"]["items"]
+    write_json(path, {"pages": {}, "items": {}})  # Previous input shape.
+    repos.commit({"wiki/a.md": "Newer upstream must not change the pinned review.\n"})
+    nightly.resume_prepared(task, repos.repo, repos.wt, lambda *a: [])
+    assert read_json(path) == grouped
+    assert (repos.wt_path / "wiki/a.md").read_text() == "Tananyag.\n"

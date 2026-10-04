@@ -32,13 +32,8 @@ def build(ctx: Ctx, task_dir=None, *, fetch=None, finish=None) -> Handlers:
             raise NeedsOwner("there is no open run in this session", todo="call fetch first")
         return found
 
-    budget_dir = task_dir
-    if budget_dir is None:
-        active = phase.open_task(ctx.task_root(), ctx.name, "notes")
-        budget_dir = active.dir if active is not None else None
-
     return Handlers(
-        check=lambda: check(ctx, task(), budget_dir=budget_dir),
+        check=lambda: check(ctx, task()),
         image_generate=lambda plan_id, note: image_generate.generate(
             ctx.image_settings(), plan_id, note, log=ctx.log),
         image_accept=lambda plan_id, review: accept(ctx, task(), plan_id, review),
@@ -46,11 +41,10 @@ def build(ctx: Ctx, task_dir=None, *, fetch=None, finish=None) -> Handlers:
         fetch=fetch, finish=finish)
 
 
-def check(ctx: Ctx, task, *, budget_dir=None) -> dict:
+def check(ctx: Ctx, task) -> dict:
     """The writer's own check at the end of its work: guard, result.json, changed files.
     Applies unambiguous auto-fixes and refreshes tool-rendered learning metadata."""
-    budget = phase.load(budget_dir) if budget_dir is not None and budget_dir != task.dir else task
-    if not checks.take(budget):
+    if not checks.take(task):
         return dict(checks.LIMIT)
     problems: list[dict] = []
     try:
@@ -83,7 +77,7 @@ def check(ctx: Ctx, task, *, budget_dir=None) -> dict:
             problems += exc.items
     if metadata_valid:
         problems += public_problems(ctx.notes_path)
-    problems = checks.identify(problems)
+    problems = checks.identify(problems, ctx.notes_path)
     steps.write_check_items(ctx, problems)
     checks.tool_errors(ctx, task, problems)
     checks.remember(task, problems)

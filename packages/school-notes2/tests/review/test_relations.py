@@ -159,3 +159,75 @@ def test_saved_legacy_review_is_still_resumable(tmp_path):
     saved = nightly.load_review(task)
     assert saved["findings"][0]["relates_to"] is None
     assert saved["family_questions"] == ["Régi kérdés."]
+
+
+@pytest.mark.parametrize("status", ["disagree", "fixed", "settled"])
+@pytest.mark.parametrize("chain", [0, 1])
+def test_related_dispute_never_reborn_and_chain_is_tool_owned(tmp_path, report, status, chain):
+    path, rel = report
+    record = {**relations.details(path.read_text(), "R1"), "chain": chain}
+    path.write_text(frontmatter.set_keys(path.read_text(), {"items": {"R1": status}, "item_details": {"R1": record}}))
+    finding = {"id": "R1", "file": PAGE, "problem": "Ismételt.", "relates_to": f"{rel}#R1"}
+    new = files.write_review(tmp_path, "2026-10-05", {"verdict": "changes", "findings": [finding]}, "r", "b", "c")
+    meta = frontmatter.split(new.read_text()).meta
+    if status == "disagree":
+        assert meta["items"] == {} and "## Függő" in new.read_text()
+    else:
+        assert meta["items"] == {"R1": "owner"}
+        assert meta["item_details"]["R1"]["chain"] == 1
+        assert meta["item_details"]["R1"]["origin"] == "nightly"
+    for key, value in [("origin", "reader"), ("chain", 0), ("unlocated", True)]:
+        with pytest.raises(SchemaError):
+            validate("review", {"verdict": "changes", "findings": [{**finding, key: value}]})
+
+
+def test_asset_round_two_question_on_embedding_page(tmp_path, report):
+    path, rel = report
+    record = {"file": "wiki/assets/a.svg", "round": 2}
+    path.write_text(frontmatter.set_keys(path.read_text(), {"item_details": {"R1": record}}))
+    page = tmp_path / PAGE
+    page.write_text(page.read_text() + '\n![Ábra](../assets/a.svg)\n')
+    closure = {"file": rel, "item_id": "R1", "status": "question", "question_id": "tema-datum"}
+    assert not relations.closure_problems(tmp_path, closure)
+    files.apply_closure(tmp_path, "second", [closure], [])
+    assert frontmatter.split(path.read_text()).meta["items"]["R1"] == "question"
+    page.write_text(QUESTION + '\n```md\n![Ábra](../assets/a.svg)\n```\n')
+    assert relations.closure_problems(tmp_path, closure)
+
+
+def test_reviewer_inventory_is_grouped_filtered_and_deterministic(tmp_path, report):
+    path, rel = report
+    states = ["open", "owner", "disagree", "fixed", "settled", "question"]
+    items = {f"R{n}": s for n, s in enumerate(states, 1)}
+    records = {key: {"file": PAGE, "round": 1} for key in items}
+    path.write_text(frontmatter.set_keys(path.read_text(), {"items": items, "item_details": records}))
+    actual = relations.reviewer_inventory(tmp_path)
+    page = actual["pages"][PAGE]
+    assert page["questions"] == ["tema-datum"] and page["decisions"] == ["tema-nev"]
+    assert list(page["items"]) == [f"{rel}#R{n}" for n in (1, 2, 3)]
+    assert "items" not in actual
+    path.write_text(frontmatter.set_keys(path.read_text(), {"items": dict(reversed(list(items.items())))}))
+    assert relations.reviewer_inventory(tmp_path) == actual
+
+
+def test_missing_decision_evidence_is_invalid_output_not_unlocated(tmp_path, report):
+    from school_notes2.review import nightly
+    from school_notes2.state import phase
+    from school_notes2.state.errors import BadWork
+    task = phase.create(tmp_path / "tasks", "tester", "review", "cron", "reviewing")
+    finding = {"id": "R1", "file": PAGE, "problem": "Más adat.", "relates_to": "tema-nev"}
+    with pytest.raises(BadWork, match="requires new_evidence"):
+        nightly.record_review(task, {"verdict": "changes", "findings": [finding]}, tmp_path)
+    assert task.phase == "reviewing" and not (task.dir / "review.json").exists()
+    nightly.record_review(task, {"verdict": "changes", "findings": [{**finding, "new_evidence": "Új bizonyíték."}]}, tmp_path)
+    assert task.phase == "reviewed"
+
+
+def test_duplicate_responses_drop_both_without_choosing_a_verdict(tmp_path, report):
+    path, rel = report
+    files.apply_closure(tmp_path, "writer", [{"file": rel, "item_id": "R1", "status": "disagree", "note": "Indok."}], [])
+    responses = [{"key": f"{rel}#R1", "verdict": verdict, "answer": "Indok."} for verdict in ("keep", "accept")]
+    kept, dropped = relations.valid_responses(responses, relations.inventory(tmp_path))
+    assert not kept and len(dropped) == 2
+    assert all(i["reason"] == "duplicate response key" for i in dropped)
+    assert relations.valid_responses(list(reversed(responses)), relations.inventory(tmp_path)) == (kept, dropped)

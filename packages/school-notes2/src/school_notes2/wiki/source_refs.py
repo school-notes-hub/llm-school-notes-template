@@ -90,7 +90,7 @@ def visible_markdown(text: str) -> list[str]:
             footnote = True
         elif line.strip() and not line.startswith(("    ", "\t")):
             footnote = False
-        if question_level or footnote or re.match(r"^\s*(?:>\s*)?🔖\s*(?:Tankönyv|Textbook):", line):
+        if question_level or footnote:
             out.append("")
             continue
         if n > meta_lines:
@@ -101,6 +101,7 @@ def visible_markdown(text: str) -> list[str]:
             if not in_list and line.startswith(("    ", "\t")):
                 out.append("")
                 continue
+        line = re.sub(r"🔖\s*(?:Tankönyv|Textbook):.*?(?=</sub>|$)", "", line, flags=re.I)
         # Keep labels/alt/captions, not link destinations or HTML attributes.
         line = re.sub(r"<img\b[^>]*>", _image_alt, line, flags=re.I)
         line = re.sub(r"(!?\[[^\]]*\])\([^)]*\)", r"\1", line)
@@ -121,7 +122,7 @@ def visible_svg(text: str) -> list[str]:
     for m in re.finditer(r"<(?:[\w-]+:)?(text|title|desc)\b[^>]*>(.*?)</(?:[\w-]+:)?\1\s*>", text, re.S):
         masked[m.start(2):m.end(2)] = m[2]
     visible = re.sub(r"<[^>]+>", lambda m: blank(m[0]), "".join(masked))
-    return html.unescape(visible).splitlines()
+    return [" ".join(html.unescape(line).splitlines()) for line in visible.splitlines()]
 
 
 def scan(rel: str, text: str, old: str = "", *, full: bool = False) -> list[dict]:

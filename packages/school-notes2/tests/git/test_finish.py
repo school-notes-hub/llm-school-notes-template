@@ -327,3 +327,44 @@ def test_discard_keeps_uncommitted_edits_on_a_detached_head(env):
     listed = subprocess.run(["git", "bundle", "list-heads", str(bundle)], capture_output=True,
                             text=True).stdout
     assert f"notes/{task.run_id}" in listed
+
+
+def test_review_reply_and_other_item_closure_rebase_without_owner(env):
+    from school_notes2.review import files, relations
+    from school_notes2.wiki import frontmatter
+    report = files.write_review(env.path, "2026-10-03", {"verdict": "changes", "findings": [
+        {"id": "R1", "file": "wiki/a.md", "problem": "Vitatott."},
+        {"id": "R2", "file": "wiki/a.md", "problem": "Javítandó."}]}, "r", "a", "b")
+    rel = report.relative_to(env.path).as_posix()
+    files.apply_closure(env.path, "old", [{"file": rel, "item_id": "R1", "status": "disagree", "note": "Indok."}], [])
+    base = report.read_text()
+    env.other_push(rel, base)
+    report.unlink()  # The upstream copy becomes tracked when the work branch starts.
+    repos.fetch(env.bare, 60)
+    task = env.start_run()
+    files.apply_closure(env.path, task.run_id, [{"file": rel, "item_id": "R2", "status": "fixed"}], [])
+    # The nightly reply changes the same frontmatter and appends to the same body.
+    separate = env.tmp / "reply"
+    (separate / rel).parent.mkdir(parents=True)
+    (separate / rel).write_text(base)
+    relations.reply(separate, f"{rel}#R1", "keep", "Válasz.")
+    env.other_push(rel, (separate / rel).read_text())
+    hooks = env.hooks()
+    hooks.message = fixed_message(task)
+    assert finish.run(task, env.wt, hooks, T, {}) == "done"
+    text = (env.path / rel).read_text()
+    assert frontmatter.split(text).meta["items"] == {"R1": "open", "R2": "fixed"}
+    assert relations.details(text, "R1")["round"] == 2
+    assert text.count("## Válasz (R1)") == 1
+    assert text.count(f"## Végrehajtva ({task.run_id})") == 1
+
+
+def test_review_merge_does_not_hide_conflicting_status_or_prose():
+    from school_notes2.review.merge import merge
+    from school_notes2.wiki import frontmatter
+    base = frontmatter.set_keys("# Review\n\nTárgy.\n", {"reviewer": "r", "items": {"R1": "open"}, "status": "open"})
+    fixed = frontmatter.set_keys(base, {"items": {"R1": "fixed"}})
+    disagree = frontmatter.set_keys(base, {"items": {"R1": "disagree"}})
+    assert merge([base.encode(), b"---\nitems: [\n---\n", fixed.encode()]) is None
+    assert merge([s.encode() for s in (base, fixed, disagree)]) is None
+    assert merge([s.encode() for s in (base, fixed.replace("Tárgy.", "Átírva."), disagree)]) is None

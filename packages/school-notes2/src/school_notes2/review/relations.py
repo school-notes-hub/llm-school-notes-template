@@ -1,11 +1,12 @@
 """Review identities, reference-aware closures and one-round disagreement replies."""
 
 import re
+from collections import Counter
 from pathlib import Path
 
 from ..state import safefs
 from ..wiki import decisions, frontmatter
-from ..wiki.pages import CODE_FENCE, wiki_pages
+from ..wiki.pages import CODE_FENCE, links, resolve, wiki_pages
 
 
 def details(text: str, item_id: str) -> dict:
@@ -43,12 +44,26 @@ def closure_problems(repo: Path, closure: dict) -> list[str]:
         return ["round: 2 can close only as fixed or question"]
     if status not in ("question", "settled"):
         return []
-    q, d = page_ids(repo, record.get("file", ""))
+    q, d = related_ids(repo, record.get("file", ""))
     if status == "question":
-        return [] if closure.get("question_id") in q else ["question_id must name an open question on the item's page"]
+        return [] if closure.get("question_id") in q else ["question_id must name an open question on the item's page (for an asset, an embedding page)"]
     if (closure.get("question_id") in q) ^ (closure.get("decision_id") in d):
         return []
-    return ["settled needs an existing question_id or decision_id on the item's page"]
+    return ["settled needs an existing question_id or decision_id on the item's page (for an asset, an embedding page)"]
+
+
+def related_ids(repo: Path, rel: str) -> tuple[set[str], set[str]]:
+    """An asset's question may live on any page that embeds it."""
+    if rel.endswith(".md"):
+        return page_ids(repo, rel)
+    questions, confirmed = set(), set()
+    for page in sorted(wiki_pages(repo)):
+        text = frontmatter.split(safefs.read_text(repo, page)).body
+        if any(link.image and resolve(page, link.target) == rel for link in links(text)):
+            q, d = page_ids(repo, page)
+            questions.update(q)
+            confirmed.update(d)
+    return questions, confirmed
 
 
 def inventory(repo: Path) -> dict:
@@ -67,20 +82,54 @@ def inventory(repo: Path) -> dict:
     return {"pages": pages, "items": dict(sorted(items.items()))}
 
 
+def reviewer_inventory(repo: Path) -> dict:
+    """The private reviewer input: active/disputed items grouped by their page."""
+    known = inventory(repo)
+    pages = {rel: {**ids, "items": {}} for rel, ids in known["pages"].items()}
+    for key, item in known["items"].items():
+        if item["status"] in ("open", "owner", "disagree"):
+            page = pages.setdefault(item.get("file", ""), {"questions": [], "decisions": [], "items": {}})
+            page["items"][key] = item
+    return {"pages": dict(sorted(pages.items()))}
+
+
+def chain(finding: dict, known: dict) -> int:
+    other = known["items"].get(finding.get("relates_to"))
+    if other:
+        return min(1, other["chain"] + int(other["status"] in ("fixed", "settled")))
+    return 0
+
+
 def route(finding: dict, known: dict) -> tuple[str, bool]:
     """Return (open/owner/pending, unlocated), never silently drop unknown references."""
     ref = finding.get("relates_to")
     if ref is None:
-        return "open", finding.get("unlocated", False)
+        return "open", False
     page = known["pages"].get(finding["file"], {})
     if ref in page.get("questions", []):
         return "pending", False
     if ref in page.get("decisions", []):
-        return "owner", not bool(finding.get("new_evidence", "").strip())
+        return "owner", False
     other = known["items"].get(ref)
     if other:
-        return ("pending" if other["status"] in ("open", "owner", "question") else "open"), False
+        if other["status"] in ("open", "owner", "question", "disagree"):
+            return "pending", False
+        return ("owner" if chain(finding, known) else "open"), False
     return "open", True
+
+
+def valid_responses(responses: list[dict], known: dict) -> tuple[list[dict], list[dict]]:
+    kept, dropped = [], []
+    counts = Counter(r["key"] for r in responses)
+    for response in sorted(responses, key=lambda r: (r["key"], r["verdict"], r["answer"])):
+        item = known["items"].get(response["key"], {})
+        if (item.get("status") == "disagree" and item.get("round") == 1
+                and not item.get("response") and counts[response["key"]] == 1):
+            kept.append(response)
+        else:
+            reason = "duplicate response key" if counts[response["key"]] > 1 else "not an unanswered round-1 disagreement"
+            dropped.append({"key": response["key"], "reason": reason})
+    return kept, dropped
 
 
 def reply(repo: Path, key: str, verdict: str, answer: str) -> str:

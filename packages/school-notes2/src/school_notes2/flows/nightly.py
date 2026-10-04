@@ -25,6 +25,9 @@ def nightly(ctx: Ctx) -> int:
     try:
         setup.ensure(ctx)
         tasks = [t for t in phase.all_tasks(ctx.task_root(), ctx.name) if t.kind == "review"]
+        for previous in tasks:
+            if previous.phase == "done":
+                _notify_owners(ctx, previous)
         if any(t.open and t.data.get("needs_owner") for t in tasks):
             ctx.log.event("nightly.skip", "needs_owner")
             return 0
@@ -122,6 +125,15 @@ def _review(ctx: Ctx, task: phase.Task) -> None:
         ctx.log.event("review.timeout", target=task.run_id)
         return
     review.record_review(task, outcome.output, ctx.cfg.worktree(ctx.name, "review"))
+    if task.get("dropped_responses"):
+        ctx.log.event("review.dropped_responses", items=task.get("dropped_responses"))
+
+
+def _notify_owners(ctx: Ctx, task: phase.Task) -> None:
+    from .run import owner_items
+    if task.get("notify_owner_items") and not task.get("owners_notified"):
+        owner_items(ctx, task, task.get("notify_owner_items"))
+        task.update(owners_notified=True)
 
 
 def _close(ctx: Ctx, task: phase.Task) -> None:
@@ -131,3 +143,4 @@ def _close(ctx: Ctx, task: phase.Task) -> None:
     t = review_close.Timeouts(ctx.cfg.timeouts.fetch_s, ctx.cfg.timeouts.push_s,
                               ctx.cfg.timeouts.ls_remote_s)
     review_close.close(task, ctx.bare(), ctx.worktree("review"), ident, t)
+    _notify_owners(ctx, task)

@@ -118,9 +118,17 @@ def close(task: phase.Task, repo: Git, wt: Git, ident: Identity, t: Timeouts = T
     base, head, end = task.get("base"), task.get("H"), task.get("T")
 
     def write(worktree: Path) -> list[str]:
+        responses, dropped = relations.valid_responses(review.get("responses", []), relations.inventory(worktree))
+        task.update(dropped_responses_at_close=dropped)
+        if dropped:
+            repo.log.event("review.dropped_responses", items=dropped)
         replied = [relations.reply(worktree, r["key"], r["verdict"], r["answer"])
-                   for r in sorted(review.get("responses", []), key=lambda r: r["key"])]
+                   for r in responses]
         report = files.write_review(worktree, ident.date, review, ident.reviewer, base, end)
+        rel = report.relative_to(worktree).as_posix()
+        owners = [{"file": rel, "item_id": key, "reason": "review finding requires an owner decision"}
+                  for key, status in (files.read_items(worktree, report) or {}).items() if status == files.OWNER]
+        task.update(notify_owner_items=owners)
         written = replied + [report.relative_to(worktree).as_posix(),
                    index.update(worktree).relative_to(worktree).as_posix()]
         written += records.append(worktree, records.from_reviewer(review.get("figures", [])),

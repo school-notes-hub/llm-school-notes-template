@@ -11,6 +11,7 @@ from .run import Git
 
 FULLY_GENERATED = ("publication/public.json",)
 WITH_GENERATED_BLOCKS = ("wiki/index.md", "wiki/*/index.md", "docs/review/index.md")
+REVIEW_REPORTS = ("docs/review/*-review.md", "docs/review/*-review-*.md", "docs/review/*-run.md")
 ORIGIN_LABEL = "origin/main (kívülről)"
 
 
@@ -33,6 +34,9 @@ def resolve(wt: Git, run_id: str, empty_blocks) -> Outcome:
     for path in conflicted(wt):
         if path in FULLY_GENERATED:
             wt.run("checkout", "--theirs", "--", path)
+            wt.run("add", "--", path)
+            resolved.append(path)
+        elif _matches(path, REVIEW_REPORTS) and _merge_review(wt, path):
             wt.run("add", "--", path)
             resolved.append(path)
         elif _matches(path, WITH_GENERATED_BLOCKS) and _merge_blocks(wt, path, empty_blocks):
@@ -104,3 +108,13 @@ def has_markers(text: str) -> bool:
     lines = text.split("\n")
     return any(ln.startswith("<<<<<<< ") for ln in lines) and any(
         ln.startswith(">>>>>>> ") for ln in lines)
+
+
+def _merge_review(wt: Git, path: str) -> bool:
+    from ..review.merge import merge
+    versions = _stages(wt, path)
+    merged = merge(versions) if versions is not None else None
+    if merged is None:
+        return False
+    safefs.write_bytes(wt.work_tree, path, merged)
+    return True
