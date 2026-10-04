@@ -1,17 +1,7 @@
-# School Notes v2 (plan 10.2). Install with `crontab -e` as the owner.
-# One time slot per learner, in the [students.<name>] table order of config.toml: the first
-# configured learner runs at :00, the second at :30; the nightly review follows the same
-# order from 03:15. Replace <learner-1>, <learner-2> with the configured names. The offsets
-# only keep two LLM calls apart while a run fits in its slot; there is no lock between
-# learners and no free slot for a third one. The `school-notes round` scheduler (plan 6.1)
-# replaces these lines with a single hourly line that walks the configured order.
 CRON_TZ=Europe/Budapest
 # The owner's uid (`id -u`); rootless Podman needs the runtime dir.
 XDG_RUNTIME_DIR=/run/user/1000
 # Failures are mailed by the tool itself (plan 8.4), not by cron.
 MAILTO=""
 PATH=/usr/local/bin:/usr/bin:/bin
-0  * * * *  /srv/school-notes/current/bin/school-notes run <learner-1>
-30 * * * *  /srv/school-notes/current/bin/school-notes run <learner-2>
-15 3 * * *  /srv/school-notes/current/bin/school-notes nightly <learner-1>
-45 3 * * *  /srv/school-notes/current/bin/school-notes nightly <learner-2>
+0 * * * * /srv/school-notes/current/bin/school-notes round

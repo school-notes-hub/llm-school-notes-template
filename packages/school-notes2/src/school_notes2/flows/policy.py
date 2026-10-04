@@ -35,6 +35,12 @@ def on_error(exc: BaseException, *, task: Task | None, student: str, step: str, 
         if task.phase != "waiting_quota":
             task.set_phase("waiting_quota", quota_phase=task.phase)
         return kind
+    if kind == "timeout":
+        if getattr(exc, "details", {}).get("count", 0) >= 2 or getattr(exc, "details", {}).get("suspended"):
+            task.mark_needs_owner("Két egymás utáni időtúllépés; a munka megállt.",
+                                  f"Állítsd be az időkorlátot; school-notes status --clear {student} writer --continue",
+                                  "timeout")
+        return kind
     if isinstance(exc, Transient):
         task.data["retries"] += 1
         task.save()

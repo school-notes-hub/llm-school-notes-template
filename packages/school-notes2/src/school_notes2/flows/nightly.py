@@ -8,14 +8,16 @@ from ..log import now_iso, today
 from ..review import close as review_close
 from ..review import nightly as review
 from ..state import phase
-from ..state.errors import NeedsOwner, Prerequisite
+from ..state.errors import Prerequisite
 from . import cleanup, policy, prereq, setup
 from .context import Ctx
+from .operation import entry
 
 RASTERIZE = ["bash", "-c", 'for f in /in/*.svg; do rsvg-convert -o "/out/$(basename "${f%.svg}").png" "$f"'
              ' || exit 1; done']
 
 
+@entry("nightly")
 def nightly(ctx: Ctx) -> int:
     lock = ctx.lock()
     if not lock.try_acquire("nightly"):
@@ -35,6 +37,8 @@ def nightly(ctx: Ctx) -> int:
         if task is None:
             task = _prepare(ctx, tasks)
         if task is not None:
+            if task.phase == "waiting_quota":
+                task.set_phase(task.get("quota_phase"))
             if task.phase in ("prepared", "reviewing"):
                 _review(ctx, task)              # 8.2: the same H/T as recorded
             if task.phase in review.ACTIVE:
@@ -53,32 +57,18 @@ def nightly(ctx: Ctx) -> int:
 def _unfinished(tasks: list[phase.Task]):
     """An interrupted review (no review.json yet) resumes instead of a new one."""
     for task in tasks:
-        if task.open and task.phase in ("prepared", "reviewing") and not task.get("stuck") \
+        if task.open and task.phase in ("prepared", "reviewing", "waiting_quota") and not task.get("stuck") \
                 and not task.data.get("closed"):
             return task
     return None
 
 
 def _prepare(ctx: Ctx, tasks: list[phase.Task]):
-    stuck = review.stuck_commit([t for t in tasks if not t.open or t.data.get("closed")])
-    if stuck:
-        # D85: one marker task holds the stop, so later nights skip instead of piling up.
-        task = phase.create(ctx.task_root(), ctx.name, "review", "cron", "prepared")
-        task.update(commits=[stuck], stuck=True)
-        exc = NeedsOwner(f"commit {stuck[:7]} ran out of review time on two nights",
-                         todo=f"`school-notes status --clear {ctx.name} review --discard` "
-                              "(not reviewed: timeout), or raise the reviewer timeout in "
-                              "config.toml and `--continue`")
-        policy.on_error(exc, task=task, student=ctx.name, step="nightly", log=ctx.log,
-                        mailer=ctx.mailer)
-        return None
-    previous = tasks[-1] if tasks else None
     return review.prepare(ctx.task_root(), ctx.name, ctx.bare(), ctx.worktree("review"),
                           max_images=ctx.cfg.limits.review_max_images,
                           max_diff_kb=ctx.cfg.limits.review_max_diff_kb,
                           fetch_timeout=ctx.cfg.timeouts.fetch_s,
-                          rasterize=lambda svgs, out: _rasterize(ctx, svgs, out),
-                          previous=previous)
+                          rasterize=lambda svgs, out: _rasterize(ctx, svgs, out))
 
 
 def _rasterize(ctx: Ctx, svgs: list[Path], out_dir: Path) -> list[Path]:
@@ -117,14 +107,19 @@ def _review(ctx: Ctx, task: phase.Task) -> None:
         mounts=launch.Mounts(work=ctx.cfg.worktree(ctx.name, "review"), work_readonly=True,
                              in_dir=task.dir / "in", out_dir=out),
         output_host=out / "review.json", schema="review", task_dir=task.dir, grade=ctx.student.grade,
+        label=task.get("T", task.run_id),
         allowed_domains=ctx.cfg.provider_domains,
         max_agents=task.get("max_agents", ctx.cfg.limits.max_agents), lease_dir=ctx.cfg.state_dir / "agent-leases")
     try:
         outcome = launch.run_headless(run, log=ctx.log,
                                       snapshot=lambda: launch.tree_fingerprint(out))
-    except launch.TimedOut:
-        review.record_timeout(task)       # 5.6/6: not an error; next night halves the range
-        ctx.log.event("review.timeout", target=task.run_id)
+    except launch.TimedOut as exc:
+        task.update(timeout_day=today())
+        if exc.details.get("count", 0) >= 2 or exc.details.get("suspended"):
+            task.update(blocked_topics=[task.get("T")])
+            task.mark_needs_owner("Két egymás utáni éjszakai időtúllépés.",
+                                  f"Állítsd be az időkorlátot; school-notes status --clear {ctx.name} reviewer --continue",
+                                  "timeout")
         return
     review.record_review(task, outcome.output, ctx.cfg.worktree(ctx.name, "review"))
     if task.get("dropped_responses"):

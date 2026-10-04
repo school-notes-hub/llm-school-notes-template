@@ -77,3 +77,16 @@ def test_repair_cli_requires_exactly_one_target_mode():
     for argv in (["repair", "barna"], ["repair", "barna", "--queue", "--topic", "a"]):
         with pytest.raises(SystemExit):
             _parser().parse_args(argv)
+
+
+def test_operational_cli_and_reader_stage_timeouts():
+    from school_notes2.cli import _parser
+    for command in ("run", "nightly"):
+        assert _parser().parse_args([command, "synthetic", "--manual"]).manual
+    assert _parser().parse_args(["round"]).command == "round"
+    data = {**BASE, "nightly_after": "04:20", "roles": {**BASE["roles"], "reader": {
+        **BASE["roles"]["reviewer"], "timeout_s": 1800, "list_timeout_s": 700, "recheck_timeout_s": 1300}}}
+    cfg = config.parse(data)
+    reader, _ = cfg.role("reader")
+    assert (reader.timeout_s, reader.list_timeout_s, reader.recheck_timeout_s) == (1800, 700, 1300)
+    assert cfg.nightly_after == "04:20"

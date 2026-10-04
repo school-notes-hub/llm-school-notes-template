@@ -9,8 +9,10 @@ from ..state import phase, safefs
 from ..state.errors import NeedsOwner
 from . import policy, setup, steps
 from .context import Ctx
+from .operation import entry
 
 
+@entry("repair")
 def repair(ctx: Ctx, *, topic: str | None = None, build_queue: bool = False,
            no_push: bool = False) -> int:
     from . import run

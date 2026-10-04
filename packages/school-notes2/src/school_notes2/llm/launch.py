@@ -8,14 +8,14 @@ import hashlib
 import os
 import subprocess
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable
 
 from ..config import Harness, Role
 from ..log import Log
 from ..state import safefs
-from ..state.errors import BadWork, NeedsOwner, Prerequisite, Transient
+from ..state.errors import BadWork, NeedsOwner, Prerequisite, Transient, SnError, WaitingQuota
 from . import metrics as metrics_mod
 from .output import extract_stdout, read_file
 from .leases import guarded
@@ -123,8 +123,10 @@ def _output_root(run: RoleRun) -> Path:
     return run.output_host.parent
 
 
-class TimedOut(BadWork):
-    """The role ran out of time: bad work for the writer, a halved range for the reviewer."""
+class TimedOut(SnError):
+    """T-125: timeout is independent of bad work and transport retries."""
+
+    kind = "timeout"
 
 
 def classify(rc: int, timed_out: bool, changed: bool, produced: bool,
@@ -161,6 +163,37 @@ def run_headless(run: RoleRun, *, log: Log, snapshot: Callable[[], object],
 
     Raises the 8.1 error class on failure; returns the Outcome on success.
     """
+    from ..flows.operation import CURRENT
+    from . import quota, timeouts
+    current = CURRENT.get()
+    if current:
+        ctx, manual, cache = current
+        configured = ctx.cfg.roles.get(timeouts.role_name(run.role_name))
+        if configured and run.role_name not in ("writer", "fix", "reviewer"):
+            if run.role_name == "reader-2":
+                configured = replace(configured, timeout_s=configured.list_timeout_s)
+            elif run.role_name == "recheck":
+                configured = replace(configured, timeout_s=configured.recheck_timeout_s)
+            run = replace(run, role=configured, harness=ctx.cfg.harnesses[configured.harness])
+        if timeouts.blocked(ctx, run):
+            raise TimedOut("A szerep tulajdonosi döntésre vár.", details={"suspended": True})
+        quota.check(ctx, run, manual, cache)
+    try:
+        outcome = _admitted(run, log=log, snapshot=snapshot, podman=podman)
+    except WaitingQuota:
+        if current:
+            quota.wait(ctx, run, cache)
+        raise
+    except TimedOut as exc:
+        if current:
+            exc.details["count"] = timeouts.record(ctx, run)
+        raise
+    if current:
+        timeouts.success(ctx, run)
+    return outcome
+
+
+def _admitted(run, *, log, snapshot, podman):
     from .leases import acquire
     root = run.lease_dir or run.task_dir / "agent-leases"
     with acquire(root, run.learner, _volume_role(run.role_name), run.max_agents):
@@ -190,7 +223,10 @@ def _headless(run, *, log, snapshot, podman):
     output, problems, produced = _read_output(run, transcript)
     outcome = Outcome(rc, timed_out, duration, output, problems, changed,
                       transcript, metrics_mod.from_transcript(transcript))
-    error = classify(outcome.rc, timed_out, changed, produced, output, problems)
+    from .quota import exhausted
+    error = (WaitingQuota("A harness heti kerete elfogyott.")
+             if not timed_out and exhausted(transcript) else
+             classify(outcome.rc, timed_out, changed, produced, output, problems))
     log.event(f"llm.launch role={run.role_name}", "ok" if error is None else "error",
               step=run.label, duration_s=duration, rc=outcome.rc, timed_out=timed_out,
               changed=changed, model=run.role.model, effort=run.role.effort,
@@ -222,8 +258,23 @@ def _run_fed(argv: list[str], stdin: bytes | None, out, name: str, timeout: floa
     return timed_out, proc.returncode
 
 
+def run_interactive(**kwargs):
+    from ..flows.operation import CURRENT
+    from . import quota
+    current = CURRENT.get()
+    if current:
+        ctx, manual, cache = current
+        run = RoleRun(ctx.name, kwargs["run_id"], "writer", kwargs["role"], kwargs["harness"],
+                      kwargs["image"], kwargs["mounts"], ctx.notes_path / ".school-notes/result.json",
+                      "result", ctx.cfg.root / "tasks" / ctx.name / kwargs["run_id"], ctx.student.grade,
+                      allowed_domains=kwargs.get("allowed_domains", DEFAULT_PROVIDER_DOMAINS),
+                      max_agents=kwargs.get("max_agents", ctx.cfg.limits.max_agents))
+        quota.check(ctx, run, manual, cache)
+    return _interactive(**kwargs)
+
+
 @guarded("writer")
-def run_interactive(*, learner: str, run_id: str, role: Role, harness: Harness, image: str,
+def _interactive(*, learner: str, run_id: str, role: Role, harness: Harness, image: str,
                     mounts: Mounts, log: Log,
                     allowed_domains: tuple[str, ...] = DEFAULT_PROVIDER_DOMAINS,
                     limits: Limits = Limits(), podman: str = "podman") -> int:

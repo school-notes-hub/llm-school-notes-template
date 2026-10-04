@@ -74,10 +74,10 @@ def test_outcome_classes(fake, role, harness, tmp_path, log, monkeypatch, mode, 
         go(make_run(fake, role, harness, tmp_path), log)
 
 
-def test_timeout_stops_container_and_is_bad_work(fake, harness, tmp_path, log, monkeypatch, role):
+def test_timeout_stops_container_and_has_its_own_policy(fake, harness, tmp_path, log, monkeypatch, role):
     set_mode(monkeypatch, "sleep")
     quick = dataclasses.replace(role, timeout_s=1)
-    with pytest.raises(BadWork, match="time"):
+    with pytest.raises(launch.TimedOut, match="time"):
         go(make_run(fake, quick, harness, tmp_path), log)
     assert "stop -t 10 school-notes-benedek" in fake["FAKE_LOG"].read_text()
 

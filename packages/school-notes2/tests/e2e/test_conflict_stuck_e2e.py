@@ -48,18 +48,15 @@ def test_owner_settles_a_content_conflict(world, tmp_path, monkeypatch):
     assert "# Próba tantárgy" in show(origin, "main:wiki/proba/index.md")
 
 
-def test_stuck_review_opens_one_marker_and_continue_closes_it(world, monkeypatch):
+def test_timeout_stop_continues_the_same_review(world, monkeypatch):
     ctx, origin, drive, package = world
-    for _ in range(2):
-        old = phase.create(ctx.task_root(), "benedek", "review", "cron", "prepared")
-        old.update(commits=["c0ffee" * 6 + "abcd"], timed_out=True)
-        old.data["closed"] = True
-        old.save()
+    task = phase.create(ctx.task_root(), ctx.name, "review", "cron", "reviewing")
+    task.update(T="c0ffee", blocked_topics=["c0ffee"])
+    task.mark_needs_owner("timeout", "raise timeout", "timeout")
     monkeypatch.setattr("school_notes2.flows.setup.ensure", lambda ctx: None)
     assert nightly_flow.nightly(ctx) == 0
     assert nightly_flow.nightly(ctx) == 0
-    open_reviews = [t for t in phase.all_tasks(ctx.task_root(), "benedek")
-                    if t.kind == "review" and t.open and not t.data.get("closed")]
-    assert len(open_reviews) == 1 and open_reviews[0].data["needs_owner"]
-    assert "emelt" in clear.clear(ctx, "review", "continue")
-    assert phase.open_task(ctx.task_root(), "benedek", "review") is None
+    assert "feloldva" in clear.clear(ctx, "reviewer", "continue")
+    resumed = phase.open_task(ctx.task_root(), ctx.name, "review")
+    assert resumed.run_id == task.run_id and resumed.phase == "reviewing"
+    assert not resumed.data["needs_owner"] and resumed.get("blocked_topics") == []

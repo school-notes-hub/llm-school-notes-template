@@ -17,8 +17,10 @@ from . import fetch as fetch_flow
 from . import finish as finish_flow
 from . import handlers, policy, prereq, publish, setup, steps, writer
 from .context import Ctx
+from .operation import entry
 
 
+@entry("run")
 def run(ctx: Ctx) -> int:
     lock = ctx.lock()
     if not lock.try_acquire("run"):

@@ -10,16 +10,18 @@ from ..llm import launch
 from ..mcp.redact import redact
 from ..schemas import errors as schema_errors
 from ..state import phase
-from ..state.errors import NeedsOwner, SnError, Transient
+from ..state.errors import NeedsOwner, SnError, Transient, WaitingQuota
 from ..state import safefs
 from ..state.files import write_json
 from . import checks, clear, fetch as fetch_flow
 from . import finish as finish_flow
 from . import handlers, policy, run as run_flow, setup, steps, writer
 from .context import Ctx
+from .operation import entry
 from .session import mcp
 
 
+@entry("chat")
 def chat(ctx: Ctx, harness_name: str | None, ask=input, say=print) -> int:
     lock = ctx.lock()
     lock.acquire("chat", on_wait=lambda h: say(f"A zárat {h.get('kind')} tartja "
@@ -99,6 +101,8 @@ def _drive_or_none(ctx: Ctx):
 
 def _launch(ctx: Ctx, task: phase.Task, harness_name: str | None) -> None:
     role, harness = _role_for(ctx, harness_name)
+    if task.phase == "waiting_quota":
+        task.set_phase(task.get("quota_phase"))
     if task.phase in ("downloading", "downloaded", "moved"):
         if task.get("mode") == "repair":
             from . import repair
@@ -207,6 +211,8 @@ def session_finish(ctx: Ctx) -> dict:
     task = phase.open_task(ctx.task_root(), ctx.name, "notes")
     if task is None:
         raise NeedsOwner("there is no open run to finish", todo="call fetch first")
+    if task.phase == "waiting_quota":
+        task.set_phase(task.get("quota_phase"))
     ctx.lock().note("finish")       # this detached job holds the inherited lock (7.8)
     n = len(task.get("ranges"))
     if (task.mode == "cron" and not task.get("skip_writer") and not task.get("question")
@@ -223,6 +229,10 @@ def session_finish(ctx: Ctx) -> dict:
             task.update(no_push=False)
         state = finish_flow.finish(ctx, task, notify_owner_items=lambda items: run_flow.owner_items(
             ctx, task, items))
+    except (WaitingQuota, launch.TimedOut) as exc:
+        policy.on_error(exc, task=task, student=ctx.name, step="finish", log=ctx.log,
+                        mailer=ctx.mailer, interactive=True)
+        return {"state": exc.kind, "message": str(exc), "phase": task.phase}
     except steps.CheckFailed as exc:
         steps.write_check_items(ctx, exc.items)
         task.set_phase("writing", review_complete=False, attempt=task.get("attempt", 1) + 1)

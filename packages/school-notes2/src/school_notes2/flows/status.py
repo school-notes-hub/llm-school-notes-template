@@ -22,9 +22,21 @@ BIG_REFERENCE = 40 * 1024
 
 
 def summary(ctx: Ctx) -> dict:
+    from .operation import vm_lock
+    vm = vm_lock(ctx.cfg)
+    vm_state = {"held": not vm.probe(), **vm.holder()}
+    round_state = read_json(ctx.cfg.state_dir / "round.json", {})
+    if round_state.get("status") == "running" and (not vm_state["held"] or vm_state.get("kind") != "round"):
+        round_state["status"] = "interrupted"
     tasks = phase.all_tasks(ctx.task_root(), ctx.name)
     return {
         "learner": ctx.name,
+        "vm_lock": vm_state,
+        "round": round_state,
+        "quota": read_json(ctx.cfg.state_dir / "quota.json", {}),
+        "timeouts": read_json(ctx.cfg.state_dir / ctx.name / "timeouts.json", {}),
+        "figure_requests": safefs.read_json(ctx.notes_path, "docs/figure-requests.json",
+                                          [r for t in tasks for r in t.get("figure_requests", [])]),
         "lock": _lock(ctx),
         "open": [_task(t) for t in tasks if t.open],
         "needs_owner": [{"kind": t.kind, "run_id": t.run_id, **t.data["needs_owner"]}
@@ -57,6 +69,7 @@ def _task(t: phase.Task) -> dict:
             "age_h": _age_h(t.data["created"]), "packages": len(t.get("packages", [])),
             "retries": t.data["retries"], "llm_failures": t.data["llm_failures"],
             "source_ref_counts": t.get("source_ref_counts", {}),
+            "quota_phase": t.get("quota_phase"), "blocked_topics": t.get("blocked_topics", []),
             "last_error": t.data.get("last_error"), "questions": t.get("question", [])}
 
 
@@ -154,6 +167,9 @@ def _pack_mb(bare: Path) -> float:
 def render(data: dict) -> str:
     """The console form of `summary`."""
     lines = [f"== {data['learner']}"]
+    for key, label in (("vm_lock", "VM-zár"), ("round", "kör"), ("quota", "heti keret"), ("timeouts", "T-125"), ("figure_requests", "licenckérelmek")):
+        if data.get(key):
+            lines.append(label + ": " + json.dumps(data[key], ensure_ascii=False, sort_keys=True))
     lock = data["lock"]
     lines.append(f"zár: {'foglalt – ' + str(lock.get('kind')) + ' óta ' + str(lock.get('since')) if lock['held'] else 'szabad'}")
     for t in data["open"]:

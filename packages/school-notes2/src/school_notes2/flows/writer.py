@@ -5,7 +5,7 @@ from ..git import workbranch
 from ..llm import launch
 from ..mcp.jobs import JobStore
 from ..schemas import validate
-from ..state.errors import BadWork, Transient
+from ..state.errors import BadWork, Transient, WaitingQuota
 from ..state import safefs
 from ..state.files import read_json, write_json
 from ..state.phase import Task
@@ -178,12 +178,22 @@ def _fix_resume(ctx, task, k):
 
 def _invoke(ctx, task, k, role, harness, handlers):
     try:
-        return _call(ctx, task, k, role, harness, handlers)
-    except Transient:
-        if task.get("mode") != "fix":
-            raise
-        retried = task.get("fix_crash_retries", [])
-        if k in retried:
-            raise
-        task.update(fix_crash_retries=sorted(retried + [k]))
-        return _call(ctx, task, k, role, harness, handlers)
+        try:
+            return _call(ctx, task, k, role, harness, handlers)
+        except Transient:
+            if task.get("mode") != "fix":
+                raise
+            retried = task.get("fix_crash_retries", [])
+            if k in retried:
+                raise
+            task.update(fix_crash_retries=sorted(retried + [k]))
+            return _call(ctx, task, k, role, harness, handlers)
+    except (WaitingQuota, launch.TimedOut):
+        # Quota waits and T-125 have their own retry policy; never consume the
+        # correction's crash budget or recover a failed call's partial output.
+        if task.get("mode") == "fix":
+            counts = dict(task.get("fix_calls", {}))
+            counts[str(k)] = max(0, counts.get(str(k), 0) - 1)
+            safefs.unlink(ctx.notes_path, ".school-notes/result.json")
+            task.update(fix_calls=counts)
+        raise

@@ -2,6 +2,7 @@
 with mcp.sock, served from a thread of the launching process."""
 
 import contextlib
+from contextvars import copy_context
 import json
 import os
 import shutil
@@ -68,7 +69,7 @@ def mcp(ctx: Ctx, task_dir: Path, mode: str, handlers: Handlers, run_id):
                        log_path=str(ctx.cfg.log_path), secrets=secret_values(ctx),
                        wait_s=ctx.cfg.limits.mcp_wait_s)
     stop = threading.Event()
-    thread = threading.Thread(target=server.serve, args=(sessdir / "mcp.sock", stop.is_set),
+    thread = threading.Thread(target=copy_context().run, args=(server.serve, sessdir / "mcp.sock", stop.is_set),
                               daemon=True)
     thread.start()
     try:

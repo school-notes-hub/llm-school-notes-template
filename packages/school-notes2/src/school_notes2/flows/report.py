@@ -8,11 +8,20 @@ from . import writer
 
 
 def completion(ctx, task):
-    notes = redact(writer.merge(writer.results(task, required=False))["owner_notes"]
+    merged = writer.merge(writer.results(task, required=False))
+    requests = sorted(merged.get("figure_requests", []), key=lambda r: (r["source"], r["page"], r["id"]))
+    task.update(figure_requests=requests)
+    for request in requests:
+        pending.send(ctx, Notice(ctx.name, f"license:{request['id']}:{request['source']}:{request['page']}",
+                                 task.run_id, "finish", "licenckérelem",
+                                 f"Anyag: {request['source']}; kivágás: {request['crop']}; "
+                                 f"cél: {request['purpose']}; hely: {request['page']}",
+                                 "Dönts a kép felhasználási jogáról a tulajdonosi munkamenetben."))
+    notes = redact(merged["owner_notes"]
                    + task.get("reader_owner_notes", []) + task.get("recheck_owner_notes", [])
                    + task.get("correction_result", {}).get("owner_notes", []))
     report = {"run_id": task.run_id, "phase": task.phase,
-              "mode": task.get("mode", task.mode), "owner_notes": notes,
+              "mode": task.get("mode", "chat" if task.mode == "interactive" else "run"), "owner_notes": notes,
               "reader_coverage": task.get("reader_coverage", []),
               "branch": f"notes/{task.run_id}" if task.get("no_push") else None}
     write_json(task.dir / "report.json", report)
@@ -23,4 +32,5 @@ def completion(ctx, task):
                                     "Olvasd át a kihagyott lépések indokát és a jobb javaslatot."))
     from ..repair import failure
     failure.notify(ctx, task)
-    return report
+    from .operational_report import at_finish
+    return at_finish(ctx, task, report)

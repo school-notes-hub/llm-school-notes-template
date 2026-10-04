@@ -10,9 +10,22 @@ from ..review import close as review_close
 from ..state import phase
 from ..state.errors import NeedsOwner
 from .context import Ctx
+from .operation import entry
 
 
+@entry("clear")
 def clear(ctx: Ctx, kind: str, action: str) -> str:
+    from ..llm import timeouts
+    if kind in timeouts.ROLES:
+        if action != "continue":
+            return "Időtúllépési szerep csak --continue paranccsal oldható fel."
+        timeouts.clear(ctx, kind)
+        task_kind = "review" if kind == "reviewer" else "notes"
+        task = phase.open_task(ctx.task_root(), ctx.name, task_kind)
+        if kind in ("writer", "reviewer") and task is not None and (task.data.get("needs_owner") or {}).get("class") == "timeout":
+            task.clear_needs_owner()
+            task.update(blocked_topics=[], timeout_day=None)
+        return f"{kind}: az időtúllépési felfüggesztés feloldva"
     task = phase.open_task(ctx.task_root(), ctx.name, kind)
     if task is None:
         return f"nincs nyitott {kind} futás"

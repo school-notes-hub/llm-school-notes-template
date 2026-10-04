@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from school_notes2.flows import correction, inspection, recheck, review_phases, steps
+from school_notes2.llm import launch
 from school_notes2.reader import calls, notices, units, verdicts
 from school_notes2.review import files, relations
 from school_notes2.state import phase, safefs
@@ -119,6 +120,29 @@ def test_waiting_quota_keeps_phase(setup, monkeypatch):
     assert task.phase == "waiting_quota" and task.get("quota_phase") == "inspecting"
     install_reader(monkeypatch, page)
     monkeypatch.undo()
+
+
+@pytest.mark.parametrize("count", [1, 2])
+def test_t095_p4_timeout_rolls_back_and_second_stops(setup, monkeypatch, count):
+    ctx, task, page = setup
+    install_reader(monkeypatch, page, findings=[finding(page)])
+    inspection.prepare(ctx, task)
+    inspection.inspect(ctx, task)
+    before = safefs.read_text(ctx.notes_path, page)
+    def timeout(ctx, child, handlers):
+        safefs.write_text(ctx.notes_path, page, "Partial fix")
+        raise launch.TimedOut("timeout", details={"count": count})
+    monkeypatch.setattr(correction.writer, "run_ranges", timeout)
+    if count == 2:
+        with pytest.raises(launch.TimedOut):
+            correction.run(ctx, task)
+    else:
+        correction.run(ctx, task)
+    assert safefs.read_text(ctx.notes_path, page) == before
+    monkeypatch.setattr(correction.writer, "run_ranges", lambda *a: pytest.fail("replayed timed-out P4"))
+    resumed = phase.load(task.dir)
+    correction.run(ctx, resumed)
+    assert resumed.get("correction_rolled_back")
 
 
 def test_notices_are_idempotent_and_keep_hash(setup):

@@ -2,6 +2,8 @@
 
 import copy
 
+from ..llm import launch
+
 from ..review import files, relations
 from ..sources import calls
 from ..state import phase, safefs
@@ -103,6 +105,12 @@ def run(ctx, task, edits=None):
                 saved = validated(ctx, child, root, items, result)
             except WaitingQuota:
                 raise
+            except launch.TimedOut as exc:
+                saved = {"status": "rollback", "reason": str(exc)}
+                if exc.details.get("count", 0) >= 2 or exc.details.get("suspended"):
+                    safefs.write_json(root, "receipt.json", saved)
+                    apply(ctx, task, root, saved, edits)
+                    raise
             except (BadWork, Transient) as exc:
                 saved = {"status": "rollback", "reason": str(exc)}
         if saved["status"] == "rollback" and task.mode == "interactive":

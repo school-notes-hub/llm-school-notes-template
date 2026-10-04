@@ -13,7 +13,7 @@ SCHEMA = 1
 NOTES_PHASES = ("downloading", "downloaded", "moved", "prepared", "writing", "finishing",
                 "figures", "inspecting", "correcting", "rechecking", "review_ready",
                 "waiting_quota", "committed", "built", "pushing", "pushed", "done")
-REVIEW_PHASES = ("prepared", "reviewing", "reviewed", "closing", "pushing", "done")
+REVIEW_PHASES = ("prepared", "reviewing", "waiting_quota", "reviewed", "closing", "pushing", "done")
 PUBLISH_PHASES = ("prepared", "built", "pushing", "done")
 
 

@@ -16,8 +16,8 @@ def folder(task):
     return path
 
 
-def role(ctx, task):
-    configured, harness = ctx.cfg.role("reviewer")
+def role(ctx, task, name="reader"):
+    configured, harness = ctx.cfg.role(name if name in getattr(ctx.cfg, "roles", {}) else "reviewer")
     return launch.RoleRun(ctx.name, task.run_id, "reader-1", configured, harness,
                           ctx.image_tag(), launch.Mounts(), task.dir / "unused.json",
                           "reader-1", folder(task), grade=ctx.student.grade,
@@ -45,6 +45,7 @@ def prepare(ctx, task):
     briefs = [s["brief"] for s in states]
     changed = sorted(steps.llm_snapshot(ctx, task))
     grouped = units.collect(ctx.notes_path, changed, result.get("review_closure", []), briefs)
+    task.update(inspection_changed=changed, inspection_all_units=grouped)
     # Retry only changed keys. A unit containing an invalid page is read as a whole.
     grouped = [u for u in grouped if any(verdicts.valid(ctx.notes_path, p) is None for p in u["pages"])
                or any(s["brief"]["page"] in u["pages"] and figure_changed(ctx, task, s) for s in states)]
@@ -156,7 +157,7 @@ def _reader(ctx, task, view, unit):
 def figures(ctx, task, batch, name):
     renderer = render(ctx, task)
     try:
-        return figure_review.run_batch(ctx.notes_path, batch, name, role(ctx, task),
+        return figure_review.run_batch(ctx.notes_path, batch, name, role(ctx, task, "figure-review"),
                                        render=renderer, log=ctx.log)
     except (ValueError, OSError, subprocess.TimeoutExpired) as exc:
         return {"status": "pending", "reason": str(exc)}

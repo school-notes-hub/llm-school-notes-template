@@ -44,6 +44,8 @@ class Role:
     effort: str
     timeout_s: int
     nested_sandbox: bool = False
+    list_timeout_s: int = 600
+    recheck_timeout_s: int = 1200
 
 
 @dataclass(frozen=True)
@@ -106,6 +108,12 @@ class Config:
     timeouts: Timeouts = field(default_factory=Timeouts)
     sources: Sources = field(default_factory=Sources)
     limits: Limits = field(default_factory=Limits)
+    nightly_after: str = "03:15"
+
+    def __post_init__(self):
+        if not isinstance(self.nightly_after, str) or not re.fullmatch(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]", self.nightly_after):
+            raise ConfigError("nightly_after must be HH:MM")
+
     ssh_hostname: str = ""        # e.g. ssh.github.com when port 22 is closed
     ssh_port: int = 22
     release_dir: Path = Path("/srv/school-notes/current")
@@ -182,7 +190,9 @@ def _role(name: str, t: dict, harnesses: dict) -> Role:
     if t["effort"] not in ("low", "medium", "high"):
         raise ConfigError(f"[roles.{name}] effort must be at most high")
     return Role(harness=t["harness"], model=t["model"], effort=t["effort"],
-                timeout_s=int(t.get("timeout_s", 7200) if name == "writer" else t["timeout_s"]), nested_sandbox=bool(t.get("nested_sandbox", False)))
+                timeout_s=int(t.get("timeout_s", 7200) if name == "writer" else t["timeout_s"]), nested_sandbox=bool(t.get("nested_sandbox", False)),
+                list_timeout_s=int(t.get("list_timeout_s", 600)),
+                recheck_timeout_s=int(t.get("recheck_timeout_s", 1200)))
 
 
 def default_harnesses() -> dict:
@@ -206,6 +216,7 @@ def parse(data: dict) -> Config:
             raise ConfigError(f"[roles.{needed}] is required")
     git = data.get("git", {})
     return Config(
+        nightly_after=data.get("nightly_after", "03:15"),
         root=_path(data.get("root", "/srv/school-notes")),
         secrets_dir=_path(data.get("secrets_dir", "~/.config/school-notes/secrets")),
         known_hosts=_path(data.get("known_hosts", "~/.config/school-notes/github_known_hosts")),

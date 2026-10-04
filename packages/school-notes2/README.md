@@ -404,3 +404,53 @@ that were valid at the run's base; P2 isolates pre-existing damage as failed.
 Unchanged page and figure keys reuse their
 receipts across attempts. Regression tests cover chat handoff, rollback, receipt
 interruption, figure insertion, G4/G5 retries and pending-figure damage.
+
+## Operational rounds (unit 3)
+
+`school-notes round` takes the VM flock (`state/operations/vm/lock`), visits `[students]` in
+TOML table order, runs due nightly reviews first, then notes runs. `nightly_after`
+defaults to `03:15` Budapest time. Open nights resume; timed-out nights wait until
+the next date. A round crossing an hourly boundary starts one immediate successor;
+each successor makes the same decision, without collecting missed-hour jobs.
+The single cron job replaces the previous per-learner jobs. Direct run/nightly,
+repair, chat, host fetch/finish and owner clear share the same VM admission.
+The lock is inherited by detached MCP jobs and is never forcibly broken. A busy
+lock older than twelve hours triggers the existing daily notification path.
+
+Weekly quota probes use the role's home in a short container without a model call:
+Codex app-server JSON-RPC and Claude OAuth usage. Only the weekly window counts.
+The cache is shared by harness family for one round. Unknown usage (including 401)
+permits the call, logs the failure and mails daily; known remaining usage at or
+below 2% pauses in `waiting_quota`. `run/nightly --manual` bypass only this pre-call
+gate. Recognized harness quota error events still pause manual runs. No credentials
+or provider error bodies leave the helper. `status` reads persisted observations
+and the last known value without probing.
+
+T-125 counters are separate from bad-work strikes, persist per learner/role, and
+reset on a successful role call. Reader passes/recheck share the reader counter;
+fix calls share the writer counter. A second timeout suspends that role. Writer
+work awaits owner action, while missing reader/figure verdicts use the existing
+pending fallback. Clear after adjusting the configured role timeout with
+`status --clear <learner> writer|reader|figure-review|figure|reviewer --continue`.
+Explicit `[roles.reader]` and `[roles.figure-review]` override the corresponding
+role's model/harness/timeout; absent these, the existing fixed stage defaults apply.
+The reader's list and recheck calls use `list_timeout_s` (600) and
+`recheck_timeout_s` (1200), independently of its first-call `timeout_s` (1800).
+P4 still rolls a timed-out correction back (5.6); the second consecutive timeout
+also stops the parent run (6.6). Quota waits preserve the correction and do not use
+its crash retry budget.
+
+The current nightly implementation still reviews a commit range. Its timeout unit
+is the pinned range end (T); it now preserves that task instead of halving/discarding
+it. The per-unit counter is ready for topic labels, but topic splitting, targeted
+nightly review and per-topic durations remain plan 13/5. No new nightly workflow
+or student-facing wording is invented here.
+
+Processing invocations accumulate active elapsed time (quota-wait hours do not
+count). Work over ten minutes gets a private summary through the durable notice
+queue, including available per-topic review/figure outcomes, pending indicators,
+timeouts, quota observations, owner notes and transcript metrics. Nights report
+even empty ranges. The email renderer preserves the full summary instead of the
+previous 500-character truncation. A resumed task reports its eventual completion
+separately from an earlier interrupted invocation. The VM verification/deployment,
+T-144 owner gate and cron installation are outside this repository change.

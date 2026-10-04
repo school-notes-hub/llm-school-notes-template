@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from email.message import EmailMessage
 from pathlib import Path
 
-from ..log import Log, today
+from ..log import Log, today, now_iso
+from ..mcp.redact import redact
 from ..state.files import read_json, write_json
 
 
@@ -84,7 +85,8 @@ def render(notice: Notice, to: str) -> EmailMessage:
         f"Futás: {notice.run_id or '-'}\n"
         f"Lépés: {notice.step}\n"
         f"Hibaosztály: {notice.error_class}\n"
-        f"Üzenet: {notice.message[:500]}\n"
+        f"Időpont: {now_iso()}\n"
+        f"Üzenet: {redact(notice.message)}\n"
         f"Teendő: {notice.todo or '-'}\n\n"
         f"Részletek: school-notes status {notice.student}\n")
     return message

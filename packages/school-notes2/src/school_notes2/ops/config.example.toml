@@ -1,3 +1,4 @@
+nightly_after = "03:15"
 # ~/.config/school-notes/config.toml (plan 3.4). No secrets here.
 root = "/srv/school-notes"
 secrets_dir = "~/.config/school-notes/secrets"
@@ -46,6 +47,20 @@ harness = "claude-review"     # no MCP for the reviewer (plan 7.4)
 model = "claude-opus-5-5"
 effort = "high"
 timeout_s = 5400
+
+[roles.reader]
+harness = "claude-review"
+model = "claude-opus-5-5"
+effort = "high"
+timeout_s = 1800
+list_timeout_s = 600
+recheck_timeout_s = 1200
+
+[roles.figure-review]
+harness = "claude-review"
+model = "claude-opus-5-5"
+effort = "high"
+timeout_s = 1800
 
 # The harness templates live in llm/templates.toml of the release; copy them here
 # (or override single keys) – see that file.

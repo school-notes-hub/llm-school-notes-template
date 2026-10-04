@@ -27,7 +27,11 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--config", type=Path, default=None)
     sub = p.add_subparsers(dest="command", required=True)
     for name in ("run", "nightly", "setup", "fetch", "finish"):
-        sub.add_parser(name).add_argument("learner")
+        command = sub.add_parser(name)
+        command.add_argument("learner")
+        if name in ("run", "nightly"):
+            command.add_argument("--manual", action="store_true")
+    sub.add_parser("round")
     repair = sub.add_parser("repair")
     repair.add_argument("learner")
     selection = repair.add_mutually_exclusive_group(required=True)
@@ -60,6 +64,9 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     cfg = config.load(args.config)
     from .flows import context
+    if args.command == "round":
+        from .flows.round import round
+        return round(cfg)
     if args.command == "verify-tasks":
         return _verify_tasks(cfg)
     if args.command == "status":
@@ -74,9 +81,9 @@ def _dispatch(ctx, args) -> int:
         from .flows import repair
         return repair.repair(ctx, topic=args.topic, build_queue=args.queue, no_push=args.no_push)
     if args.command == "run":
-        return run.run(ctx)
+        return run.run(ctx, manual=args.manual)
     if args.command == "nightly":
-        return nightly.nightly(ctx)
+        return nightly.nightly(ctx, manual=args.manual)
     if args.command == "setup":
         setup.setup(ctx)
         return 0
@@ -91,6 +98,10 @@ def _dispatch(ctx, args) -> int:
     raise SystemExit(f"unknown command {args.command}")
 
 
+from .flows.operation import entry
+
+
+@entry("owner")
 def _owner_step(ctx, command: str) -> int:
     """`fetch`/`finish` from the host shell: the same functions as the session's MCP."""
     from .flows import chat, policy
@@ -137,8 +148,8 @@ def _status(cfg, args, context) -> int:
     from .flows import clear, status
     if args.clear:
         learner, kind = args.clear
-        if kind not in ("notes", "review", "publish") or not args.action:
-            raise SystemExit("usage: status --clear <learner> notes|review|publish "
+        if kind not in ("notes", "review", "publish", "writer", "reader", "figure-review", "figure", "reviewer") or not args.action:
+            raise SystemExit("usage: status --clear <learner> notes|review|publish|writer|reader|figure-review|figure|reviewer "
                              "--continue|--discard")
         print(clear.clear(context.make(cfg, learner), kind, args.action))
         return 0
