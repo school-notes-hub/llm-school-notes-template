@@ -20,7 +20,11 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 configured_learners() {
     # The learners in the configuration's table order; never a built-in list of names.
     python3 - "$CONFIG" <<'PY'
-import re, sys, tomllib
+import re, sys
+try:
+    import tomllib
+except ImportError:
+    sys.exit("python3 >= 3.11 (tomllib) is required to read the configuration")
 try:
     with open(sys.argv[1], "rb") as stream:
         names = list(tomllib.load(stream).get("students", {}))
@@ -94,7 +98,8 @@ build_image() {
 
 check_open_tasks() {
     # A newer phase.json than this release understands means: finish or discard that run first.
-    closed "$RELEASE/bin/school-notes" verify-tasks
+    # The same configuration as the locks: its learners and root are the runs to check.
+    closed "$RELEASE/bin/school-notes" --config "$CONFIG" verify-tasks
 }
 
 switch_current() {

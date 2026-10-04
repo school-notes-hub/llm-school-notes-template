@@ -20,6 +20,7 @@ def install(tmp_path, config: str | None, **env):
     environ = {"PATH": os.environ["PATH"], "HOME": str(tmp_path), "SN_ROOT": str(tmp_path / "srv"),
                "SN_TEMPLATE": str(tmp_path / "no-template"), "SN_CONFIG": str(path),
                "XDG_RUNTIME_DIR": str(tmp_path), **env}
+    environ = {k: v for k, v in environ.items() if v is not None}     # None: left unset
     return subprocess.run(["bash", str(INSTALL), "v9.9.9"], env=environ, capture_output=True,
                           text=True, timeout=60)
 
@@ -51,3 +52,45 @@ def test_explicit_learner_list_overrides_the_configuration(tmp_path):
     waits = [line.split()[-2] for line in done.stdout.splitlines()
              if line.startswith("waiting for the lock of")]
     assert waits == ["egy", "ketto"]
+
+
+@pytest.mark.parametrize("explicit", [True, False])
+def test_open_task_check_reads_the_configuration_that_chose_the_locks(tmp_path, explicit):
+    """A rollback to an installed tag reaches `verify-tasks`: it gets the configuration the
+    learner list came from (SN_CONFIG, else the default path), never another one."""
+    default = tmp_path / ".config/school-notes/config.toml"
+    default.parent.mkdir(parents=True)
+    default.write_text("".join(f"\n[students.{n}]\n{STUDENT}" for n in ("egy", "ketto")))
+    release = tmp_path / "srv/releases/v9.9.9"
+    (release / "bin").mkdir(parents=True)
+    calls = tmp_path / "calls.txt"
+    (release / "bin/school-notes").write_text(f'#!/bin/sh\necho "$@" >> {calls}\n')
+    fake = tmp_path / "fake-bin"
+    fake.mkdir()
+    (fake / "podman").write_text("#!/bin/sh\nexit 0\n")       # the image already exists
+    for script in (release / "bin/school-notes", fake / "podman"):
+        script.chmod(0o755)
+    env = {"PATH": f"{fake}{os.pathsep}{os.environ['PATH']}"}
+    if explicit:
+        done = install(tmp_path, f"\n[students.proba]\n{STUDENT}", **env)
+        used, locked = tmp_path / "config.toml", ["proba"]
+    else:
+        done = install(tmp_path, None, SN_CONFIG=None, **env)
+        used, locked = default, ["egy", "ketto"]
+    assert done.returncode == 0, done.stderr
+    waits = [line.split()[-2] for line in done.stdout.splitlines()
+             if line.startswith("waiting for the lock of")]
+    assert waits == locked
+    assert calls.read_text() == f"--config {used} verify-tasks\n"
+    assert (tmp_path / "srv/current").resolve() == release.resolve()
+
+
+def test_a_python_without_tomllib_gets_a_plain_message(tmp_path):
+    """Before `uv sync` the system python3 reads the configuration; tomllib is 3.11+."""
+    old = tmp_path / "old-python"
+    old.mkdir()
+    (old / "tomllib.py").write_text('raise ImportError("no tomllib before Python 3.11")\n')
+    done = install(tmp_path, f"\n[students.proba]\n{STUDENT}", PYTHONPATH=str(old))
+    assert done.returncode != 0 and "Traceback" not in done.stderr
+    assert "python3 >= 3.11 (tomllib) is required" in done.stderr
+    assert not (tmp_path / "srv/state").exists()

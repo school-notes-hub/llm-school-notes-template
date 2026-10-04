@@ -17,7 +17,7 @@ from tests.sources.test_sources import record
 
 def context(repo, monkeypatch):
     def git(*args, **kwargs):
-        path = repo / cards.PATH
+        path = repo / args[1].split(":", 1)[1]           # `show <base>:<path>`
         if not path.exists():
             return SimpleNamespace(returncode=128, stdout=b"")
         return SimpleNamespace(returncode=0, stdout=path.read_bytes())
@@ -218,3 +218,37 @@ def test_legacy_download_base_is_not_reused_by_offline_prepare(tmp_path, monkeyp
     fetch.advance(ctx, task, lambda: None)
     assert task.phase == "prepared"
     assert task.get("base") == "a" * 40
+
+
+@pytest.mark.parametrize("student", LEARNERS)
+@pytest.mark.parametrize("broken", ['{"subjects": {', '{"subjects": []}',
+                                    '{"subjects": {"statika": {"name": 7}}}'])
+def test_invalid_subject_list_blocks_before_move_and_resumes_on_a_fresh_base(
+        tmp_path, monkeypatch, student, broken):
+    """Preparation maps Drive subjects through tools/subjects.json: a broken file stops the
+    run before any package leaves Drive, and the fixed file is read from a fresh base."""
+    repo = tmp_path / "repo"
+    (repo / "tools").mkdir(parents=True)
+    shared(repo)
+    (repo / "tools/subjects.json").write_text(broken)
+    ctx = context(repo, monkeypatch)
+    ctx.student = SimpleNamespace(drive_root="root")
+    ctx.log = SimpleNamespace(event=lambda *a, **k: None)
+    task = phase.create(tmp_path / "tasks", student, "notes", "cron", "downloaded")
+    task.update(selected=[{"package": {"id": "pkg", "name": "Óra", "listed": []}}])
+    moved = []
+    monkeypatch.setattr(fetch, "move_to_processed", lambda *a: moved.append(a[1]) or "moved")
+    with pytest.raises(Prerequisite, match="tools/subjects.json") as failure:
+        fetch.advance(ctx, task, lambda: object())
+    assert "tools/subjects.json" in failure.value.todo
+    task = phase.load(task.dir)
+    assert moved == [] and task.phase == "downloaded"
+    assert task.get("preparation_base") is None and not task.get("preparation_started")
+    monkeypatch.setattr(fetch, "_base", lambda *args: "b" * 40)
+    # A leftover per-learner `card` is not read, even an invalid one (cards are shared).
+    (repo / "tools/subjects.json").write_text(json.dumps(
+        {"subjects": {"statika": {"name": "Statika", "card": {"role": " "}}}}))
+    monkeypatch.setattr(fetch, "prepare", lambda c, t, **k: t.set_phase("prepared"))
+    fetch.advance(ctx, task, lambda: object())
+    assert moved == ["pkg"] and task.phase == "prepared"
+    assert task.get("preparation_base") == "b" * 40

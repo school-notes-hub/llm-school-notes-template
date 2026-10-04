@@ -367,9 +367,9 @@ admission uses global slots and an exclusive lock per learner/home volume.
 Reader and figure review share the reviewer home and run sequentially. There is
 no parallel Claude experiment or B-mode activation here. Container names contain
 the learner, run, role, unit and attempt; stale cleanup uses only that exact name.
-The new tests cover both learners' shared behavior, physical blind inputs,
-interruption at each phase, bounded retries, rollback, disputes, admission and
-hash invalidation after a real local rebase.
+The new tests cover the shared behavior of all configured learners, physical
+blind inputs, interruption at each phase, bounded retries, rollback, disputes,
+admission and hash invalidation after a real local rebase.
 
 Unit 2a review repairs: P1 validates candidates, crop bounds, marker placement and
 notebook-drawing assignments. Figure IDs cannot overwrite another commission's

@@ -77,7 +77,7 @@ Set the JSON to mode `0600`; create the outboxes mode `0700`. For each configure
 python3 tools/drive_media.py check --learner learner-a
 ```
 
-Expected JSON: scope `drive.file`, refresh `ok`, parent `verified`. A missing or moved folder fails. Check both learners independently. The pilot's `destinations.json` and `selected-folders.json` are setup records; the uploader's authoritative mapping is `uploader.json`.
+Expected JSON: scope `drive.file`, refresh `ok`, parent `verified`. A missing or moved folder fails. Check every configured learner independently. The pilot's `destinations.json` and `selected-folders.json` are setup records; the uploader's authoritative mapping is `uploader.json`.
 
 ## 5. Upload, verify and retry
 

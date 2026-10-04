@@ -1,7 +1,7 @@
 """Daily and monthly budget and the shared image lock (plan 4.6).
 
 learning_image.py knows only school-year caps and has a non-waiting lock; the daily
-1 USD budget and the blocking lock for two learners live here.
+1 USD budget and the blocking lock shared by all configured learners live here.
 """
 
 import fcntl

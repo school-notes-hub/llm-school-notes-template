@@ -19,7 +19,7 @@ from ..images import plans as image_plans
 from ..log import today
 from ..review import files as review_files
 from ..schemas import validate
-from ..sources import calls, cards
+from ..sources import calls, cards, naming
 from ..sources.batch import select_batch
 from ..sources.duplicates import known_hashes
 from ..sources.naming import subject_key
@@ -163,9 +163,10 @@ def _validated_base(ctx: Ctx, task: Task, *, pin: bool = True) -> str:
         return base
     wt = ctx.worktree("notes")
     base = _base(ctx, task, wt)
-    shared = wt.run("show", f"{base}:{cards.PATH}", check=False)
-    if shared.returncode == 0:
-        cards.preflight(shared.stdout)
+    for path, check in ((naming.SUBJECTS, naming.preflight), (cards.PATH, cards.preflight)):
+        pinned = wt.run("show", f"{base}:{path}", check=False)
+        if pinned.returncode == 0:
+            check(pinned.stdout)
     if pin:
         task.update(preparation_base=base, preparation_started=True)
     elif task.get("preparation_base"):

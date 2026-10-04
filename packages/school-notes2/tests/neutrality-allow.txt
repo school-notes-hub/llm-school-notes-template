@@ -1,8 +1,7 @@
 # Reviewed exceptions of tests/test_neutrality.py: <template-relative path> <token>  # reason
-# A token is a learner name or a topic-page stem of a local learner checkout. Add a line only
-# after checking that the text is about the subject or the deployment, not about a learner.
+# A token is a learner name, a multi-word topic-page stem of a local learner checkout, or a
+# fixed learner count (`ket-tanulo`, `both-learners`). Add a line only after checking that
+# the text is about the subject or the deployment, not about a learner. A learner name that
+# is also a common word (`barna`, the colour) is listed here per file when used as the word.
 packages/school-notes2/src/school_notes2/ops/config.example.toml benedek  # deployment example (G-17)
 packages/school-notes2/src/school_notes2/ops/config.example.toml barna  # deployment example (G-17)
-instructions/note-formatting.md forgatonyomatek  # physics terminology example, subject level (G-22)
-examples/technical-visuals/index.html forgatonyomatek  # lever demo, subject level (G-22)
-subject-cards.json kommunikacio  # the subject name Kommunikáció, not a learner page
