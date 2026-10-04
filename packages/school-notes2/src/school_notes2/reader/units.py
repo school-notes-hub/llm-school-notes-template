@@ -7,14 +7,21 @@ from pathlib import Path
 from ..figures import commissions
 from ..review import relations
 from ..state import safefs
-from ..wiki import frontmatter
+from ..wiki import banners, frontmatter
 from ..wiki.pages import links, resolve, wiki_pages
 
 
-def page_key(repo: Path, page: str) -> str:
+def page_key(repo: Path, page: str, *, banner_image: str | None = None) -> str:
     from ..flows.steps import _llm_part
     text = _llm_part(safefs.read_text(repo, page))
     text = re.sub(r"\n?" + commissions.MARKER.pattern + r"\n{0,2}", "", text)
+    meta = frontmatter.split(safefs.read_text(repo, page)).meta
+    if meta.get("banner_from"):
+        image = banners.body(repo, page, meta) if banner_image is None else banner_image
+        text += "\n" + image
+        for link in links(image):
+            asset = resolve(page, link.target)
+            text += hashlib.sha256(safefs.read_bytes(repo, asset)).hexdigest()
     return hashlib.sha256(text.replace("\r\n", "\n").rstrip("\n").encode()).hexdigest()
 
 
@@ -33,6 +40,11 @@ def collect(repo: Path, changed: list[str], closures=(), briefs=()) -> list[dict
     for page in sorted(affected & pages):
         topic = commissions.topic(repo, page)
         groups.setdefault(topic, set()).update((topic, page))
+    for page in sorted(pages):
+        meta = frontmatter.split(safefs.read_text(repo, page)).meta
+        if meta.get("banner_from") and banners.target(repo, page, meta) in affected:
+            topic = commissions.topic(repo, page)
+            groups.setdefault(topic, set()).update((topic, page))
     # An unchanged related lesson is context; only its primary topic owns its verdict.
     for page in sorted(pages):
         topic = commissions.topic(repo, page)

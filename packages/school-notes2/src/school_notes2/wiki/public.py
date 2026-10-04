@@ -5,6 +5,7 @@ renderer leaves out the links and citations pointing to them (study-site lib/mar
 """
 
 import json
+import re
 from pathlib import Path
 from typing import Callable
 
@@ -102,12 +103,15 @@ def linked_targets(repo: Path, pages: list[str]) -> tuple[set[str], set[str]]:
 def asset_entry(repo: Path, rel: str, known: dict, rights: RightsLookup) -> dict | None:
     entry = {"path": rel, "sha256": sha256(repo, rel)}
     old = known.get(rel)
-    if old and old.get("rights"):
+    if old and old.get("sha256") == entry["sha256"] and old.get("rights") in (
+            "authored", "generated", "public-domain", "standard"):
         entry["rights"] = old["rights"]
         if old.get("rightsEvidence"):
             entry["rightsEvidence"] = old["rightsEvidence"]
         return entry
-    found = rights(rel)
+    from ..figures.licenses import rights as licensed_rights
+    licensed = licensed_rights(repo, rel)
+    found = licensed if old and old.get("rights") == "licensed" else licensed or rights(rel)
     if found is None:
         return None
     entry["rights"], entry["rightsEvidence"] = found
@@ -121,6 +125,9 @@ def build(repo: Path, rights: RightsLookup, existing: dict | None = None) -> dic
     images, citations = linked_targets(repo, order)
     known = {a["path"]: a for a in existing.get("assets", [])}
     value = {k: existing[k] for k in FIXED if k in existing}
+    note = source_note(repo)
+    if note:
+        value["sourceNote"] = note
     value.setdefault("version", 1)
     value["pages"] = [page_entry(repo, rel) for rel in order]
     assets = {rel: asset_entry(repo, rel, known, rights)
@@ -128,7 +135,8 @@ def build(repo: Path, rights: RightsLookup, existing: dict | None = None) -> dic
     unknown = [rel for rel, entry in assets.items() if entry is None]
     if unknown:
         raise PublicError(unknown)
-    copies = source_copies(repo, [rel for rel in assets if rel not in known])
+    copies = source_copies(repo, [rel for rel in assets if assets[rel]["rights"] != "licensed"])
+    copies += [rel for rel in assets if rel.startswith("wiki/assets/orai/")]
     if copies:
         raise PublicError(copies, "a copy of a source photo may not be published as an image")
     value["assets"] = list(assets.values())
@@ -168,28 +176,27 @@ def source_copies(repo: Path, new_assets: list[str]) -> list[str]:
 
 
 def media_receipt_rights(repo: Path) -> RightsLookup:
-    """A generated image: its receipt folder docs/evidence/media/<file stem>/ exists (B10)."""
-    def lookup(rel: str):
-        receipt = f"docs/evidence/media/{Path(rel).stem}"
-        return ("generated", receipt) if safefs.is_dir(repo, receipt) else None
-    return lookup
+    from .rights import media
+    return media(repo)
 
 
 def render_rights(repo: Path) -> RightsLookup:
-    """Default lookup: an image listed in a render.json `outputs` is the tool-rendered kind."""
-    owners: dict[str, str] = {}
-    for receipt in safefs.glob(repo, "wiki/assets", "wiki/assets/**/render.json"):
-        try:
-            data = json.loads(read_text(repo, receipt))
-        except (OSError, ValueError):
-            continue
-        base = receipt.rsplit("/", 1)[0]
-        for out in data.get("outputs") or {}:
-            owners[f"{base}/{out}"] = receipt
+    from .rights import rendered
+    return rendered(repo)
 
-    def lookup(rel: str):
-        return ("authored", owners[rel]) if rel in owners else None
-    return lookup
+
+def source_note(repo: Path) -> str | None:
+    if not is_file(repo, "PROFILE.md"):
+        return None
+    profile = read_text(repo, "PROFILE.md")
+    if "Not initialized yet" in profile:
+        return None
+    found = re.search(r"^\* \*\*Student\*\*: ([^\W\d_]+)(?:[. \n]|$)", profile, re.M)
+    if not found:
+        return None
+    return (f"A jegyzet {found[1]} órai jegyzetei és a tanári anyagok alapján készült; "
+            "mesterséges intelligencia egészítette ki és javította, és ahol a tankönyv "
+            "rendelkezésre áll, azzal összevetette.")
 
 
 def either(*lookups: RightsLookup) -> RightsLookup:

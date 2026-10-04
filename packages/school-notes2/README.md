@@ -464,3 +464,29 @@ previous 500-character truncation. Summaries are sent once per terminal state
 (done, owner intervention or closure). Quota waits and retry invocations only
 accumulate elapsed time; they send no summary. The VM verification/deployment,
 T-144 owner gate and cron installation are outside this repository change.
+
+## Closure and export (unit 4)
+
+`wiki/rights.py` validates output hashes for `render.json` and generation receipts;
+`public.py` only inherits rights for unchanged bytes. Generation records under
+`docs/evidence/image-generation/` are written by the host and cannot collide with
+accepted figure identities. A licensed image always revalidates its grant.
+`figures/requests.py` and `figures/licenses.py` own the private request/license
+contracts; `flows/licensing.py` files requests through the existing tool-write
+journal before inspection. Source image hashes are distinct from the uploaded
+material's hash; extracted figures resolve to their package's `document.md` mapping.
+The same declaration record supports pre-recorded permission without an owner question.
+The normal figure commission supplies the learning text and candidate; the tool never
+invents an alt or caption while resolving a license. Keep the request marker until
+independent acceptance inserts the credited image. Both records enter the existing
+Git commit inventory; only the owner's interactive session may edit licenses.
+
+`wiki/banners.py` maintains lesson header references, and the reader key includes
+the referenced banner's bytes. `wiki/footnotes.py` adds non-blocking mixed-footnote
+warnings to the usual check and reviewer handoff. `sourceNote` uses the initialized
+PROFILE's explicit Student first name; the uninitialized template stays untouched.
+No new phase, model call or publishing switch is introduced.
+
+Run the JS export tests with `node test/learning-export.test.mjs` in `packages/study-site`.
+Set `STUDY_BROWSER` to the installed Chromium executable for both synthetic learners'
+actual HTML/PDF/site-file negative tests; without it those two browser builds skip.

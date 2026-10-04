@@ -84,6 +84,9 @@ def after_header(text: str, name: str, body: str) -> str:
     else:
         offset = title_end
     cut = len(text) - len(page.body) + offset
+    for block in markers.BLOCK.finditer(text):
+        if block.start() < cut < block.end():
+            cut = block.end() + (text[block.end():block.end() + 1] == "\n")
     return text[:cut] + "\n" + markers.wrap(name, body) + "\n" + text[cut:]
 
 

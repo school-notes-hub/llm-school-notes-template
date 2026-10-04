@@ -74,6 +74,7 @@ def accounting(task, result: dict) -> list[dict]:
 
 def source_warnings(ctx, task, paths: list[str]) -> list[dict]:
     from .steps import base_of
+    from ..wiki import footnotes
     out, counts = [], {}
     wt = ctx.worktree("notes")
     for rel in sorted(set(paths)):
@@ -89,6 +90,7 @@ def source_warnings(ctx, task, paths: list[str]) -> list[dict]:
             counts[rel] = 0
         out += source_refs.scan(rel, text, previous,
                                 full=task.get("mode") == "repair")
+        out += footnotes.scan(rel, text, previous, full=task.get("mode") == "repair")
     counts.update(Counter(i["file"] for i in out))
     counts = dict(sorted(counts.items()))
     task.update(source_ref_counts=counts)

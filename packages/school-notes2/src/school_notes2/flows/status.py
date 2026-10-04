@@ -7,6 +7,7 @@ from pathlib import Path
 
 from ..git import workbranch
 from ..images import pending as image_pending
+from ..figures import requests as figure_requests, licenses
 from ..log import TZ
 from ..review import files as review_files
 from ..sources import cards
@@ -35,8 +36,8 @@ def summary(ctx: Ctx) -> dict:
         "round": round_state,
         "quota": read_json(ctx.cfg.state_dir / "quota.json", {}),
         "timeouts": read_json(ctx.cfg.state_dir / ctx.name / "timeouts.json", {}),
-        "figure_requests": safefs.read_json(ctx.notes_path, "docs/figure-requests.json",
-                                          [r for t in tasks for r in t.get("figure_requests", [])]),
+        "figure_requests": [r for r in figure_requests.active(ctx.notes_path)
+                            if licenses.permission(ctx.notes_path, r) is None],
         "lock": _lock(ctx),
         "open": [_task(t) for t in tasks if t.open],
         "needs_owner": [{"kind": t.kind, "run_id": t.run_id, **t.data["needs_owner"]}

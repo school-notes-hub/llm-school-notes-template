@@ -95,4 +95,12 @@ def public_problems(repo) -> list[dict]:
 def generate(ctx, task, plan_id, note):
     if task.get("mode") == "repair" or task.get("paid_disabled"):
         return {"state": "disabled", "message": "Repair uses free local figures; paid generation is disabled."}
-    return image_generate.generate(ctx.image_settings(), plan_id, note, log=ctx.log)
+    result = image_generate.generate(ctx.image_settings(), plan_id, note, log=ctx.log)
+    if result.get("state") == "generated" and result.get("preview_sha256"):
+        from . import learning
+        from ..wiki.public import dumps
+        learning._settle_pending(ctx, task)
+        path = f"docs/evidence/image-generation/{plan_id}-{result['number']}.json"
+        learning._write(ctx, task, path, dumps({"rights": "generated",
+                        "outputs": sorted({result["sha256"], result["preview_sha256"]})}), whole=True)
+    return result

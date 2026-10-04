@@ -3,7 +3,7 @@
 import hashlib
 import re
 
-from ..figures import commissions, pending
+from ..figures import commissions, pending, requests
 from ..review import relations
 from ..state import safefs
 from ..wiki import drafts, frontmatter, lesson_log, markers
@@ -17,6 +17,8 @@ FIGURE = "⏳ Ehhez a részhez ábra készül.\n"
 def refresh(repo, pages):
     known = relations.inventory(repo)["items"]
     waiting = pending.load(repo)
+    waiting += [{"commission": r} for r in requests.active(repo)]
+    waiting = list({e["commission"]["id"]: e for e in waiting}.values())
     written = []
     for page in sorted(set(pages)):
         if not safefs.is_file(repo, page) or not page.endswith(".md"):
@@ -46,7 +48,7 @@ def refresh(repo, pages):
                 text = text.replace(heading + "\n", heading + "\n\n" + markers.wrap(name, SECTION) + "\n", 1)
         notice = PAGE if page_notice else drafts.NOTICE if frontmatter.split(text).meta.get("status") == "draft" else ""
         text = lesson_log.after_header(text, "pending", notice)
-        for entry in waiting:
+        for entry in sorted(waiting, key=lambda e: (e["commission"]["page"], e["commission"]["id"])):
             brief = entry["commission"]
             if brief["page"] != page:
                 continue

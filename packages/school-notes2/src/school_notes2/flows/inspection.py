@@ -7,6 +7,7 @@ from ..figures.render import Renderer
 from ..llm import launch
 from ..reader import calls, inputs, report, units, verdicts
 from ..state import safefs
+from ..wiki import banners, frontmatter
 from . import steps
 
 
@@ -91,6 +92,10 @@ def inspect(ctx, task):
         briefs = [s["brief"] for s in task.get("inspection_figures", [])]
         view = root / "reader-view"
         inputs.preview(repo, view, briefs, render(ctx, task))
+        for unit in task.get("inspection_units", []):
+            for page in unit["pages"]:
+                if frontmatter.split(safefs.read_text(repo, page)).meta.get("banner_from"):
+                    unit["keys"][page] = units.page_key(repo, page, banner_image=banners.candidate_image(repo, page, briefs))
         findings, notes, pages, receipts, coverage = [], [], [], {}, []
         for unit in task.get("inspection_units", []):
             if task.get("mode") != "fix":

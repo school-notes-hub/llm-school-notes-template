@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "array",
+  "$defs": {
+    "text": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "page": {
+      "type": "string",
+      "pattern": "^wiki/(?!.*\\.\\.)[^\\\\]+\\.md$"
+    },
+    "source": {
+      "type": "string",
+      "pattern": "^sources/(?!.*\\.\\.)[^\\\\]+$"
+    }
+  },
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "id",
+      "page",
+      "source",
+      "crop",
+      "purpose",
+      "origin",
+      "content_sha256",
+      "original_sha256"
+    ],
+    "properties": {
+      "id": {
+        "$ref": "#/$defs/id"
+      },
+      "page": {
+        "$ref": "#/$defs/page"
+      },
+      "source": {
+        "$ref": "#/$defs/source"
+      },
+      "crop": {
+        "$ref": "#/$defs/text"
+      },
+      "purpose": {
+        "$ref": "#/$defs/text"
+      },
+      "origin": {
+        "enum": [
+          "teacher-own",
+          "third-party",
+          "unknown"
+        ]
+      },
+      "content_sha256": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "original_sha256": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    }
+  }
+}

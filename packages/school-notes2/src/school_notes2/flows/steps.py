@@ -172,6 +172,8 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
     evidence = records.append(repo, records.from_writer(result.get("checks", [])),
                               run_id=task.run_id, checker=by, at=at, fetch_pages=fetch["pages"])
     _record_writes(task, repo, whole=outcome.written + evidence, parts=[])
+    from . import licensing
+    licensing.refresh(ctx, task, result, fetch["pages"])
     generate_all(ctx, task)
     return Prepared(result, result["status"] == "question", outcome.new_owner)
 
@@ -220,8 +222,11 @@ def generate_all(ctx: Ctx, task: Task) -> None:
     # these generated blocks are the tool's own writes.
     _record_writes(task, repo, whole=[], parts=indexes)
     try:
-        public.write(repo, public.either(public.render_rights(repo),
-                                         public.media_receipt_rights(repo)))
+        value = public.build(repo, public.either(public.render_rights(repo),
+                                                public.media_receipt_rights(repo)))
+        text = public.dumps(value)
+        if not safefs.is_file(repo, "publication/public.json") or safefs.read_text(repo, "publication/public.json") != text:
+            learning._write(ctx, task, "publication/public.json", text, whole=True)
     except public.PublicError as exc:
         problems = [wiki_check.item(p, None, exc.reason) for p in exc.paths]
         checks.tool_errors(ctx, task, problems)
@@ -315,6 +320,8 @@ def _llm_hash(rel: str, data: bytes) -> str:
 def _llm_part(text: str) -> str:
     """The text without generated blocks and machine frontmatter keys."""
     from ..figures.commissions import MARKER
+    from ..wiki.banners import canonical_reference
+    text = canonical_reference(text)
     text = markers.BLOCK.sub(lambda m: f"<!-- figure: {m['name'][7:]} -->"
                              if m["name"].startswith("figure-") else m[0], text)
     text = MARKER.sub(lambda m: f"<!-- figure: {m[1]} -->", text)

@@ -8,7 +8,8 @@ from pathlib import Path
 from ..figures import commissions, context
 from ..review import relations
 from ..state import safefs
-from ..wiki import frontmatter
+from ..wiki import banners, frontmatter
+from ..wiki.pages import wiki_pages
 from ..wiki.pages import relative
 
 
@@ -44,6 +45,10 @@ def preview(repo: Path, destination: Path, briefs: list[dict], render=None) -> N
             link = ""
         text = commissions.MARKER.sub(lambda m: link if m[1] == brief["id"] else m[0], text)
         safefs.write_text(destination, page, text)
+
+    for page in sorted(wiki_pages(destination)):
+        text = safefs.read_text(destination, page)
+        safefs.write_text(destination, page, banners.update(destination, page, text))
 
 
 def prepare(repo: Path, view: Path, unit: dict, folder: Path, old_text) -> dict:

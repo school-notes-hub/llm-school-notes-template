@@ -52,7 +52,7 @@ def test_generated_index_is_recorded_before_the_public_step_can_stop(world, monk
 
     def refuse(*a, **k):
         raise public.PublicError(["wiki/assets/x.svg"])
-    monkeypatch.setattr(public, "write", refuse)
+    monkeypatch.setattr(public, "build", refuse)
     with pytest.raises(steps.CheckFailed):
         steps.generate_all(ctx, task)
     assert "wiki/index.md" in phase.load(task.dir).get("tool_parts")

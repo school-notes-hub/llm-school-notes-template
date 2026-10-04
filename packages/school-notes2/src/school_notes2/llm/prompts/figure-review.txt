@@ -40,6 +40,8 @@ Checklista:
 7. Bannernél: a témát mutatja-e, érthető-e első ránézésre?
 8. Nem másolat-e?
 
+Ha a tool a bemenet `licensed` mezőjében igazolt `public-with-credit` engedélyt ad, a képet licencelt ábraként ellenőrizd: a másolás ténye önmagában nem hiba. A helyességet, tanulási célt, olvashatóságot és a látható kredit meglétét ugyanúgy vizsgáld. Az engedély nem ábraítélet.
+
 
 Kimenet és befejezés
 

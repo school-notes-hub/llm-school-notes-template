@@ -2,6 +2,14 @@
 
 Newest first. Each entry says what changed in the shared files and what an existing wiki must do when it applies the update (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)). A wiki records the version it is on in `PROFILE.md`.
 
+## Pending controller approval - closure and export (unit 4; proposed 1.18.0)
+
+- Bind inherited asset rights, render outputs and generated-image receipts to the actual output SHA-256. Licensed output additionally requires the current original-material permission and independently accepted image record. Receipt folders alone grant nothing; teacher copies under `wiki/assets/orai/` remain forbidden.
+- Persist private figure requests with original and extracted-source hashes, validate owner license records, include both in the normal commit inventory, reuse independent figure acceptance and visible credit, and show unresolved requests through the existing pending/status/notification paths.
+- Render lesson-log `banner_from` references to the topic's current header; include the reused image in the lesson's reader verdict. Use the fixed Hungarian `sourceNote` from the initialized PROFILE first name. Warn, without blocking, on source-location patterns inside web-linked footnotes.
+- Add two synthetic-learner privacy regressions for decisions, hidden markers, source files, private footnotes, review files and the private log; add optional full HTML/PDF/site builds with the controller's Chromium. No publishing or learner migration is enabled.
+- Migration (controller-owned): proposed shared-rule version 1.18.0, not released here. Synchronize the changed instructions and changelog through Template updates after review. Deploy tool and renderer together. Before a private build, replace stale or hashless image rights with genuine matching receipts or explicit permission; never regenerate a hash just to preserve a stale right. Initialized profiles supply the already authorized first name; no profile or learner content is copied by this change. Run the full socket/browser tests and inspect both private builds and one interactive license workflow before considering publication; `publish = false` remains in effect.
+
 ## 1.17.0 - 2026-10-04
 
 ### Learner-neutral template

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "sha256",
+      "granted_by",
+      "scope",
+      "credit",
+      "own_work_confirmed",
+      "on"
+    ],
+    "properties": {
+      "sha256": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "granted_by": {
+        "type": "string",
+        "minLength": 1
+      },
+      "scope": {
+        "enum": [
+          "private",
+          "public-with-credit",
+          "none"
+        ]
+      },
+      "credit": {
+        "type": "string"
+      },
+      "own_work_confirmed": {
+        "type": "boolean"
+      },
+      "on": {
+        "type": "string",
+        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+      },
+      "request_id": {
+        "type": "string",
+        "pattern": "^[a-z0-9-]{1,64}$"
+      }
+    }
+  }
+}

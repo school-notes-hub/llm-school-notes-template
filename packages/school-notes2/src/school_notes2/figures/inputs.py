@@ -8,7 +8,7 @@ from pathlib import Path
 from ..review.relations import reviewer_inventory
 from ..state import safefs
 from ..wiki.pages import links, resolve, wiki_pages
-from . import commissions, context, machine
+from . import commissions, context, machine, licenses
 from .render import png
 
 Render = Callable[[str, bytes, str], bytes]
@@ -72,6 +72,10 @@ def _figure(repo: Path, brief: dict, folder: Path, render: Render) -> dict:
               "full": f"images/{fid}.png", "phone": f"images/{fid}-phone.png",
               "embedding": context.embedding(repo, brief, candidate), "machine": report,
               "uses": [context.page_context(repo, brief["page"])] + context.other_uses(repo, brief, candidate)}
+    request = licenses.request_for(repo, fid)
+    if request and (grant := licenses.permission(repo, request)):
+        result["licensed"] = {"scope": grant["scope"], "credit": grant["credit"],
+                              "original_sha256": request["original_sha256"]}
     _source(repo, brief, candidate, folder, result, data, kind)
     return result
 

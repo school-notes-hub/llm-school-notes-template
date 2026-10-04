@@ -12,7 +12,7 @@ import yaml
 from ..state import safefs
 from ..state.phase import Task
 from ..state.errors import NeedsOwner
-from ..wiki import decisions, drafts, frontmatter, guard, lesson_log
+from ..wiki import banners, decisions, drafts, frontmatter, guard, lesson_log
 from ..wiki.pages import read_page, wiki_pages
 from . import checks, steps
 from .context import Ctx
@@ -30,7 +30,7 @@ def validate(ctx: Ctx, task: Task) -> None:
     problems = []
     for rel in sorted(wiki_pages(ctx.notes_path)):
         problems += [steps.wiki_check.item(rel, None, m) for m in
-                     _metadata_problems(rel, safefs.read_text(ctx.notes_path, rel))]
+                     _metadata_problems(rel, safefs.read_text(ctx.notes_path, rel), ctx.notes_path)]
     if problems:
         checks.tool_errors(ctx, task, problems)
         changed = steps.llm_snapshot(ctx, task)
@@ -38,7 +38,7 @@ def validate(ctx: Ctx, task: Task) -> None:
         previous = {}
         for rel in sorted({p["file"] for p in problems} & changed.keys()):
             old = wt.run("show", f"{base}:{rel}", check=False)
-            previous[rel] = _metadata_problems(rel, old.stdout.decode("utf-8", "replace")) \
+            previous[rel] = _metadata_problems(rel, old.stdout.decode("utf-8", "replace"), ctx.notes_path) \
                 if old.returncode == 0 else []
         outside = [p for p in problems if p["file"] not in changed or
                    p["message"] in previous.get(p["file"], [])]
@@ -49,7 +49,7 @@ def validate(ctx: Ctx, task: Task) -> None:
         raise steps.CheckFailed(problems)
 
 
-def _metadata_problems(rel: str, text: str) -> list[str]:
+def _metadata_problems(rel: str, text: str, repo=None) -> list[str]:
     try:
         meta = frontmatter.split(text).meta
     except (ValueError, yaml.YAMLError):
@@ -59,6 +59,11 @@ def _metadata_problems(rel: str, text: str) -> list[str]:
         try:
             lesson_log.source_line(meta)
         except ValueError as exc:
+            messages.append(str(exc))
+    if repo is not None and not messages:
+        try:
+            banners.body(repo, rel, meta)
+        except (ValueError, OSError) as exc:
             messages.append(str(exc))
     return messages
 
@@ -72,7 +77,8 @@ def refresh(ctx: Ctx, task: Task, *, today: date | None = None) -> None:
     for rel in sorted(wiki_pages(repo)):
         old = safefs.read_text(repo, rel)
         meta = read_page(repo, rel).meta
-        new = drafts.update(old, linked.get(rel, []), today)
+        new = banners.update(repo, rel, old)
+        new = drafts.update(new, linked.get(rel, []), today)
         if lesson_log.is_lesson(rel, meta):
             new = lesson_log.after_header(new, lesson_log.BLOCK, lesson_log.source_line(meta))
         if new != old:

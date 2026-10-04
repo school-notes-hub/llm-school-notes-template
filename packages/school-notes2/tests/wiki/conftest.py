@@ -1,6 +1,7 @@
 """A small synthetic learner repo in the v2 format (after migration)."""
 
 import json
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -87,6 +88,6 @@ def repo(tmp_path) -> Path:
         {"subjects": {"proba": {"name": "Próba", "emoji": "🧪"}}}, ensure_ascii=False))
     write(r, "publication/public.json", json.dumps(
         {"version": 1, "mode": "public", "title": "T", "base": "/t/", "publicationApproved": True,
-         "assets": [{"path": "wiki/assets/abra.svg", "sha256": "x", "rights": "authored",
+         "assets": [{"path": "wiki/assets/abra.svg", "sha256": hashlib.sha256(b"<svg/>").hexdigest(), "rights": "authored",
                      "publicationReviewed": True}]}))
     return r

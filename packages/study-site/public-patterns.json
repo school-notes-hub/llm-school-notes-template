@@ -24,7 +24,10 @@
   ],
   "output_only": [
     "image-description",
-    "(?:href|src|srcset)\\s*=\\s*[\"']?[^\"'>\\s]*(?:^|/)(?:sources|references)/"
+    "(?:href|src|srcset)\\s*=\\s*[\"']?[^\"'>\\s]*(?:^|/)(?:sources|references)/",
+    "<!--\\s*(?:q|figure|figure-request|image):",
+    "\"decisions\"\\s*:",
+    "(?:href|src|srcset)\\s*=\\s*[\\\"\\x27]?[^\\\"\\x27>\\s]*(?:^|/)docs/review/"
   ],
   "source_refs": [
     "\\b\\d+(?:\\s*[-–]\\s*\\d+)?\\.?\\s*(?:dia|diája|dián|diánál|diákon|fotó\\w*|(?:füzet|tankönyv|PDF)[ -]?oldal\\w*)\\b",

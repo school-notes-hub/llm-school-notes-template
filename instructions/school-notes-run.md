@@ -43,7 +43,7 @@ Read `AGENTS.md`, `PROFILE.md` and the rules the rule map requires for ingest, i
 
 ## Where you may write
 
-`wiki/**` (except generated blocks and machine frontmatter keys) and `wiki/assets/**`; in the owner's session also `references/**`; while resolving a conflict also the conflicting files. A file that existed before the run is never renamed or deleted; a file created in this run may be deleted. No symlinks, no dotfiles under `wiki/`. The tool's path guard refuses everything else.
+`wiki/**` (except generated blocks and machine frontmatter keys) and `wiki/assets/**`; in the owner's session also `references/**` and `docs/licenses.json` (only to record the owner's explicit permission decision); while resolving a conflict also the conflicting files. A file that existed before the run is never renamed or deleted; a file created in this run may be deleted. No symlinks, no dotfiles under `wiki/`. The tool's path guard refuses everything else.
 
 ## MCP tools
 
@@ -93,3 +93,13 @@ Never infer lesson dates from filenames. Keep chapter, lesson and topic order; s
 within the assigned topic may follow a better teaching sequence. The full target page
 gets the Reader check. No Drive fetch or paid image generation happens in repair.
 The host tool manages the queue and the `--no-push` hold; never edit the queue yourself.
+
+## Licensed figures and closure
+
+The tool files `figure_requests` into private `docs/figure-requests.json`, binding each stable ID to its page, source bytes and the original material hash. Keep exactly one unindented `<!-- figure-request: <id> -->` at its place. Never reuse an ID for changed source/crop/purpose; never edit the generated request list. An unresolved request gets the fixed generated figure-pending notice and appears in status and the private owner notification. A valid pre-recorded permission proceeds without another owner question.
+
+In an owner's session, record `docs/licenses.json` as a JSON array. Each record has `sha256` (the original uploaded material), `granted_by`, `scope: private | public-with-credit | none`, `credit` (one public-safe line), `own_work_confirmed` (boolean) and `on` (`YYYY-MM-DD`). No teacher's private name belongs in the public credit. A material-wide permission only covers `origin: teacher-own` with `public-with-credit` and confirmed own work. For third-party or unknown origins, the owner must establish the particular image's separate permission with an additional `request_id` on the license record; the permission giver must own the licensed work. A request-specific record overrides the material-wide record, including a refusal.
+
+After permission, on the next touching run or repair, supply a normal `figures` commission and candidate with the request's ID and page; keep the request marker. The commission's `source_image` identifies the requested source and a pixel crop for the independent checker. The tool adds the exact public credit before review and inserts only on a current independent accept; it records the license and output hash together. If the owner chooses another image or a redraw, remove the request marker and use a new commission ID for that route; if they choose deletion, remove the marker and adapt the teaching text. Historical request records remain private. Never place an unlicensed candidate in the wiki.
+
+For a reused lesson banner, set `banner_from` to a listed topic page. The tool maintains `lesson-banner` with that topic's current header; do not copy a banner link by hand. The reader checks the lesson context, and a changed banner invalidates its previous verdict. Request filing, banner refresh and publication metadata use the existing resumable tool-write journal; none starts another writer or review cycle.

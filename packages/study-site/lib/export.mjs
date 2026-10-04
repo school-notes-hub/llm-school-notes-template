@@ -22,6 +22,7 @@ export async function exportSite({ repo, config, output, browserPath, printEngin
   const routes = new Set();
   for (const p of config.pages) {
     relativeFile(p.path);
+    if (p.path === 'wiki/log.md') throw new Error('Private wiki log cannot be exported');
     const route = routeFor(p.path);
     if (routes.has(route)) throw new Error(`Duplicate route: ${route}`);
     if (!/^[a-f0-9]{64}$/.test(p.sha256)) throw new Error(`Page hash required: ${p.path}`);

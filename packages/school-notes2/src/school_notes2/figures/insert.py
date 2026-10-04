@@ -6,7 +6,7 @@ from pathlib import Path
 from ..state import safefs
 from ..wiki import markers
 from ..wiki.pages import relative
-from . import commissions, context, pending
+from . import commissions, context, pending, licenses
 from .review import validate_output
 
 VERDICTS = "docs/review/verdicts.json"
@@ -35,6 +35,14 @@ def insert(repo: Path, brief: dict, receipt: dict, *, at: str) -> list[str]:
     directory = f"docs/evidence/media/{fid}"
     record = {"commission": brief, "candidate": candidate, "verdict": verdict,
               "verifier": receipt["model"], "at": at}
+    if candidate.get("asset"):
+        record["output_sha256"] = hashlib.sha256(safefs.read_bytes(repo, candidate["asset"])).hexdigest()
+    request = licenses.request_for(repo, fid)
+    if request:
+        grant = licenses.permission(repo, request)
+        if not grant:
+            raise ValueError("licensed insertion needs current public permission")
+        record.update(license_request=request, license=grant, rights="licensed")
     new_text = text if "mermaid" in candidate else _insert(text, page, brief, candidate, verdict, directory, repo)
     files = [f"{directory}/figure.json", VERDICTS]
     safefs.write_json(repo, files[0], record)

@@ -9,7 +9,7 @@ from ..state import safefs
 from ..wiki import frontmatter, markers as blocks
 from ..wiki.pages import CODE_FENCE, INLINE_CODE, links, resolve, wiki_pages
 
-MARKER = re.compile(r"<!-- (?:figure|image): ([a-z0-9-]{1,64}) -->")
+MARKER = re.compile(r"<!-- (?:figure|image|figure-request): ([a-z0-9-]{1,64}) -->")
 MERMAID = re.compile(r"^```mermaid[^\n]*\n(.*?)^```\s*$", re.M | re.S)
 
 
@@ -109,7 +109,8 @@ def candidate(repo: Path, brief: dict) -> dict:
         raise ValueError("candidate asset must be under wiki/assets/")
     if any(c in value.get("alt", "") for c in "\r\n"):
         raise ValueError("alt must fit on one line")
-    return value
+    from . import licenses
+    return licenses.candidate(repo, brief, value)
 
 
 def topic(repo: Path, page: str) -> str:

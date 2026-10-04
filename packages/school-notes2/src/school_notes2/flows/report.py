@@ -9,7 +9,9 @@ from . import writer
 
 def completion(ctx, task):
     merged = writer.merge(writer.results(task, required=False))
-    requests = sorted(merged.get("figure_requests", []), key=lambda r: (r["source"], r["page"], r["id"]))
+    from ..figures import requests as figure_requests, licenses
+    requests = [r for r in figure_requests.active(ctx.notes_path)
+                if licenses.permission(ctx.notes_path, r) is None]
     task.update(figure_requests=requests)
     for request in requests:
         pending.send(ctx, Notice(ctx.name, f"license:{request['id']}:{request['source']}:{request['page']}",

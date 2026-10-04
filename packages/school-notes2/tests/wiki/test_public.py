@@ -41,7 +41,7 @@ def test_assets_keep_rights_and_classify_new_ones(repo):
     with pytest.raises(public.PublicError) as err:
         public.build(repo, public.render_rights(repo))
     assert err.value.paths == ["wiki/assets/uj/kep.png"]
-    (repo / "wiki/assets/uj/render.json").write_text(json.dumps({"outputs": {"kep.png": {}}}))
+    (repo / "wiki/assets/uj/render.json").write_text(json.dumps({"outputs": {"kep.png": {"sha256": public.sha256(repo, "wiki/assets/uj/kep.png")}}}))
     entry = [a for a in public.build(repo, public.render_rights(repo))["assets"]
              if a["path"].endswith("kep.png")][0]
     assert entry["rights"] == "authored" and entry["rightsEvidence"] == "wiki/assets/uj/render.json"

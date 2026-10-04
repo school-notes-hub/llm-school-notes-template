@@ -38,7 +38,16 @@ def check_result(repo: Path, result: dict, fetch: dict, open_items: set[tuple[st
             out.append(item(RESULT, None, f"review_closure: {c['file']} does not exist"))
         elif (c["file"], c["item_id"]) not in open_items:
             out.append(item(RESULT, None, f"review_closure: {c['file']} {c['item_id']} is not open"))
-    from ..figures import commissions, pending
+    from ..figures import commissions, pending, requests, licenses
+    try:
+        requested = requests.collect(repo, result.get("figure_requests", []), fetch["pages"])
+        for request in requested:
+            if request["id"] in {f["id"] for f in result.get("figures", [])}:
+                brief = commissions.read(repo, request["id"])
+                licenses.candidate(repo, brief, commissions.candidate(repo, brief), request)
+        licenses.load(repo)
+    except (ValueError, OSError) as exc:
+        out.append(item(RESULT, None, str(exc)))
     inherited = fetch.get("pending_figures", [])
     invalid = {e["commission"]["id"] for e in inherited
                if base_content is not None and not pending.valid_at(e["commission"], base_content)}

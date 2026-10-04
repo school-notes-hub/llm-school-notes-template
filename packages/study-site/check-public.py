@@ -48,7 +48,8 @@ def main(root):
         text = text_of(path, counts)
         if text is not None:
             errors += [{'file': name, 'pattern': p.pattern} for p in compiled if p.search(text)]
-        if path.suffix in ('.md', '.pptx', '.docx') or 'receipt' in path.name:
+        if (path.suffix in ('.md', '.pptx', '.docx') or 'receipt' in path.name
+                or name.startswith(('sources/', 'references/', 'docs/'))):
             errors.append({'file': name, 'pattern': 'private file type'})
     result = {'mode': 'public', **counts, 'errors': errors}
     (root / 'privacy-report.json').write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')

@@ -68,6 +68,8 @@ def _allowed(path: str, g: GuardInput) -> bool:
     change how Git merges, archives or hides the writer's other files."""
     if any(part.startswith(".") for part in path.split("/")):
         return False
+    if g.interactive and path == "docs/licenses.json":
+        return True
     prefixes = ALWAYS + (INTERACTIVE if g.interactive else ())
     return path.startswith(prefixes) or path in g.conflict_files
 

@@ -88,5 +88,6 @@ def test_public_refuses_a_copied_source_photo_and_knows_generated_receipts(repo)
     except public.PublicError as exc:
         assert exc.paths == ["wiki/assets/copy.jpg"] and "source photo" in exc.reason
     (repo / "docs/evidence/media/banner-1").mkdir(parents=True)
-    assert public.media_receipt_rights(repo)("wiki/assets/banner/banner-1.webp") == (
-        "generated", "docs/evidence/media/banner-1")
+    (repo / "wiki/assets/banner").mkdir()
+    (repo / "wiki/assets/banner/banner-1.webp").write_bytes(b"image")
+    assert public.media_receipt_rights(repo)("wiki/assets/banner/banner-1.webp") is None
