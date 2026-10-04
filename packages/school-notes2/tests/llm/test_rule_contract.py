@@ -49,10 +49,11 @@ def test_pending_figure_retry_uses_worktree_relative_paths():
 def test_wording_migration_belongs_to_profile_release():
     import json
     version = json.loads((ROOT / "shared-files.json").read_text())["version"]
-    assert version == "1.17.0"
     assert f"**Template version**: `{version}`" in (ROOT / "PROFILE.md").read_text()
     changelog = (ROOT / "CHANGELOG.md").read_text()
-    release = changelog.split(f"## {version} - ", 1)[1].split("\n## ", 1)[0]
+    assert f"## {version} - " in changelog
+    # The Wording keys were introduced by the 1.17.0 release and stay documented there.
+    release = changelog.split("## 1.17.0 - ", 1)[1].split("\n## ", 1)[0]
     for key in ("lesson-log heading", "lesson-log source line", "undated source lesson",
                 "notebook correction request"):
         assert f"`{key}`" in release

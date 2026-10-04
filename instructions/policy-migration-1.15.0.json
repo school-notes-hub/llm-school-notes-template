@@ -15,7 +15,7 @@
       "source_sha256": "91416c932747a9e5a95b2c27ba7babf2ac8229afd251016b069bc5c142cb0b98",
       "migrated_sha256": "1378eef0ef95fde0b6fa4647d9f13eb01b4ba31dc0f9fe26e0e6b2931c835441",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
-      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.16.2: the public view leaves out links and citations of private files and the grade prefix; 1.17.0: lesson-log body and source pointer; topic-only banner, banner reuse/style and private footnotes; 1.17.0 (neutral template): undated-lesson range placeholders, banner yardstick is the youngest main reader in PROFILE Audience; 1.18.0 (proposed): public footnote layering, export never carries decisions/markers/log, image rights tied to output SHA-256"
+      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.16.2: the public view leaves out links and citations of private files and the grade prefix; 1.17.0: lesson-log body and source pointer; topic-only banner, banner reuse/style and private footnotes; 1.17.0 (neutral template): undated-lesson range placeholders, banner yardstick is the youngest main reader in PROFILE Audience; 1.18.0: public footnote layering, export never carries decisions/markers/log, image rights tied to output SHA-256"
     },
     {
       "heading": "Principles",
