@@ -40,7 +40,7 @@ def test_t095_every_phase_resumes_after_completed_action(setup, monkeypatch, bou
     ctx, task, page = setup
     invoked = install_reader(monkeypatch, page, findings=[finding(page)])
     corrections = []
-    def fix(ctx, task):
+    def fix(ctx, task, restores=None):
         corrections.append(1)
         path = task.get("inspection_report")
         closure = {"file": path, "item_id": "R1", "status": "fixed", "note": "Javítva"}
@@ -82,7 +82,7 @@ def test_two_pass_merge_and_empty_list_skips_second_call(setup, monkeypatch):
 def test_p6_without_p5_after_open_or_rollback(setup, monkeypatch):
     ctx, task, page = setup
     invoked = install_reader(monkeypatch, page, findings=[finding(page)])
-    def rollback(ctx, task):
+    def rollback(ctx, task, restores=None):
         task.update(correction_result={"status": "done"}, correction_rolled_back=True)
     monkeypatch.setattr(correction, "run", rollback)
     review_phases.advance(ctx, task, lambda _: None)

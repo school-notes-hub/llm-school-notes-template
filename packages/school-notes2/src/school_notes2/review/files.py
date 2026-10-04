@@ -120,7 +120,7 @@ def write_review(repo: Path, date: str, review: dict, reviewer: str, frm: str, t
         records[f["id"]] = {"file": f["file"], "round": 1, "chain": max(f.get("chain", 0), relations.chain(f, known)),
                             "origin": f.get("origin", "nightly"), "category": f.get("category"),
                             "relates_to": f.get("relates_to"), "unlocated": unlocated or f.get("unlocated", False),
-                            **{k: f[k] for k in ("quote", "hit_id", "figure_id") if k in f}}
+                            **{k: f[k] for k in ("quote", "hit_id", "figure_id", "outside_assignment") if k in f}}
     body = render_body(date, {**review, "findings": active}, frm, to)
     if pending:
         body += "\n## Függő (nyitott kérdésre vár)\n\n" + "\n".join(

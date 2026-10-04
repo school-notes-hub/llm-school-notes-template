@@ -10,17 +10,17 @@ from . import correction, inspection, recheck, steps
 PHASES = ("figures", "inspecting", "correcting", "rechecking", "review_ready")
 
 
-def advance(ctx, task, notify):
+def advance(ctx, task, notify, edits=None):
     if task.phase == "waiting_quota":
         task.set_phase(task.get("quota_phase"))
     try:
-        return _advance(ctx, task, notify)
+        return _advance(ctx, task, notify, edits)
     except WaitingQuota:
         task.set_phase("waiting_quota", quota_phase=task.phase)
         raise
 
 
-def _advance(ctx, task, notify):
+def _advance(ctx, task, notify, edits):
     if task.phase == "figures":
         inspection.prepare(ctx, task)
         task.set_phase("inspecting")
@@ -29,7 +29,7 @@ def _advance(ctx, task, notify):
         task.set_phase("correcting" if correction.all_items(ctx, task) and task.get("mode") != "fix"
                        else "review_ready")
     if task.phase == "correcting":
-        handoff = correction.run(ctx, task)
+        handoff = correction.run(ctx, task, edits)
         if handoff is not None:
             return handoff
         task.set_phase("rechecking" if correction.needs_recheck(ctx, task) and not task.get("correction_rolled_back")
@@ -38,14 +38,14 @@ def _advance(ctx, task, notify):
         recheck.run(ctx, task)
         task.set_phase("review_ready")
     if task.phase == "review_ready":
-        finalize(ctx, task)
+        finalize(ctx, task, edits)
         items = relations.inventory(ctx.notes_path)["items"]
         notify([{"file": k.rsplit("#", 1)[0], "item_id": k.rsplit("#", 1)[1]}
                 for k, i in items.items() if i["status"] == "owner"])
         task.set_phase("finishing", review_complete=True)
 
 
-def finalize(ctx, task):
+def finalize(ctx, task, edits=None):
     repo, written, owners = ctx.notes_path, [], []
     for state in task.get("inspection_figures", []):
         brief = state["brief"]
@@ -53,7 +53,11 @@ def finalize(ctx, task):
         verdict = next((v for v in receipt.get("review", {}).get("figures", []) if v["id"] == brief["id"]), {})
         if verdict.get("verdict") == "accept" and state["candidate"]["state"] == "candidate":
             try:
+                before = steps._llm_hash(brief["page"], safefs.read_bytes(repo, brief["page"]))
                 written += insert.insert(repo, brief, receipt, at=task.data["created"])
+                if edits is not None and brief.get("replaces"):
+                    after = steps._llm_hash(brief["page"], safefs.read_bytes(repo, brief["page"]))
+                    edits["replacements"].append((brief["page"], before, after))
                 continue
             except (OSError, ValueError) as exc:
                 ctx.log.event("figure.stale", id=brief["id"], reason=str(exc))

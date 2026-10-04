@@ -9,6 +9,7 @@ from ..git import workbranch
 from ..site import build as site_build
 from ..site import publish as site_publish
 from ..state.errors import NeedsOwner, SnError
+from ..state import safefs
 from ..state.phase import Task
 from ..wiki import markers
 from . import checks, steps
@@ -22,11 +23,19 @@ def finish(ctx: Ctx, task: Task, *, notify_owner_items) -> str | dict:
     """Run a notes task from `finishing` (or a later Git phase) to `done`.
 
     Raises steps.CheckFailed (the writer must fix check.json), NeedsOwner, Transient."""
+    try:
+        return _finish(ctx, task, notify_owner_items)
+    except git_finish.EditedDuringFinish:
+        task.set_phase("writing", review_complete=False, attempt=task.get("attempt", 1) + 1)
+        raise
+
+
+def _finish(ctx, task, notify_owner_items):
     wt = ctx.worktree("notes")
     start = _snapshot(ctx, task)
+    edits = {"restores": [], "replacements": []} if task.mode == "interactive" else None
     from . import review_phases
     if task.phase in ("prepared", "writing", "finishing") and not task.get("review_complete"):
-        start = _snapshot(ctx, task)
         prepared = steps.content_steps(ctx, task)
         notify_owner_items(prepared.new_owner)
         if prepared.question:
@@ -36,12 +45,11 @@ def finish(ctx: Ctx, task: Task, *, notify_owner_items) -> str | dict:
         task.set_phase("figures", inspection_result=prepared.result,
                        attempt=task.get("attempt", 1), max_agents=task.get("max_agents", ctx.cfg.limits.max_agents))
     if task.phase in (*review_phases.PHASES, "waiting_quota"):
-        handoff = review_phases.advance(ctx, task, notify_owner_items)
+        handoff = review_phases.advance(ctx, task, notify_owner_items, edits)
         if handoff is not None:
+            if start != _snapshot(ctx, task, start):
+                raise git_finish.EditedDuringFinish("files changed before correction handoff")
             return handoff
-        # P4 repairs and P6 insertions are authorized changes, already checked.
-        # Compare subsequent session edits with this finalized tree.
-        start = _snapshot(ctx, task)
     elif task.get("rebase") == "conflict":
         steps.guard_step(ctx, task)
         steps.regenerate(ctx, task)
@@ -53,26 +61,38 @@ def finish(ctx: Ctx, task: Task, *, notify_owner_items) -> str | dict:
         build=lambda commit: _build(ctx, task, commit),
         publish=lambda record: _publish(ctx, task, record),
         message=lambda: message(ctx, task),
-        snapshot=lambda: _snapshot(ctx, task),
+        snapshot=lambda: _snapshot(ctx, task, start),
         empty_blocks=markers.empty_all,
         rerecord=lambda paths: steps.rerecord(ctx, task, paths),
         final_keys=lambda: review_phases.final_keys(ctx, task),
         extra_paths=("references",) if task.mode == "interactive" else ())
     t = git_finish.Timeouts(ctx.cfg.timeouts.fetch_s, ctx.cfg.timeouts.push_s,
                             ctx.cfg.timeouts.ls_remote_s)
-    try:
-        state = git_finish.run(task, wt, hooks, t, start)
-    except git_finish.EditedDuringFinish:
-        task.set_phase("writing", review_complete=False, attempt=task.get("attempt", 1) + 1)
-        raise
+    for before, after in (edits or {}).get("restores", []):
+        if start != before:
+            raise git_finish.EditedDuringFinish("files changed before correction rollback")
+        start = after
+    for page, before, after in (edits or {}).get("replacements", []):
+        if start.get(page) != before:
+            raise git_finish.EditedDuringFinish("files changed before figure replacement")
+        start[page] = after
+    state = git_finish.run(task, wt, hooks, t, start)
     if state in ("done", "committed"):
         report.completion(ctx, task)
     return state
 
 
-def _snapshot(ctx: Ctx, task: Task) -> dict:
+def _snapshot(ctx: Ctx, task: Task, authored=()) -> dict:
     """5.4/9 guards against a session editing during finish; cron has no session."""
-    return steps.llm_snapshot(ctx, task) if task.mode == "interactive" else {}
+    if task.mode != "interactive":
+        return {}
+    snapshot = steps.llm_snapshot(ctx, task)
+    # Accepted candidate bytes become tool-owned, but were authored before finish.
+    # Keep comparing those bytes even after the insertion records their ownership.
+    for rel in sorted(set(authored) & set(task.get("tool_writes", {}))):
+        snapshot[rel] = steps._llm_hash(rel, safefs.read_bytes(ctx.notes_path, rel)) \
+            if safefs.is_file(ctx.notes_path, rel) else None
+    return snapshot
 
 
 def renderer(ctx: Ctx) -> site_build.Renderer:

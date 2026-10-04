@@ -138,7 +138,8 @@ def _check_call(ctx, task, k, result):
     fetch = fetch_flow.fetch_json(task, k, grade=ctx.student.grade)
     listed = {(i["file"], i["item_id"]) for i in fetch["open_review_items"]}
     problems = check_result(ctx.notes_path, result, fetch, listed,
-                            ctx.cfg.limits.review_closures_per_run, whole_run=False)
+                            ctx.cfg.limits.review_closures_per_run, whole_run=False,
+                            base_content=steps.base_reader(ctx, task))
     for operation in (lambda: steps.guard_step(ctx, task),
                       lambda: steps.check_changed(ctx, task, result=result)):
         try:

@@ -70,3 +70,38 @@ def for_subjects(repo: Path, subjects: set[str]) -> list[dict]:
         brief = entry["commission"]
         safefs.write_json(repo, f".school-notes/figures/{brief['id']}.json", brief)
     return entries
+
+
+def valid_at(brief: dict, read) -> bool:
+    """Was the inherited commission usable before this writer started?
+
+    Candidates are run-local; only the committed embedding and dependencies count.
+    A pre-existing defect belongs to P2's failed/pending path, not to the writer.
+    """
+    from . import commissions, context
+    from .render import png
+    from ..wiki.pages import CODE_FENCE, INLINE_CODE
+    try:
+        raw = read(brief["page"])
+        if raw is None:
+            return False
+        text = context.with_markers(raw.decode("utf-8"))
+        visible = INLINE_CODE.sub("", CODE_FENCE.sub("", text))
+        matches = [m for m in commissions.MARKER.finditer(visible) if m[1] == brief["id"]]
+        if len(matches) != 1:
+            return False
+        marker = f"<!-- figure: {brief['id']} -->"
+        if marker not in visible.splitlines():
+            return False
+        if brief["kind"] != "banner" and marker not in context.section(text, brief["anchor"])[0]:
+            return False
+        if brief.get("replaces") and read(brief["replaces"]) is None:
+            return False
+        if source := brief.get("source_image"):
+            data = read(source["path"])
+            if data is None:
+                return False
+            png(data, crop=source["crop"])
+    except (ValueError, OSError):
+        return False
+    return True

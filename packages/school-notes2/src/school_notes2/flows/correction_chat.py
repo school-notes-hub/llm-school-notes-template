@@ -46,4 +46,9 @@ def resume_inputs(ctx, task):
 def restore_inputs(ctx, task):
     safefs.write_json(ctx.notes_path, ".school-notes/fetch.json", fetch.fetch_json(
         task, min(task.get("writing_k", 1), len(task.get("ranges"))), grade=ctx.student.grade))
-    safefs.write_json(ctx.notes_path, ".school-notes/result.json", task.get("inspection_result"))
+    root = inspection.folder(task) / "correction"
+    path = ".school-notes/result.json"
+    if safefs.is_file(root, "before/" + path):
+        safefs.write_bytes(ctx.notes_path, path, safefs.read_bytes(root, "before/" + path))
+    else:
+        safefs.unlink(ctx.notes_path, path)

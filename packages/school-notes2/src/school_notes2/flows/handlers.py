@@ -66,7 +66,8 @@ def check(ctx: Ctx, task) -> dict:
                                          grade=ctx.student.grade)
             listed = {(i["file"], i["item_id"]) for i in fetch["open_review_items"]}
             problems += check_result(ctx.notes_path, result, fetch, listed,
-                                     ctx.cfg.limits.review_closures_per_run, whole_run=False)
+                                     ctx.cfg.limits.review_closures_per_run, whole_run=False,
+                                     base_content=steps.base_reader(ctx, task))
     if not wiki_check.errors(problems):
         try:
             learning.refresh(ctx, task)

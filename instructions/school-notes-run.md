@@ -57,6 +57,8 @@ In state A the writer also draws; visual-module routing is unchanged. For every 
 
 Leave exactly one `<!-- figure: <id> -->` or `<!-- image: <id> -->` on its own unindented line, with nothing before or after it. It belongs inside the named section; a banner marker belongs after the frontmatter. Do not link the candidate image yourself. After inspection, leave the marker and the commission; the tool queues it. The tool inserts only after independent acceptance. Mermaid remains inline with its marker; acceptance keeps that marker as its stable identity, without a pending notice.
 
+For each `fetch.json.pending_figures` entry, retry the restored commission using its `defects[]`, or write `figures/<id>/figure.json` with `state: failed` and a reason; a commission already broken at the run's base is handled by the tool as failed, while damage introduced in this run must be repaired.
+
 Write `.school-notes/figures/<id>/figure.json`. The complete candidate field list is:
 - `state: candidate`, exactly one of `asset` (the final publication file under `wiki/assets/`) or `mermaid` (the lowercase SHA-256 of the UTF-8 Mermaid source between the fence lines, including its trailing newline; exactly one matching block in the commission section).
 - Required: `alt` (nonempty, one line), `caption` (string, may be empty), `form` and `tool` (nonempty strings), `elements` (array of `{element, meaning}`, both nonempty strings), `visible_text` (array of nonempty strings), `attempt` (integer ≥ 1).

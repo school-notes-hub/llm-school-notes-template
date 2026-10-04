@@ -13,6 +13,13 @@ def check(value, stage, assigned, known=None):
     validate(stage, value)
     if stage == "reader-1":
         pages = [p["file"] for p in assigned["pages"]]
+        allowed = set(pages) | set(assigned.get("context", []))
+        ignored = sorted((f for f in value["findings"] if f["file"] not in allowed),
+                         key=lambda f: (f["file"], f["id"]))
+        value["owner_notes"] += [f"Kihagyott lelet ({f['id']}, {f['file']}): "
+                                 f"az útvonal nincs a kiosztott vagy kontextusoldalak között. {f['problem']}"
+                                 for f in ignored]
+        value["findings"] = [f for f in value["findings"] if f["file"] in allowed]
         value["pages"] = [p for p in value["pages"] if p["file"] in pages]
         exact(value["pages"], pages, "file")
         if any(p["verdict"] == "changes" and not any(f["file"] == p["file"] for f in value["findings"])

@@ -13,7 +13,7 @@ def locate(repo, finding):
     pattern = r"\s+".join(re.escape(word) for word in quote.split())
     match = re.search(pattern, text) if quote else None
     return {**finding, "line": text[:match.start()].count("\n") + 1 if match else None,
-            "unlocated": finding.get("unlocated", False) or not bool(match)}
+            "unlocated": not bool(match)}
 
 
 def list_findings(repo, hits, output):
@@ -90,7 +90,7 @@ def append(repo, path, findings, notes, label):
                         "origin": finding["origin"], "category": finding["category"],
                         "relates_to": finding.get("relates_to"),
                         "unlocated": unlocated or finding["unlocated"],
-                        **{k: finding[k] for k in ("quote", "hit_id", "figure_id") if k in finding}}
+                        **{k: finding[k] for k in ("quote", "hit_id", "figure_id", "outside_assignment") if k in finding}}
         body += [f"### {key} – {finding['file']}", "", f"**Probléma:** {finding['problem']}", "",
                  f"**Javaslat:** {finding.get('suggestion', '')}", ""]
     if notes:

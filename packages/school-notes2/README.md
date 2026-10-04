@@ -392,11 +392,15 @@ not silently skipped in a restricted sandbox. Python tests use a fake `node`
 executable to verify argument, output and failure handling without Chromium.
 
 Unit 2b review repairs: chat check failures start a new attempt with mandatory
-content checks; the commit race snapshot follows review finalization and figure
-insertion. Conflict resolution runs the path guard before regeneration. Reader
-inputs label assigned/context pages; extra page verdicts are ignored, while findings
-outside the assignment remain open and unlocated for a later run. Format retries
-explicitly read their error file. P1 validates pending commissions too; P2 isolates
-invalid pending commissions as failed. Unchanged page and figure keys reuse their
+content checks. The commit race snapshot precedes review; inserted figure blocks
+normalize to their original markers. Rollback reports its reason and preserves the
+rejected edits and binary patch in the task folder. Chat P4 restores the original
+range-local result before a later retry. Conflict resolution runs the path guard
+before regeneration. Reader inputs label assigned/context pages; extra page verdicts
+are ignored. Context findings carry `outside_assignment`; `unlocated` records a
+missing quote. Unknown finding paths become private owner notes without a retry.
+Format retries explicitly read their error file. P1 checks inherited commissions
+that were valid at the run's base; P2 isolates pre-existing damage as failed.
+Unchanged page and figure keys reuse their
 receipts across attempts. Regression tests cover chat handoff, rollback, receipt
 interruption, figure insertion, G4/G5 retries and pending-figure damage.

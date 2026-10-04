@@ -13,7 +13,7 @@ RESULT = ".school-notes/result.json"
 
 
 def check_result(repo: Path, result: dict, fetch: dict, open_items: set[tuple[str, str]],
-                 closure_limit: int = 20, whole_run: bool = True) -> list[dict]:
+                 closure_limit: int = 20, whole_run: bool = True, base_content=None) -> list[dict]:
     """`open_items`: {(file, item_id)} the run may close (fetch.json's list).
 
     `whole_run`: coverage of every page of the run (finish, merged results); False checks
@@ -38,9 +38,13 @@ def check_result(repo: Path, result: dict, fetch: dict, open_items: set[tuple[st
             out.append(item(RESULT, None, f"review_closure: {c['file']} does not exist"))
         elif (c["file"], c["item_id"]) not in open_items:
             out.append(item(RESULT, None, f"review_closure: {c['file']} {c['item_id']} is not open"))
-    from ..figures import commissions
-    out += commissions.check(repo, commissions.assignments(result, fetch.get("pending_figures", [])),
-                             result.get("notebook_drawings", []))
+    from ..figures import commissions, pending
+    inherited = fetch.get("pending_figures", [])
+    invalid = {e["commission"]["id"] for e in inherited
+               if base_content is not None and not pending.valid_at(e["commission"], base_content)}
+    assignments = [a for a in commissions.assignments(result, inherited) if a["id"] not in invalid]
+    out += commissions.check(repo, assignments,
+                             [d for d in result.get("notebook_drawings", []) if d["figure"] not in invalid])
     out += check_checks(repo, result, fetch)
     from ..repair import check as repair_check
     out += repair_check.coverage(result, fetch)

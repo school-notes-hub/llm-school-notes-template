@@ -23,7 +23,7 @@ def all_items(ctx, task):
                  "round": relations.details(text, key)["round"],
                  "chain": relations.details(text, key)["chain"], "key": path + "#" + key}
                 for key, status in items.items() if status == "open" and relations.details(text, key)["chain"] == 0
-                and (not relations.details(text, key).get("unlocated")
+                and (not relations.details(text, key).get("outside_assignment")
                      or relations.details(text, key).get("file") in pages)]
     return selected
 
@@ -77,7 +77,7 @@ def child_task(ctx, task, root, items):
     return child
 
 
-def run(ctx, task):
+def run(ctx, task, edits=None):
     root = inspection.folder(task) / "correction"
     root.mkdir(parents=True, exist_ok=True)
     saved = safefs.read_json(root, "receipt.json")
@@ -105,18 +105,25 @@ def run(ctx, task):
                 raise
             except (BadWork, Transient) as exc:
                 saved = {"status": "rollback", "reason": str(exc)}
+        if saved["status"] == "rollback" and task.mode == "interactive":
+            from .correction_backup import rejected
+            rejected(ctx.notes_path, root, PREFIXES, ctx.log)
         safefs.write_json(root, "receipt.json", saved)
-    apply(ctx, task, root, saved)
+    apply(ctx, task, root, saved, edits)
 
 
-def apply(ctx, task, root, saved):
+def apply(ctx, task, root, saved, edits=None):
+    if saved["status"] == "rollback":
+        before = steps.llm_snapshot(ctx, task) if edits is not None else None
+        restore(ctx.notes_path, root)
+        if edits is not None:
+            edits["restores"].append((before, steps.llm_snapshot(ctx, task)))
+        task.update(correction_result={"status": "done"}, correction_rolled_back=True,
+                    correction_rollback_reason=saved["reason"])
+        return
     if task.mode == "interactive":
         from . import correction_chat
         correction_chat.restore_inputs(ctx, task)
-    if saved["status"] == "rollback":
-        restore(ctx.notes_path, root)
-        task.update(correction_result={"status": "done"}, correction_rolled_back=True)
-        return
     result = saved["result"]
     state = saved.get("tool_state", {})
     task.update(**state)
@@ -144,7 +151,8 @@ def validated(ctx, child, root, items, result):
     from ..wiki.check_result import check_result
     supplied = fetch.fetch_json(child, 1, grade=ctx.student.grade, whole_run=True)
     problems = check_result(ctx.notes_path, result, supplied,
-                            {(i["file"], i["item_id"]) for i in items}, len(items))
+                            {(i["file"], i["item_id"]) for i in items}, len(items),
+                            base_content=steps.base_reader(ctx, child))
     if problems:
         raise steps.CheckFailed(problems)
     steps.guard_step(ctx, child)

@@ -53,6 +53,13 @@ def changed_paths(ctx: Ctx, task: Task) -> list[str]:
     return [c["path"] for c in workbranch.changed_files(ctx.worktree("notes"), base_of(task))]
 
 
+def base_reader(ctx: Ctx, task: Task):
+    def read(path):
+        old = ctx.worktree("notes").run("show", f"{base_of(task)}:{path}", check=False)
+        return old.stdout if old.returncode == 0 else None
+    return read
+
+
 def guard_step(ctx: Ctx, task: Task) -> None:
     """Step 1: the path guard. Owner-class violations stop the run; others go back."""
     wt = ctx.worktree("notes")
@@ -149,7 +156,7 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
                                   whole_run=True)
     listed = fetch["open_review_items"]
     problems = check_result(repo, result, fetch, {(i["file"], i["item_id"]) for i in listed},
-                            ctx.cfg.limits.review_closures_per_run)
+                            ctx.cfg.limits.review_closures_per_run, base_content=base_reader(ctx, task))
     if wiki_check.errors(problems):
         raise CheckFailed(problems)
     check_changed(ctx, task, result=result)  # Validate author text before any tool stamp.
@@ -307,6 +314,10 @@ def _llm_hash(rel: str, data: bytes) -> str:
 
 def _llm_part(text: str) -> str:
     """The text without generated blocks and machine frontmatter keys."""
+    from ..figures.commissions import MARKER
+    text = markers.BLOCK.sub(lambda m: f"<!-- figure: {m['name'][7:]} -->"
+                             if m["name"].startswith("figure-") else m[0], text)
+    text = MARKER.sub(lambda m: f"<!-- figure: {m[1]} -->", text)
     # Adding a tool block is not an author edit either. Strip its insertion separators,
     # preserving whitespace everywhere else (including the author's code examples).
     text = re.sub(r"\n?" + markers.BLOCK.pattern + r"\n{0,2}", "", text, flags=re.S | re.M)

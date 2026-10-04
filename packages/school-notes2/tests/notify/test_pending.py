@@ -45,7 +45,7 @@ def test_failed_finish_owner_notice_retries_in_next_run(tmp_path, log, monkeypat
         return SimpleNamespace(new_owner=outcome.new_owner, question=False, result={"status": "done"})
     monkeypatch.setattr(steps, "content_steps", content)
     from school_notes2.flows import review_phases
-    monkeypatch.setattr(review_phases, "advance", lambda ctx, task, notify:
+    monkeypatch.setattr(review_phases, "advance", lambda ctx, task, notify, edits=None:
                         task.set_phase("finishing", review_complete=True))
     def git_finish(task, *args):
         task.set_phase("done")

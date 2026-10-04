@@ -78,7 +78,8 @@ def test_context_verdict_is_ignored_but_finding_survives_one_call(setup, monkeyp
     assert verdicts.valid(ctx.notes_path, page) is not None
     assert verdicts.valid(ctx.notes_path, other) is None
     record = next(iter(relations.inventory(ctx.notes_path)["items"].values()))
-    assert record["file"] == other and record["unlocated"] and record["status"] == "open"
+    assert record["file"] == other and not record["unlocated"] and record["status"] == "open"
+    assert record["outside_assignment"]
     assert correction.assigned(ctx, task) == []
     assert record["quote"] == "Összefoglaló"
     for pages in ([], pass1(page)["pages"] * 2):

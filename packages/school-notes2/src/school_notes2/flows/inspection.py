@@ -128,7 +128,7 @@ def _reader(ctx, task, view, unit):
     if first["status"] == "reviewed":
         review = first["review"]
         safefs.write_json(repo, f".school-notes/reader/{root.name}/pass1.json", review)
-        findings = [{**f, "origin": "reader", "unlocated": f["file"] not in unit["pages"]}
+        findings = [{**f, "origin": "reader", "outside_assignment": f["file"] not in unit["pages"]}
                     for f in review["findings"]]
         notes += review["owner_notes"]
         pages = [{**p, "key": unit["keys"][p["file"]], "model": first["model"]} for p in review["pages"]]

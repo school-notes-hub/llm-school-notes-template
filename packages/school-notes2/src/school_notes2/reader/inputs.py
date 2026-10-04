@@ -48,7 +48,8 @@ def preview(repo: Path, destination: Path, briefs: list[dict], render=None) -> N
 
 def prepare(repo: Path, view: Path, unit: dict, folder: Path, old_text) -> dict:
     folder.mkdir(parents=True, exist_ok=True)
-    assigned = {"pages": [{"file": p, "key": unit["keys"][p]} for p in unit["pages"]]}
+    assigned = {"pages": [{"file": p, "key": unit["keys"][p]} for p in unit["pages"]],
+                "context": sorted(unit.get("context", []))}
     inventory = relations.reviewer_inventory(repo)["pages"]
     pages = []
     for page in unit["pages"] + unit.get("context", []):
