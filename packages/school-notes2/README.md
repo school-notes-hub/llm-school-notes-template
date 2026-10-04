@@ -488,49 +488,62 @@ actual HTML/PDF/site-file negative tests; without it those two browser builds sk
 
 ## Topic-based nightly review and daily fixes (unit 5)
 
-The night pins `claude-reviewed..H`, derives topic units from actual author changes
-and unanswered review closures, and calls the reviewer once per topic in path order.
-D60's `review_max_images` and `review_max_diff_kb` configuration keys are removed;
-remove them from installed configuration before upgrading. The reviewer timeout
-defaults to 5400 seconds; explicit configuration still wins. Fix-only topic ranges
-use the literal targeted-review prompt; any ordinary author commit selects full review.
-Per-topic receipts recover valid output after a crash and skip completed calls after
-quota suspension. Format and crash retries are bounded independently; timeout has
-no immediate retry. The configured `claude-review` template leaves native Agent/Task
-tools enabled, without MCP; the real VM confirmation remains the deployment test.
+The night pins `claude-reviewed..H`, derives topic units from actual author changes and
+unanswered review closures, and calls the reviewer once per topic in path order. D60's
+`review_max_images` and `review_max_diff_kb` configuration keys are obsolete; for one
+release the parser warns and ignores them. Remove them before the next release. The
+reviewer timeout defaults to 5400 seconds; explicit configuration still wins. Fix-only
+topic ranges use the literal targeted-review prompt; any ordinary author commit selects
+full review. Per-topic receipts recover valid output after a crash and skip completed
+calls after quota suspension. Format and crash retries are bounded independently;
+timeout has no immediate retry. The configured `claude-review` template leaves native
+Agent/Task tools enabled, without MCP; the real VM confirmation remains the deployment
+test.
 
 `docs/review/nightly-state.json` carries each completed topic's own reviewed commit,
-blocked topics with their original range start, and consecutive failed-night counts.
-A timeout/failure ends that topic's work for this night; other topics continue. Two
+blocked topics with their original range start, and consecutive failed-night counts. A
+timeout/failure ends that topic's work for this night; other topics continue. Two
 consecutive failed nights block only that topic. `status --clear <learner> reviewer
---continue` clears the timeout counters and records a local unblock timestamp; the
-next report persists the removal. The global marker advances exactly to H only when
-all topics are complete. One report commit contains topic sections, closure replies,
-hash-bound page/figure verdicts, warning decisions and recomputed pending notices.
-Concurrent changes invalidate H-bound verdicts, without overwriting a newer valid one.
+--continue` clears the timeout counters and records a local unblock timestamp; the next
+report persists the removal. The global marker advances only when all topics are
+complete: to the report commit R when main is still H, otherwise to H (concurrent work
+belongs to the next night). Thus a quiet night never feeds its own report into another
+nightly run. One report commit contains topic sections, closure replies, hash-bound
+page/figure verdicts, warning decisions and recomputed pending notices. Concurrent
+changes invalidate H-bound verdicts, without overwriting a newer valid one.
 
-A quota suspension is a continuation of the same night: successful results remain
-in durable task receipts and the report commits once the invocation can finish.
-Timeout nights commit partial results and `done_topics` immediately. This preserves
-one report commit per night and append-only pushed history; publishing a quota-time
-partial commit and later extending it would require another commit or history rewriting.
-An abrupt process crash likewise resumes from receipts before committing its report.
+A quota suspension is a continuation of the same night: successful results remain in
+durable task receipts and the report commits once the invocation can finish. Timeout
+nights commit partial results and `done_topics` immediately. This preserves one report
+commit per night and append-only pushed history; publishing a quota-time partial commit
+and later extending it would require another commit or history rewriting. An abrupt
+process crash likewise resumes from receipts before committing its report.
 
 Unreviewed embedded figures use the existing independent figure reviewer, including
 phone rendering, with four figures per topic call. Legacy image identity markers exist
-only in a private review view. Receipts bind the original image/context fingerprint;
-the source page and asset are not rewritten. Existing valid figure verdicts skip the
-call. Missing/rejected figure checks remain visible as review findings and pending
-notices. Nightly never generates an image or runs an LLM during publication.
+only in one private review view per night, hardlinked where supported and atomically
+replaced when adapted. A completed snapshot receipt prevents copying it for every topic.
+Receipts bind the original image/context fingerprint; the source page and asset are not
+rewritten. Existing valid figure verdicts skip the call. Missing figure verdicts go to
+owner notes and `docs/review/night-figure-pending.json`, visible in status and generated
+pending notices, without writer assignments. Rejected figures remain ordinary findings
+with readable defect descriptions. Nightly never generates an image or runs an LLM
+during publication.
 
 A source-free daily `fix` run follows new Drive packages and precedes the one-time
-repair queue. It assigns open/round-2 items and eligible pending figures, uses P1 in
-fix mode, only figure checks in P2/P3, then P6. No reader call or second correction
-pass is introduced. Every new finding is located at H; Git blame determines whether
-its quote was last changed by a fix commit, in full and targeted mode alike. Such a
-finding, or `not-ok` on a fix commit's `fixed` closure, goes to owner with chain 1.
-`keep` reopens the existing disagreement at round 2. Successful P5 fixed verdicts
-are now persisted as well, so nightly does not judge the same closure twice.
+repair queue. It assigns open/round-2 items and eligible pending figures, uses P1 in fix
+mode, only figure checks in P2/P3, then P6. No reader call or second correction pass is
+introduced. Every new finding is located at H; Git blame determines whether its quote
+was last changed by a fix commit, in full and targeted mode alike. A second search
+strips inline Markdown while preserving blame line numbers. An unlocated quote inherits
+chain 1 when a fix commit touched the topic range; related items always retain the
+maximum inherited chain. Such a finding, or `not-ok` on a fix commit's `fixed` closure,
+goes to owner with chain 1. The fix scope uses the pre-edit unit, including related
+lessons, summaries and image embedding pages. Textbook inputs contain printed-page
+excerpts selected through the book index; ambiguous or unavailable references are
+explicitly marked. `keep` reopens the existing disagreement at round 2. Successful P5
+fixed verdicts are now persisted as well, so nightly does not judge the same closure
+twice.
 
 The upgrade tests retain legacy saved-report closure recovery. New fake-harness tests
 cover preparation, valid-output recovery, missing-topic continuation, failed-topic

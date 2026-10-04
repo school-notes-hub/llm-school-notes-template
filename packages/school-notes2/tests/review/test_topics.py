@@ -237,7 +237,7 @@ def test_report_push_crash_resumes_without_duplicate_commit(tmp_path, repos, log
     resumed = phase.load(task.dir)
     close.close(resumed, repos.repo, repos.wt, IDENT)
     assert resumed.phase == "done" and repos.remote("main") == commit
-    assert repos.remote("claude-reviewed") == task.get("H")
+    assert repos.remote("claude-reviewed") == commit
 
 
 @pytest.mark.parametrize("failure, expected", [(BadWork("invalid"), 2), (launch.TimedOut("timeout"), 1)])

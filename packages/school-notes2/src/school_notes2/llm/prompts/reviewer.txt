@@ -52,7 +52,7 @@ Checklista
 4. Mi maradt ki a tananyagból?
 5. Felépítés, nyelvezet, kontextus: szigorúan.
 6. Csak forrással érthető mondat, felirat, kérdés vagy kép.
-7. A nyitott tételek és a diffben látható lezárások indoklása.
+7. A nyitott tételek ítélete.
 8. Mi lett tévesen biztos állítás?
 
 Kimenet és befejezés

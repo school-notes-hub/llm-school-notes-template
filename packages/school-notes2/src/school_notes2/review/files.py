@@ -123,13 +123,10 @@ def write_review(repo: Path, date: str, review: dict, reviewer: str, frm: str, t
         if status == "pending":
             pending.append(f)
             continue
-        if "chain" in f and f.get("origin", "nightly") == "nightly":
-            other = known["items"].get(f.get("relates_to"), {})
-            if other.get("status") in ("fixed", "settled"):
-                status = "owner" if f["chain"] else "open"
+        chain = max(f.get("chain", 0), relations.chain(f, known))
         active.append(f)
-        items[f["id"]] = "owner" if f.get("chain") == 1 else status
-        records[f["id"]] = {"file": f["file"], "round": 1, "chain": f.get("chain", relations.chain(f, known)),
+        items[f["id"]] = "owner" if chain else status
+        records[f["id"]] = {"file": f["file"], "round": 1, "chain": chain,
                             "origin": f.get("origin", "nightly"), "category": f.get("category"),
                             "relates_to": f.get("relates_to"), "unlocated": unlocated or f.get("unlocated", False),
                             **{k: f[k] for k in ("quote", "hit_id", "figure_id", "outside_assignment") if k in f}}

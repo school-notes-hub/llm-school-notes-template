@@ -26,8 +26,7 @@ def test_empty_night_then_daytime_commit_waits_until_next_day(cfg, repos, monkey
     monkeypatch.setattr(scheduler, "now", lambda: clock)
     monkeypatch.setattr(scheduler.run, "run", lambda c: 0)
     def night(ctx):
-        selected = review.select(repos.repo, max_images=30, max_diff_kb=300,
-                                 max_commits=None, fetch_timeout=10)
+        selected = review.select(repos.repo, fetch_timeout=10)
         calls.append((ctx.name, selected))
         return 0
     monkeypatch.setattr(scheduler.nightly, "nightly", night)

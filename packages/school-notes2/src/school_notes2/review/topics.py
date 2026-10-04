@@ -6,7 +6,7 @@ import re
 from functools import cache
 
 from ..figures import commissions
-from ..flows.steps import _llm_part
+from ..wiki.author import part
 from ..reader import units
 from ..state import safefs
 from ..schemas import validate
@@ -31,7 +31,7 @@ def author_changes(repo, base, head):
         if status == "D":
             continue
         if path.endswith(".md"):
-            if _llm_part(text(repo, base, path)) == _llm_part(text(repo, head, path)):
+            if part(text(repo, base, path)) == part(text(repo, head, path)):
                 continue
         result.append(path)
     return result
@@ -130,7 +130,7 @@ def patch(repo, unit, head):
     for path in sorted(set(unit["pages"] + unit["context"])):
         old, new = text(repo, unit["base"], path), text(repo, head, path)
         if path.endswith(".md"):
-            old, new = _llm_part(old), _llm_part(new)
+            old, new = part(old), part(new)
         out.extend(difflib.unified_diff(old.splitlines(True), new.splitlines(True),
                                          "a/" + path, "b/" + path))
     return "".join(line if line.endswith("\n") else line + "\n" for line in out)
@@ -157,3 +157,11 @@ def validated(state):
         if len(names) != len(set(names)):
             raise ValueError(f"{field}: duplicate topic")
     return state
+
+
+def unblocked(entries, state_dir, learner):
+    """Forget failures/blocks cleared by the owner, consistently in run and status."""
+    from ..state.files import read_json
+    cleared = read_json(state_dir / learner / "nightly-cleared.json", {}).get("at", "")
+    return sorted((e for e in entries if not cleared or e.get("at", "") > cleared),
+                  key=lambda e: e["topic"])

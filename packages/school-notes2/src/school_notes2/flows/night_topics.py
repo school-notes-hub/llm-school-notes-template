@@ -7,18 +7,16 @@ from ..llm import launch
 from ..log import now_iso
 from ..notify import Notice, pending
 from ..reader.units import slug
-from ..review import night_figures, topic_call, topic_input, topic_result
+from ..review import night_figures, topic_call, topic_input, topic_result, topics
 from ..state import safefs
-from ..state.files import read_json
 
 
 def run(ctx, task):
     repo, work = ctx.bare(), ctx.worktree("review").work_tree
     configured, harness = ctx.cfg.role("reviewer")
     results = {e["unit"]["topic"]: e for e in task.get("topic_results", [])}
-    blocked = {e["topic"]: e for e in task.get("blocked_topics", [])}
-    cleared = read_json(ctx.cfg.state_dir / ctx.name / "nightly-cleared.json", {}).get("at", "")
-    blocked = {k: v for k, v in blocked.items() if v.get("at", "") > cleared or not cleared}
+    blocked = {e["topic"]: e for e in topics.unblocked(
+        task.get("blocked_topics", []), ctx.cfg.state_dir, ctx.name)}
     task.set_phase("reviewing", blocked_topics=[blocked[k] for k in sorted(blocked)])
     for unit in task.get("units", []):
         topic = unit["topic"]
@@ -41,8 +39,10 @@ def run(ctx, task):
             role, _ = ctx.cfg.role("figure-review") if "figure-review" in ctx.cfg.roles else (replace(configured, timeout_s=1800), harness)
             renderer = Renderer(ctx.release() / "packages/study-site", ctx.cfg.browser,
                                 folder / "render", timeout_s=ctx.cfg.timeouts.rasterize_s)
-            figures = night_figures.run(work, unit, folder, replace(call, role=role), renderer, ctx.log)
-            entry.update(figure_records=figures["records"], figure_findings=figures["findings"], figure_notes=figures["notes"])
+            figures = night_figures.run(work, unit, folder, replace(call, role=role), renderer, ctx.log,
+                                        view_folder=task.dir / "figure-view")
+            entry.update(figure_records=figures["records"], figure_findings=figures["findings"], figure_notes=figures["notes"],
+                         figure_pending=figures.get("pending", []), figure_checked=figures.get("checked", []))
         else:
             _failed(ctx, task, unit, receipt, blocked)
         results[topic] = entry
@@ -56,11 +56,10 @@ def run(ctx, task):
 
 
 def _failed(ctx, task, unit, receipt, blocked):
-    previous = task.get("nightly_state", {}).get("failed_topics", [])
+    previous = topics.unblocked(task.get("nightly_state", {}).get("failed_topics", []),
+                                ctx.cfg.state_dir, ctx.name)
     old = next((e for e in previous if e["topic"] == unit["topic"]), {})
-    cleared = read_json(ctx.cfg.state_dir / ctx.name / "nightly-cleared.json", {}).get("at", "")
-    previous_count = old.get("count", 0) if old.get("at", "") > cleared else 0
-    count = receipt.get("timeout_count", previous_count + 1)
+    count = max(receipt.get("timeout_count", 0), old.get("count", 0) + 1)
     failures = {r["topic"]: r for r in task.get("failed_topics", [])}
     failures[unit["topic"]] = {"topic": unit["topic"], "count": count, "at": now_iso()}
     task.update(failed_topics=[failures[k] for k in sorted(failures)])
@@ -68,7 +67,7 @@ def _failed(ctx, task, unit, receipt, blocked):
         return
     blocked[unit["topic"]] = {"topic": unit["topic"], "since_commit": unit["base"],
                                "reason": receipt["reason"], "at": now_iso()}
-    if "timeout_count" in receipt:
+    if receipt.get("timeout_count", 0) >= 2:
         return  # T-125 already delivered the second-timeout notice.
     pending.send(ctx, Notice(ctx.name, f"nightly-blocked:{unit['topic']}:{task.run_id}", task.run_id,
                              "nightly", "éjszakai review", f"A témakör két éjszakán sikertelen: {unit['topic']}.",

@@ -6,17 +6,19 @@ from ..reader import notices, verdicts
 from ..reader.units import page_key
 from ..state import safefs
 from ..wiki import frontmatter
-from . import files, relations, topics, warnings
+from . import figure_waiting, files, relations, topics, warnings
 
 
-def chain(repo, head, finding):
+def chain(repo, head, finding, *, fix_touched=False):
     """Locate the quote at H, then inspect every covered line's last author commit."""
     quote = finding.get("quote", "")
     text = topics.text(repo, head, finding["file"])
-    pattern = r"\s+".join(re.escape(w) for w in quote.split())
-    matches = list(re.finditer(pattern, text)) if pattern else []
+    matches = _matches(quote, text)
     if len(matches) != 1:
-        return {**finding, "line": None, "unlocated": True, "chain": 0}
+        text, quote = _plain(text), _plain(quote)
+        matches = _matches(quote, text)
+    if len(matches) != 1:
+        return {**finding, "line": None, "unlocated": True, "chain": int(fix_touched)}
     match = matches[0]
     first = text[:match.start()].count("\n") + 1
     last = text[:match.end()].count("\n") + 1
@@ -24,6 +26,19 @@ def chain(repo, head, finding):
     commits = sorted(set(re.findall(r"^([0-9a-f]{40}) \d+ \d+", proc.stdout.decode(), re.M)))
     return {**finding, "line": first, "unlocated": False,
             "chain": int(any(topics.is_fix(repo, c) for c in commits))}
+
+
+def _matches(quote, text):
+    pattern = r"\s+".join(re.escape(w) for w in quote.split())
+    return list(re.finditer(pattern, text)) if pattern else []
+
+
+def _plain(text):
+    """Remove inline Markdown without changing line numbers used by blame."""
+    text = re.sub(r"!?\[([^]\n]+)\]\([^\n)]*\)", r"\1", text)
+    text = re.sub(r"\[\^[^]\n]+\]", "", text)
+    text = re.sub(r"\\([\\`*_{}\[\]()#+.!$-])", r"\1", text)
+    return re.sub(r"[*_`$]", "", text)
 
 
 def assemble(task, repo, work):
@@ -34,7 +49,8 @@ def assemble(task, repo, work):
                    "duration_s": receipt.get("duration_s", 0), "findings": []}
         if receipt["status"] == "reviewed":
             value = receipt["review"]
-            own = [chain(repo, task.get("H"), f) for f in value["findings"]]
+            fix_touched = unit["mode"] == "targeted" or any(topics.is_fix(repo, c) for c in unit["commits"])
+            own = [chain(repo, task.get("H"), f, fix_touched=fix_touched) for f in value["findings"]]
             # Generate list findings without changing the pinned worktree's verdict store.
             by_id = {h["id"]: h for h in entry["input"]["hits"]}
             for hit in value["hits"]:
@@ -43,8 +59,8 @@ def assemble(task, repo, work):
                     lines = topics.text(repo, task.get("H"), row["file"]).splitlines()
                     f = {"file": row["file"], "quote": lines[row["line"] - 1], "problem": hit["reason"],
                          "category": "forráskötött", "relates_to": None, "hit_id": row["id"]}
-                    own.append(chain(repo, task.get("H"), f))
-            own += [chain(repo, task.get("H"), f) for f in entry.get("figure_findings", [])]
+                    own.append(chain(repo, task.get("H"), f, fix_touched=fix_touched))
+            own += [chain(repo, task.get("H"), f, fix_touched=fix_touched) for f in entry.get("figure_findings", [])]
             for f in sorted(own, key=lambda f: (f["file"], f.get("line") or 0, f["problem"], f.get("quote", ""))):
                 f = {**f, "id": f"R{len(findings) + 1}", "topic": unit["topic"]}
                 findings.append(f)
@@ -84,6 +100,9 @@ def apply(task, work, ident):
             written.append(warnings.PATH)
         from . import night_figures
         written += night_figures.apply(work, entry.get("figure_records", []), ident.at)
+    written += figure_waiting.apply(work,
+        [p for e in task.get("topic_results", []) for p in e.get("figure_pending", [])],
+        [s for e in task.get("topic_results", []) for s in e.get("figure_checked", [])])
     complete = task.get("all_topics_done", False)
     state = topics.validated({
         "done_topics": [] if complete else [{"topic": t, "commit": done[t]} for t in sorted(done)],

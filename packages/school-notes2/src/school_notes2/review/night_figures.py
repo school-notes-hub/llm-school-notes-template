@@ -97,7 +97,8 @@ def valid(repo, spec, records):
     return False
 
 
-def run(repo, unit, folder, configured, render, log):
+def run(repo, unit, folder, configured, render, log, *, view_folder=None):
+    folder.mkdir(parents=True, exist_ok=True)
     saved = safefs.read_json(folder, "night-figures.json")
     if saved is not None:
         return saved
@@ -111,42 +112,53 @@ def run(repo, unit, folder, configured, render, log):
             pass  # The per-figure preparation records missing bytes/context as pending.
         specs.append(spec)
     if not specs:
-        return {"records": [], "findings": [], "notes": []}
-    view = folder / "figure-view"
-    view.mkdir(parents=True, exist_ok=True)
-    for prefix in ("wiki", "docs", "sources"):
-        for path in safefs.walk_files(repo, prefix):
-            safefs.write_bytes(view, path, safefs.read_bytes(repo, path))
+        return {"records": [], "findings": [], "notes": [], "pending": [], "checked": []}
+    view = view_folder or folder / "figure-view"
+    prepare_view(repo, view)
     briefs = [_adapt(view, spec) for spec in specs]
     configured = replace(configured, task_dir=folder)
-    result = {"records": [], "findings": [], "notes": []}
+    result = {"records": [], "findings": [], "notes": [], "pending": [], "checked": []}
     by_id = {s["id"]: s for s in specs}
     for name, batch in inputs.batches(view, briefs):
         receipt = review.run_batch(view, batch, name, configured, render=render, log=log)
-        result["notes"] += receipt.get("review", {}).get("owner_notes", [])
-        for verdict in receipt.get("review", {}).get("figures", []):
-            spec = by_id[verdict["id"]]
-            key = fingerprint(repo, spec)
-            if verdict["verdict"] == "accept":
-                result["records"].append({"role": "figure-review", "file": spec["page"], "id": spec["id"],
-                                          "key": key, "verdict": "accept", "model": receipt["model"],
-                                          "night_spec": spec, "observed": verdict["observed"]})
-            else:
-                result["findings"].append({"file": spec["page"], "quote": spec.get("source", spec.get("alt", "")),
-                                           "problem": str(verdict["defects"] + verdict["text_mismatch"]) or verdict["observed"],
-                                           "category": "kép–szöveg", "relates_to": verdict["relates_to"],
-                                           "new_evidence": verdict.get("new_evidence", ""), "figure_id": spec["id"]})
-        if receipt["status"] != "reviewed" or receipt.get("failed"):
-            result["notes"].append(f"Hiányzó ábraítélet: {unit['topic']} ({name}).")
-            judged = {v["id"] for v in receipt.get("review", {}).get("figures", [])}
-            for brief in batch:
-                if brief["id"] not in judged:
-                    result["findings"].append({"file": brief["page"], "quote": "", "unlocated": True,
-                                               "problem": "Az ábra független ellenőrzése nem készült el.",
-                                               "category": "kép–szöveg", "relates_to": None,
-                                               "figure_id": brief["id"]})
+        _merge(repo, unit, name, batch, receipt, by_id, result)
     safefs.write_json(folder, "night-figures.json", result)
     return result
+
+
+def prepare_view(repo, view):
+    view.mkdir(parents=True, exist_ok=True)
+    if safefs.read_json(view, "snapshot.json") is not None:
+        return
+    for prefix in ("wiki", "docs", "sources"):
+        for path in safefs.walk_files(repo, prefix):
+            safefs.link_or_copy(repo, view, path)
+    safefs.write_json(view, "snapshot.json", {"ready": True})
+
+
+def _merge(repo, unit, name, batch, receipt, by_id, result):
+    result["notes"] += receipt.get("review", {}).get("owner_notes", [])
+    for verdict in receipt.get("review", {}).get("figures", []):
+        spec = by_id[verdict["id"]]
+        result["checked"].append(spec)
+        key = fingerprint(repo, spec)
+        if verdict["verdict"] == "accept":
+            result["records"].append({"role": "figure-review", "file": spec["page"], "id": spec["id"],
+                                      "key": key, "verdict": "accept", "model": receipt["model"],
+                                      "night_spec": spec, "observed": verdict["observed"]})
+        else:
+            result["findings"].append({"file": spec["page"], "quote": spec.get("source", spec.get("alt", "")),
+                                       "problem": "; ".join(f"{d['location']}: {d['observed']} → {d['expected']}"
+                                                             for d in verdict["defects"] + verdict["text_mismatch"]) or verdict["observed"],
+                                       "category": "kép–szöveg", "relates_to": verdict["relates_to"],
+                                       "new_evidence": verdict.get("new_evidence", ""), "figure_id": spec["id"]})
+    if receipt["status"] != "reviewed" or receipt.get("failed"):
+        result["notes"].append(f"Hiányzó ábraítélet: {unit['topic']} ({name}).")
+        judged = {v["id"] for v in receipt.get("review", {}).get("figures", [])}
+        for brief in batch:
+            if brief["id"] not in judged:
+                result["pending"].append({"spec": by_id[brief["id"]],
+                                           "reason": receipt.get("reason", "Hiányzó ábraítélet.")})
 
 
 def _adapt(view, spec):
@@ -167,12 +179,14 @@ def _adapt(view, spec):
             candidate["source"] = spec["asset"]
         link = next(l for l in pages.links(text) if l.image and pages.resolve(page, l.target) == spec["asset"])
         lines = text.splitlines(True)
-        lines.insert(link.line - 1, marker)
+        if marker.strip() not in text:
+            lines.insert(link.line - 1, marker)
         text = "".join(lines)
     else:
         candidate["mermaid"] = hashlib.sha256(spec["source"].encode()).hexdigest()
         match = next(m for m in commissions.MERMAID.finditer(text) if m[1] == spec["source"])
-        text = text[:match.start()] + marker + text[match.start():]
+        if marker.strip() not in text:
+            text = text[:match.start()] + marker + text[match.start():]
     safefs.write_text(view, page, text)
     safefs.write_json(view, f".school-notes/figures/{fid}/figure.json", candidate)
     return brief

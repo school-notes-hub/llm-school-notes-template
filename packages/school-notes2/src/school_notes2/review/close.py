@@ -144,7 +144,7 @@ def close(task: phase.Task, repo: Git, wt: Git, ident: Identity, t: Timeouts = T
 
     def choose_m(r: str, head_now: str) -> str:
         if task.get("topic_review"):
-            return head if task.get("all_topics_done") else base
+            return (r if head_now == head else head) if task.get("all_topics_done") else base
         # Legacy tasks keep their original marker contract.
         return r if end == head and head_now == head else end
 

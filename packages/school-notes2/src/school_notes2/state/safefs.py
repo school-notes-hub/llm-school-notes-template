@@ -363,3 +363,42 @@ def read_json(root, rel, default=None):
 
 def write_json(root, rel, value, mode: int = 0o644) -> None:
     write_text(root, rel, json.dumps(value, ensure_ascii=False, indent=2) + "\n", mode)
+
+
+def link_or_copy(source, root, rel) -> None:
+    """Atomic snapshot of an immutable file; later writes must replace the inode."""
+    with _open(source, rel, os.O_RDONLY) as fd, _parent(source, rel, False) as (sfd, name), \
+            _parent(root, rel, True) as (dfd, target):
+        original = os.fstat(fd)
+        if not stat.S_ISREG(original.st_mode):
+            raise UnsafePath(f"{rel}: not a regular file", todo="inspect the worktree")
+        tmp = f"{TMP_PREFIX}{uuid.uuid4().hex}"
+        try:
+            try:
+                os.link(name, tmp, src_dir_fd=sfd, dst_dir_fd=dfd, follow_symlinks=False)
+            except OSError as exc:
+                if exc.errno not in (errno.EXDEV, errno.EPERM, errno.EOPNOTSUPP, errno.EMLINK):
+                    raise
+                write_bytes(root, rel, read_bytes(source, rel))
+                return
+            linked = os.stat(tmp, dir_fd=dfd, follow_symlinks=False)
+            if (linked.st_dev, linked.st_ino) != (original.st_dev, original.st_ino):
+                raise UnsafePath(f"{rel}: changed during snapshot", todo="retry the snapshot")
+            os.replace(tmp, target, src_dir_fd=dfd, dst_dir_fd=dfd)
+        finally:
+            try:
+                os.unlink(tmp, dir_fd=dfd)
+            except FileNotFoundError:
+                pass
+
+
+def read_lines(root, rel, first: int, last: int | None) -> str:
+    """Read a 1-based inclusive line range without loading the rest of a book."""
+    from itertools import islice
+    if first < 1 or (last is not None and last < first):
+        raise ValueError("invalid line range")
+    with _open(root, rel, os.O_RDONLY) as fd:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise UnsafePath(f"{rel}: not a regular file", todo="inspect the worktree")
+        with os.fdopen(os.dup(fd), encoding="utf-8") as stream:
+            return "".join(islice(stream, first - 1, last))

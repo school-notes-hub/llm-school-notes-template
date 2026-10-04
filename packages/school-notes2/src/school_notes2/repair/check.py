@@ -11,7 +11,8 @@ from ..wiki.check import item
 def problems(ctx, task, paths):
     if task.get("mode") != "repair" or task.get("queue_only"):
         return []
-    from ..flows.steps import _llm_part, base_of
+    from ..flows.steps import base_of
+    from ..wiki.author import part
     target = task.get("repair_targets")[0]
     allowed = {target["page"], *target["related"]}
     out = []
@@ -21,7 +22,7 @@ def problems(ctx, task, paths):
         raw = ctx.worktree("notes").run("show", f"{base_of(task)}:{rel}", check=False)
         before = raw.stdout.decode("utf-8") if raw.returncode == 0 else ""
         after = safefs.read_text(ctx.notes_path, rel) if safefs.is_file(ctx.notes_path, rel) else ""
-        if _llm_part(before) == _llm_part(after):
+        if part(before) == part(after):
             continue
         if rel not in allowed:
             out.append(item(rel, None, "repair: page is outside the assigned target and related pages"))
@@ -34,7 +35,7 @@ def problems(ctx, task, paths):
         if any(a not in after for a in anchors):
             out.append(item(rel, None, "repair: preserve existing anchors"))
         if rel != target["page"] and target["kind"] not in ("lesson-notes", "chapter-summary", "review"):
-            if _without_links(_llm_part(before)) != _without_links(_llm_part(after)):
+            if _without_links(part(before)) != _without_links(part(after)):
                 out.append(item(rel, None, "repair: related lesson logs and summaries allow only link adjustments"))
     return out
 
@@ -59,7 +60,8 @@ def inherited_learning_problems(ctx, task, paths):
     """A link-only adjustment cannot force the separate lesson-log rewrite forward."""
     if task.get("mode") != "repair" or task.get("queue_only"):
         return set()
-    from ..flows.steps import _llm_part, base_of
+    from ..flows.steps import base_of
+    from ..wiki.author import part
     target = task.get("repair_targets")[0]
     if target["kind"] in ("lesson-notes", "chapter-summary", "review"):
         return set()
@@ -69,7 +71,7 @@ def inherited_learning_problems(ctx, task, paths):
         if raw.returncode != 0 or not safefs.is_file(ctx.notes_path, rel):
             continue
         before, after = raw.stdout.decode(), safefs.read_text(ctx.notes_path, rel)
-        if _without_links(_llm_part(before)) != _without_links(_llm_part(after)):
+        if _without_links(part(before)) != _without_links(part(after)):
             continue
         old = wiki_check.check_learning(ctx.notes_path, rel, frontmatter.split(before))
         inherited.update((rel, i["message"]) for i in old)

@@ -2,6 +2,7 @@
 
 import re
 import tomllib
+import warnings
 from importlib import resources
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -159,7 +160,12 @@ def _path(value: str) -> Path:
 
 
 def _sub(cls, table: dict | None):
-    table = table or {}
+    table = dict(table or {})
+    if cls is Limits:
+        for key in sorted({"review_max_images", "review_max_diff_kb"} & table.keys()):
+            warnings.warn(f"[limits] {key} is obsolete and ignored; remove it before the next release",
+                          FutureWarning, stacklevel=2)
+            del table[key]
     known = set(cls.__dataclass_fields__)
     unknown = set(table) - known
     if unknown:

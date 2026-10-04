@@ -110,7 +110,7 @@ def images(repo: Git, a: str, b: str) -> list[dict]:
     return sorted(found, key=lambda img: natural_key(img["path"]))     # 4.3: 2 before 10
 
 
-def select(repo: Git, *, fetch_timeout: float, **obsolete) -> Range | None:
+def select(repo: Git, *, fetch_timeout: float) -> Range | None:
     """Pin the entire range. D60's image/diff and D85's commit caps are removed."""
     fetch(repo, fetch_timeout)
     base, head = rev(repo, MARKER_REF), rev(repo, MAIN_REF)
@@ -120,7 +120,7 @@ def select(repo: Git, *, fetch_timeout: float, **obsolete) -> Range | None:
         raise NeedsOwner("origin/claude-reviewed is not an ancestor of origin/main",
                          todo="check the claude-reviewed branch on GitHub")
     commits = repo.out("rev-list", "--reverse", "--topo-order", f"{base}..{head}").split()
-    return Range(base, head, head, commits, build_patch(repo, base, head), images(repo, base, head)) if commits else None
+    return Range(base, head, head, commits, "") if commits else None
 
 
 def write_input(repo: Git, wt: Git, rng: Range, in_dir: Path, rasterize: Rasterize) -> None:
@@ -147,13 +147,13 @@ def write_input(repo: Git, wt: Git, rng: Range, in_dir: Path, rasterize: Rasteri
 
 
 def prepare(root: Path, student: str, repo: Git, wt: Git, *, fetch_timeout: float,
-            rasterize: Rasterize, max_agents: int = 3, **obsolete):
+            rasterize: Rasterize, max_agents: int = 3):
     rng = select(repo, fetch_timeout=fetch_timeout)
     if rng is None:
         return None
     task = phase.create(root, student, "review", "cron", "prepared")
     task.update(base=rng.base, H=rng.head, T=rng.head, commits=rng.commits,
-                images=len(rng.images), diff_bytes=len(rng.patch.encode()), topic_review=True, max_agents=max_agents)
+                topic_review=True, max_agents=max_agents)
     resume_prepared(task, repo, wt, rasterize)
     return task
 

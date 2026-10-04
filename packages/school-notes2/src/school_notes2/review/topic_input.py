@@ -7,7 +7,7 @@ from ..reader import inputs
 from ..repair import queue
 from ..state import safefs
 from ..wiki import footnotes, markers, pages, source_refs
-from . import relations, topics, warnings
+from . import relations, textbooks, topics, warnings
 
 
 def sources(work, topic):
@@ -61,8 +61,7 @@ def prepare(repo, work, task, unit, folder):
     safefs.write_json(folder, "input.json", {
         "mode": unit["mode"], "topic": unit["topic"], "base": unit["base"], "H": task.get("H"),
         "pages": unit["pages"], "context": unit["context"], "sources": sources(work, unit["topic"]),
-        "textbooks": [{"file": p, "lines": [line for line in safefs.read_text(work, p).splitlines() if "🔖" in line]}
-                      for p in unit["pages"] if p.endswith(".md")],
+        "textbooks": textbooks.collect(work, unit["pages"]),
         "relations": {p: data for p, data in relations.reviewer_inventory(work)["pages"].items()
                       if p in members or p in unit["context"]}, "items": items,
         "hits": inputs.hits(work, hits)})

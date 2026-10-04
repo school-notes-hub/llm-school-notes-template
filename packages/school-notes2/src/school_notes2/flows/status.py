@@ -213,14 +213,14 @@ def render(data: dict) -> str:
 
 
 def _nightly_state(ctx):
-    from ..review import topics
+    from ..review import figure_waiting, topics
     from ..git import repos
     wt = ctx.worktree("review")
     try:
-        state = topics.read_state(ctx.bare(), repos.rev(wt, "refs/remotes/origin/main"))
-        cleared = read_json(ctx.cfg.state_dir / ctx.name / "nightly-cleared.json", {}).get("at", "")
-        if cleared:
-            state["blocked_topics"] = [b for b in state.get("blocked_topics", []) if b.get("at", "") > cleared]
+        head = repos.rev(wt, "refs/remotes/origin/main")
+        state = topics.read_state(ctx.bare(), head)
+        state["pending_figures"] = json.loads(topics.text(ctx.bare(), head, figure_waiting.PATH) or "[]")
+        state["blocked_topics"] = topics.unblocked(state.get("blocked_topics", []), ctx.cfg.state_dir, ctx.name)
         return state
     except (OSError, ValueError):
         return {}

@@ -99,3 +99,12 @@ def test_reader_defaults_are_role_defaults_without_reviewer_timeout_leakage():
         reader, _ = cfg.role("reader")
         assert (reader.timeout_s, reader.list_timeout_s, reader.recheck_timeout_s) == (
             config.Role.timeout_s, config.Role.list_timeout_s, config.Role.recheck_timeout_s)
+
+
+def test_obsolete_d60_keys_warn_and_are_ignored_for_one_release():
+    limits = {"review_max_images": 1, "review_max_diff_kb": 2, "max_agents": 2}
+    with pytest.warns(FutureWarning) as warnings:
+        cfg = config.parse({**BASE, "limits": limits})
+    assert [str(w.message).split()[1] for w in warnings] == ["review_max_diff_kb", "review_max_images"]
+    assert cfg.limits.max_agents == 2 and not hasattr(cfg.limits, "review_max_images")
+    assert limits["review_max_images"] == 1

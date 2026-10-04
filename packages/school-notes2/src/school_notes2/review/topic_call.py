@@ -7,7 +7,7 @@ from ..llm import launch
 from ..reader.contracts import exact
 from ..schemas import validate
 from ..state import safefs
-from ..state.errors import BadWork, Transient, WaitingQuota
+from ..state.errors import BadWork, NeedsOwner, Prerequisite, Transient, WaitingQuota
 from . import relations
 
 
@@ -64,7 +64,7 @@ def run(work, folder, assigned, configured, *, log, invoke=None):
             outcome = invoke(replace(configured, attempt=len(state["attempts"])), log=log,
                              snapshot=lambda: launch.tree_fingerprint(folder / "out"))
             value = check(outcome.output, assigned, work)
-        except WaitingQuota:
+        except (WaitingQuota, Prerequisite, NeedsOwner):
             state["attempts"].pop()
             safefs.write_json(folder, "call.json", state)
             raise

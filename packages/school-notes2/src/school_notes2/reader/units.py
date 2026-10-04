@@ -12,8 +12,8 @@ from ..wiki.pages import links, resolve, wiki_pages
 
 
 def page_key(repo: Path, page: str, *, banner_image: str | None = None) -> str:
-    from ..flows.steps import _llm_part
-    text = _llm_part(safefs.read_text(repo, page))
+    from ..wiki.author import part
+    text = part(safefs.read_text(repo, page))
     text = re.sub(r"\n?" + commissions.MARKER.pattern + r"\n{0,2}", "", text)
     meta = frontmatter.split(safefs.read_text(repo, page)).meta
     if meta.get("banner_from"):

@@ -128,8 +128,8 @@ def advance(ctx: Ctx, task: Task) -> None:
                              details={"questions": task.get("question", [])})
     if task.get("mode") == "fix" and not task.get("review_complete"):
         from . import correction
-        correction._scope(ctx, task.dir / "fix-before", task.get("open_review_items", []),
-                          [e["commission"]["page"] for e in task.get("pending_figures", [])])
+        correction.check_scope(ctx, task.dir / "fix-before", task.get("open_review_items", []),
+                               [e["commission"]["page"] for e in task.get("pending_figures", [])])
     try:
         finish_flow.finish(ctx, task, notify_owner_items=lambda items: owner_items(ctx, task, items))
     except steps.CheckFailed as exc:

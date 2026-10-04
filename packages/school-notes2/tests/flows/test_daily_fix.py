@@ -63,3 +63,33 @@ def test_fix_inspection_goes_directly_to_finalization(tmp_path, monkeypatch):
     monkeypatch.setattr(review_phases.relations, "inventory", lambda *a: {"items": {}})
     review_phases.advance(SimpleNamespace(notes_path=tmp_path), task, lambda *a: None)
     assert task.phase == "finishing" and seen == ["figures", "inspect", "finalize"]
+
+
+@pytest.mark.parametrize("item_page", ["wiki/s/topic.md", "wiki/assets/a.png"])
+def test_fix_allows_unit_and_embedding_but_not_unrelated_page(tmp_path, item_page):
+    from school_notes2.flows import correction
+    from school_notes2.state.errors import BadWork
+    repo, snapshot = tmp_path / "repo", tmp_path / "snapshot"
+    repo.mkdir()
+    for page, text in {
+        "wiki/s/topic.md": "---\ntype: concept\n---\n# A\n\n![A](../assets/a.png)\n",
+        "wiki/s/log.md": "---\ntype: lesson-notes\nlessons: [{topics: [topic.md]}]\n---\n# Óra\n",
+        "wiki/s/summary.md": "---\ntype: chapter-summary\n---\n# Összefoglaló\n\n[A](topic.md)\n",
+        "wiki/s/other.md": "---\ntype: concept\n---\n# Más\n",
+    }.items():
+        safefs.write_text(repo, page, text)
+    safefs.write_bytes(repo, "wiki/assets/a.png", b"image")
+    report = files.write_review(repo, "2026-10-04", {"verdict": "changes", "findings": [
+        {"id": "R1", "file": item_page, "problem": "Hiba", "relates_to": None}]}, "fake", "a", "b")
+    items = [{"file": report.relative_to(repo).as_posix(), "item_id": "R1"}]
+    correction.snapshot(repo, snapshot)
+    for page in ("topic", "log", "summary"):
+        path = f"wiki/s/{page}.md"
+        safefs.write_text(repo, path, safefs.read_text(repo, path) + "\nJavítás.\n")
+    ctx = SimpleNamespace(notes_path=repo)
+    correction.check_scope(ctx, snapshot, items)
+    # An edited link must not give the writer more scope.
+    safefs.write_text(repo, "wiki/s/summary.md", "---\ntype: chapter-summary\n---\n[Other](other.md)\n")
+    safefs.write_text(repo, "wiki/s/other.md", "# Más\n\nVáltozás.\n")
+    with pytest.raises(BadWork, match="unassigned page"):
+        correction.check_scope(ctx, snapshot, items)
