@@ -66,6 +66,7 @@ def _plain(text: str) -> str:
 
 def after_header(text: str, name: str, body: str) -> str:
     """Insert once, after the leading banner (or title/placeholder while it is pending)."""
+    text = markers.clean_nested_notices(text)
     if name in markers.names(text):
         return markers.replace(text, name, body)
     if not body:
@@ -96,10 +97,7 @@ def header_end(text: str) -> int:
     description = re.match(r"\s*<!-- image-description\b.*?-->(?:\n|$)", text[cut:], re.S)
     if description:
         cut += description.end()
-    for start, end, _ in markers.spans(text):
-        if start < cut <= end:
-            cut = end + int(text[end:end + 1] == "\n")
-    return cut
+    return markers.outside(text, cut)
 
 
 def form_problems(repo: Path, rel: str, body: str, meta: dict) -> list[str]:

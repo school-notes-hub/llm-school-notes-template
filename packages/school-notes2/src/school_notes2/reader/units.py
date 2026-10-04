@@ -11,9 +11,9 @@ from ..wiki import frontmatter
 from ..wiki.pages import links, resolve, wiki_pages
 
 
-def page_key(repo: Path, page: str) -> str:
+def page_key(repo: Path, page: str, *, legacy_notices=False) -> str:
     from ..flows.steps import _llm_part
-    text = _llm_part(safefs.read_text(repo, page))
+    text = _llm_part(safefs.read_text(repo, page), legacy_notices=legacy_notices)
     text = re.sub(r"\n?" + commissions.MARKER.pattern + r"\n{0,2}", "", text)
     return hashlib.sha256(text.replace("\r\n", "\n").rstrip("\n").encode()).hexdigest()
 

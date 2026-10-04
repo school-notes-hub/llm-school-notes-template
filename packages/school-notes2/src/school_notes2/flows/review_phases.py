@@ -93,6 +93,8 @@ def _notice_pages(ctx, task):
 
 def final_keys(ctx, task):
     """G4 regeneration and final G5 check: invalidate only, never call a reviewer."""
+    from . import learning
+    learning.migrate(ctx, task)
     stale = verdicts.invalidate(ctx.notes_path)
     pages = {r["file"] for r in stale}
     pages.update(_notice_pages(ctx, task))

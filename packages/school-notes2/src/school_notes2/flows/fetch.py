@@ -126,8 +126,10 @@ def prepare(ctx: Ctx, task: Task, *, new_subject_index) -> None:
     found = image_pending.scan(settings)
     image_plans.restore(settings, [i["plan_id"] for i in found["pending"]])
     fresh = [p for p in pages if not p["duplicate_of"]]
-    task.update(tool_writes={}, tool_parts={})
+    task.update(tool_writes=task.get("tool_writes", {}), tool_parts=task.get("tool_parts", {}))
     steps.record_tool_files(task, ctx.notes_path, written)
+    from . import learning
+    learning.migrate(ctx, task)
     reviews = calls.select_reviews(review_files.open_items(ctx.notes_path, task.mode),
                                    ctx.cfg.limits.review_closures_per_run, mode=task.mode)
     assigned = calls.assignments(ctx.notes_path, packages, pages, reviews, found["pending"],

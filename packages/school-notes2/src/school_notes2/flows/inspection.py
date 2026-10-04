@@ -6,7 +6,6 @@ from ..figures import commissions, context, inputs as figure_inputs, review as f
 from ..figures.render import Renderer
 from ..llm import launch
 from ..reader import calls, inputs, report, units, verdicts
-from ..review import generated
 from ..state import safefs
 from . import steps
 
@@ -186,9 +185,8 @@ def figure_findings(batch, receipt):
 
 
 def _apply(ctx, task, saved):
-    findings, notes = generated.partition(ctx.notes_path, saved["findings"], saved["notes"])
-    saved = {**saved, "findings": findings, "notes": notes,
-             "pages": generated.page_verdicts(saved["pages"], saved["findings"], findings)}
+    findings, notes, pages = report.prepare(ctx.notes_path, saved["findings"], saved["notes"], saved["pages"])
+    saved = {**saved, "findings": findings, "notes": notes, "pages": pages}
     path = f"docs/review/{task.data['created'][:10]}-{task.run_id}-run.md"
     if not task.get("inspection_figures") and not any(saved[k] for k in ("findings", "notes", "pages", "receipts")):
         task.update(inspection_report=None, inspection_receipts={}, reader_pages=[])

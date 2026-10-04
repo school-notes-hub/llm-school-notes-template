@@ -2,7 +2,7 @@
 
 from ..figures import inputs as figure_inputs
 from ..reader import calls, inputs, report, units, verdicts
-from ..review import generated, relations
+from ..review import relations
 from ..state import safefs
 from ..wiki import source_refs
 from . import correction, inspection, steps
@@ -74,7 +74,7 @@ def _apply(ctx, task, saved):
             elif item["verdict"] == "not-ok":
                 written.append(report.reopen(ctx.notes_path, item["key"], item["answer"]))
         new = report.list_findings(ctx.notes_path, entry["hits"], review["hits"])
-        new, feedback = generated.partition(ctx.notes_path, new, [])
+        new, feedback, _ = report.prepare(ctx.notes_path, new, [])
         findings += [{**f, "origin": "recheck"} for f in new]
         notes += review["owner_notes"] + feedback
         # A targeted result only carries forward an existing full reader verdict.
@@ -83,7 +83,8 @@ def _apply(ctx, task, saved):
             own = {i["key"] for i in entry["items"] if i.get("file") == page or
                    relations.details(safefs.read_text(ctx.notes_path, i["file"]), i["item_id"]).get("file") == page}
             judged = [i for i in review["items"] if i["key"] in own]
-            if judged and all(i["verdict"] in ("ok", "accept") for i in judged) and not any(f["file"] == page for f in new):
+            new_on_page = any(page in (f["file"], f.get("reported_file")) for f in new)
+            if judged and all(i["verdict"] in ("ok", "accept") for i in judged) and not new_on_page:
                 open_items = any(i.get("file") == page and i["status"] in ("open", "owner")
                                  for i in relations.inventory(ctx.notes_path)["items"].values())
                 verdicts.record(ctx.notes_path, [{"file": page, "verdict": "changes" if open_items else "ok"}],

@@ -22,11 +22,12 @@ def refresh(repo, pages):
         if not safefs.is_file(repo, page) or not page.endswith(".md"):
             continue
         original = safefs.read_text(repo, page)
-        names = {name for _, _, name in markers.spans(original)
-                 if name == "pending" or name.startswith(("pending-section-", "pending-figure-"))}
-        text = markers.remove(original, names)
+        text = markers.clean_nested_notices(original)
+        names = {name for _, _, name in markers.spans(text)
+                 if markers.is_notice(name)}
+        text = markers.remove(text, names)
         items = [i for i in known.values() if i.get("file") == page and i["status"] in ("open", "owner")
-                 and not generated.only_generated(original, i.get("quote", ""))]
+                 and not generated.only_literals(original, i.get("quote", ""))]
         placements = _placements(text, items, waiting, page, verdicts.valid(repo, page) is None)
         for cut, (_, name, body) in sorted(placements.items(), reverse=True):
             text = text[:cut] + "\n" + markers.wrap(name, body) + "\n" + text[cut:]
@@ -36,17 +37,10 @@ def refresh(repo, pages):
     return written
 
 
-def _outside(text, cut):
-    for start, end, _ in markers.spans(text):
-        if start < cut <= end:
-            cut = end + int(text[end:end + 1] == "\n")
-    return cut
-
-
 def _placements(text, items, waiting, page, page_notice):
     placements = {}
     def add(cut, priority, name, body):
-        cut = _outside(text, cut)
+        cut = markers.outside(text, cut)
         candidate = (priority, name, body)
         placements[cut] = min(placements.get(cut, candidate), candidate)
     headings = list(re.finditer(r"^#{1,6} .+$", text, re.M))

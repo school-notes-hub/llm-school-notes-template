@@ -75,6 +75,8 @@ def prepare(ctx, task):
     repo = ctx.notes_path
     workbranch.start(ctx.worktree("notes"), task.run_id, task.get("base"), interactive=False)
     workbranch.reset_workdir(repo)
+    from . import learning
+    learning.migrate(ctx, task)
     data = task.get("repair_queue")
     if data is None:
         data = queue.build(repo, task.get("queue_previous")) if task.get("queue_only") else queue.load(repo)

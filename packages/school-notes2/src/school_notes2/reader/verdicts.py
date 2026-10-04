@@ -16,6 +16,19 @@ def record(repo, pages, keys, model, at):
     safefs.write_json(repo, PATH, sorted(records, key=lambda r: (r["file"], r["key"], r["role"])))
 
 
+def rekeyed(repo):
+    """Upgrade only records still matching the pre-2.2.2 formula, before page writes."""
+    records = safefs.read_json(repo, PATH, [])
+    updated = []
+    for record in records:
+        if record.get("role") == "reader" and safefs.is_file(repo, record["file"]):
+            key = page_key(repo, record["file"])
+            if key != record["key"] and page_key(repo, record["file"], legacy_notices=True) == record["key"]:
+                record = {**record, "key": key}
+        updated.append(record)
+    return sorted(updated, key=lambda r: (r["file"], r["key"], r["role"])) if updated != records else None
+
+
 def valid(repo, page):
     if not safefs.is_file(repo, page):
         return None

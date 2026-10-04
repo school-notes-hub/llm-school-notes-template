@@ -9,7 +9,8 @@ from ..wiki import frontmatter
 
 def locate(repo, finding):
     quote = " ".join(finding.get("quote", "").split())
-    text = safefs.read_text(repo, finding["file"]) if safefs.is_file(repo, finding["file"]) else ""
+    path = finding["file"]
+    text = safefs.read_text(repo, path) if path.endswith((".md", ".svg")) and safefs.is_file(repo, path) else ""
     pattern = r"\s+".join(re.escape(word) for word in quote.split())
     match = re.search(pattern, text) if quote else None
     return {**finding, "line": text[:match.start()].count("\n") + 1 if match else None,
@@ -37,10 +38,16 @@ def list_findings(repo, hits, output):
     return result
 
 
+def prepare(repo, findings, notes, pages=()):
+    """Route once before report writing and page verdict decisions (also on replay)."""
+    kept, notes, literals = generated.partition(repo, findings, notes)
+    return kept, notes, generated.page_verdicts(pages, findings, literals)
+
+
 def write(repo, path, findings, notes, model, base, at):
+    """Write findings already routed by prepare; no second partition on replay."""
     if safefs.is_file(repo, path):
         return path
-    findings, notes = generated.partition(repo, findings, notes)
     located = [locate(repo, f) for f in findings]
     ordered = sorted(located, key=lambda f: (f["file"], f.get("line") or 0, f.get("origin", ""),
                                              f.get("quote", ""), f["problem"], f.get("id", "")))
@@ -73,7 +80,6 @@ def append(repo, path, findings, notes, label):
     labels = page.meta.get("supplements", [])
     if label in labels:
         return path
-    findings, notes = generated.partition(repo, findings, notes)
     known = relations.inventory(repo)
     items, details = dict(page.meta["items"]), dict(page.meta.get("item_details", {}))
     number = max((int(k[1:]) for k in items), default=0)

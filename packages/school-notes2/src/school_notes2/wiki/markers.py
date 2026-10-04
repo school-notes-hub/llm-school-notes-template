@@ -35,6 +35,32 @@ def spans(text: str) -> list[tuple[int, int, str]]:
     return sorted(found)
 
 
+def is_notice(name: str) -> bool:
+    return name == "pending" or name.startswith(("pending-section-", "pending-figure-"))
+
+
+def outside(text: str, cut: int) -> int:
+    for start, end, _ in spans(text):
+        if start < cut <= end:
+            cut = end + int(text[end:end + 1] == "\n")
+    return cut
+
+
+def clean_nested_notices(text: str) -> str:
+    """Remove legacy notices inside another block before any regex-based replacement."""
+    blocks = spans(text)
+    nested = [(a, b) for a, b, name in blocks if is_notice(name)
+              and any(start < a and b < end for start, end, _ in blocks)]
+    # Only outermost selected ranges; preserve the enclosing block's line boundaries.
+    ranges = []
+    for start, end in nested:
+        if not ranges or start >= ranges[-1][1]:
+            ranges.append((start, end + int(text[end:end + 1] == "\n")))
+    for start, end in reversed(ranges):
+        text = text[:start] + text[end:]
+    return text
+
+
 def remove(text: str, names: set[str]) -> str:
     """Remove all named blocks and their insertion separators, even old duplicates."""
     ranges = []
@@ -72,6 +98,7 @@ def read(text: str, name: str) -> str | None:
 
 def replace(text: str, name: str, body: str) -> str:
     """Put `body` (ending in a newline, or empty) into block `name`; it must exist."""
+    text = clean_nested_notices(text)
     if body and not body.endswith("\n"):
         body += "\n"
     for m in BLOCK.finditer(text):

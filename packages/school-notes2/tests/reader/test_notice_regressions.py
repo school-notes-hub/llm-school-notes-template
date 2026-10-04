@@ -64,7 +64,7 @@ def test_page_notice_moves_after_banner_and_description(setup, wrapped, reason):
     assert markers.read(result, "figure-banner") == BANNER if wrapped else BANNER in result
 
 
-def test_vm_nested_duplicates_are_removed_and_generated_items_do_not_get_notices(setup):
+def test_vm_nested_duplicates_are_removed_and_authored_items_keep_notices(setup):
     ctx, _, page = setup
     name = "pending-section-7b79e662bcc8"
     old = markers.wrap(name, notices.SECTION)
@@ -89,10 +89,10 @@ def test_vm_nested_duplicates_are_removed_and_generated_items_do_not_get_notices
 @pytest.mark.parametrize("unlocated", [False, True])
 def test_legacy_tool_findings_do_not_mark_page_or_section(setup, status, unlocated):
     ctx, _, page = setup
-    text = META + BANNER + markers.wrap("notes", "# 📝 Jegyzetek\n\nTool-szöveg.\n")
+    text = META + BANNER + markers.wrap("notes", "# 📝 Jegyzetek\n")
     safefs.write_text(ctx.notes_path, page, text)
     accept(ctx.notes_path, page)
-    legacy_items(ctx.notes_path, page, ["Tool-szöveg."], status=status, unlocated=unlocated)
+    legacy_items(ctx.notes_path, page, ["# 📝 Jegyzetek"], status=status, unlocated=unlocated)
     assert refresh_twice(ctx.notes_path, page) == text
 
 
@@ -146,12 +146,12 @@ def test_priority_and_disappearing_notices_preserve_author_key(setup):
     assert result == frontmatter.set_keys(original, {}, remove=("status",))
 
 
-@pytest.mark.parametrize("quote, expected", [("Tool mondat.", True), ("Tool\n mondat.", True),
+@pytest.mark.parametrize("quote, expected", [("# 📝 Jegyzetek", True), ("# 📝\n Jegyzetek", True),
                                                ("Kézi mondat.", False), ("nincs", False), ("", False),
-                                               ("Tool mondat.\n<!-- /school-notes:generated -->\nKézi", False)])
+                                               ("# 📝 Jegyzetek\n<!-- /school-notes:generated -->\nKézi", False)])
 def test_generated_quote_must_be_fully_contained(quote, expected):
-    text = markers.wrap("notes", "Tool mondat.\n") + "Kézi mondat.\n"
-    assert generated.only_generated(text, quote) is expected
+    text = markers.wrap("notes", "# 📝 Jegyzetek\n") + "Kézi mondat.\n"
+    assert generated.only_literals(text, quote) is expected
 
 
 def test_new_header_blocks_follow_description_without_nesting():
@@ -166,9 +166,9 @@ def test_new_header_blocks_follow_description_without_nesting():
 @pytest.mark.parametrize("boundary", ["report", "verdicts"])
 def test_tool_feedback_and_page_verdict_resume_without_duplicate_or_writer_work(setup, monkeypatch, mixed, boundary):
     ctx, task, page = setup
-    text = safefs.read_text(ctx.notes_path, page) + "\n" + markers.wrap("notes", "# Jegyzetek\n\nTool mondat.\n")
+    text = safefs.read_text(ctx.notes_path, page) + "\n" + markers.wrap("notes", "# 📝 Jegyzetek\n")
     safefs.write_text(ctx.notes_path, page, text)
-    tool = {**finding(page), "quote": "Tool mondat.", "problem": "Sablonhiba."}
+    tool = {**finding(page), "quote": "# 📝 Jegyzetek", "problem": "Sablonhiba."}
     findings = [tool, {**tool, "id": "F-2"}]
     if mixed:
         findings.append({**finding(page), "id": "F-3"})
@@ -211,16 +211,17 @@ def test_tool_feedback_and_page_verdict_resume_without_duplicate_or_writer_work(
 
 def test_supplement_routes_tool_findings_to_owner_notes_and_replays(setup):
     ctx, _, page = setup
-    safefs.write_text(ctx.notes_path, page, META + BANNER + markers.wrap("notes", "# Jegyzetek\nTool mondat.\n"))
+    safefs.write_text(ctx.notes_path, page, META + BANNER + markers.wrap("notes", "# 📝 Jegyzetek\n"))
     path = "docs/review/run.md"
-    tool = {**finding(page), "quote": "Tool mondat.", "origin": "list"}
-    report.write(ctx.notes_path, path, [tool], [], "model", "base", "2026-10-04")
+    tool = {**finding(page), "quote": "# 📝 Jegyzetek", "origin": "list"}
+    kept, notes, _ = report.prepare(ctx.notes_path, [tool], [])
+    report.write(ctx.notes_path, path, kept, notes, "model", "base", "2026-10-04")
     assert not relations.inventory(ctx.notes_path)["items"]
-    report.append(ctx.notes_path, path, [tool], [], "recheck")
+    report.append(ctx.notes_path, path, kept, notes, "recheck")
     assert not relations.inventory(ctx.notes_path)["items"]
     before = safefs.read_bytes(ctx.notes_path, path)
     assert "Tool-sablon" in before.decode()
-    report.append(ctx.notes_path, path, [tool], [], "recheck")
+    report.append(ctx.notes_path, path, kept, notes, "recheck")
     assert safefs.read_bytes(ctx.notes_path, path) == before
 
 
@@ -251,13 +252,13 @@ def test_recheck_tool_hit_does_not_spoil_repaired_page_verdict(setup):
     from school_notes2.flows import recheck
     from school_notes2.review import files
     ctx, task, page = setup
-    text = safefs.read_text(ctx.notes_path, page) + "\n" + markers.wrap("notes", "Tool mondat.\n")
+    text = safefs.read_text(ctx.notes_path, page) + "\n" + markers.wrap("notes", "# 📝 Jegyzetek\n")
     safefs.write_text(ctx.notes_path, page, text)
     path = "docs/review/run.md"
     report.write(ctx.notes_path, path, [{**finding(page), "origin": "reader"}], [], "model", "base", "2026-10-04")
     files.apply_closure(ctx.notes_path, "fix", [{"file": path, "item_id": "R1", "status": "fixed"}], [])
     key = path + "#R1"
-    hit = {"id": "H1", "file": page, "line": text[:text.index("Tool mondat.")].count("\n") + 1}
+    hit = {"id": "H1", "file": page, "line": text[:text.index("# 📝 Jegyzetek")].count("\n") + 1}
     task.update(inspection_report=path, reader_pages=[{"file": page}])
     saved = {"receipts": {}, "units": [{"status": "reviewed", "model": "model", "hits": [hit],
              "items": [{"key": key, "file": page}], "review": {
