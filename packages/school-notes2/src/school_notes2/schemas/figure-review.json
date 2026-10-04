@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "figures",
+    "owner_notes"
+  ],
+  "properties": {
+    "figures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "key",
+          "verdict",
+          "observed",
+          "defects",
+          "text_mismatch",
+          "relates_to"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]{1,64}$"
+          },
+          "key": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "verdict": {
+            "enum": [
+              "accept",
+              "repair",
+              "reject"
+            ]
+          },
+          "observed": {
+            "type": "string",
+            "minLength": 1
+          },
+          "defects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "location",
+                "observed",
+                "expected"
+              ],
+              "properties": {
+                "location": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "observed": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "expected": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "text_mismatch": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "location",
+                "observed",
+                "expected"
+              ],
+              "properties": {
+                "location": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "observed": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "expected": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "relates_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "new_evidence": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "owner_notes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

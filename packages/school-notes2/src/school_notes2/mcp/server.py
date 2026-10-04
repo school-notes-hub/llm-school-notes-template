@@ -18,7 +18,6 @@ import jsonschema
 from .. import VERSION
 from ..images.plans import PLAN_ID as PLAN_ID_RE
 from ..log import Log, Timer
-from ..schemas import errors as schema_errors
 from ..state.errors import SnError
 from . import transport
 from .jobs import JobStore
@@ -29,7 +28,7 @@ PLAN_ID = {"type": "string", "pattern": PLAN_ID_RE.pattern}
 NO_ARGS = {"type": "object", "properties": {}, "additionalProperties": False}
 STATE_CHANGING = ("fetch", "finish")
 # While a fetch or finish job runs, nothing else may touch the worktree or phase.json.
-WORKTREE_WRITERS = ("check", "image_generate", "image_accept")
+WORKTREE_WRITERS = ("check", "image_generate")
 
 
 @dataclass(frozen=True)
@@ -52,13 +51,6 @@ TOOLS = {
          "properties": {"plan_id": PLAN_ID,
                         "repair_note": {"type": "string", "minLength": 1, "maxLength": 2000}}},
         True),
-    "image_accept": Tool(
-        "Accept a generated image after looking at it and its publication preview; `review` "
-        "holds your verdict fields (observed, decision, checks, material_defects, description, "
-        "publication).",
-        {"type": "object", "additionalProperties": False, "required": ["plan_id", "review"],
-         "properties": {"plan_id": PLAN_ID, "review": {"type": "object"}}},
-        False),
     "status": Tool("The learner's current state (run, phase, open items, images, budget).",
                    NO_ARGS, False),
     "wait": Tool("Wait up to ~50 seconds for a background job; call again while it is running.",
@@ -79,7 +71,6 @@ class Handlers:
 
     check: Callable[[], dict]
     image_generate: Callable[[str, str | None], dict]
-    image_accept: Callable[[str, dict], dict]
     status: Callable[[], dict]
     fetch: Callable[[], dict] | None = None
     finish: Callable[[], dict] | None = None
@@ -180,21 +171,12 @@ class McpServer:
         if name == "status":
             return self.handlers.status()
         self._refuse_while_busy(name)
-        if name == "image_accept":
-            problems = schema_errors("image-accept", args["review"])
-            if problems:
-                raise ToolError("invalid_params", "review: " + "; ".join(problems[:10]))
-            return self.handlers.image_accept(args["plan_id"], args["review"])
         return self._start(name, args)
 
     def _refuse_while_busy(self, name: str) -> None:
         """A running fetch/finish owns the worktree and phase.json: anything else is told to
         wait (a repeated fetch/finish gets the running job id, 7.5). The other way round
         too: while a check or image job still writes in the worktree, fetch/finish wait."""
-        checking = self.jobs.running(("check",)) if name == "image_accept" else None
-        if checking:
-            raise ToolError("busy", "check is running; wait for it first",
-                            job_id=checking["id"], tool="check")
         busy = self.jobs.running(STATE_CHANGING)
         if busy and name in WORKTREE_WRITERS:
             raise ToolError("busy", f"{busy['tool']} is running; wait for it first",

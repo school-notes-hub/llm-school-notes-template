@@ -253,3 +253,63 @@ uv run --group dev pytest -q          # unit, integration and end-to-end tests
 cd ../study-site && npm test          # renderer tests
 ```
 The tests use real `git` with local bare origins, and fake Drive, OpenRouter and `podman`.
+
+## Independent figures (unit 2a)
+
+`figures/` is a separately callable pipeline; P2–P5, owner notifications and the
+pending notice/fetch handoff join in unit 2b. No new scheduler phase is enabled here.
+The existing `image_generate` retains its budget and attempt limits. `image_accept`
+is no longer an MCP tool in either mode. The writer guard refuses direct insertion
+of new/changed image bytes, including SVG; an inline Mermaid change requires a
+commission and goes through the same independent review input.
+
+The writer leaves exactly one `figure` or `image` marker and writes
+`.school-notes/figures/<id>.json` (schema `figure-commission`). `anchor` is the exact,
+unique section heading. `source_image` has `path` and a pixel crop
+`[left, top, right, bottom]`. Replacements require `replaces` and
+`decision_reason: {code: a|b|c, text}`. The commission's page determines the primary
+topic; a lesson log belongs to its first listed topic. Duplicate replacements fail.
+
+The candidate at `figures/<id>/figure.json` uses schema `figure-candidate`:
+`state: candidate|failed|no-figure`; failures/omissions have `reason`. A candidate
+has `asset` (the final publication bytes under `wiki/assets/`), `alt`, `caption`
+(possibly empty), `form`, `tool`, `elements[{element, meaning}]`, `visible_text`,
+`attempt`, and optional `source` or `render`. Generated images use the publication
+preview bytes, not a different later encoding. Source drawings require private
+`corrections[]` (possibly empty) and cannot use `no-figure`. Mermaid uses a one-based
+`mermaid` block number instead of `asset`; its Markdown remains inline.
+
+Call `commissions.validate_assignments`, then `inputs.batches` and
+`review.run_batch` with a configured reviewer `RoleRun`. It uses the configured
+`claude-review` model, 1800 seconds, the reviewer home, no MCP and only `wiki/`
+mounted read-only at `/work`. `figures.render.Renderer` invokes the study-site's
+existing Mermaid renderer/SVG sanitizer and an offline browser rasterization;
+it needs the installed study-site dependencies and Chromium. Tests inject a renderer
+and harness. A rendering failure is a hard preparation error for the caller to turn
+into a failed/pending commission; heuristic warnings never prevent review.
+
+Each call receives full/390px images, editable source/render record, machine hints,
+commission, embedding section and neighbours, source crop when present, other uses,
+topic image inventory, open questions, decisions and open/disputed review keys.
+It never receives the generating prompt, `figure.json` self-evaluation or alternatives.
+The output schema requires exactly one hash-bound verdict per assigned ID plus
+`owner_notes`. A valid saved result survives interruption; malformed output has one
+format retry, a crashed call one retry, timeout none. Retry counters survive restart.
+The trusted task receipt is the input to `insert.insert`; never load that argument
+from a writer-controlled file. The repo copy is at
+`.school-notes/figure-review/<topic>-<n>.json` (topic path hash disambiguates names).
+
+`insert.insert` rechecks the key, writes evidence and `docs/review/verdicts.json`,
+then atomically replaces the page marker with the image, caption and observed
+`image-description` in a protected generated block. `verifier` is the independent
+reviewer's configured model/effort. Replays are idempotent; replacement retains the
+old asset and removes its old link/comment. Mermaid only gets evidence/verdicts.
+`insert.invalidated` detects stale final keys after rebase without launching an LLM.
+Teaching keys bind image bytes, alt, caption and section (and other real uses);
+banner keys bind image bytes, title and description. Rule versions are excluded.
+
+`pending.record/load/eligible/restore/clear` maintains `docs/figure-pending.json`
+in commission-ID order. It keeps the full commission and latest defects; unique run
+IDs make increments replay-safe. At three runs, `owner_required` is true and the
+commission is no longer eligible. The future orchestrator creates/notifies the owner
+item and the learner-facing pending notice. No owner wording is invented here.

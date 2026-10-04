@@ -260,16 +260,22 @@ def _same(repo: Path, rel: str, sha: str | None) -> bool:
     return bool(target) and safefs.is_file(repo, target) and sha256(repo, target) == sha
 
 
-def check_renders(repo: Path) -> list[dict]:
+def check_renders(repo: Path, receipts: list[str] | None = None) -> list[dict]:
     """render.json must still describe its source and outputs (no re-rendering here)."""
     out = []
-    for rel in safefs.glob(repo, "wiki/assets", "wiki/assets/**/render.json"):
+    for rel in (sorted(receipts) if receipts is not None else
+                safefs.glob(repo, "wiki/assets", "wiki/assets/**/render.json")):
         try:
             data = json.loads(safefs.read_text(repo, rel))
         except ValueError:
             out.append(item(rel, None, "render.json is not valid JSON"))
             continue
-        if not _same(repo, str(data.get("source", "")), data.get("source_sha256")):
+        if (not isinstance(data, dict) or not isinstance(data.get("source"), str)
+                or not isinstance(data.get("outputs"), dict)
+                or any(not isinstance(info, dict) for info in data["outputs"].values())):
+            out.append(item(rel, None, "render.json has invalid source/outputs fields"))
+            continue
+        if not _same(repo, data["source"], data.get("source_sha256")):
             out.append(item(rel, None, "the figure source changed after rendering; render again"))
         base = rel.rsplit("/", 1)[0]
         for name, info in (data.get("outputs") or {}).items():

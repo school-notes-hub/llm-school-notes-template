@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "page",
+    "anchor",
+    "kind",
+    "purpose",
+    "must_show",
+    "avoid_misreading",
+    "taught_conventions",
+    "text_complete_without_figure"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]{1,64}$"
+    },
+    "page": {
+      "type": "string",
+      "pattern": "^wiki/[^.][^\\n]*\\.md$"
+    },
+    "anchor": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "enum": [
+        "notebook-drawing",
+        "teacher-drawing",
+        "figure",
+        "banner"
+      ]
+    },
+    "source_image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "crop"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "crop": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "purpose": {
+      "type": "string",
+      "minLength": 1
+    },
+    "must_show": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "avoid_misreading": {
+      "type": "string",
+      "minLength": 1
+    },
+    "taught_conventions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "text_complete_without_figure": {
+      "const": true
+    },
+    "replaces": {
+      "type": "string",
+      "minLength": 1
+    },
+    "decision_reason": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "text"
+      ],
+      "properties": {
+        "code": {
+          "enum": [
+            "a",
+            "b",
+            "c"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "notebook-drawing",
+              "teacher-drawing"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "source_image"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "replaces"
+        ]
+      },
+      "then": {
+        "required": [
+          "decision_reason"
+        ]
+      }
+    }
+  ]
+}

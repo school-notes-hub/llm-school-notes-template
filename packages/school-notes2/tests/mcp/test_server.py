@@ -16,7 +16,6 @@ CANARY = "CANARY-7f3e9a-SECRET-VALUE"
 def handlers(**over):
     base = dict(check=lambda: {"problems": []},
                 image_generate=lambda plan_id, note: {"plan_id": plan_id, "note": note},
-                image_accept=lambda plan_id, review: {"accepted": plan_id},
                 status=lambda: {"phase": "writing"},
                 fetch=lambda: {"run_id": "new"}, finish=lambda: {"pushed": True})
     base.update(over)
@@ -51,7 +50,7 @@ def finish_job(server, response):
 def test_tools_list_depends_on_mode(make):
     cron = make("cron").handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
     names = {t["name"] for t in cron["result"]["tools"]}
-    assert names == {"check", "image_generate", "image_accept", "status", "wait"}
+    assert names == {"check", "image_generate", "status", "wait"}
     inter = make().handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
     assert {"fetch", "finish"} <= {t["name"] for t in inter["result"]["tools"]}
 
@@ -67,7 +66,6 @@ def test_cron_mode_refuses_fetch_and_finish(make):
     ("image_generate", {"plan_id": "Bad Id"}),
     ("image_generate", {"plan_id": "ok", "repair_note": "x" * 2001}),
     ("image_generate", {"plan_id": "ok", "extra": 1}),
-    ("image_accept", {"plan_id": "ok", "review": {"observed": "x"}}),
     ("wait", {}),
     ("status", {"student": "barna"}),
 ])
@@ -295,9 +293,13 @@ def test_a_reused_pid_is_not_a_live_job(make, tmp_path):
     assert server.jobs.get("finish-never")["state"] == "error"
 
 
-def test_image_accept_review_is_schema_checked(make):
-    response = call(make(), "image_accept", {"plan_id": "ok", "review": {"observed": "x"}})
-    assert not response["ok"] and response["error"]["code"] == "invalid_params"
+@pytest.mark.parametrize("mode", ["cron", "interactive"])
+def test_image_accept_is_never_an_mcp_tool(make, mode):
+    server = make(mode)
+    listed = server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    assert "image_accept" not in {t["name"] for t in listed["result"]["tools"]}
+    response = call(server, "image_accept", {"plan_id": "ok", "review": {}})
+    assert response["error"]["code"] == "unknown_tool"
 
 
 def test_finish_and_fetch_wait_while_a_check_writes(make):
@@ -326,10 +328,8 @@ def test_stop_all_handles_a_job_record_without_pid(make):
     assert server.jobs.get("check-0000")["state"] == "error"
 
 
-def test_image_accept_waits_for_check_without_touching_state(make, monkeypatch):
-    server = make(image_accept=lambda *a: pytest.fail("image_accept must not run beside check"))
-    monkeypatch.setattr(server.jobs, "running", lambda names: {"id": "check-job", "tool": "check"}
-                        if "check" in names else None)
+def test_image_accept_is_refused_even_while_check_runs(make, monkeypatch):
+    server = make()
+    monkeypatch.setattr(server.jobs, "running", lambda names: {"id": "check-job", "tool": "check"})
     answer = call(server, "image_accept", {"plan_id": "banner", "review": {}})
-    assert answer["error"]["code"] == "busy"
-    assert answer["error"]["job_id"] == "check-job"
+    assert answer["error"]["code"] == "unknown_tool"

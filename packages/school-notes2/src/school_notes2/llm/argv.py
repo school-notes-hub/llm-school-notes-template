@@ -55,11 +55,15 @@ def api_domain(harness: Harness, allowed: tuple[str, ...]) -> str:
 
 def prompt(role_name: str, output_mode: str = "file") -> str:
     """The fixed prompt of a role, byte-identical on every call (K12)."""
-    if role_name not in (*ROLES, "fix"):
+    if role_name not in (*ROLES, "fix", "figure-review"):
         raise ValueError(f"unknown prompt {role_name!r}")
     name = role_name
     text = resources.files(__package__).joinpath("prompts", f"{name}.txt").read_text("utf-8")
-    return text.replace("{output_instruction}", OUTPUT_INSTRUCTION[output_mode])
+    instruction = OUTPUT_INSTRUCTION[output_mode]
+    if role_name == "figure-review":
+        instruction = ("A választ a `/out/review.json` fájlba írd." if output_mode == "file"
+                       else "A válasz végén írd ki az egyetlen JSON-objektumot.")
+    return text.replace("{output_instruction}", instruction)
 
 
 def expand(template: list[str], role: Role) -> list[str]:

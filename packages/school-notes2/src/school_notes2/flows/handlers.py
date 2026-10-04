@@ -1,10 +1,7 @@
 """The MCP operations of one session (plan 7.5), wired to the flows."""
 
-from ..evidence import records
 from ..git import workbranch
-from ..images import accept as image_accept
 from ..images import generate as image_generate
-from ..log import now_iso
 from ..mcp.server import Handlers
 from ..schemas import errors as schema_errors
 from ..state import phase
@@ -35,7 +32,6 @@ def build(ctx: Ctx, task_dir=None, *, fetch=None, finish=None) -> Handlers:
     return Handlers(
         check=lambda: check(ctx, task()),
         image_generate=lambda plan_id, note: generate(ctx, task(), plan_id, note),
-        image_accept=lambda plan_id, review: accept(ctx, task(), plan_id, review),
         status=lambda: status_flow.summary(ctx),
         fetch=fetch, finish=finish)
 
@@ -91,25 +87,6 @@ def public_problems(repo) -> list[dict]:
     except public.PublicError as exc:
         return [wiki_check.item(p, None, exc.reason) for p in exc.paths]
     return []
-
-
-def accept(ctx: Ctx, task, plan_id: str, review: dict) -> dict:
-    role, _ = ctx.cfg.role("writer")
-    verifier = f"{role.model}/{role.effort}"
-    evidence: list[str] = []
-
-    def append_evidence(page: str, entry: dict) -> None:
-        record = records.Entry(page=page, image=entry["image"], locator=entry["entry_id"],
-                               observed=entry["observed"], decision=entry["decision"],
-                               note=entry.get("description", ""), checks=entry.get("checks"))
-        evidence.extend(records.append(ctx.notes_path, [record], run_id=task.run_id,
-                                       checker=verifier, at=now_iso(), kind=f"image:{plan_id}"))
-
-    answer = image_accept.accept(ctx.image_settings(), plan_id, review, verifier=verifier,
-                                 append_evidence=append_evidence, log=ctx.log)
-    written = [w["path"] for w in answer.get("tool_writes", [])] + evidence
-    steps.record_tool_files(task, ctx.notes_path, written)
-    return answer
 
 
 def generate(ctx, task, plan_id, note):

@@ -165,6 +165,9 @@ def run(g: GuardInput) -> list[Violation]:
             found.append(Violation(".git", "the worktree's .git file was replaced", True))
     for change in g.changes:
         found += check_change(change, g)
+    if not found:
+        from ..figures import guard as figure_guard
+        found += figure_guard.check(g)
     return found
 
 

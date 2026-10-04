@@ -1,4 +1,4 @@
-"""`image_accept` (plan 4.6, 5.5): the LLM's verdict in, the inserted image out.
+"""Legacy internal generated-image receipt writer; never an MCP tool.
 
 The LLM gives only the judgement fields. The tool fills the machine fields, runs
 `learning_image.py review` (it writes the asset and the receipt), replaces the marker

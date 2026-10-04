@@ -1,0 +1,103 @@
+"""Tool-only insertion from a current independent accept verdict, with replayable writes."""
+
+import hashlib
+from pathlib import Path
+
+from ..images.accept import comment_safe
+from ..state import safefs
+from ..wiki import markers
+from ..wiki.pages import relative
+from . import commissions, context, pending
+from .review import validate_output
+
+VERDICTS = "docs/review/verdicts.json"
+
+
+def insert(repo: Path, brief: dict, receipt: dict, *, at: str) -> list[str]:
+    """`receipt` must come from run_batch, never from the writer or an MCP argument.
+
+    The page is written last: a crash during evidence writes is harmless to replay.
+    Recompute the key at call time, including after rebase; never trust an earlier check.
+    """
+    if receipt.get("status") != "reviewed" or not receipt.get("model"):
+        raise ValueError("independent review receipt required")
+    fid = brief["id"]
+    verdicts = [v for v in receipt["review"]["figures"] if v["id"] == fid]
+    if len(verdicts) != 1 or verdicts[0]["verdict"] != "accept":
+        raise ValueError("one independent accept verdict is required")
+    verdict = verdicts[0]
+    validate_output({"figures": [verdict], "owner_notes": receipt["review"]["owner_notes"]},
+                    {"figures": [{"id": fid, "key": verdict["key"]}]}, repo, [brief])
+    candidate = commissions.candidate(repo, brief)
+    page = brief["page"]
+    text = safefs.read_text(repo, page)
+    directory = f"docs/evidence/media/{fid}"
+    record = {"commission": brief, "candidate": candidate, "verdict": verdict,
+              "verifier": receipt["model"], "at": at}
+    new_text = text if "mermaid" in candidate else _insert(text, page, brief, candidate, verdict, directory, repo)
+    files = [f"{directory}/figure.json", VERDICTS]
+    safefs.write_json(repo, files[0], record)
+    _record_verdict(repo, brief, candidate, verdict, receipt["model"], at)
+    if new_text != text:
+        safefs.write_text(repo, page, new_text)
+    files.append(page)
+    if candidate.get("asset"):
+        files.append(candidate["asset"])
+    pending.clear(repo, fid)
+    return sorted(files + ([pending.PATH] if safefs.is_file(repo, pending.PATH) else []))
+
+
+def _insert(text, page, brief, candidate, verdict, directory, repo):
+    fid = brief["id"]
+    existing = markers.read(text, f"figure-{fid}")
+    if existing is not None:
+        return text  # validate_output already checked the actual embedded version
+    matches = commissions.markers(repo).get(fid, [])
+    if len(matches) != 1 or matches[0][0] != page:
+        raise ValueError("insertion needs exactly one marker on the commission's page")
+    alt = candidate["alt"].replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
+    if "\n" in alt:
+        raise ValueError("alt must fit on one line")
+    asset = relative(page, candidate["asset"])
+    sha = hashlib.sha256(safefs.read_bytes(repo, candidate["asset"])).hexdigest()
+    body = f"![{alt}](<{asset}>)\n\n"
+    if candidate["caption"]:
+        body += candidate["caption"] + "\n\n"
+    body += (f"<!-- image-description\nasset: {asset}\nsha256: {sha}\n"
+             f"observed: {comment_safe(' '.join(verdict['observed'].split()))}\n"
+             f"evidence: {relative(page, directory + '/figure.json')}\n-->")
+    block = markers.wrap(f"figure-{fid}", body).rstrip("\n")
+    # A reviewed image stays in place until this single atomic page replacement.
+    start = matches[0][1]
+    match = commissions.MARKER.match(text, start)
+    text = text[:start] + block + text[match.end():]
+    return context.without_replaced(text, page, brief.get("replaces"))
+
+
+def _record_verdict(repo, brief, candidate, verdict, model, at):
+    records = safefs.read_json(repo, VERDICTS, [])
+    record = {"role": "figure-review", "file": brief["page"], "id": brief["id"],
+              "key": verdict["key"], "verdict": "accept", "model": model, "at": at,
+              "commission": brief, "candidate": candidate}
+    records = [r for r in records if not (r.get("role") == "figure-review" and
+                                          r.get("file") == brief["page"] and r.get("id") == brief["id"])]
+    if brief.get("replaces"):
+        records = [r for r in records if not (r.get("role") == "figure-review" and
+                    r.get("file") == brief["page"] and r.get("candidate", {}).get("asset") == brief["replaces"])]
+    records.append(record)
+    safefs.write_json(repo, VERDICTS, sorted(records, key=lambda r: (r["file"], r["key"], r["role"])))
+
+
+def invalidated(repo: Path) -> list[dict]:
+    """T-154: report stale accepts after rebase; no LLM, retry or publication hold."""
+    stale = []
+    for record in safefs.read_json(repo, VERDICTS, []):
+        if record.get("role") != "figure-review":
+            continue
+        try:
+            current = context.verdict_key(repo, record["commission"], record["candidate"])
+        except (OSError, ValueError):
+            current = None
+        if current != record["key"]:
+            stale.append(record)
+    return sorted(stale, key=lambda r: (r["file"], r["key"]))

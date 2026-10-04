@@ -38,6 +38,8 @@ def check_result(repo: Path, result: dict, fetch: dict, open_items: set[tuple[st
             out.append(item(RESULT, None, f"review_closure: {c['file']} does not exist"))
         elif (c["file"], c["item_id"]) not in open_items:
             out.append(item(RESULT, None, f"review_closure: {c['file']} {c['item_id']} is not open"))
+    from ..figures import commissions
+    out += commissions.check(repo, result.get("figures", []))
     out += check_checks(repo, result, fetch)
     from ..repair import check as repair_check
     out += repair_check.coverage(result, fetch)

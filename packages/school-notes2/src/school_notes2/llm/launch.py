@@ -192,7 +192,7 @@ def run_headless(run: RoleRun, *, log: Log, snapshot: Callable[[], object],
 
 def _volume_role(role_name: str) -> str:
     """The reviewer has its own home; everything else (writer, chat) uses the writer's."""
-    return "reviewer" if role_name == "reviewer" else "writer"
+    return "reviewer" if role_name in ("reviewer", "figure-review") else "writer"
 
 
 def _run_fed(argv: list[str], stdin: bytes | None, out, name: str, timeout: float,

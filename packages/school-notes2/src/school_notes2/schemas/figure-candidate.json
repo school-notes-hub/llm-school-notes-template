@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "state"
+  ],
+  "properties": {
+    "state": {
+      "enum": [
+        "candidate",
+        "failed",
+        "no-figure"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "asset": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "render": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mermaid": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "alt": {
+      "type": "string",
+      "minLength": 1
+    },
+    "caption": {
+      "type": "string"
+    },
+    "form": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tool": {
+      "type": "string",
+      "minLength": 1
+    },
+    "elements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "element",
+          "meaning"
+        ],
+        "properties": {
+          "element": {
+            "type": "string",
+            "minLength": 1
+          },
+          "meaning": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "visible_text": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "corrections": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "candidate"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "alt",
+          "caption",
+          "form",
+          "tool",
+          "elements",
+          "visible_text",
+          "attempt"
+        ],
+        "oneOf": [
+          {
+            "required": [
+              "asset"
+            ],
+            "not": {
+              "required": [
+                "mermaid"
+              ]
+            }
+          },
+          {
+            "required": [
+              "mermaid"
+            ],
+            "not": {
+              "required": [
+                "asset"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "enum": [
+              "failed",
+              "no-figure"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "reason"
+        ]
+      }
+    }
+  ]
+}

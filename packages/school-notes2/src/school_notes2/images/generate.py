@@ -106,7 +106,7 @@ def _attempts(settings, job, job_path, repair_note, log, sleep) -> dict:
 def _success(settings: ImageSettings, job_id: str, answer: dict) -> dict:
     if answer.get("state") == "accepted":
         return {"state": "accepted", "path": answer.get("path"),
-                "message": "already accepted; call image_accept to insert it if the marker remains"}
+                "message": "already accepted; insertion requires the independent figure review"}
     entry = settings.ledger()["jobs"][job_id]
     return {"state": "generated", "number": answer["number"], "sha256": answer["sha256"],
             "cost_usd": answer.get("cost_usd"),
