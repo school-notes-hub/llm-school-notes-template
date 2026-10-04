@@ -8,6 +8,7 @@ from .pages import sha256
 
 def media(repo: Path):
     records = []
+    authored = []
     for path in safefs.glob(repo, "docs/evidence/media", "docs/evidence/media/**/review-*.json"):
         value = safefs.read_json(repo, path, {})
         if value.get("decision") == "accepted":
@@ -20,14 +21,31 @@ def media(repo: Path):
     # New independent reviews record the actual published bytes, not a filename stem.
     for path in safefs.glob(repo, "docs/evidence/media", "docs/evidence/media/**/figure.json"):
         value = safefs.read_json(repo, path, {})
-        if value.get("verdict", {}).get("verdict") == "accept" and value.get("rights") == "generated":
+        if value.get("verdict", {}).get("verdict") != "accept":
+            continue
+        if value.get("rights") == "generated":
             records.append((value.get("output_sha256"), path))
+        elif (value.get("rights") in (None, "authored") and
+              not value.get("license_request") and not value.get("license") and
+              authored_candidate(repo, value.get("candidate", {}))):
+            authored.append((value.get("output_sha256"), path))
 
     def lookup(rel):
         digest = sha256(repo, rel)
-        return next((("generated", path) for recorded, path in sorted(records, key=lambda r: r[1])
-                     if recorded == digest), None)
+        for kind, entries in (("generated", records), ("authored", authored)):
+            found = next(((kind, path) for recorded, path in sorted(entries, key=lambda r: r[1])
+                          if recorded == digest), None)
+            if found:
+                return found
+        return None
     return lookup
+
+
+def authored_candidate(repo: Path, candidate: dict) -> bool:
+    """A local editable source identifies the writer's own, non-licensed candidate."""
+    asset, source = candidate.get("asset", ""), candidate.get("source", "")
+    return (candidate.get("state") == "candidate" and asset.startswith("wiki/assets/") and
+            source.startswith("wiki/assets/") and safefs.is_file(repo, source))
 
 
 def rendered(repo: Path):

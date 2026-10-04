@@ -63,8 +63,9 @@ The source-grounded repair rules and writer/fix prompts support the P1–P6 flow
 Source-free daily fixes use `fix.txt`; nightly review uses a separate topic contract
 with exact page, closure and warning accounting and private `owner_notes`.
 Writer `owner_notes` are emitted as `writer.owner_notes` JSONL log events and, at completion,
-in the private task `report.json`, the finish response and an existing once-per-run e-mail
-notice, with token-like secrets redacted. Operational reports provide the full e-mail layout.
+in the private task `report.json`, the finish response and the completion summary,
+with token-like secrets redacted. When no summary is sent, the notes use one separate
+e-mail notice. Operational reports provide the full e-mail layout.
 The additive figure lists and `coverage` survive range merging. Warning decisions are validated per writer invocation. `coverage` records
 `source`, `unit` and either a `target` topic-section link or an omission `reason`,
 without creating an image evidence record. `question`/`settled` closures now validate the reference on the item's page and close it.
@@ -457,7 +458,11 @@ timeouts, quota observations, owner notes and transcript metrics. Nights report
 even empty ranges. The email renderer preserves the full summary instead of the
 previous 500-character truncation. Summaries are sent once per terminal state
 (done, owner intervention or closure). Quota waits and retry invocations only
-accumulate elapsed time; they send no summary. The VM verification/deployment,
+accumulate elapsed time; they send no summary. Owner notes are included in that
+summary, without a separate owner-notes e-mail; runs of at most ten minutes send
+their notes in one separate notice. The choice survives retries and crossing the
+ten-minute boundary during notification. Error and owner-item notices are unchanged.
+The VM verification/deployment,
 T-144 owner gate and cron installation are outside this repository change.
 
 ## Closure and export (unit 4)
@@ -466,6 +471,10 @@ T-144 owner gate and cron installation are outside this repository change.
 `public.py` only inherits rights for unchanged bytes. Generation records under
 `docs/evidence/image-generation/` are copied from the host ledger in the main content flow and cannot collide with
 accepted figure identities. A request-based licensed image always revalidates its grant; hash-matching legacy licensed rights survive without a request record.
+An independently accepted `figure.json` also grants `authored` rights for its exact
+`output_sha256` when the non-generated, non-licensed candidate has its own editable
+source under `wiki/assets/` (including the asset itself). Insertion records the rights
+class; older accepted records without that field use the same source/hash checks.
 `figures/requests.py` and `figures/licenses.py` own the private request/license
 contracts; `flows/licensing.py` files requests through the existing tool-write
 journal before inspection. Source image hashes are distinct from the uploaded

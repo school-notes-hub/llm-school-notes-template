@@ -70,7 +70,7 @@ def terminal(task):
     return "done" if task.phase == "done" else None
 
 
-def completed(ctx, task, report, duration):
+def completed(ctx, task, report, duration, *, finishing=False):
     from . import writer
     notes = writer.merge(writer.results(task, required=False) if task.get("ranges") else [])["owner_notes"]
     notes += task.get("reader_owner_notes", []) + task.get("recheck_owner_notes", [])
@@ -80,9 +80,24 @@ def completed(ctx, task, report, duration):
     report = redact(report)
     write_json(task.dir / "report.json", report)
     receipt = terminal(task)
-    if duration > 600 and receipt:
+    # An explicit finish can also stop at --no-push's committed branch. It has
+    # no completion summary, but still delivers the writer's owner notes.
+    notice_key = receipt or ("finish" if finishing else None)
+    # Pin the choice before sending: finish and the operation wrapper may straddle
+    # ten minutes, and an interrupted delivery must retry the same notice.
+    notices = task.get("completion_notices", {})
+    choice = notices.get(notice_key)
+    if notice_key and choice is None:
+        choice = "completion" if duration > 600 and receipt else "owner_notes" if report["owner_notes"] else None
+        if choice:
+            task.update(completion_notices={**notices, notice_key: choice})
+    if choice == "completion":
         pending.send(ctx, Notice(ctx.name, f"completion:{task.run_id}:{receipt}", task.run_id, "finish", "feldolgozás",
                                  json.dumps(report, ensure_ascii=False, indent=2), "A feldolgozás összesítése."))
+    elif choice == "owner_notes":
+        pending.send(ctx, Notice(ctx.name, f"owner_notes:{task.run_id}", task.run_id,
+                                 "finish", "owner_notes", "\n\n".join(report["owner_notes"]),
+                                 "Olvasd át a kihagyott lépések indokát és a jobb javaslatot."))
     return report
 
 
@@ -116,7 +131,7 @@ def ended(ctx, kind, started, before, *, successful=True):
                   "keretállapot": read_json(ctx.cfg.state_dir / "quota.json", {}), "tokenek": _metrics(task)}
         pending.send(ctx, Notice(ctx.name, f"nightly:{task.run_id}:{terminal(task)}", task.run_id,
                                  "nightly", "éjszakai review", json.dumps(redact(report), ensure_ascii=False, indent=2), "Az éjszakai munka összesítése."))
-    elif task.get("active_seconds", 0) > 600:
+    else:
         report = read_json(task.dir / "report.json", {"mode": task.get("mode", "chat" if task.mode == "interactive" else "run")})
         completed(ctx, task, report, task.get("active_seconds", 0))
 
@@ -125,8 +140,8 @@ def at_finish(ctx, task, report):
     from .operation import TIMING
     timing = TIMING.get()
     if timing is None:
-        return report
+        return completed(ctx, task, report, task.get("active_seconds", 0), finishing=True)
     started, baseline = timing
     duration = max(task.get("active_seconds", 0), baseline.get(task.run_id, 0) + time.monotonic() - started)
     task.update(active_seconds=duration)
-    return completed(ctx, task, report, duration)
+    return completed(ctx, task, report, duration, finishing=True)

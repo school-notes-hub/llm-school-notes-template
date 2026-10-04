@@ -95,6 +95,9 @@ def test_replacement_retains_old_file_and_only_removes_its_link(repo, make_figur
 
 def test_insertion_resume_after_evidence_before_page(repo, make_figure, monkeypatch):
     brief, candidate = make_figure()
+    candidate["source"] = "wiki/assets/physics/forces.py"
+    safefs.write_text(repo, candidate["source"], "# Drawing source\n")
+    safefs.write_json(repo, ".school-notes/figures/forces/figure.json", candidate)
     judged = receipt(repo, brief, candidate)
     original = safefs.write_text
     def crash(root, rel, text, *args, **kwargs):
@@ -107,6 +110,11 @@ def test_insertion_resume_after_evidence_before_page(repo, make_figure, monkeypa
     monkeypatch.setattr(safefs, "write_text", original)
     insert.insert(repo, brief, judged, at="date")
     assert not insert.invalidated(repo)
+    record = safefs.read_json(repo, "docs/evidence/media/forces/figure.json")
+    assert record["rights"] == "authored"
+    from school_notes2.wiki import public
+    assert record["output_sha256"] == public.sha256(repo, candidate["asset"])
+    assert public.media_receipt_rights(repo)(candidate["asset"])[0] == "authored"
 
 
 def test_shared_figure_verdict_expires_when_another_use_changes(repo, make_figure):

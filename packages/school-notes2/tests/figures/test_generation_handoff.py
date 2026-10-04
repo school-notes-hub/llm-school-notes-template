@@ -85,3 +85,4 @@ def test_generation_receipt_does_not_reserve_the_commission_identity(repo, make_
     commissions.check_identity(repo, brief)
     insert.insert(repo, brief, receipt(repo, brief, candidate), at="date")
     assert public.media_receipt_rights(repo)(candidate["asset"])[0] == "generated"
+    assert safefs.read_json(repo, "docs/evidence/media/forces/figure.json")["rights"] == "generated"

@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 
 from ..state import safefs
-from ..wiki import markers
+from ..wiki import markers, rights
 from ..wiki.pages import relative
 from . import commissions, context, pending, licenses
 from .review import validate_output
@@ -43,6 +43,12 @@ def insert(repo: Path, brief: dict, receipt: dict, *, at: str) -> list[str]:
         if not grant:
             raise ValueError("licensed insertion needs current public permission")
         record.update(license_request=request, license=grant, rights="licensed")
+    elif candidate.get("asset"):
+        known = rights.media(repo)(candidate["asset"])
+        if known and known[0] == "generated":
+            record["rights"] = "generated"
+        elif rights.authored_candidate(repo, candidate):
+            record["rights"] = "authored"
     new_text = text if "mermaid" in candidate else _insert(text, page, brief, candidate, verdict, directory, repo)
     files = [f"{directory}/figure.json", VERDICTS]
     safefs.write_json(repo, files[0], record)
