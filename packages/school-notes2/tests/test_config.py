@@ -6,7 +6,7 @@ BASE = {
     "email_to": "o@example.com",
     "git": {"name": "O", "email": "o@example.com"},
     "students": {"benedek": {"repo": "git@x:a.git", "repo_key": "~/.ssh/a", "site_repo": "git@x:b.git",
-                             "site_key": "~/.ssh/b", "drive_root": "id1"}},
+                             "site_key": "~/.ssh/b", "drive_root": "id1", "grade": 9}},
     "harnesses": {"fake": {"headless": ["fake"], "interactive": ["fake"], "login_check": ["true"]}},
     "roles": {"writer": {"harness": "fake", "model": "m", "effort": "high", "timeout_s": 5400},
               "reviewer": {"harness": "fake", "model": "m", "effort": "high", "timeout_s": 600}},
@@ -31,6 +31,29 @@ def test_effort_above_high_is_refused():
 def test_unknown_keys_are_refused():
     with pytest.raises(config.ConfigError, match="unknown keys"):
         config.parse({**BASE, "limits": {"image_daily_usd": 1, "typo": 2}})
+
+
+@pytest.mark.parametrize("grade", ["missing", 0, -1, "9", 9.5, True])
+def test_learner_grade_is_required_and_positive(grade):
+    import copy
+    data = copy.deepcopy(BASE)
+    if grade == "missing":
+        del data["students"]["benedek"]["grade"]
+    else:
+        data["students"]["benedek"]["grade"] = grade
+    with pytest.raises(config.ConfigError, match=r"\[students\.benedek\]"):
+        config.parse(data)
+
+
+def test_learners_keep_the_configured_order():
+    import copy
+    data = copy.deepcopy(BASE)
+    entry = data["students"]["benedek"]
+    data["students"] = {name: {**entry, "grade": n} for n, name in
+                        enumerate(["proba", "benedek", "barna"], 7)}
+    cfg = config.parse(data)
+    assert list(cfg.students) == ["proba", "benedek", "barna"]
+    assert [cfg.student(n).grade for n in cfg.students] == [7, 8, 9]
 
 
 def test_unknown_learner():

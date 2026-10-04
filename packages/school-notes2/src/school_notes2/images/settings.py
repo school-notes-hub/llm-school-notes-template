@@ -29,9 +29,9 @@ class ImageSettings:
     script: Path              # tools/learning_image.py of the installed release
     state_root: Path          # state/images/ (one ledger folder per school year below)
     plans_root: Path          # state/image-plans/ (kept plans, per learner below)
-    lock_path: Path           # state/images.lock, shared by both learners
+    lock_path: Path           # state/images.lock, shared by all learners
     key_file: Path            # secrets/openrouter.key
-    max_total_usd: Decimal    # school-year safety cap over both learners
+    max_total_usd: Decimal    # school-year safety cap over all learners
     learner_max_usd: Decimal  # school-year safety cap per learner
     daily_usd: Decimal = Decimal("1")
     monthly_usd: Decimal = Decimal("10")

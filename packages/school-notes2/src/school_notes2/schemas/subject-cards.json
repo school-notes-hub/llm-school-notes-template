@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "subject-cards.json: the template's shared subject cards, one per subject (plan 4.3)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["cards"],
+  "properties": {
+    "cards": {"type": "object",
+              "propertyNames": {"pattern": "^[a-z0-9-]+$"},
+              "additionalProperties": {"$ref": "urn:school-notes:subject-card"}}
+  }
+}

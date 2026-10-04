@@ -144,7 +144,7 @@ def test_real_fix_call_assignment_and_targeted_recheck(setup, monkeypatch, statu
     monkeypatch.setattr(steps, "check_changed", lambda *a, **kw: None)
     monkeypatch.setattr(steps, "order_step", lambda *a: [])
     def fix(ctx, child, k, role, harness, handlers):
-        supplied = fetch.fetch_json(child, k)
+        supplied = fetch.fetch_json(child, k, grade=9)
         assert supplied["mode"] == "fix" and supplied["pages"] == []
         item = supplied["open_review_items"][0]
         assert item["file"] == task.get("inspection_report") and item["chain"] == 0

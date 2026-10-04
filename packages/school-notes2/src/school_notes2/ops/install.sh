@@ -1,7 +1,8 @@
 #!/bin/bash
 # Install or roll back a School Notes v2 release in one step (plan 10.1).
 #   ops/install.sh <tag>
-# Waits for both learners' locks, unpacks the tag under releases/<tag>/, `uv sync --frozen`,
+# Waits for every configured learner's lock (the [students.<name>] tables of config.toml,
+# or SN_LEARNERS), unpacks the tag under releases/<tag>/, `uv sync --frozen`,
 # builds localhost/school-notes-agent:<tag>, then switches the `current` symlink atomically.
 # An already installed tag (rollback) is neither unpacked nor rebuilt.
 set -euo pipefail
@@ -9,12 +10,31 @@ set -euo pipefail
 TAG="${1:?usage: install.sh <tag>}"
 ROOT="${SN_ROOT:-/srv/school-notes}"
 SOURCE="${SN_TEMPLATE:-$ROOT/template}"     # a clone of the template repository
-LEARNERS="${SN_LEARNERS:-benedek barna}"
+CONFIG="${SN_CONFIG:-$HOME/.config/school-notes/config.toml}"
 RELEASE="$ROOT/releases/$TAG"
 PKG="packages/school-notes2"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 
 [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "tag must look like v2.0.0" >&2; exit 2; }
+
+configured_learners() {
+    # The learners in the configuration's table order; never a built-in list of names.
+    python3 - "$CONFIG" <<'PY'
+import re, sys, tomllib
+try:
+    with open(sys.argv[1], "rb") as stream:
+        names = list(tomllib.load(stream).get("students", {}))
+except (OSError, tomllib.TOMLDecodeError) as exc:
+    sys.exit(f"cannot read the configuration {sys.argv[1]}: {exc}")
+bad = [n for n in names if not re.fullmatch(r"[a-z0-9-]+", n)]
+if bad:
+    sys.exit(f"learner names must be lowercase ascii: {bad}")
+print(" ".join(names))
+PY
+}
+
+LEARNERS="${SN_LEARNERS:-$(configured_learners)}"
+[[ -n "${LEARNERS// /}" ]] || { echo "no learner configured ([students.<name>] in $CONFIG)" >&2; exit 2; }
 
 LOCK_FDS=()
 

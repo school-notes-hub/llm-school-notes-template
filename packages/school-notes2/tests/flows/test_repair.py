@@ -11,14 +11,14 @@ from school_notes2.state.errors import BadWork
 from school_notes2.state.files import read_json, write_json
 from school_notes2.wiki import frontmatter
 from tests.flows.test_repair_queue import page
-from tests.sources.test_cards import CARD
+from tests.sources.test_cards import CARD, LEARNERS, shared
 
 
 def context(tmp_path, log, monkeypatch):
     repo = tmp_path / "repo"
     repo.mkdir()
     safefs.write_text(repo, ".git", "gitdir: unused\n")
-    safefs.write_json(repo, "tools/subjects.json", {"subjects": {"m": {"card": CARD}}})
+    shared(repo, {"m": CARD})
     topic = page(repo, "a")
     def git(*args, **kwargs):
         if args[0] == "ls-tree":
@@ -40,7 +40,7 @@ def context(tmp_path, log, monkeypatch):
     return ctx, topic, mailed
 
 
-@pytest.mark.parametrize("student", ["benedek", "barna"])
+@pytest.mark.parametrize("student", LEARNERS)
 def test_repair_prepare_restart_snapshots_card_without_drive(tmp_path, log, monkeypatch, student):
     ctx, topic, _ = context(tmp_path, log, monkeypatch)
     ctx.name = student
@@ -52,13 +52,13 @@ def test_repair_prepare_restart_snapshots_card_without_drive(tmp_path, log, monk
         repair.prepare(ctx, task)
     task = phase.load(task.dir)
     repair.prepare(ctx, task)
-    inp = fetch.fetch_json(task, 1)
+    inp = fetch.fetch_json(task, 1, grade=11)
     assert inp["mode"] == "repair" and inp["packages"] == inp["pages"] == []
     assert inp["repair_targets"][0]["page"] == topic
     assert inp["card"] == CARD
     assert task.get("no_push")
-    safefs.write_json(ctx.notes_path, "tools/subjects.json", {"subjects": {}})
-    assert fetch.fetch_json(phase.load(task.dir), 1) == inp
+    shared(ctx.notes_path, {})
+    assert fetch.fetch_json(phase.load(task.dir), 1, grade=11) == inp
     assert handlers.generate(ctx, task, "test", None)["state"] == "disabled"
     assert not run._may_run(ctx, task)
 

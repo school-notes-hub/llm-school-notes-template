@@ -129,6 +129,11 @@ def test_hourly_run_end_to_end(world):
     note = show(origin, "main:wiki/proba/2026-10-02-teszt-jegyzet.md")
     assert "type: lesson-notes" in note and "content_sha256" in note and "drive_folder: Óra 1" in note
     assert "grade: 9" in note
+    # The configured school year reaches the writer: fetch.json and the prompt's yardstick.
+    work = ctx.notes_path
+    assert json.loads(work.with_name(f"{work.name}-fetch-learner.json").read_text()) == {"grade": 9}
+    prompt = work.with_name(f"{work.name}-writer-prompt.txt").read_text()
+    assert "Az olvasó a 9. évfolyamos tanuló" in prompt and "{grade}" not in prompt
     index = show(origin, "main:wiki/proba/index.md")
     assert "Teszt óra" in index
     listing = subprocess.run(["git", f"--git-dir={origin}", "ls-tree", "-r", "--name-only", "main",

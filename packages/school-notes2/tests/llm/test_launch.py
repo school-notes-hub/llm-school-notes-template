@@ -21,7 +21,7 @@ def make_run(fake, role, harness, tmp_path, **kw):
                           role=role, harness=harness, image="localhost/school-notes-agent:v2.0.0",
                           mounts=launch.Mounts(work=work, sessdir=tmp_path / "sess"),
                           output_host=work / ".school-notes" / "result.json", schema="result",
-                          task_dir=tmp_path / "task", **kw)
+                          task_dir=tmp_path / "task", grade=9, **kw)
 
 
 def go(run, log):
@@ -53,7 +53,7 @@ def test_success_argv_prompt_and_transcript(fake, role, harness, tmp_path, log, 
     assert argv[-5:] == ["codex", "-m", "gpt-6-astra", "exec", "-"]
     env = [argv[i + 1] for i, a in enumerate(argv) if a == "-e"]
     assert {e.split("=")[0] for e in env} == {"SN_RUN_ID", "SN_ALLOWED_DOMAINS", "SN_MODEL_PROBE"}
-    assert fake["FAKE_STDIN"].read_text() == launch.prompt("writer")
+    assert fake["FAKE_STDIN"].read_text() == launch.prompt("writer", grade=9)
     mode = stat.S_IMODE(os.stat(outcome.transcript).st_mode)
     assert mode == 0o600
     assert "rm -f --ignore school-notes-benedek" in fake["FAKE_LOG"].read_text()
@@ -91,7 +91,8 @@ def test_stdout_mode_reviewer(fake, role, tmp_path, log, monkeypatch):
                          harness=harness, image="img",
                          mounts=launch.Mounts(work=fake["FAKE_WORK"], work_readonly=True,
                                               in_dir=tmp_path / "in", out_dir=out),
-                         output_host=out / "review.json", schema="review", task_dir=tmp_path / "t")
+                         output_host=out / "review.json", schema="review", task_dir=tmp_path / "t",
+                         grade=11)
     outcome = launch.run_headless(run, log=log, podman=str(FAKE), snapshot=lambda: 0)
     assert outcome.output == {"verdict": "ok", "findings": []}
     argv = argv_lines(fake)
@@ -147,7 +148,7 @@ def test_prompt_as_argument_when_the_template_wants_no_stdin(fake, role, harness
     set_mode(monkeypatch, "ok")
     argless = dataclasses.replace(harness, prompt_stdin=False)
     go(make_run(fake, role, argless, tmp_path), log)
-    first_line = launch.prompt("writer").splitlines()[0]
+    first_line = launch.prompt("writer", grade=9).splitlines()[0]
     assert first_line in argv_lines(fake)
     assert fake["FAKE_STDIN"].read_text() == ""
 

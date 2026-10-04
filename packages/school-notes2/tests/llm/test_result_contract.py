@@ -28,7 +28,7 @@ ADDITIONS = {
 @pytest.mark.parametrize("role", ["writer", "fix"])
 def test_all_output_fields_prescribed_by_prompt_exist_in_schema(role):
     schema = json.loads(files("school_notes2.schemas").joinpath("result.json").read_text())
-    contract = prompt(role).split("a futás szerződése: ")[1].split(". A pontos mezőket")[0]
+    contract = prompt(role, grade=9).split("a futás szerződése: ")[1].split(". A pontos mezőket")[0]
     fields = {s.split(":")[0] for s in re.findall(r"`([^`]+)`", contract)}
     assert fields == set(schema["properties"])
     run = (ROOT / "instructions/school-notes-run.md").read_text()

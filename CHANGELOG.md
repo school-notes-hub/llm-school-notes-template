@@ -4,6 +4,13 @@ Newest first. Each entry says what changed in the shared files and what an exist
 
 ## 1.17.0 - 2026-10-04
 
+### Learner-neutral template
+
+- Subject cards move to the shared `subject-cards.json` in the template root (one card per subject, `role` and `style` only, generally worded, the same for every learner); it starts empty. The `conventions` field, the learner `tools/subjects.json` `card`, the owner-session card edit/preload exception of the path guard and `examples/subject-card.json` are removed. Taught notation is read from the notebook. A missing card does not stop a run; `school-notes status` lists `hiányzó kártya: <subject>` per learner.
+- `fetch.json` carries `learner.grade`; `grade` is required in each `[students.<name>]` table. The prompts' reader yardstick is the learner's school year, filled by the tool; the rule modules use the youngest main reader named in PROFILE *Audience*. The owner's principle sentence is unchanged.
+- Learner-specific examples in the prompts are generalized; the owner's open-question rule names roles instead of learners. The reader prompt gets the complete owner yardstick. The *undated lesson* wording uses placeholders instead of dates. `install.sh` takes the learner list from the configuration; the crontab example names no learner.
+- Migration (controller-owned): synchronize the shared set (new `subject-cards.json`, removed `examples/subject-card.json`, changed rules and run module) through Template updates; replace the *undated lesson* Wording row of each learner PROFILE with the placeholder form; check that every VM `[students.<name>]` has `grade` before deploying the package.
+
 ### Subject calls and repair (unit 1d)
 
 - Call the writer sequentially per subject, using pinned role cards and stable source IDs. Only one oversized package gets D36 ranges. Validate each call before saving its resumable result; use complete run data for merged checks and metadata. The default writer timeout and example are 7200 s; explicit configured overrides remain effective.

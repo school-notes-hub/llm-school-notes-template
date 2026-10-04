@@ -126,9 +126,9 @@ def test_unit_routing_first_lesson_topic_and_source_only(setup):
 
 def test_reader_prompts_include_verbatim_plan_sentences():
     from school_notes2.llm.argv import prompt
-    assert "Olvasd végig az egész oldalt úgy, mint a 14 éves olvasó, aki a forrást nem látja. Gépi listát most nem kapsz: mindent magad találj meg – a forrásról szóló mondatot diaszámmal vagy anélkül is." in prompt("reader-1")
-    assert "Itt a gépi találatok. Mindegyikre egy ítélet és egy mondat indok; ha már jelezted, írd oda az F-azonosítót. A lista nem teljes, és amit az előbb találtál, az akkor is érvényes, ha itt nincs találat." in prompt("reader-2")
-    assert "Ez nem teljes review. Tételenként ítélj: a javítás megoldotta-e (`ok`/`not-ok`); a vitatott tételnél fogadd el az indokot (`accept`), vagy egyszer, röviden válaszolj (`keep`). Az új találatokról ítélj." in prompt("recheck")
+    assert "Olvasd végig az egész oldalt úgy, mint a 9. évfolyamos olvasó, aki a forrást nem látja. Gépi listát most nem kapsz: mindent magad találj meg – a forrásról szóló mondatot diaszámmal vagy anélkül is." in prompt("reader-1", grade=9)
+    assert "Itt a gépi találatok. Mindegyikre egy ítélet és egy mondat indok; ha már jelezted, írd oda az F-azonosítót. A lista nem teljes, és amit az előbb találtál, az akkor is érvényes, ha itt nincs találat." in prompt("reader-2", grade=9)
+    assert "Ez nem teljes review. Tételenként ítélj: a javítás megoldotta-e (`ok`/`not-ok`); a vitatott tételnél fogadd el az indokot (`accept`), vagy egyszer, röviden válaszolj (`keep`). Az új találatokról ítélj." in prompt("recheck", grade=9)
 
 
 def test_mermaid_candidate_is_rendered_in_reader_view(setup):

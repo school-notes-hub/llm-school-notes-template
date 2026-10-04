@@ -57,17 +57,23 @@ def api_domain(harness: Harness, allowed: tuple[str, ...]) -> str:
     return HARNESS_API.get(family(harness), allowed[0])
 
 
-def prompt(role_name: str, output_mode: str = "file") -> str:
-    """The fixed prompt of a role, byte-identical on every call (K12)."""
+def prompt(role_name: str, output_mode: str = "file", *, grade: int) -> str:
+    """The fixed prompt of a role, byte-identical on every call of one learner (K12).
+
+    `grade` is the learner's configured school year: the readers' yardstick in the prompt
+    sentences comes from it, never from a fixed age.
+    """
     if role_name not in (*ROLES, "fix", "figure-review", "reader-1", "reader-2", "recheck"):
         raise ValueError(f"unknown prompt {role_name!r}")
+    if type(grade) is not int or grade < 1:
+        raise ValueError(f"grade must be a positive integer, not {grade!r}")
     name = role_name
     text = resources.files(__package__).joinpath("prompts", f"{name}.txt").read_text("utf-8")
     instruction = OUTPUT_INSTRUCTION[output_mode]
     if role_name in ("figure-review", "reader-1", "reader-2", "recheck"):
         instruction = ("A választ a `/out/review.json` fájlba írd." if output_mode == "file"
                        else "A válasz végén írd ki az egyetlen JSON-objektumot.")
-    return text.replace("{output_instruction}", instruction)
+    return text.replace("{output_instruction}", instruction).replace("{grade}", str(grade))
 
 
 def expand(template: list[str], role: Role) -> list[str]:

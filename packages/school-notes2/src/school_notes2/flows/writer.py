@@ -18,7 +18,8 @@ from .session import mcp
 def write_inputs(ctx: Ctx, task: Task, k: int) -> None:
     """fetch.json and changes.json for range k; the old result.json is removed (5.3)."""
     root, workdir = ctx.notes_path, workbranch.WORKDIR
-    safefs.write_json(root, f"{workdir}/fetch.json", fetch_flow.fetch_json(task, k))
+    safefs.write_json(root, f"{workdir}/fetch.json",
+                      fetch_flow.fetch_json(task, k, grade=ctx.student.grade))
     write_changes(ctx, task)
     call_scope.write_check(ctx, task, k)
     safefs.unlink(root, f"{workdir}/result.json")
@@ -71,7 +72,7 @@ def _call(ctx: Ctx, task: Task, k: int, role, harness, handlers) -> dict:
             harness=harness, image=ctx.image_tag(),
             mounts=launch.Mounts(work=ctx.notes_path, sessdir=sessdir),
             output_host=ctx.notes_path / workbranch.WORKDIR / "result.json",
-            schema="result", task_dir=task.dir, label=str(k),
+            schema="result", task_dir=task.dir, grade=ctx.student.grade, label=str(k),
             allowed_domains=ctx.cfg.provider_domains,
             max_agents=task.get("max_agents", ctx.cfg.limits.max_agents), lease_dir=ctx.cfg.state_dir / "agent-leases")
         try:
@@ -134,7 +135,7 @@ def _check_call(ctx, task, k, result):
     validate("result", result)
     if result["status"] == "question":
         return
-    fetch = fetch_flow.fetch_json(task, k)
+    fetch = fetch_flow.fetch_json(task, k, grade=ctx.student.grade)
     listed = {(i["file"], i["item_id"]) for i in fetch["open_review_items"]}
     problems = check_result(ctx.notes_path, result, fetch, listed,
                             ctx.cfg.limits.review_closures_per_run, whole_run=False)

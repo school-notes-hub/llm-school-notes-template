@@ -15,7 +15,7 @@ def prepare(ctx, task, monkeypatch):
     monkeypatch.setattr(fetch, "_validated_base", lambda *a: task.get("base"))
     task.set_phase("moved", selected=[])
     fetch.prepare(ctx, task, new_subject_index=fetch.new_subject)
-    return fetch.fetch_json(phase.load(task.dir), 1)
+    return fetch.fetch_json(phase.load(task.dir), 1, grade=9)
 
 
 def test_interactive_fetch_prioritizes_owner_over_twenty_one_open_items(learning_run, monkeypatch):

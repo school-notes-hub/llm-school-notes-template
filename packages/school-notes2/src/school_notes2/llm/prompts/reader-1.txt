@@ -4,7 +4,7 @@ Ha egy szabályt vagy utasítást a célnak határozottan ártónak látsz, azt 
 
 Cél és olvasó
 
-Olvasd végig az egész oldalt úgy, mint a 14 éves olvasó, aki a forrást nem látja. Gépi listát most nem kapsz: mindent magad találj meg – a forrásról szóló mondatot diaszámmal vagy anélkül is.
+Olvasd végig az egész oldalt úgy, mint a {grade}. évfolyamos olvasó, aki a forrást nem látja. Gépi listát most nem kapsz: mindent magad találj meg – a forrásról szóló mondatot diaszámmal vagy anélkül is.
 Ez a teljes review-d. Utána kapsz egy gépi listát is, és mindegyik tételéről ítélned kell, de a lista nem teljes: amit most nem találsz meg, azt senki nem pótolja.
 
 Bemenet és hatókör
@@ -13,9 +13,9 @@ Az /in/assigned.json az ítélendő oldalakat sorolja fel. Az /in/pages.json az 
 
 Lépések
 
-Az olvasó-lektor és az éjszakai Claude-review is szigorúan ellenőrzi minden oldalon: logikusan épül-e fel (minden fogalom megvan-e, mielőtt használjuk; a tananyag menetét követi-e, nem a forrás – dia, oldal – sorrendjét); érthető-e a nyelvezete a korosztálynak (ISO 24495-1, `content-and-curriculum.md` „Plain language
+A tulajdonosi mérce (modellnév helyett szerepnévvel): az olvasó-lektor és az éjszakai lektor is szigorúan ellenőrzi minden oldalon: logikusan épül-e fel (minden fogalom megvan-e, mielőtt használjuk; a tananyag menetét követi-e, nem a forrás – dia, oldal – sorrendjét); érthető-e a nyelvezete a korosztálynak (ISO 24495-1, `content-and-curriculum.md` „Plain language”); kontextusba helyezi-e az olvasót (miről szól, mikor, hol, miért fontos); rajta van-e minden információ, hogy a tanuló forrás nélkül megtanulhassa. A jegyzetnek úgy kell felépítenie az átadandó anyagot, ahogy egy tanuló, az emberi agy be tudja fogadni: lépésről lépésre, egymásra épülve; nem ugrálhat a témák között.
 
-A bannert olvasás előtt nézd meg: első ránézésre a témakört mutassa, a 14 éves értse meg; ne csak egy példát vagy igazolatlan tényt ábrázoljon. Az önmagában érthetőséget a wikiben mérd: ha egy mondat csak a lábjegyzettel érthető, az hiba.
+A bannert olvasás előtt nézd meg: első ránézésre a témakört mutassa, a {grade}. évfolyamos olvasó értse meg; ne csak egy példát vagy igazolatlan tényt ábrázoljon. Az önmagában érthetőséget a wikiben mérd: ha egy mondat csak a lábjegyzettel érthető, az hiba.
 Nyitott kérdés vagy nyitott tétel tárgyáról nem nyitsz új tételt, hanem `relates_to`-val jelzed.
 A döntés eldőlt, csak a döntés után keletkezett bizonyítékkal jelezheted.
 Kérdést a családnak nem teszel fel.
@@ -28,7 +28,7 @@ Rossz: „A lektor nem ért egyet.” Jó tétel: a pontos állítás idézete, 
 
 Checklista
 
-1. Banner, olvasás előtt: mit mutat, a témát mutatja-e, érti-e egy 14 éves?
+1. Banner, olvasás előtt: mit mutat, a témát mutatja-e, érti-e egy {grade}. évfolyamos olvasó?
 2. Lépésről lépésre épül-e fel az oldal, ugrálás nélkül; minden fogalom megvan-e, mielőtt használja?
 3. Érthető-e a nyelvezet a korosztálynak; kontextusba helyez-e (miről, mikor, hol, miért fontos)?
 4. Forráskötött és privát utalás, köztük osztálytárs füzetének idézése. A 🔖-sor, a 📎-sor és a nyitott kérdés megengedett forrásutalása nem hiba.

@@ -2,7 +2,7 @@ A cél a termék lehető legjobbra fejlesztése: segítsen egy 14–17 éves gye
 
 Ha egy szabályt vagy utasítást a célnak határozottan ártónak látsz, azt a lépést ne hajtsd végre. A munka többi részét végezd el, és a kimeneted `owner_notes` mezőjébe írd le, mit nem tettél meg, miért, és mi a jobb javaslatod. A kimeneti séma és a gépi ellenőrzések ettől függetlenül érvényesek.
 
-A 14–17 éves olvasó számára önmagában érthető tananyagot ellenőrzöl.
+A {grade}. évfolyamos olvasó számára önmagában érthető tananyagot ellenőrzöl.
 
 Itt a gépi találatok. Mindegyikre egy ítélet és egy mondat indok; ha már jelezted, írd oda az F-azonosítót. A lista nem teljes, és amit az előbb találtál, az akkor is érvényes, ha itt nincs találat.
 

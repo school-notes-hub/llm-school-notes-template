@@ -1,5 +1,6 @@
 """`school-notes status [<learner>]` (plan 8.7): local state only, fast, no network."""
 
+import json
 import re
 from datetime import date, datetime
 from pathlib import Path
@@ -8,11 +9,12 @@ from ..git import workbranch
 from ..images import pending as image_pending
 from ..log import TZ
 from ..review import files as review_files
+from ..sources import cards
 from ..state import phase
 from ..state import safefs
 from ..state.files import read_json
 from ..wiki import drafts
-from ..wiki.pages import PageError
+from ..wiki.pages import PageError, subjects as wiki_subjects
 from .context import Ctx
 
 OPEN_QUESTIONS = re.compile(r"^#+\s.*Nyitott kérdések", re.M)
@@ -34,6 +36,7 @@ def summary(ctx: Ctx) -> dict:
         "last_review": _last(tasks, "review"),
         "wiki_open_questions": _open_questions(ctx.notes_path),
         "drafts": _drafts(ctx.notes_path),
+        "cards": _cards(ctx.notes_path),
         "source_ref_counts": next((t.get("source_ref_counts", {}) for t in reversed(tasks)
                                    if t.kind == "notes"), {}),
         "references_without_map": _unmapped(ctx.notes_path),
@@ -112,6 +115,20 @@ def _drafts(repo: Path) -> dict:
         return {"error": str(exc)}
 
 
+def _cards(repo: Path) -> dict:
+    """Subjects of the learner without a shared card (plan 4.3): shown until the template's
+    `subject-cards.json` has one and the shared files are synced. The run is not stopped."""
+    if not repo.is_dir():
+        return {"missing": []}
+    try:
+        known = set(wiki_subjects(repo))
+        if safefs.is_file(repo, "tools/subjects.json"):
+            known |= set(json.loads(safefs.read_text(repo, "tools/subjects.json")).get("subjects", {}))
+        return {"missing": cards.missing(repo, known)}
+    except (ValueError, TypeError, AttributeError, OSError, safefs.UnsafePath) as exc:
+        return {"error": str(exc)[:200]}
+
+
 def _unmapped(repo: Path) -> list[str]:
     """Big reference material without a map: the writer must not read it (5.9, B29)."""
     out = []
@@ -167,6 +184,10 @@ def render(data: dict) -> str:
         lines.append(f"14 napnál régebbi draft: {warning['file']}")
     if data.get("drafts", {}).get("error"):
         lines.append(f"draft-áttekintés: {data['drafts']['error']}")
+    for subject in data.get("cards", {}).get("missing", []):
+        lines.append(f"hiányzó kártya: {subject}")
+    if data.get("cards", {}).get("error"):
+        lines.append(f"kártyafájl: {data['cards']['error']}")
     for ref in data["references_without_map"]:
         lines.append(f"térkép nélkül, felvétel szükséges: {ref}")
     lines.append(f"pack: {data['pack_mb']} MiB; napló: {data['log']}")

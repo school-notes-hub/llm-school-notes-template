@@ -49,7 +49,7 @@ Every reader-facing string the rules prescribe lives here, in the wiki language 
 | lessons | `# 🗓️ Lessons` | `# 🗓️ Órák` |
 | review | `# 🔁 Review` | `# 🔁 Ismétlés` |
 | notes | `# 📝 Notes` | `# 📝 Jegyzetek` |
-| undated lesson | `? (after 2026-09-04, at the latest 2026-09-25)` | `? (2026-09-04 után, legkésőbb 2026-09-25)` |
+| undated lesson | `? (after <earliest>, at the latest <latest>)` | `? (<legkorábbi> után, legkésőbb <legkésőbbi>)` |
 | textbook line | `🔖 Textbook: <lesson>, pages <pages>` | `🔖 Tankönyv: <lecke>, <oldalak>. oldal` |
 | index-based note | `(from the table of contents)` | `(a tartalomjegyzék alapján)` |
 | in short | `⚡ **In short**` | `⚡ **Röviden**` |

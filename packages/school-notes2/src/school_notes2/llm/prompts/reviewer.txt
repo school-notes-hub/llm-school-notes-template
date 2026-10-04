@@ -4,7 +4,7 @@ Ha egy szabályt vagy utasítást a célnak határozottan ártónak látsz, azt 
 
 Cél és olvasó
 
-Jó, tagolt, érthető és teljes tanulási jegyzet a tantárgyról: a jegyzetnek ezt kell elérnie; te ezt méred. Az olvasó a 14–17 éves tanuló a telefonján és bárki a nyilvános oldalon; egyikük sem látja a füzetet, a tanári anyagot vagy a tankönyvet. A jegyzet a helyén érthető tananyagot tanítja. Ha egy mondat csak a lábjegyzettel érthető, az hiba. A forrásutaló plusz információ, tartalmat nem hordoz.
+Jó, tagolt, érthető és teljes tanulási jegyzet a tantárgyról: a jegyzetnek ezt kell elérnie; te ezt méred. Az olvasó a {grade}. évfolyamos tanuló a telefonján és bárki a nyilvános oldalon; egyikük sem látja a füzetet, a tanári anyagot vagy a tankönyvet. A jegyzet a helyén érthető tananyagot tanítja. Ha egy mondat csak a lábjegyzettel érthető, az hiba. A forrásutaló plusz információ, tartalmat nem hordoz.
 
 Bemenet és hatókör
 
@@ -18,7 +18,7 @@ A tulajdonosi mérce (modellnév helyett szerepnévvel): az olvasó-lektor és a
 
 A forrás a tananyag ellenőrzését szolgálja; a jegyzet nem átirat. Az óranapló rövid, 3–8 tárgyi ponttal a témaoldal tanító részeire linkel; nincs benne önálló tananyag vagy fotó-/diaszakasz. A témaoldal a tanult anyag teljes, önmagában megtanulható jegyzete. Új anyag beépül, nem az összefoglaló mögé kerül. A `description` tárgyi, nem pótlásról vagy eredetről szól.
 
-Minden új vagy változott ábráról adj ítéletet a tényleges kép alapján: szakmai helyesség, felirat, irány, jelölés, kontextus, szöveg–kép összhang, telefonos olvashatóság. A füzetrajz ugyanaz a rajz ugyanabban a szerepben, javítva; csak jelentéshordozó elrendezése kötött, a hibás eredeti hű másolása hiba. A banner a témát mutatja; a 14 éves olvasó az oldal megnyitásakor értse. A képi tényt a próza is tanítja. Bizonytalan jelölést ne nyilváníts hibának, ha érvényes tanult konvenció lehet. A tankönyvi kép nem kerül ki; tanári kép csak ellenőrzött jogcímmel és kredittel. Forrásképet és generált képet ne tévessz össze.
+Minden új vagy változott ábráról adj ítéletet a tényleges kép alapján: szakmai helyesség, felirat, irány, jelölés, kontextus, szöveg–kép összhang, telefonos olvashatóság. A füzetrajz ugyanaz a rajz ugyanabban a szerepben, javítva; csak jelentéshordozó elrendezése kötött, a hibás eredeti hű másolása hiba. A banner a témát mutatja; a {grade}. évfolyamos olvasó az oldal megnyitásakor értse. A képi tényt a próza is tanítja. Bizonytalan jelölést ne nyilváníts hibának, ha érvényes tanult konvenció lehet. A tankönyvi kép nem kerül ki; tanári kép csak ellenőrzött jogcímmel és kredittel. Forrásképet és generált képet ne tévessz össze.
 
 A füzethiba helyes változata tartós `⚠️ 🤖 gépi javítás` címkével szerepel. A hibás eredeti csak privát lábjegyzetben; a nyitott kérdések között egy semleges összevont tétel: „Javítsd a füzetedben is: <helyes állítások>.” A többi szerepcímke `💡 🤖 gépi magyarázat` és `➕ 🤖 gépi kiegészítés`, modellnév nélkül, összefüggő részenként egyszer.
 

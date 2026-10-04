@@ -24,7 +24,7 @@ def make_run(tmp_path):
                           role=Role("claude-review", "configured-reviewer", "high", 5400),
                           harness=Harness("claude-review", [], [], []), image="local",
                           mounts=launch.Mounts(), output_host=tmp_path / "unused",
-                          schema="review", task_dir=tmp_path / "task")
+                          schema="review", task_dir=tmp_path / "task", grade=11)
 
 
 def fake_render(kind, data, fid):
@@ -170,14 +170,15 @@ def test_format_retry_contains_error_and_can_succeed(repo, make_figure, tmp_path
 
 
 def test_figure_prompt_contract():
-    text = launch.prompt("figure-review")
+    text = launch.prompt("figure-review", grade=11)
     assert text.startswith("A cél a termék lehető legjobbra fejlesztése:")
     assert "Számold újra a számokat és irányokat a forrásból" in text
     assert "A gépi jelentés (betűméret, számegyezés, minta) nem jelöli ki, mit nézz:" in text
-    assert "Novella-oldal hegedűje és cirkusza" in text
+    assert "egy műfajt tanító oldalon a példaként elemzett mű egyik motívuma" in text
+    assert "A 11. évfolyamos tanulónak az ábrából" in text
     assert "8. Nem másolat-e?" in text
     assert "/out/review.json" in text
-    assert "A válasz végén írd ki" in launch.prompt("figure-review", "stdout")
+    assert "A válasz végén írd ki" in launch.prompt("figure-review", "stdout", grade=11)
 
 
 def test_all_shared_figure_uses_are_review_input(repo, make_figure, tmp_path):

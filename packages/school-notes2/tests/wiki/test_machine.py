@@ -56,17 +56,15 @@ def test_skeleton_is_a_valid_empty_index(repo):
     assert machine.create_subject(repo, "fizika", "Fizika", "x") is None
 
 
-def test_preloaded_card_gets_only_missing_display_fields(repo):
-    from tests.sources.test_cards import CARD
+def test_existing_subject_settings_get_only_missing_display_fields(repo):
     path = repo / "tools/subjects.json"
     data = json.loads(path.read_text())
-    data["subjects"]["statika"] = {"name": "Statika", "card": CARD, "dark": "#336699"}
+    data["subjects"]["statika"] = {"name": "Statika", "dark": "#336699"}
     path.write_text(json.dumps(data))
     new = [{"subject": "statika", "emoji": "📐", "color": "#000000"}]
     assert machine.add_subjects(repo, new, {"statika": "más név"})
     entry = json.loads(path.read_text())["subjects"]["statika"]
-    assert entry == {"name": "Statika", "card": CARD, "emoji": "📐", "dark": "#336699",
-                     "light": "#d6e0eb"}
+    assert entry == {"name": "Statika", "emoji": "📐", "dark": "#336699", "light": "#d6e0eb"}
     before = path.read_bytes()
     assert not machine.add_subjects(repo, new, {})
     assert path.read_bytes() == before

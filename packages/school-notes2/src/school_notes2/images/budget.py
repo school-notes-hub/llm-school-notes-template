@@ -34,7 +34,7 @@ def attempt_cost(attempt: dict) -> Decimal:
 
 
 def spent_on(ledger: dict, day: date) -> Decimal:
-    """Spending of a Budapest calendar day across both learners."""
+    """Spending of a Budapest calendar day across all learners."""
     total = Decimal(0)
     for _, attempt in attempts(ledger):
         started = datetime.fromisoformat(attempt["started_at"]).astimezone(TZ).date()
@@ -44,7 +44,7 @@ def spent_on(ledger: dict, day: date) -> Decimal:
 
 
 def spent_in_month(ledger: dict, day: date) -> Decimal:
-    """Spending of the Budapest calendar month of `day` across both learners."""
+    """Spending of the Budapest calendar month of `day` across all learners."""
     total = Decimal(0)
     for _, attempt in attempts(ledger):
         started = datetime.fromisoformat(attempt["started_at"]).astimezone(TZ).date()
@@ -72,7 +72,7 @@ def unknown_calls(ledger: dict) -> list[dict]:
 
 @contextmanager
 def images_lock(path: Path, timeout_s: float, poll_s: float = 1.0):
-    """Blocking flock with timeout on state/images.lock (both learners share it)."""
+    """Blocking flock with timeout on state/images.lock (all learners share it)."""
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
     deadline = time.monotonic() + timeout_s

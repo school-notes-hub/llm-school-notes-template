@@ -14,7 +14,6 @@ from typing import Callable
 import yaml
 
 from ..state import safefs
-from ..sources import cards
 from . import decisions, frontmatter, markers
 from .machine import machine_keys
 
@@ -108,10 +107,6 @@ def check_change(change: Change, g: GuardInput) -> list[Violation]:
             return [Violation(path, "cannot compare decisions: invalid frontmatter", False)]
     if path in g.conflict_files:
         return []        # 6.7: the owner resolved this file in the session, whatever it holds
-    if path == "tools/subjects.json" and g.interactive:
-        base = g.base_content(path)
-        if base is not None and cards.only_cards_changed(base, data):
-            return []
     if path in g.tool_files:
         if _sha(data) != g.tool_files[path] and not _pending(path, _sha(data), True, g):
             return [Violation(path, "a file the tool wrote was changed afterwards", True)]

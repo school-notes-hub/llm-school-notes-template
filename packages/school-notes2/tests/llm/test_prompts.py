@@ -2,7 +2,13 @@
 
 import pytest
 
-from school_notes2.llm.argv import prompt
+from school_notes2.llm import argv
+
+ROLES = ['writer', 'fix', 'reviewer', 'figure-review', 'reader-1', 'reader-2', 'recheck']
+
+
+def prompt(role, mode='file', grade=9):
+    return argv.prompt(role, mode, grade=grade)
 
 PRINCIPLE = (
     'A cél a termék lehető legjobbra fejlesztése: segítsen egy 14–17 éves gyereknek tanulni, '
@@ -88,7 +94,7 @@ def test_prompts_use_role_names(role):
 
 def test_fix_restores_required_question_and_drawing_clauses():
     text, writer = prompt('fix'), prompt('writer')
-    owner_question = next(line for line in writer.splitlines() if line.startswith('A tulajdonos szabálya:'))
+    owner_question = next(line for line in writer.splitlines() if line.startswith('A tulajdonos szabálya'))
     assert owner_question in text
     assert 'Javítsd a füzetedben is: 1 kg = 1000 g.' in text
     drawing = next(line for line in writer.splitlines() if line.startswith('Füzetrajz:'))
@@ -104,3 +110,32 @@ def test_repair_uses_writer_with_verbatim_preservation_clause():
     assert 'Minden helyes állítást, magyarázatot, példát és ⚠️ javítást őrizz meg. Ezek jelölése marad. Csak a formát változtasd: a forrást leíró mondatból tárgyi állítás legyen. Ami már javítva van, azt ne javítsd újra.' in text
     assert '`mode: repair`' in text and '`repair_targets`' in text
     assert 'a szövegük külön menetben készül' in text
+
+
+@pytest.mark.parametrize('role', ROLES)
+def test_reader_yardstick_is_the_learners_grade(role):
+    """G-4: no fixed reader age; the tool fills the configured school year."""
+    ninth, twelfth = prompt(role, grade=9), prompt(role, grade=12)
+    assert '{grade}' not in ninth and '9. évfolyamos' in ninth
+    assert ninth.replace('9. évfolyamos', '<g>') == twelfth.replace('12. évfolyamos', '<g>')
+    assert ninth == prompt(role, grade=9)
+
+
+@pytest.mark.parametrize('grade', [0, -3, None, '9', True])
+def test_prompt_needs_a_positive_grade(grade):
+    with pytest.raises(ValueError):
+        argv.prompt('writer', grade=grade)
+
+
+def test_owner_question_rule_names_roles_not_learners():
+    lines = {role: next(line.strip() for line in prompt(role).splitlines()
+                        if line.strip().startswith('A tulajdonos szabálya')) for role in ('writer', 'fix')}
+    assert lines['writer'] == lines['fix']
+    assert lines['writer'].startswith('A tulajdonos szabálya (tulajdonosi szöveg, tanulónév helyett szereppel): „maradnak, minden oldalon. Bármi lehet benne, amit a tanuló vagy a tulajdonos meg tud válaszolni')
+
+
+def test_reader_gets_the_complete_owner_yardstick():
+    reviewer = next(line for line in prompt('reviewer').splitlines()
+                    if line.startswith('A tulajdonosi mérce'))
+    assert reviewer in prompt('reader-1')
+    assert STRUCTURE in prompt('reader-1')

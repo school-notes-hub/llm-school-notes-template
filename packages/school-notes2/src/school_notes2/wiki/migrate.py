@@ -85,7 +85,7 @@ def parse_date(cell: str) -> dict:
 
 
 def parse_row(row: str) -> tuple[dict, str] | None:
-    """A lessons-table row (4 columns, or Barna's 3) → (lesson, lesson-notes file)."""
+    """A lessons-table row (4 columns, or the legacy 3-column form) → (lesson, lesson-notes file)."""
     cells = [c.strip() for c in row.strip().strip("|").split(" | ")]
     if len(cells) == 4:
         date, title, note_cell, topic_cell = cells

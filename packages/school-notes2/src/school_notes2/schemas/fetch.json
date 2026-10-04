@@ -2,12 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "fetch.json (plan 4.4)",
   "type": "object",
-  "required": ["student", "run_id", "mode", "packages", "pages", "range", "open_review_items",
+  "required": ["student", "learner", "run_id", "mode", "packages", "pages", "range", "open_review_items",
                "pending_images"],
   "additionalProperties": false,
   "properties": {
     "pending_figures": {"type": "array", "items": {"type": "object"}},
     "student": {"type": "string"},
+    "learner": {"type": "object", "additionalProperties": false, "required": ["grade"],
+                "properties": {"grade": {"type": "integer", "minimum": 1}}},
     "run_id": {"type": "string"},
     "mode": {"enum": ["cron", "interactive", "repair", "fix"]},
     "packages": {"type": "array", "items": {

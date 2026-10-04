@@ -1,63 +1,54 @@
-"""Subject cards have one canonical home: tools/subjects.json (plan 4.3).
+"""Subject cards have one canonical home: the template's shared `subject-cards.json` (plan 4.3).
 
-A missing card stays absent; the tool never invents a role or taught conventions.
+One card per subject, the same for every learner: a shared file, byte-identical in each
+learner repo, edited only in the template in an interactive session. A learner's
+`tools/subjects.json` holds no card; a `card` key there has no effect. The subject's place
+(school year, school type, training) comes from the learner's configuration and PROFILE.md.
+A missing card stays absent: the run goes on without it and `status` lists the subject.
 Preparation snapshots a validated card in each package for stable resume inputs.
 """
 
 import json
-import re
 from pathlib import Path
 
-from ..schemas import validate
+from ..schemas import SchemaError, validate
 from ..state import safefs
 from ..state.errors import Prerequisite
 
+PATH = "subject-cards.json"
+
+
+def _parse(content: bytes | str) -> dict:
+    data = json.loads(content)
+    validate("subject-cards", data)
+    return data["cards"]
+
+
+def _all(repo: Path) -> dict:
+    try:
+        return _parse(safefs.read_text(repo, PATH))
+    except FileNotFoundError:
+        return {}
+
 
 def load(repo: Path, subject: str) -> dict | None:
-    try:
-        data = json.loads(safefs.read_text(repo, "tools/subjects.json"))
-    except FileNotFoundError:
+    card = _all(repo).get(subject)
+    if card is None:
         return None
-    entry = data.get("subjects", {}).get(subject, {})
-    if "card" not in entry:
-        return None
-    card = entry["card"]
-    validate("subject-card", card)
-    # Convention order is authored content, never alphabetical order.
-    return {key: card[key] for key in ("role", "conventions", "style")}
+    return {key: card[key] for key in ("role", "style")}
 
 
-def only_cards_changed(before: bytes, after: bytes) -> bool:
-    """Edit existing cards, or preload a new subject with only its name and card."""
-    try:
-        old, new = json.loads(before), json.loads(after)
-        old_subjects, new_subjects = old.get("subjects", {}), new.get("subjects", {})
-        for subject in sorted(new_subjects.keys() - old_subjects.keys()):
-            entry = new_subjects[subject]
-            if (not re.fullmatch(r"[a-z0-9-]+", subject) or set(entry) != {"name", "card"}
-                    or not isinstance(entry["name"], str) or not entry["name"].strip()):
-                return False
-            validate("subject-card", entry["card"])
-            del new_subjects[subject]
-        for data in (old, new):
-            for entry in data.get("subjects", {}).values():
-                if "card" in entry:
-                    if data is new:
-                        validate("subject-card", entry["card"])
-                    del entry["card"]
-        return old == new
-    except (ValueError, TypeError, AttributeError):
-        return False
+def missing(repo: Path, subjects) -> list[str]:
+    """The learner's subjects without a shared card, in name order (for `status`)."""
+    cards = _all(repo)
+    return sorted(s for s in set(subjects) if s not in cards)
 
 
 def preflight(content: bytes) -> None:
-    """Validate the pinned preparation config before taking any package from Drive."""
-    subject = ""
+    """Validate the pinned shared card file before taking any package from Drive."""
     try:
-        data = json.loads(content)
-        for subject, entry in sorted(data.get("subjects", {}).items()):
-            if "card" in entry:
-                validate("subject-card", entry["card"])
-    except (ValueError, TypeError, AttributeError) as exc:
-        raise Prerequisite(f"invalid subject card configuration: {subject or 'subjects'}",
-                           todo=f"javítsd a tools/subjects.json {subject} kártyáját".strip()) from exc
+        _parse(content)
+    except (ValueError, TypeError, SchemaError) as exc:
+        raise Prerequisite(f"invalid shared subject cards: {str(exc)[:200]}",
+                           todo=f"javítsd a template {PATH} fájlját, majd szinkronizáld "
+                                "a közös fájlokat a tanulói repóba") from exc

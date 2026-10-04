@@ -52,6 +52,7 @@ class RoleRun:
     output_host: Path            # where the output file appears on the host (file mode)
     schema: str                  # result | review
     task_dir: Path
+    grade: int                   # the learner's school year, filled into the prompt
     label: str = "1"             # range k, or attempt; part of the transcript name
     allowed_domains: tuple[str, ...] = DEFAULT_PROVIDER_DOMAINS
     limits: Limits = Limits()
@@ -172,7 +173,7 @@ def _headless(run, *, log, snapshot, podman):
     remove_stale(name, podman)
     run.output_host.unlink(missing_ok=True)
     before = snapshot()
-    text = prompt(run.role_name, run.harness.output)
+    text = prompt(run.role_name, run.harness.output, grade=run.grade)
     argv = podman_argv(learner=run.learner, image=run.image, run_id=run.run_id,
                        mounts=run.mounts, name=name, role=_volume_role(run.role_name),
                        allowed_domains=run.allowed_domains,

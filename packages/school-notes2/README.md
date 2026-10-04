@@ -41,18 +41,23 @@ It does every mechanical step; the LLM runs in a container and asks for mechanic
 
 ## Subject cards
 
-A subject entry in the learner's `tools/subjects.json` may contain `card` with nonempty
-`role` and `style` strings and an ordered `conventions` array (empty if no local convention
-is confirmed). `schemas/subject-card.json` is shared by configuration loading and the
-`fetch.json` contract. See [the empty-template example](../../examples/subject-card.json).
-Preparation snapshots cards in the durable package data; resume does not reload changed
-configuration. Missing cards stay absent, including newly discovered subjects. The owner's
-session may edit valid cards of existing subjects or preload an entry containing only
-`name` and `card`; cron cannot edit them or other settings. A missing subject index
-triggers creation with the first package, even for a preloaded card. The tool fills
-missing display metadata without overwriting existing values. Card validation precedes
-Drive movement. Download retries validate against a fresh base; the first move pins
-the preparation commit before its external action, also across an interrupted move.
+The template's shared `subject-cards.json` holds one card per subject, the same for every
+learner: `{"cards": {"<subject>": {"role": ..., "style": ...}}}` with nonempty strings and
+only generally worded content. It is part of `shared-files.json`, so it is byte-identical in
+every learner repo; it is edited only in the template, in an interactive session. A learner's
+`tools/subjects.json` holds no card, and a `card` key there has no effect.
+`schemas/subject-card.json` is shared by the card file and the `fetch.json` contract.
+Taught notation is never on a card: the writer reads it from the notebook. The subject's
+place comes from the configured `grade` (`fetch.json` `learner.grade`, required in the
+configuration) and the learner's PROFILE. Preparation snapshots cards in the durable package
+data; resume does not reload a changed card file. A missing card stays absent: the run goes
+on and `school-notes status` shows `hiányzó kártya: <subject>` per learner until the shared
+file has it. The card file is validated before Drive movement. Download retries validate
+against a fresh base; the first move pins the preparation commit before its external action,
+also across an interrupted move.
+
+The prompts' reader yardstick is the learner's school year: the tool fills `{grade}` from
+the configuration, as it fills `{output_instruction}`.
 
 The source-grounded repair rules and writer/fix prompts describe the target step-1/2
 contracts; their remaining flow integration is staged separately. `fix.txt` is loadable,
@@ -121,10 +126,10 @@ Source-reference patterns in `study-site/public-patterns.json` are warning-only.
 uses changed lines, including Markdown title/description, Mermaid and SVG labels, with the
 structural exceptions from repair plan 8.2. `source_refs.scan(full=True)` and task data
 `mode: repair` support the later repair entry point. No rule enters the publication gate.
-The fixed corpus is tested against both optional local learner checkouts, read-only.
+The fixed corpus is tested against the optional local learner checkouts, read-only.
 `SN_LEARNER_REPOS` may supply their paths as a colon-separated list (directories named
-`school-notes-benedek-active` and `school-notes-barna-active`); absent that variable,
-the tests search the usual sibling directories.
+`school-notes-<learner>-active`); absent that variable, the tests search the usual sibling
+directories.
 Per-file counts (before verdict suppression) appear in logs and status.
 
 MCP check returns errors first, full counts, `truncated` and the full-list path. A durable
@@ -239,16 +244,9 @@ as a local Git bundle, then a tool-only continuation commits the queue's `owner`
 remain blocked. Preparation, per-call result saving, queue replacement and the committed
 hold all have interruption/resume tests. No new phase or model is introduced.
 
-The controller's trial order (repair plan 13/1, K-6) is sequential. Steps 1–3 use
-`--no-push`; the controller (and the owner in the morning) inspects it, then `finish`
-closes it before the next step:
-
-1. Create the repair queue.
-2. Repair the polisz topic page.
-3. Repair its lesson log, after all its topic dependencies are done.
-4. Separately inspect the polisz link adjustments in the Hellász summary, already
-   made in step 2's topic-page commit. This is inspection only, with no separate
-   command or repair pass.
+The controller's trial order is sequential: create the queue, repair one topic page with
+`--no-push`, inspect, `finish`, then its lesson log after its topic dependencies are done.
+The concrete pages belong to the operations runbook.
 
 The full summary rewrite belongs to implementation step 6, when every topic in the
 chapter is done. `require_ready` stays strict; held branches never satisfy the next

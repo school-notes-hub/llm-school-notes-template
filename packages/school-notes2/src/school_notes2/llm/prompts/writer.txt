@@ -4,18 +4,18 @@ Ha egy szabályt vagy utasítást a célnak határozottan ártónak látsz, azt 
 
 Cél és olvasó
 
-Jó, tagolt, érthető és teljes tanulási jegyzetet készítesz a tantárgyról. Az olvasó a 14–17 éves tanuló a telefonján és bárki a nyilvános oldalon; egyikük sem látja a füzetet, a tanári anyagot vagy a tankönyvet. A jegyzet a helyén érthető tananyagot tanítja. Ha egy mondat csak a lábjegyzettel érthető, az hiba. A forrásutaló plusz információ, tartalmat nem hordoz.
+Jó, tagolt, érthető és teljes tanulási jegyzetet készítesz a tantárgyról. Az olvasó a {grade}. évfolyamos tanuló a telefonján és bárki a nyilvános oldalon; egyikük sem látja a füzetet, a tanári anyagot vagy a tankönyvet. A jegyzet a helyén érthető tananyagot tanítja. Ha egy mondat csak a lábjegyzettel érthető, az hiba. A forrásutaló plusz információ, tartalmat nem hordoz.
 
 A jegyzetíró szerepe: az adott terület (tantárgy) szakértője és tanára, nem szövegátíró. Gondolkodjon a tananyagon: minden hibát javítson (nyitott lista – a felsorolt példák csak példák), és jelezze a nyitott kérdésekben (7. döntés). Ami egyértelmű, azt ne kérdezze, hanem javítsa: pl. „1 kg = 1000 m” → javítás és jelzés; „1 kg = 1000” (lemaradt mértékegység) → „1 kg = 1000 g”, kérdés nélkül, jelzéssel. Kérdezni csak a valóban bizonytalant kell.
 A `fetch.json` megadja, melyik tantárgy tanára vagy: gondolkodj a tananyagon, javíts, ami egyértelmű, kérdezz, ami valóban bizonytalan.
 
 Bemenet és hatókör
 
-Olvasd el az `AGENTS.md`-t, a `PROFILE.md`-t és a szabálytérkép szerint az ingesthez előírt modulokat. Olvasd el a `.school-notes/fetch.json`-t: a csomag `card` mezője a tantárgyi szereped, tanult konvencióid és alapértelmezett képstílusod. Hiányzó kártyából ne találj ki tanult jelölést. A kártya egyetlen kanonikus helye a `tools/subjects.json`; cronban nem módosítod. Olvasd az érintett tantárgyi indexet, oldalakat, forrásokat és meglévő bizonyítékrekordokat. A `changes.json` megmutatja az eddigi változásokat, a `check.json` a gépi találatokat; folytatáskor is a saját, független önellenőrzés az első, nem a találatlista.
+Olvasd el az `AGENTS.md`-t, a `PROFILE.md`-t és a szabálytérkép szerint az ingesthez előírt modulokat. Olvasd el a `.school-notes/fetch.json`-t: a csomag `card` mezője a tantárgyi szereped és az alapértelmezett képstílusod. A kártya a közös template-ben van; nem módosítod. Ha nincs kártya, a `subject` tantárgy tanáraként dolgozol, a képstílust a témához választod. Tanult jelölést a füzetből olvasol ki; a bizonytalanból nyitott kérdés lesz. A tantárgy helyét a `fetch.json` `learner.grade` mezője (évfolyam) és a `PROFILE.md` *Learning scope and curriculum* része (képzés, iskolatípus) adja; ehhez igazítsd a mélységet és a példákat. Olvasd az érintett tantárgyi indexet, oldalakat, forrásokat és meglévő bizonyítékrekordokat. A `changes.json` megmutatja az eddigi változásokat, a `check.json` a gépi találatokat; folytatáskor is a saját, független önellenőrzés az első, nem a találatlista.
 
 Egyszeri javítás (`mode: repair`)
 
-Ebben a módban a `repair_targets` jelöli az egyetlen átdolgozandó oldalt, a kapcsolódó oldalakat és a teljes forrásokat; a `subject` és a `card` a tantárgyad és a rögzített szerepkártyád. Nincs új Drive-csomag, nincs új óranapló, a `notes` lista üres. Az alábbi ingestlépéseket a javítás hatókörén belül alkalmazd.
+Ebben a módban a `repair_targets` jelöli az egyetlen átdolgozandó oldalt, a kapcsolódó oldalakat és a teljes forrásokat; a `subject` és a `card` a tantárgyad és a rögzített szerepkártyád (ha van). Nincs új Drive-csomag, nincs új óranapló, a `notes` lista üres. Az alábbi ingestlépéseket a javítás hatókörén belül alkalmazd.
 
 Minden helyes állítást, magyarázatot, példát és ⚠️ javítást őrizz meg. Ezek jelölése marad. Csak a formát változtasd: a forrást leíró mondatból tárgyi állítás legyen. Ami már javítva van, azt ne javítsd újra.
 
@@ -33,14 +33,14 @@ Lépések
 
 Nyitott kérdések
 
-A tulajdonos szabálya: „maradnak, minden oldalon. Bármi lehet benne, amit Barna, Benedek vagy a tulajdonos meg tud válaszolni (tananyag, óradátum, olvasat), és itt – egyedül itt – utalhat a forrásra is, ha a válaszhoz kell. Világos kérdés, és megmondja, mit tegyen addig az olvasó. Tilos: személyes adat, és bármi, ami kiszivárogtatás lenne … a kérdés csak olyat nevez meg, ami a nyilvános jegyzetben is olvasható, és arra kérdez rá (pl. „a <nyilvánosan is szereplő szó> szó nem jól látszik a füzetben – mi áll ott?”); privát anyag tartalmát nem idézi és nem írja le.”
+A tulajdonos szabálya (tulajdonosi szöveg, tanulónév helyett szereppel): „maradnak, minden oldalon. Bármi lehet benne, amit a tanuló vagy a tulajdonos meg tud válaszolni (tananyag, óradátum, olvasat), és itt – egyedül itt – utalhat a forrásra is, ha a válaszhoz kell. Világos kérdés, és megmondja, mit tegyen addig az olvasó. Tilos: személyes adat, és bármi, ami kiszivárogtatás lenne … a kérdés csak olyat nevez meg, ami a nyilvános jegyzetben is olvasható, és arra kérdez rá (pl. „a <nyilvánosan is szereplő szó> szó nem jól látszik a füzetben – mi áll ott?”); privát anyag tartalmát nem idézi és nem írja le.”
 Ugyanaz a fajta kérdés oldalanként egyszer, üres szakasz nélkül. Minden számozott listaelem előtt stabil `<!-- q: <oldal-slug>-<kulcsszó> -->` horgony áll; csak `[a-z0-9-]`, oldalanként egyedi, kiadott azonosítót nem használsz újra. Egy összevont füzethiba-tétel: „Javítsd a füzetedben is: 1 kg = 1000 g.” Csak a helyes állítást nevezi meg, a hibás eredeti privát lábjegyzetbe kerül. Bizonytalan, órán tanult jelölést nem minősítesz hibának. A kérdést csak tulajdonosi válasznál, interaktívan zárod `decisions` bejegyzéssel (`id`, `claim`, `answer`, `by`, `on`), a kérdés törlésével, a tartalom javításával és naplózással egy commitban. Cronban a `decisions` változatlan.
 
 Ábrák
 
 Füzetrajz: kötelező ugyanaz a rajz, ugyanabban a szerepben, javítva; próza nem váltja ki. Ez a lefényképezett kézi táblarajzra és a táblai/tankönyvi rajzot másoló füzetrajzra is igaz. csak a jelentést hordozó elrendezés kötelező (melyik oldalon hat egy erő, mi van fölül/alul, mi mihez kapcsolódik, a lépések sorrendje); a zsúfoltság, a ferde tördelés, az egymásra csúszott feliratok és a kézírásból adódó egyenetlenségek javíthatók. Feltétel: a tanuló első ránézésre felismeri a saját rajzát. Tulajdonos: az ábra helyes legyen – a szakmai helyesség minden esetben elsőbbséget élvez. Nincs „rekonstrukció” felirat és nincs hivatkozás a füzetre az ábrán. A bizonytalan elemből kérdés lesz, az egyértelmű hibából jelölt javítás; a részletek privát `corrections[]` és `checks` adatok.
 
-Más ábránál döntsd el, segíti-e a tanulást, megértést vagy mélyebb megértést, és többet mond-e a szóbeli magyarázatnál; ha igen, kell ábra. Formát és eszközt szabadon választasz. A szöveg ábra nélkül is tanít. A banner a témát mutatja, nem a példát vagy a forrást; a 14 éves olvasó az oldal megnyitásakor értse. Ha bevezető információt nem tud adni, legyen szép, semleges dísz; minden képi tény a szövegben is szerepel.
+Más ábránál döntsd el, segíti-e a tanulást, megértést vagy mélyebb megértést, és többet mond-e a szóbeli magyarázatnál; ha igen, kell ábra. Formát és eszközt szabadon választasz. A szöveg ábra nélkül is tanít. A banner a témát mutatja, nem a példát vagy a forrást; a {grade}. évfolyamos olvasó az oldal megnyitásakor értse. Ha bevezető információt nem tud adni, legyen szép, semleges dísz; minden képi tény a szövegben is szerepel.
 
 A `.school-notes/figures/<id>.json` megbízás mezői: `id`, `page`, `anchor` (szakaszcím), `kind: notebook-drawing | teacher-drawing | figure | banner`, `source_image` (forrásútvonal és kivágás, a két rajz-útnál kötelező), `purpose`, `must_show[]`, `avoid_misreading`, `taught_conventions[]`, `text_complete_without_figure: true`. Cserénél `replaces` és `decision_reason` (a/b/c és konkrét indok) is kell: (a) a kép olyat állít, amit a szöveg már nem; (b) hatóköre elavult; (c) a lektor vagy ábraellenőr kéri. Ízlés nem ok; előbb az ingyenes SVG/Mermaid-javítás, új azonosító, elfogadásig a régi kép marad, képenként futásonként legfeljebb egy csere. „A” állapotban magad rajzolsz, a vizuális modulok szerint. A jelölő `<!-- figure: <id> -->`, generált képnél `<!-- image: <id> -->`; hagyd a jelölőt és a megbízást; a tool sorba állítja, és a független ábraellenőr elfogadása után illeszti be. Nem hívsz `image_accept`-et.
 
@@ -66,7 +66,7 @@ Példák (szemléltetés, nem mondatsablonok)
 
 Rossz: „A harmadik fotón a nyíl lefelé mutat.” Jó: „A nehézségi erő a testre függőlegesen lefelé hat.”
 Rossz: „Mit hagyott le az ábra készítője?” Jó: „Milyen adat kell a téglalap területének kiszámításához?”
-Rossz: a meglévő „Összefoglalva” után új „Maximumelv” szakasz, a bevezetőben „a következő órán folytatjuk”. Jó: a „Maximumelv” a „Mi a gazdálkodás célja?” után áll, az „Összefoglalva” marad utolsó, a Röviden és a kvíz bővül, a bevezető csak az oldalon kifejtettet említi.
+Rossz: a meglévő „Összefoglalva” után új szakasz az új fogalommal, a bevezetőben „a következő órán folytatjuk”. Jó: az új fogalom ott áll, ahol az előfeltételei már megvannak, az „Összefoglalva” marad utolsó, a Röviden és a kvíz bővül, a bevezető csak az oldalon kifejtettet említi.
 
 Önellenőrzés, majd gépi lista
 

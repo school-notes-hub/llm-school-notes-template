@@ -61,7 +61,7 @@ A szolgáltatónak átadott prompt: cél/felhasználás; látható bevezetés; p
 
 ```text
 Készíts {méret/képarány} széles, alacsony fejlécillusztrációt a {téma} tanulási oldalhoz, {célközönség} számára.
-A banner feladata: {a téma bevezető/áttekintő megmutatása vagy semleges dekoráció}. A témát mutassa, ne a példát vagy a forrást; a 14 éves olvasó már az oldal megnyitásakor, olvasás előtt értse. A felirat tényét a próza is tanítsa.
+A banner feladata: {a téma bevezető/áttekintő megmutatása vagy semleges dekoráció}. A témát mutassa, ne a példát vagy a forrást; a {legfiatalabb fő olvasó a PROFILE *Audience* szerint} már az oldal megnyitásakor, olvasás előtt értse. A felirat tényét a próza is tanítsa.
 Fő motívum vagy szerkezet: {ellenőrzött képi terv}. Nézőpont és kivágás: {a lényegi rész láthatóságát biztosító nézet}. Fókusz és olvasási sorrend: {telefonon is felismerhető fő olvasat}.
 Kötelező látható szövegek, pontosan: {végleges rövid címek/kontextus, vagy nincs}.
 Kapcsolódó elhagyható részletek: {motívumok}. Stílus: {a témához indokolt képi világ, paletta, anyagkezelés és hangnem; releváns közös jelölések és kerülendő mellékjelentések}.

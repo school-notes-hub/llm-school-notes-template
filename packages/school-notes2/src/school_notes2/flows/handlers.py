@@ -61,7 +61,8 @@ def check(ctx: Ctx, task) -> dict:
         if invalid:
             problems += [wiki_check.item(".school-notes/result.json", None, e) for e in invalid]
         else:
-            fetch = fetch_flow.fetch_json(task, task.get("writing_k", len(task.get("ranges"))))
+            fetch = fetch_flow.fetch_json(task, task.get("writing_k", len(task.get("ranges"))),
+                                         grade=ctx.student.grade)
             listed = {(i["file"], i["item_id"]) for i in fetch["open_review_items"]}
             problems += check_result(ctx.notes_path, result, fetch, listed,
                                      ctx.cfg.limits.review_closures_per_run, whole_run=False)

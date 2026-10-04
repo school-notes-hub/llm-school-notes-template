@@ -45,10 +45,10 @@ def test_two_subjects_share_twenty_closures_without_untouched_overflow(tmp_path,
         result = {"status": "done", "review_closure": [i for i in closures
                   if i["item_id"] in {r["item_id"] for r in c["open_review_items"]}]}
         from school_notes2.wiki.check_result import check_result
-        assert not check_result(tmp_path, result, fetch.fetch_json(task, n),
+        assert not check_result(tmp_path, result, fetch.fetch_json(task, n, grade=9),
                                 {(i["file"], i["item_id"]) for i in c["open_review_items"]}, 20,
                                 whole_run=False)
-    whole = fetch.fetch_json(task, 2, whole_run=True)
+    whole = fetch.fetch_json(task, 2, grade=9, whole_run=True)
     assert len(whole["open_review_items"]) == len(closures) == 20
     files.apply_closure(tmp_path, "test", closures, whole["open_review_items"], 5)
     final = safefs.read_text(tmp_path, rel)
@@ -99,7 +99,8 @@ def task_context(tmp_path):
     task.update(calls=assigned, ranges=calls.ranges(assigned), packages=packages, pages=pages, writing_k=4)
     for k in range(1, 4):
         write_json(task.dir / f"result-{k}.json", {"status": "done"})
-    ctx = SimpleNamespace(notes_path=tmp_path, cfg=SimpleNamespace(role=lambda _: (None, None),
+    ctx = SimpleNamespace(notes_path=tmp_path, student=SimpleNamespace(grade=11),
+                          cfg=SimpleNamespace(role=lambda _: (None, None),
                            limits=SimpleNamespace(review_closures_per_run=20, max_agents=3)))
     return ctx, task
 

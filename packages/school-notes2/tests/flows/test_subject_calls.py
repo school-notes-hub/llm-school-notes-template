@@ -7,12 +7,13 @@ import pytest
 from school_notes2.flows import fetch, writer
 from school_notes2.sources import calls
 from school_notes2.state import phase, safefs
-from tests.sources.test_cards import CARD
+from tests.sources.test_cards import CARD, LEARNERS, shared
 
 
 def data(repo):
-    safefs.write_json(repo, "tools/subjects.json", {"subjects": {
-        "b": {"card": CARD}, "a": {"card": {**CARD, "role": "Másik tanár"}}}})
+    # The learner's subject order comes from tools/subjects.json, the cards from the shared file.
+    safefs.write_json(repo, "tools/subjects.json", {"subjects": {"b": {}, "a": {}}})
+    shared(repo, {"b": CARD, "a": {**CARD, "role": "Másik tanár"}})
     packages = [{"drive_folder": name, "subject": sub, "role": "fuzet", "new_subject": False,
                  "preconverted": False, "files": [], "card": CARD}
                 for name, sub in [("same", "a"), ("same", "b"), ("third", "a")]]
@@ -22,7 +23,7 @@ def data(repo):
     return packages, pages
 
 
-@pytest.mark.parametrize("student", ["benedek", "barna"])
+@pytest.mark.parametrize("student", LEARNERS)
 def test_subject_calls_keep_noncontiguous_source_ids_and_cards(tmp_path, student):
     packages, pages = data(tmp_path)
     assigned = calls.assignments(tmp_path, packages, pages, [], [])
@@ -30,14 +31,14 @@ def test_subject_calls_keep_noncontiguous_source_ids_and_cards(tmp_path, student
     assert [c["seqs"] for c in assigned] == [[2], [1, 3]]
     task = phase.create(tmp_path / "tasks", student, "notes", "cron", "prepared")
     task.update(calls=assigned, packages=packages, pages=pages, ranges=calls.ranges(assigned))
-    first, second = fetch.fetch_json(task, 1), fetch.fetch_json(task, 2)
+    first, second = fetch.fetch_json(task, 1, grade=9), fetch.fetch_json(task, 2, grade=9)
     assert first["pages"] == [pages[1]]
     assert second["pages"] == [pages[0], pages[2]]
     assert first["card"]["role"] != second["card"]["role"]
     assert len(first["packages"]) == 1 and len(second["packages"]) == 2
-    assert fetch.fetch_json(task, 2, whole_run=True)["pages"] == pages
-    safefs.write_json(tmp_path, "tools/subjects.json", {"subjects": {}})
-    assert fetch.fetch_json(phase.load(task.dir), 2) == second
+    assert fetch.fetch_json(task, 2, grade=9, whole_run=True)["pages"] == pages
+    shared(tmp_path, {})
+    assert fetch.fetch_json(phase.load(task.dir), 2, grade=9) == second
 
 
 def test_only_one_oversized_package_is_split(tmp_path):

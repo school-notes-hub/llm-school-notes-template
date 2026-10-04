@@ -145,7 +145,8 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
         raise CheckFailed(reordered)
     result = merged_result(ctx, task)
     repo = ctx.notes_path
-    fetch = fetch_flow.fetch_json(task, len(task.get("ranges")), whole_run=True)
+    fetch = fetch_flow.fetch_json(task, len(task.get("ranges")), grade=ctx.student.grade,
+                                  whole_run=True)
     listed = fetch["open_review_items"]
     problems = check_result(repo, result, fetch, {(i["file"], i["item_id"]) for i in listed},
                             ctx.cfg.limits.review_closures_per_run)

@@ -157,7 +157,7 @@ def test_fetch_entries_validate(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
     placed = place_package(repo, package([photo(tmp_path / "1.jpg", (100, 80), exif=False)]), 1, Known())
-    validate("fetch", {"student": "benedek", "run_id": "r1", "mode": "cron",
+    validate("fetch", {"student": "benedek", "learner": {"grade": 9}, "run_id": "r1", "mode": "cron",
                        "packages": [placed.package], "pages": placed.pages,
                        "range": {"from": 1, "to": 1, "k": 1, "n": 1},
                        "open_review_items": [], "pending_images": []})

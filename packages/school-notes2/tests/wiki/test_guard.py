@@ -92,41 +92,20 @@ def test_conflict_files_may_be_edited(repo):
     assert run(repo, base, changes, conflict_files=frozenset({"tools/subjects.json"})) == []
 
 
-def test_subject_cards_only_in_owner_session(repo):
+def test_cards_are_never_edited_in_a_learner_repo(repo):
+    """The shared card file and the learner's subject settings stay closed, interactive too:
+    cards live only in the template (plan 4.3)."""
     import json
     from tests.sources.test_cards import CARD
+    (repo / "subject-cards.json").write_text('{"cards": {}}\n')
     base = snapshot(repo)
+    (repo / "subject-cards.json").write_text(json.dumps({"cards": {"proba": CARD}}))
     rel = "tools/subjects.json"
     data = json.loads((repo / rel).read_text())
     data["subjects"]["proba"]["card"] = CARD
-    (repo / rel).write_text(json.dumps(data))
-    assert run(repo, base, [(rel, "modified")])
-    assert run(repo, base, [(rel, "modified")], interactive=True) == []
-    # A prior tool hash does not forbid a subsequent valid owner edit.
-    assert run(repo, base, [(rel, "modified")], interactive=True,
-               tool_files={rel: hashlib.sha256(base[rel]).hexdigest()}) == []
-    data["subjects"]["proba"]["card"] = {**CARD, "role": " "}
-    (repo / rel).write_text(json.dumps(data))
-    assert run(repo, base, [(rel, "modified")], interactive=True)
-    data["subjects"]["proba"]["card"] = CARD
-    data["subjects"]["proba"]["name"] = "Más tárgy"
-    (repo / rel).write_text(json.dumps(data))
-    assert run(repo, base, [(rel, "modified")], interactive=True)
-
-
-def test_owner_can_preload_only_name_and_valid_card(repo):
-    import json
-    from tests.sources.test_cards import CARD
-    base = snapshot(repo)
-    rel = "tools/subjects.json"
-    data = json.loads((repo / rel).read_text())
     data["subjects"]["uj"] = {"name": "Új tárgy", "card": CARD}
     (repo / rel).write_text(json.dumps(data))
-    assert run(repo, base, [(rel, "modified")], interactive=True) == []
-    assert run(repo, base, [(rel, "modified")])
-    for entry in ({"card": CARD}, {"name": " ", "card": CARD},
-                  {"name": "Új tárgy", "card": {}},
-                  {"name": "Új tárgy", "card": CARD, "emoji": "X"}):
-        data["subjects"]["uj"] = entry
-        (repo / rel).write_text(json.dumps(data))
-        assert run(repo, base, [(rel, "modified")], interactive=True)
+    changes = [("subject-cards.json", "modified"), (rel, "modified")]
+    for interactive in (False, True):
+        assert {v.path for v in run(repo, base, changes, interactive=interactive)} == \
+            {"subject-cards.json", rel}

@@ -21,7 +21,7 @@ class Student:
     site_repo: str       # SSH address of the public site repo (gh-pages)
     site_key: Path
     drive_root: str      # Drive folder id of `Tanulási anyagok/<Tanuló>`
-    grade: int = 0       # school year, written into lesson-notes pages
+    grade: int           # school year: lesson-notes pages, fetch.json `learner`, prompt yardstick
     publish: bool = False
 
 
@@ -157,9 +157,12 @@ def _student(name: str, t: dict) -> Student:
     if not re.fullmatch(r"[a-z0-9-]+", name):
         raise ConfigError(f"learner name {name!r} must be lowercase ascii")
     try:
+        grade = t["grade"]
+        if type(grade) is not int or grade < 1:
+            raise ConfigError(f"[students.{name}] grade must be a positive integer")
         return Student(name=name, repo=t["repo"], repo_key=_path(t["repo_key"]),
                        site_repo=t["site_repo"], site_key=_path(t["site_key"]),
-                       drive_root=t["drive_root"], grade=int(t.get("grade", 0)),
+                       drive_root=t["drive_root"], grade=grade,
                        publish=bool(t.get("publish", False)))
     except KeyError as exc:
         raise ConfigError(f"[students.{name}] missing {exc.args[0]}") from None

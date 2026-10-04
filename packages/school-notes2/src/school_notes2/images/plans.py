@@ -34,7 +34,7 @@ def check_id(plan_id: str) -> str:
 
 
 def job_id(learner: str, plan_id: str) -> str:
-    """The ledger key: the ledger is shared by both learners, plan ids are per learner."""
+    """The ledger key: the ledger is shared by all learners, plan ids are per learner."""
     return f"{learner}-{check_id(plan_id)}"
 
 

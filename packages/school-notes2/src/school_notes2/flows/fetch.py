@@ -163,9 +163,9 @@ def _validated_base(ctx: Ctx, task: Task, *, pin: bool = True) -> str:
         return base
     wt = ctx.worktree("notes")
     base = _base(ctx, task, wt)
-    config = wt.run("show", f"{base}:tools/subjects.json", check=False)
-    if config.returncode == 0:
-        cards.preflight(config.stdout)
+    shared = wt.run("show", f"{base}:{cards.PATH}", check=False)
+    if shared.returncode == 0:
+        cards.preflight(shared.stdout)
     if pin:
         task.update(preparation_base=base, preparation_started=True)
     elif task.get("preparation_base"):
@@ -218,10 +218,12 @@ def new_subject(repo, subject: str, drive_name: str) -> list[str]:
     return [path] if path else []
 
 
-def fetch_json(task: Task, k: int, *, whole_run: bool = False) -> dict:
-    """The fetch.json of range k (1-based), validated (4.4)."""
+def fetch_json(task: Task, k: int, *, grade: int, whole_run: bool = False) -> dict:
+    """The fetch.json of range k (1-based), validated (4.4). `grade` is the learner's
+    configured school year: with PROFILE.md it places the subject for the writer (4.3)."""
     first, last = task.get("ranges")[k - 1]
-    data = {"student": task.data["student"], "run_id": task.run_id, "mode": task.mode,
+    data = {"student": task.data["student"], "learner": {"grade": grade},
+            "run_id": task.run_id, "mode": task.mode,
             "packages": task.get("packages", []), "pages": task.get("pages", []),
             "range": {"from": first, "to": last, "k": k, "n": len(task.get("ranges"))},
             "open_review_items": task.get("open_review_items", []),

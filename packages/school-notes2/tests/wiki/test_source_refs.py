@@ -103,8 +103,6 @@ def test_corpus_and_read_only_scan_on_both_local_wikis(learner):
         assert not refs.scan(rel, text, text)
         found.extend(hits)
     assert all(i["severity"] == "warning" for i in found)
-    if learner == "benedek":
-        assert any("polisz" in i["file"] and "9. dia" in i["message"] for i in found)
     # Exactly the same fixed corpus applies to both learners.
     for file, text, hit in CORPUS:
         assert bool(refs.scan(file, text)) == hit

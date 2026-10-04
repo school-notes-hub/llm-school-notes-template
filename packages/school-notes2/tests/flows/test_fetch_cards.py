@@ -1,6 +1,7 @@
-"""Preflight and preloaded cards at the existing preparation boundary (T-095)."""
+"""Preflight and shared cards at the existing preparation boundary (T-095)."""
 
 import json
+import shutil
 from types import SimpleNamespace
 
 import pytest
@@ -9,13 +10,17 @@ from school_notes2.flows import fetch
 from school_notes2.state import phase
 from school_notes2.state.errors import Prerequisite
 from school_notes2.wiki import machine
-from tests.sources.test_cards import CARD, subjects
+from school_notes2.sources import cards
+from tests.sources.test_cards import CARD, LEARNERS, shared
 from tests.sources.test_sources import record
 
 
 def context(repo, monkeypatch):
     def git(*args, **kwargs):
-        return SimpleNamespace(returncode=0, stdout=(repo / "tools/subjects.json").read_bytes())
+        path = repo / cards.PATH
+        if not path.exists():
+            return SimpleNamespace(returncode=128, stdout=b"")
+        return SimpleNamespace(returncode=0, stdout=path.read_bytes())
     wt = SimpleNamespace(run=git)
     ctx = SimpleNamespace(notes_path=repo, worktree=lambda _: wt, image_settings=lambda: None,
                           tools_dir=lambda: None, cfg=SimpleNamespace(limits=SimpleNamespace(review_closures_per_run=20, max_agents=3),
@@ -35,7 +40,7 @@ def test_prepare_persists_only_allocated_review_capacity(tmp_path, monkeypatch):
     from school_notes2.state import safefs
     repo = tmp_path / "repo"
     repo.mkdir()
-    subjects(repo)
+    shared(repo)
     ctx = context(repo, monkeypatch)
     report = files.write_review(repo, "2026-10-04", {"verdict": "changes", "findings": [
         {"id": f"R{n}", "file": "wiki/statika/topic.md", "problem": "Hiba."}
@@ -52,34 +57,34 @@ def test_prepare_persists_only_allocated_review_capacity(tmp_path, monkeypatch):
     assert set(counts) == {f"R{n}" for n in range(1, 21)}
 
 
-@pytest.mark.parametrize("student", ["benedek", "barna"])
+@pytest.mark.parametrize("student", LEARNERS)
 def test_invalid_card_blocks_before_drive_and_prepare(tmp_path, monkeypatch, student):
     repo = tmp_path / "repo"
     repo.mkdir()
-    subjects(repo, {**CARD, "role": " "})
+    shared(repo, {"statika": {**CARD, "role": " "}})
     ctx = context(repo, monkeypatch)
     task = phase.create(tmp_path / "tasks", student, "notes", "cron", "downloading")
     def no_drive():
         pytest.fail("Drive must not be touched before card validation")
     with pytest.raises(Prerequisite, match="statika") as failure:
         fetch.advance(ctx, task, no_drive)
-    assert "tools/subjects.json statika" in failure.value.todo
+    assert "subject-cards.json" in failure.value.todo
     assert phase.load(task.dir).phase == "downloading"
     assert task.get("preparation_base") is None
     task.set_phase("moved", selected=[])
     with pytest.raises(Prerequisite):
         fetch.prepare(ctx, task, new_subject_index=fetch.new_subject)
     assert not (repo / "sources").exists()
-    subjects(repo)
+    shared(repo)
     fetch.prepare(ctx, task, new_subject_index=fetch.new_subject)
     assert phase.load(task.dir).phase == "prepared"
 
 
-@pytest.mark.parametrize("student", ["benedek", "barna"])
-def test_preloaded_subject_prepares_and_resumes(tmp_path, monkeypatch, student):
+@pytest.mark.parametrize("student", LEARNERS)
+def test_new_subject_gets_the_shared_card_and_resumes(tmp_path, monkeypatch, student):
     repo = tmp_path / "repo"
     repo.mkdir()
-    subjects(repo)
+    shared(repo)
     ctx = context(repo, monkeypatch)
     doc = tmp_path / "document.md"
     doc.write_text("# Tananyag\n")
@@ -96,23 +101,52 @@ def test_preloaded_subject_prepares_and_resumes(tmp_path, monkeypatch, student):
     monkeypatch.setattr(fetch, "_base", lambda *args: pytest.fail("base must stay pinned"))
     task = phase.load(task.dir)
     fetch.prepare(ctx, task, new_subject_index=fetch.new_subject)
-    data = fetch.fetch_json(task, 1)
+    data = fetch.fetch_json(task, 1, grade=10)
     assert data["packages"][0]["new_subject"] is True
     assert data["packages"][0]["card"] == CARD
+    assert data["learner"] == {"grade": 10}
     assert (repo / "wiki/statika/index.md").is_file()
-    assert machine.add_subjects(repo, [{"subject": "statika", "emoji": "📐", "color": "#336699"}], {})
+    assert machine.add_subjects(repo, [{"subject": "statika", "emoji": "📐", "color": "#336699"}],
+                                {"statika": "Statika"})
     entry = json.loads((repo / "tools/subjects.json").read_text())["subjects"]["statika"]
-    assert entry["name"] == "Statika" and entry["card"] == CARD and entry["emoji"] == "📐"
-    assert fetch.fetch_json(phase.load(task.dir), 1) == data
+    assert entry["name"] == "Statika" and "card" not in entry and entry["emoji"] == "📐"
+    assert fetch.fetch_json(phase.load(task.dir), 1, grade=10) == data
 
 
-@pytest.mark.parametrize("student", ["benedek", "barna"])
+@pytest.mark.parametrize("student", LEARNERS)
+def test_missing_card_does_not_stop_preparation(tmp_path, monkeypatch, student):
+    """No shared card (or no card file at all): the run goes on without a card."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    ctx = context(repo, monkeypatch)
+    doc = tmp_path / "document.md"
+    doc.write_text("# Tananyag\n")
+    selected = [{"package": {"subject_name": "Statika", "name": "Óra", "role": "tanari",
+                             "description": "", "preconverted": True},
+                 "files": [record(doc, "document.md")]}]
+    monkeypatch.setattr(fetch, "download", lambda c, t, d: t.set_phase("downloaded", selected=selected))
+    monkeypatch.setattr(fetch, "move", lambda c, t, d: t.set_phase("moved"))
+    for entries in (None, {"matematika": CARD}):
+        if entries is not None:
+            shared(repo, entries)
+        task = phase.create(tmp_path / f"tasks-{entries is None}", student, "notes", "cron",
+                            "downloading")
+        fetch.advance(ctx, task, lambda: object())
+        assert task.phase == "prepared"
+        data = fetch.fetch_json(task, 1, grade=9)
+        assert data["packages"][0]["subject"] == "statika"
+        assert "card" not in data and "card" not in data["packages"][0]
+        for path in (repo / "sources", repo / "wiki"):
+            shutil.rmtree(path, ignore_errors=True)
+
+
+@pytest.mark.parametrize("student", LEARNERS)
 @pytest.mark.parametrize("interrupted_phase", ["downloading", "downloaded"])
 def test_download_resume_refreshes_base_before_move(tmp_path, monkeypatch, student, interrupted_phase):
     from school_notes2.state.errors import Transient
     repo = tmp_path / "repo"
     repo.mkdir()
-    subjects(repo)
+    shared(repo)
     ctx = context(repo, monkeypatch)
     ctx.student = SimpleNamespace(drive_root="root")
     ctx.log = SimpleNamespace(event=lambda *a, **k: None)
@@ -126,10 +160,10 @@ def test_download_resume_refreshes_base_before_move(tmp_path, monkeypatch, stude
         fetch.advance(ctx, task, lambda: object())
     assert phase.load(task.dir).get("preparation_base") is None
     monkeypatch.setattr(fetch, "_base", lambda *a: "b" * 40)
-    subjects(repo, {**CARD, "role": " "})
+    shared(repo, {"statika": {**CARD, "role": " "}})
     with pytest.raises(Prerequisite):
         fetch.advance(ctx, phase.load(task.dir), lambda: pytest.fail("invalid fresh card"))
-    subjects(repo)
+    shared(repo)
     monkeypatch.setattr(fetch, "download", lambda c, t, d: t.set_phase("downloaded", selected=[]))
     task = phase.load(task.dir)
     fetch.advance(ctx, task, lambda: object())
@@ -138,12 +172,12 @@ def test_download_resume_refreshes_base_before_move(tmp_path, monkeypatch, stude
     assert task.get("preparation_started")
 
 
-@pytest.mark.parametrize("student", ["benedek", "barna"])
+@pytest.mark.parametrize("student", LEARNERS)
 @pytest.mark.parametrize("when", ["before", "after"])
 def test_move_crash_keeps_base_even_while_phase_is_downloaded(tmp_path, monkeypatch, student, when):
     repo = tmp_path / "repo"
     repo.mkdir()
-    subjects(repo)
+    shared(repo)
     ctx = context(repo, monkeypatch)
     ctx.student = SimpleNamespace(drive_root="root")
     ctx.log = SimpleNamespace(event=lambda *a, **k: None)
@@ -173,11 +207,11 @@ def test_move_crash_keeps_base_even_while_phase_is_downloaded(tmp_path, monkeypa
     assert task.phase == "prepared" and moved == {"pkg"}
 
 
-@pytest.mark.parametrize("student", ["benedek", "barna"])
+@pytest.mark.parametrize("student", LEARNERS)
 def test_legacy_download_base_is_not_reused_by_offline_prepare(tmp_path, monkeypatch, student):
     repo = tmp_path / "repo"
     repo.mkdir()
-    subjects(repo)
+    shared(repo)
     ctx = context(repo, monkeypatch)
     task = phase.create(tmp_path / "tasks", student, "notes", "interactive", "downloaded")
     task.update(preparation_base="old-download-base", selected=[])

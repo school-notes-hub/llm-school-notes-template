@@ -13,9 +13,9 @@
       "heading": "Wiki structure",
       "destination": "instructions/wiki-structure.md",
       "source_sha256": "91416c932747a9e5a95b2c27ba7babf2ac8229afd251016b069bc5c142cb0b98",
-      "migrated_sha256": "0187ebba80d82b1a7c28cdc080fd9c1903353a0e1ac451e254d50f0c0846d0af",
+      "migrated_sha256": "703da32464b71321eedcd9e48a26e8bbf37da0a87f55e2c044cdc8589b54c5e1",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
-      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.16.2: the public view leaves out links and citations of private files and the grade prefix; 1.17.0: lesson-log body and source pointer; topic-only banner, banner reuse/style and private footnotes"
+      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.16.2: the public view leaves out links and citations of private files and the grade prefix; 1.17.0: lesson-log body and source pointer; topic-only banner, banner reuse/style and private footnotes; 1.17.0 (neutral template): undated-lesson range placeholders, banner yardstick is the youngest main reader in PROFILE Audience"
     },
     {
       "heading": "Principles",

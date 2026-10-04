@@ -25,4 +25,5 @@ if mode == "question":
 calls = work / ".school-notes" / "calls"
 with open(work.parent / f"{work.name}-writer-calls.log", "a") as stream:
     stream.write(f"{fetch['range']['k']}/{fetch['range']['n']}\n")
+(work.parent / f"{work.name}-fetch-learner.json").write_text(json.dumps(fetch["learner"]))
 (work / ".school-notes/result.json").write_text(json.dumps(result), encoding="utf-8")

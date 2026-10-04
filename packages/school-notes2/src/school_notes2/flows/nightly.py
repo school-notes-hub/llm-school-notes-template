@@ -116,7 +116,7 @@ def _review(ctx: Ctx, task: phase.Task) -> None:
         image=ctx.image_tag(),
         mounts=launch.Mounts(work=ctx.cfg.worktree(ctx.name, "review"), work_readonly=True,
                              in_dir=task.dir / "in", out_dir=out),
-        output_host=out / "review.json", schema="review", task_dir=task.dir,
+        output_host=out / "review.json", schema="review", task_dir=task.dir, grade=ctx.student.grade,
         allowed_domains=ctx.cfg.provider_domains,
         max_agents=task.get("max_agents", ctx.cfg.limits.max_agents), lease_dir=ctx.cfg.state_dir / "agent-leases")
     try:

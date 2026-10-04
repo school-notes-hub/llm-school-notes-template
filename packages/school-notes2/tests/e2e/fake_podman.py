@@ -16,7 +16,7 @@ image = next(i for i, a in enumerate(args) if a.startswith("localhost/school-not
 command = args[image + 1:]
 if command[-2:] == ["auth", "status"] or command[-2:] == ["login", "status"]:
     sys.exit(0)
-sys.stdin.read()
+prompt = sys.stdin.read()
 out = next((a.split(":")[0] for a in args if a.endswith(":/out:rw")), None)
 if out and any("-reader-" in a or "-recheck-" in a for a in args):
     import json
@@ -37,4 +37,5 @@ if out:                                   # the reviewer: read-only /work, write
     Path(out, "review.json").write_text(__import__("json").dumps(review), encoding="utf-8")
     sys.exit(0)
 writer = Path(__file__).with_name("fake_writer.py")
+Path(work).with_name(f"{Path(work).name}-writer-prompt.txt").write_text(prompt, encoding="utf-8")
 sys.exit(subprocess.call([sys.executable, str(writer), work, os.environ.get("FAKE_WRITER", "good")]))

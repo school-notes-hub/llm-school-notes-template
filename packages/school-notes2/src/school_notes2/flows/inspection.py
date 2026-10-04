@@ -20,7 +20,8 @@ def role(ctx, task):
     configured, harness = ctx.cfg.role("reviewer")
     return launch.RoleRun(ctx.name, task.run_id, "reader-1", configured, harness,
                           ctx.image_tag(), launch.Mounts(), task.dir / "unused.json",
-                          "reader-1", folder(task), allowed_domains=ctx.cfg.provider_domains,
+                          "reader-1", folder(task), grade=ctx.student.grade,
+                          allowed_domains=ctx.cfg.provider_domains,
                           max_agents=task.get("max_agents", ctx.cfg.limits.max_agents),
                           lease_dir=ctx.cfg.state_dir / "agent-leases", attempt=task.get("attempt", 1))
 

@@ -4,7 +4,7 @@ Photograph your notebook, and an AI agent turns it into clear, curated study pag
 
 This is a template for a knowledge base (an "LLM wiki") built from one student's school notes. You drop in photos of exercise-book pages, downloaded notes, or voice notes; an LLM agent - [Claude Code](https://code.claude.com/), [Codex](https://developers.openai.com/codex/), or any agent that can read `AGENTS.md` (e.g. Hermes Agent) - files them, reads them, and maintains a wiki: one directory per subject, one page per topic, plus a page per set of lesson notes. The storage format is the [Open Knowledge Format 0.2](SPEC.md): plain markdown with YAML frontmatter, readable on GitHub, in Obsidian, or with `cat`.
 
-The template contains no student identities, school, subjects, textbooks, or notes - everything specific is set up by the LLM on the first run. The canonical repository is [llm-school-notes-template](https://github.com/school-notes-hub/llm-school-notes-template).
+The template contains no student identities, school, subjects, textbooks, or notes, apart from the deployment example in `packages/school-notes2/src/school_notes2/ops/` - everything specific is set up by the LLM on the first run. The shared subject cards (`subject-cards.json`) are generally worded and fit any learner of the subject. The canonical repository is [llm-school-notes-template](https://github.com/school-notes-hub/llm-school-notes-template).
 
 ## What the pages look like
 

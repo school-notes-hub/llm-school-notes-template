@@ -23,7 +23,7 @@ def setup(tmp_path, log, monkeypatch):
     harness = Harness("claude-review", ["fake"], [], [], output="file")
     cfg = SimpleNamespace(role=lambda _: (role, harness), limits=Limits(), state_dir=tmp_path / "state",
                           provider_domains=("test.invalid",), browser=tmp_path / "browser", timeouts=Timeouts())
-    ctx = SimpleNamespace(notes_path=repo, name="tester", cfg=cfg, log=log,
+    ctx = SimpleNamespace(notes_path=repo, name="tester", cfg=cfg, log=log, student=SimpleNamespace(grade=9),
                           worktree=lambda _: wt, image_tag=lambda: "image", release=lambda: tmp_path)
     task = phase.create(tmp_path / "state", "tester", "notes", "cron", "figures", "20261004-unit")
     task.update(base="base", inspection_result={"status": "done"}, attempt=1, max_agents=3,
