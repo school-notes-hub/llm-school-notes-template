@@ -187,8 +187,9 @@ def check_scope(ctx, root, items, extra_paths=()):
     # Use the pre-edit tree: edits must not expand their own authorization.
     repo = root / "before"
     allowed = set(extra_paths)
-    allowed.update(relations.details(safefs.read_text(repo, i["file"]), i["item_id"]).get("file")
-                   for i in items)
+    details = [relations.details(safefs.read_text(repo, i["file"]), i["item_id"]) for i in items]
+    allowed.update(d.get("file") for d in details)
+    allowed.update(_value_sources(repo, [d.get("quote") or "" for d in details]))
     embedded = relations.related_pages(repo)
     allowed.update(p for asset in sorted(p for p in allowed if p) for p in embedded.get(asset, []))
     for unit in units.collect(repo, sorted(p for p in allowed if p)):
@@ -201,6 +202,17 @@ def check_scope(ctx, root, items, extra_paths=()):
         new = safefs.read_bytes(ctx.notes_path, path) if safefs.is_file(ctx.notes_path, path) else b""
         if path not in allowed and steps._llm_hash(path, old) != steps._llm_hash(path, new):
             raise BadWork(f"fix changed an unassigned page: {path}")
+
+
+def _value_sources(repo, quotes, minimum=20):
+    """Pages whose own title, description or lesson title appears in a quote: a finding on a
+    generated list (an index) is fixed in that page's frontmatter (plan 8.1)."""
+    from ..review import generated
+    quotes = [" ".join(q.split()) for q in quotes if q.strip()]
+    if not quotes:
+        return set()
+    return {path for path, value in generated._source_values(repo)
+            if len(value.strip()) >= minimum and any(" ".join(value.split()) in q for q in quotes)}
 
 
 def needs_recheck(ctx, task):

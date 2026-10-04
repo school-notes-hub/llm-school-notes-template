@@ -93,3 +93,28 @@ def test_fix_allows_unit_and_embedding_but_not_unrelated_page(tmp_path, item_pag
     safefs.write_text(repo, "wiki/s/other.md", "# Más\n\nVáltozás.\n")
     with pytest.raises(BadWork, match="unassigned page"):
         correction.check_scope(ctx, snapshot, items)
+
+
+def test_fix_may_edit_the_page_whose_description_an_index_finding_quotes(tmp_path):
+    from school_notes2.flows import correction
+    from school_notes2.state.errors import BadWork
+    repo, snapshot = tmp_path / "repo", tmp_path / "snapshot"
+    repo.mkdir()
+    description = "Füzetjegyzet egy dátum nélküli óráról, a piacgazdaság jellemzői."
+    pages = {
+        "wiki/s/index.md": f"---\ntitle: S\n---\n# S\n\n* [Óra](ora.md) - {description}\n",
+        "wiki/s/ora.md": f"---\ntype: lesson-notes\ntitle: Óra\ndescription: {description}\n---\n# Óra\n",
+        "wiki/s/other.md": "---\ntype: concept\ntitle: Más\ndescription: Egy egészen más oldal hosszú leírása.\n---\n# Más\n",
+    }
+    for page, text in pages.items():
+        safefs.write_text(repo, page, text)
+    report = files.write_review(repo, "2026-10-04", {"verdict": "changes", "findings": [
+        {"id": "R1", "file": "wiki/s/index.md", "problem": "A leírás metaadattal kezdődik.",
+         "quote": f"[Óra](ora.md) - {description}", "relates_to": None}]}, "fake", "a", "b")
+    items = [{"file": report.relative_to(repo).as_posix(), "item_id": "R1"}]
+    correction.snapshot(repo, snapshot)
+    safefs.write_text(repo, "wiki/s/ora.md", pages["wiki/s/ora.md"].replace("Füzetjegyzet egy dátum nélküli óráról, a p", "A p"))
+    correction.check_scope(SimpleNamespace(notes_path=repo), snapshot, items)
+    safefs.write_text(repo, "wiki/s/other.md", pages["wiki/s/other.md"] + "Változás.\n")
+    with pytest.raises(BadWork, match="unassigned page"):
+        correction.check_scope(SimpleNamespace(notes_path=repo), snapshot, items)
