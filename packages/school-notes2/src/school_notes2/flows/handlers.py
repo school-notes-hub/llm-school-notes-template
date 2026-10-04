@@ -49,7 +49,13 @@ def check(ctx: Ctx, task) -> dict:
         steps.guard_step(ctx, task)
     except steps.CheckFailed as exc:
         problems += exc.items
-    problems += steps.order_step(ctx, task)
+    from . import learning
+    try:
+        problems += steps.check_items(ctx, task)
+    except steps.CheckFailed as exc:
+        problems += exc.items
+    if not wiki_check.errors(problems):
+        problems += steps.order_step(ctx, task)
     result = safefs.read_json(ctx.notes_path, f"{workbranch.WORKDIR}/result.json")
     if result is not None:
         invalid = schema_errors("result", result)
@@ -60,14 +66,13 @@ def check(ctx: Ctx, task) -> dict:
             listed = {(i["file"], i["item_id"]) for i in fetch["open_review_items"]}
             problems += check_result(ctx.notes_path, result, fetch, listed,
                                      ctx.cfg.limits.review_closures_per_run, whole_run=False)
-    problems += wiki_check.check_files(ctx.notes_path, steps.changed_paths(ctx, task))
     if not wiki_check.errors(problems):
-        from . import learning
         try:
             learning.refresh(ctx, task)
         except steps.CheckFailed as exc:
             problems += exc.items
-    problems += public_problems(ctx.notes_path)
+    if not wiki_check.errors(problems):
+        problems += public_problems(ctx.notes_path)
     steps.write_check_items(ctx, problems)
     errors = wiki_check.errors(problems)
     return {"ok": not errors, "errors": len(errors), "problems": problems[:50]}

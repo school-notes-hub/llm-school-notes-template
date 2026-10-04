@@ -49,9 +49,10 @@ def test_new_undated_lesson_resets_timer_but_prose_edit_does_not(repo):
     assert drafts.warnings(repo, START + timedelta(days=30))
 
 
-def test_check_reports_old_unchanged_draft_and_rejects_unknown_status(repo):
+def test_check_limits_old_drafts_to_changed_pages_and_rejects_unknown_status(repo):
     start(repo)
-    found = check.check_files(repo, [], today=START + timedelta(days=15))
+    assert not check.check_files(repo, [], today=START + timedelta(days=15))
+    found = check.check_files(repo, [REL], today=START + timedelta(days=15))
     assert [(i["file"], i["severity"]) for i in found] == [(REL, "warning")]
     write(repo, REL, frontmatter.set_keys((repo / REL).read_text(), {"status": "oops"}))
     assert any("status must" in i["message"] for i in check.errors(check.check_files(repo, [REL])))
@@ -63,3 +64,11 @@ def test_writer_cannot_reset_draft_tracking(repo):
     write(repo, REL, text.replace("2026-09-01", "2026-10-01"))
     for interactive in (False, True):
         assert run(repo, base, [(REL, "modified")], interactive=interactive)
+
+
+@pytest.mark.parametrize("lessons", [None, 42, ["lesson"], [{"topics": 42}]])
+def test_status_reports_malformed_lesson_metadata(repo, lessons):
+    from school_notes2.flows.status import _drafts
+    rel = "wiki/proba/2026-09-10-elso-jegyzet.md"
+    write(repo, rel, frontmatter.set_keys((repo / rel).read_text(), {"lessons": lessons}))
+    assert rel in _drafts(repo)["error"]

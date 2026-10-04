@@ -128,6 +128,8 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
     Closures and evidence are written only after the check passed, so a run sent back to
     the writer never leaves a stale closure (both writers replace their own run's part)."""
     guard_step(ctx, task)
+    from . import learning
+    learning.validate(ctx, task)
     reordered = order_step(ctx, task)
     if reordered:
         raise CheckFailed(reordered)
@@ -161,9 +163,17 @@ def regenerate(ctx: Ctx, task: Task) -> None:
     generate_all(ctx, task)
 
 
+def check_items(ctx: Ctx, task: Task) -> list[dict]:
+    """Only author changes incur content checks; generated parts cannot widen the scope."""
+    from . import learning
+    today = learning.observation_date(task)
+    learning.validate(ctx, task)
+    return wiki_check.check_files(ctx.notes_path, sorted(llm_snapshot(ctx, task)), today=today)
+
+
 def check_changed(ctx: Ctx, task: Task) -> None:
     """Step 5: the mechanical check of the run's changed files."""
-    items = wiki_check.check_files(ctx.notes_path, changed_paths(ctx, task))
+    items = check_items(ctx, task)
     errors = wiki_check.errors(items)
     if errors:
         raise CheckFailed(errors)

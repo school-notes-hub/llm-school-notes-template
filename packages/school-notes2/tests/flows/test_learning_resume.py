@@ -93,3 +93,29 @@ def test_writer_race_still_detects_whitespace_edits_in_code():
     text = "# Példa\n\n```python\ntext = '''a\n\n\nb'''\n```\n"
     changed = text.replace("a\n\n\nb", "a\n\nb")
     assert _llm_hash("wiki/a.md", text.encode()) != _llm_hash("wiki/a.md", changed.encode())
+
+
+@pytest.mark.parametrize("whole", [False, True])
+def test_abandoned_pending_replacement_restores_recorded_hash(repo, tmp_path, monkeypatch, whole):
+    task = phase.create(tmp_path / "tasks", "tester", "notes", "interactive", "prepared")
+    ctx = SimpleNamespace(notes_path=repo)
+    base = snapshot(repo)
+    learning.refresh(ctx, task, today=date(2026, 9, 1))
+    rel = decisions.OVERVIEW if whole else "wiki/proba/2026-09-10-elso-jegyzet.md"
+    key = "tool_writes" if whole else "tool_parts"
+    before = task.get(key)[rel]
+    def fail(*args, **kw):
+        raise RuntimeError("before replacement")
+    with monkeypatch.context() as patch:
+        patch.setattr(safefs, "write_text", fail)
+        with pytest.raises(RuntimeError, match="before replacement"):
+            new = (repo / rel).read_text().replace("Füzet", "Másik") if not whole else "new overview"
+            learning._write(ctx, task, rel, new, whole=whole)
+    task = phase.load(task.dir)
+    assert task.get(key)[rel] != before
+    # The input already matches the last completed refresh: no replacement is needed.
+    learning.refresh(ctx, task)
+    assert task.get("learning_pending") is None
+    assert task.get(key)[rel] == before
+    assert not run(repo, base, [(rel, "modified" if rel in base else "added")],
+                   tool_parts=task.get("tool_parts"), tool_files=task.get("tool_writes"))

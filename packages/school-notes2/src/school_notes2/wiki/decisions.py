@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 from . import frontmatter, markers
-from .pages import CODE_FENCE, read_page, wiki_pages
+from .pages import CODE_FENCE, PageError, read_page, wiki_pages
 
 ID = re.compile(r"[a-z0-9-]+\Z")
 ANCHOR = re.compile(r"^ {0,3}<!--\s*q:\s*(.*?)\s*-->\s*$")
@@ -17,10 +17,8 @@ LIST_ITEM = re.compile(r"^ {0,3}(\d+[.)]|[*+-])\s+\S")
 OVERVIEW = "docs/review/dontesek.md"
 
 
-class DecisionError(ValueError):
-    def __init__(self, page: str, problems: list[str]):
-        super().__init__(f"{page}: " + "; ".join(problems))
-        self.page, self.problems = page, problems
+class DecisionError(PageError):
+    pass
 
 
 def valid_date(value) -> bool:
@@ -55,52 +53,65 @@ def decision_problems(meta: dict) -> list[str]:
     return out
 
 
-def question_problems(body: str, meta: dict) -> list[tuple[int, str]]:
-    """Validate top-level question items; nested explanation lists are not new questions."""
-    body = CODE_FENCE.sub(lambda m: "\n" * m.group().count("\n"), body)
-    out, seen, used = [], set(), set()
-    decision_ids = {d.get("id") for d in meta.get("decisions", [])
-                    if isinstance(d, dict) and isinstance(d.get("id"), str)} \
-        if isinstance(meta.get("decisions", []), list) else set()
-    section, count, previous, indent = 0, 0, None, None
-    anchors = []
-    for n, line in enumerate(body.splitlines(), 1):
-        heading, anchor, entry = HEADING.match(line), ANCHOR.match(line), LIST_ITEM.match(line)
-        if heading:
-            if section and len(heading[1]) <= section:
-                if count == 0:
-                    out.append((n, "empty open-questions section"))
-                section = 0
-            if QUESTION_HEADING.fullmatch(heading[2]):
-                section, count, indent = len(heading[1]), 0, None
-        if anchor:
-            key = anchor[1]
-            anchors.append((n, key))
-            if not ID.fullmatch(key):
-                out.append((n, "question id must contain only [a-z0-9-]"))
-            if key in seen:
-                out.append((n, f"duplicate question id {key!r}"))
-            if key in decision_ids:
-                out.append((n, f"{key!r} is both an open question and a decision"))
-            seen.add(key)
-        if section and entry:
+def _question_sections(lines: list[str]) -> list[list[tuple[int, str]]]:
+    sections, current, level = [], None, 0
+    for n, line in enumerate(lines, 1):
+        heading = HEADING.match(line)
+        if heading and len(heading[1]) <= level:
+            current = None
+        if heading and QUESTION_HEADING.fullmatch(heading[2]):
+            current, level = [(n, line)], len(heading[1])
+            sections.append(current)
+        elif current is not None:
+            current.append((n, line))
+    return sections
+
+
+def _question_items(section: list[tuple[int, str]]) -> list[tuple[int, str, int | None]]:
+    items, previous, indent = [], None, None
+    for n, line in section[1:]:
+        entry = LIST_ITEM.match(line)
+        if entry:
             leading = len(line) - len(line.lstrip(" "))
             if indent is None:
                 indent = leading
-            if leading >= indent + 3:
-                previous = n, line
-                continue
-            count += 1
-            if entry[1] != f"{count}.":
-                out.append((n, "open questions need consecutive numbered items (1., 2., ...)"))
-            if previous is None or not ANCHOR.match(previous[1]):
-                out.append((n, "open question needs a preceding <!-- q: page-key --> anchor"))
-            else:
-                used.add(previous[0])
+            if leading <= indent:
+                anchor = previous[0] if previous and ANCHOR.match(previous[1]) else None
+                items.append((n, entry[1], anchor))
         if line.strip():
             previous = n, line
-    if section and count == 0:
-        out.append((len(body.splitlines()), "empty open-questions section"))
+    return items
+
+
+def question_problems(body: str, meta: dict) -> list[tuple[int, str]]:
+    """Validate top-level question items; nested explanation lists are not new questions."""
+    body = CODE_FENCE.sub(lambda m: "\n" * m.group().count("\n"), body)
+    lines = body.splitlines()
+    out, seen, used = [], set(), set()
+    entries = meta.get("decisions", [])
+    decision_ids = {d.get("id") for d in entries
+                    if isinstance(d, dict) and isinstance(d.get("id"), str)} \
+        if isinstance(entries, list) else set()
+    anchors = [(n, m[1]) for n, line in enumerate(lines, 1) if (m := ANCHOR.match(line))]
+    for n, key in anchors:
+        if not ID.fullmatch(key):
+            out.append((n, "question id must contain only [a-z0-9-]"))
+        if key in seen:
+            out.append((n, f"duplicate question id {key!r}"))
+        if key in decision_ids:
+            out.append((n, f"{key!r} is both an open question and a decision"))
+        seen.add(key)
+    for section in _question_sections(lines):
+        items = _question_items(section)
+        if not items:
+            out.append((section[0][0], "empty open-questions section"))
+        for count, (n, marker, anchor) in enumerate(items, 1):
+            if marker != f"{count}.":
+                out.append((n, "open questions need consecutive numbered items (1., 2., ...)"))
+            if anchor is None:
+                out.append((n, "open question needs a preceding <!-- q: page-key --> anchor"))
+            else:
+                used.add(anchor)
     out += [(n, "question anchor must precede an open-question item")
             for n, _ in anchors if n not in used]
     return sorted(out)

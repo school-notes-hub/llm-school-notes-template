@@ -87,13 +87,19 @@ payload. Reviewer `relates_to` routing belongs to the later reviewer integration
 `status` accepts `draft`, `stable`, `deprecated`; absence means stable. The protected
 `draft_tracking: {since: YYYY-MM-DD, lessons: [...]}` field starts when the tool first
 observes a draft. Lesson identities are log path plus list position, independent of
-lesson dates and filenames' date prefixes. An additional linked lesson resets the
-clock; prose edits, date corrections and repeat checks do not. After more than 14
-days, `check` warns even on an unchanged draft page. Leaving draft clears tracking
+lesson date values. Renaming a log (including its date prefix) or inserting a lesson
+before an existing one changes those identities and can reset the clock; stable lesson
+IDs would be needed to avoid this. An additional linked lesson resets the clock;
+prose edits, date-value corrections and repeat checks do not. After more than 14 days,
+`check` warns on author-changed draft pages, using the run's pinned observation date.
+The repository-wide list is available in `status`. Leaving draft clears tracking
 and its generated `pending` notice. Legacy drafts start tracking on first observation;
 their original start cannot be inferred from the last edit timestamp.
 
-MCP `check` and finish/rebase generation refresh these outputs. `flows/learning.py`
+MCP `check` and finish/rebase generation refresh these outputs. Content checks compare
+the author-written part with the run base; tool blocks and machine fields alone do
+not subject legacy pages to the new lesson-log or question form. Invalid metadata on
+unchanged pages requires owner intervention instead of returning to the writer. `flows/learning.py`
 records each impending replacement before writing and pins the observation date in
 the existing task state, so interrupted generation resumes without restarting the
 clock or rejecting the tool's own writes. No new phase or LLM call is introduced.

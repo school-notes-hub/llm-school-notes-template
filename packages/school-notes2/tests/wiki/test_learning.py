@@ -143,12 +143,11 @@ def test_overview_is_private_sorted_and_replaces_resolved_question(repo):
     assert not check.errors(check.check_files(repo, [REL]))
 
 
-@pytest.mark.parametrize("learner", ["benedek", "barna"])
-def test_public_manifest_excludes_private_decisions_and_anchors(repo, learner):
+def test_public_manifest_excludes_private_decisions_and_anchors(repo):
     import json
     from school_notes2.wiki import public
     text = frontmatter.set_keys((repo / REL).read_text(),
-                                {"decisions": [{**DECISION, "answer": "PRIVATE_CANARY_" + learner}]})
+                                {"decisions": [{**DECISION, "answer": "PRIVATE_CANARY"}]})
     write(repo, REL, text + QUESTIONS.replace("elso-jel", "private-question-canary"))
     write(repo, decisions.OVERVIEW, decisions.overview(repo))
     public.write(repo, lambda _: ("authored", "test"))
@@ -164,3 +163,54 @@ def test_cron_catches_line_ending_only_decision_change(repo):
     base = snapshot(repo)
     (repo / REL).write_bytes(text.replace("\n", "\r\n").encode())
     assert any("decisions" in v.message for v in run(repo, base, [(REL, "modified")]))
+
+
+@pytest.mark.parametrize("extension", ["doc", "docx", "xls", "xlsx", "odp", "ods", "key"])
+def test_material_rejects_office_filenames(extension):
+    assert lesson_log.material_problems({"materials": [f"Munkalap.{extension} (feladatlap)"]})
+
+
+def test_material_rejects_date_slug_but_accepts_public_title():
+    assert lesson_log.material_problems({"materials": [
+        "2026-10-03-A-polisz-szuletese-1-resz (prezentáció)"]})
+    assert not lesson_log.material_problems({"materials": ["A polisz születése (prezentáció)"]})
+
+
+@pytest.mark.parametrize("prefix", ["./", "../proba/"])
+def test_lesson_form_resolves_paths_and_groups_nested_points(repo, prefix):
+    meta = frontmatter.split((repo / NOTE).read_text()).meta
+    body = LESSON_BODY.replace("elso.md#", prefix + "elso.md#")
+    body = body.replace("* [", " * [")
+    body += "\n   - Alpont link nélkül.\n" * 9
+    assert not lesson_log.form_problems(repo, NOTE, body, meta)
+    for lesson in meta["lessons"]:
+        lesson["topics"] = [prefix + t for t in lesson["topics"]]
+    assert not lesson_log.form_problems(repo, NOTE, LESSON_BODY, meta)
+
+
+def test_numbered_learning_points_explain_required_bullets(repo):
+    meta = frontmatter.split((repo / NOTE).read_text()).meta
+    errors = lesson_log.form_problems(repo, NOTE, LESSON_BODY.replace("* ", "1. "), meta)
+    assert any("top-level `*`/`-` bullets" in error for error in errors)
+
+
+def test_question_sections_and_nested_lists_are_independent():
+    body = QUESTIONS + "  - Első lehetőség.\n  - Második lehetőség.\n"
+    body += "\n## Háttér\nMagyarázat.\n<!-- q: next -->\n2. Következő?\n"
+    body += "\n# Másik rész\n1. Nem kérdés.\n"
+    assert not decisions.question_problems(body, {})
+    assert decisions.question_problems(body + "\n# Open questions\n", {})
+
+
+@pytest.mark.parametrize("consumer", ["overview", "lesson_keys", "warnings", "indexes"])
+def test_whole_wiki_readers_report_yaml_error_with_page(repo, consumer):
+    from school_notes2.wiki import drafts, generate
+    from school_notes2.wiki.pages import PageError
+    write(repo, REL, "---\nprivate: [PRIVATE_VALUE\n---\n")
+    readers = {"overview": decisions.overview, "lesson_keys": drafts.lesson_keys,
+               "warnings": lambda r: drafts.warnings(r, date(2026, 10, 4)),
+               "indexes": generate.write_indexes}
+    with pytest.raises(PageError) as failure:
+        readers[consumer](repo)
+    assert failure.value.page == REL
+    assert "PRIVATE_VALUE" not in str(failure.value)

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from . import frontmatter, lesson_log, markers
 from .decisions import valid_date
-from .pages import read_page, resolve, wiki_pages
+from .pages import PageError, read_page, resolve, wiki_pages
 
 KEY = "draft_tracking"
 NOTICE = "⏳ Ez a téma az órán folytatódik; a jegyzet az eddig tanult részt tartalmazza.\n"
@@ -17,9 +17,11 @@ def lesson_keys(repo: Path) -> dict[str, list[str]]:
         meta = read_page(repo, rel).meta
         if not lesson_log.is_lesson(rel, meta):
             continue
-        for n, lesson in enumerate(meta.get("lessons") or []):
-            if not isinstance(lesson, dict):
-                continue
+        lessons = meta.get("lessons")
+        if not isinstance(lessons, list) or any(not isinstance(lesson, dict) or
+                not isinstance(lesson.get("topics", []), list) for lesson in lessons):
+            raise PageError(rel, ["lessons must be a list of mappings with topic lists"])
+        for n, lesson in enumerate(lessons):
             key = f"{rel}#{n}"
             targets = [rel] + [resolve(rel, str(t).split("#", 1)[0])
                                for t in lesson.get("topics") or []]
@@ -66,10 +68,11 @@ def update(text: str, lessons: list[str], today: date) -> str:
     return text
 
 
-def warnings(repo: Path, today: date) -> list[tuple[str, str]]:
+def warnings(repo: Path, today: date, *, paths: list[str] | None = None) -> list[tuple[str, str]]:
     linked = lesson_keys(repo)
     out = []
-    for rel in sorted(wiki_pages(repo)):
+    available = set(wiki_pages(repo))
+    for rel in sorted(available if paths is None else available.intersection(paths)):
         meta = read_page(repo, rel).meta
         if meta.get("status") != "draft" or problems(meta):
             continue

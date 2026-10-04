@@ -9,41 +9,83 @@ from datetime import date
 
 from ..state import safefs
 from ..state.phase import Task
-from ..wiki import decisions, drafts, frontmatter, guard, lesson_log
-from ..wiki.pages import wiki_pages
+from ..state.errors import NeedsOwner
+from ..wiki import decisions, drafts, guard, lesson_log
+from ..wiki.pages import PageError, read_page, wiki_pages
 from . import steps
 from .context import Ctx
 
 
-def refresh(ctx: Ctx, task: Task, *, today: date | None = None) -> None:
-    repo = ctx.notes_path
-    # Pin the observation date across crashes/resume, including across midnight.
+def observation_date(task: Task, today: date | None = None) -> date:
+    """Pin the date before checking or generating, also across midnight and resume."""
     if not task.get("learning_date"):
         task.update(learning_date=(today or date.today()).isoformat())
-    today = date.fromisoformat(task.get("learning_date"))
+    return date.fromisoformat(task.get("learning_date"))
+
+
+def validate(ctx: Ctx, task: Task) -> None:
+    """Inspect metadata page by page before any whole-wiki consumer or tool write."""
+    problems = []
+    for rel in sorted(wiki_pages(ctx.notes_path)):
+        try:
+            meta = read_page(ctx.notes_path, rel).meta
+            messages = drafts.problems(meta) + decisions.decision_problems(meta)
+            if lesson_log.is_lesson(rel, meta):
+                try:
+                    lesson_log.source_line(meta)
+                except ValueError as exc:
+                    messages.append(str(exc))
+            problems += [steps.wiki_check.item(rel, None, m) for m in messages]
+        except PageError as exc:
+            problems += [steps.wiki_check.item(rel, None, m) for m in exc.problems]
+    if problems:
+        changed = steps.llm_snapshot(ctx, task)
+        outside = [p for p in problems if p["file"] not in changed]
+        if outside:
+            raise NeedsOwner("invalid metadata outside this run: " + "; ".join(
+                f"{p['file']}: {p['message']}" for p in outside),
+                todo="repair the listed pages in `school-notes chat`", details={"items": outside})
+        raise steps.CheckFailed(problems)
+
+
+def refresh(ctx: Ctx, task: Task, *, today: date | None = None) -> None:
+    repo = ctx.notes_path
+    today = observation_date(task, today)
+    validate(ctx, task)
+    _settle_pending(ctx, task)
     linked = drafts.lesson_keys(repo)
     for rel in sorted(wiki_pages(repo)):
         old = safefs.read_text(repo, rel)
-        meta = frontmatter.split(old).meta
-        invalid = drafts.problems(meta)
-        if invalid:
-            raise steps.CheckFailed([steps.wiki_check.item(rel, None, m) for m in invalid])
+        meta = read_page(repo, rel).meta
         new = drafts.update(old, linked.get(rel, []), today)
         if lesson_log.is_lesson(rel, meta):
-            try:
-                new = lesson_log.after_header(new, lesson_log.BLOCK, lesson_log.source_line(meta))
-            except (ValueError, TypeError, AttributeError) as exc:
-                raise steps.CheckFailed([steps.wiki_check.item(rel, None, str(exc))]) from exc
+            new = lesson_log.after_header(new, lesson_log.BLOCK, lesson_log.source_line(meta))
         if new != old:
             _write(ctx, task, rel, new, whole=False)
-    try:
-        overview = decisions.overview(repo)
-    except decisions.DecisionError as exc:
-        raise steps.CheckFailed([steps.wiki_check.item(exc.page, None, m) for m in exc.problems]) from exc
+    overview = decisions.overview(repo)
     if not safefs.exists(repo, decisions.OVERVIEW) or safefs.read_text(repo, decisions.OVERVIEW) != overview:
         _write(ctx, task, decisions.OVERVIEW, overview, whole=True)
-    if task.get("learning_pending"):
-        task.update(learning_pending=None)
+
+
+def _settle_pending(ctx: Ctx, task: Task) -> None:
+    pending = task.get("learning_pending")
+    if not pending:
+        return
+    rel, whole = pending["path"], pending["whole"]
+    key = "tool_writes" if whole else "tool_parts"
+    recorded = dict(task.get(key, {}))
+    text = safefs.read_text(ctx.notes_path, rel) if safefs.exists(ctx.notes_path, rel) else None
+    actual = None if text is None else (
+        hashlib.sha256(text.encode()).hexdigest() if whole else guard.parts_hash(text))
+    if actual == pending["before"]:
+        if actual is None:
+            recorded.pop(rel, None)
+        else:
+            recorded[rel] = actual
+    elif actual != recorded.get(rel):
+        raise NeedsOwner(f"interrupted tool write was edited: {rel}",
+                         todo="inspect the worktree in `school-notes chat`")
+    task.update(**{key: recorded}, learning_pending=None)
 
 
 def _write(ctx: Ctx, task: Task, rel: str, text: str, *, whole: bool) -> None:

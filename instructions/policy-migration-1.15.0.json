@@ -13,7 +13,7 @@
       "heading": "Wiki structure",
       "destination": "instructions/wiki-structure.md",
       "source_sha256": "91416c932747a9e5a95b2c27ba7babf2ac8229afd251016b069bc5c142cb0b98",
-      "migrated_sha256": "f94513e55f9c73ef03f75f657ff028e70879671531877ccf2150a02f74b6de40",
+      "migrated_sha256": "0187ebba80d82b1a7c28cdc080fd9c1903353a0e1ac451e254d50f0c0846d0af",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
       "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.16.2: the public view leaves out links and citations of private files and the grade prefix; 1.17.0: lesson-log body and source pointer; topic-only banner, banner reuse/style and private footnotes"
     },
@@ -83,7 +83,7 @@
       "heading": "Sources",
       "destination": "instructions/sources-and-evidence.md",
       "source_sha256": "666eba81e2908049ac684ac9238acd1008b77d14afc370bec536d9045bb5c503",
-      "migrated_sha256": "275368dc4338eee486108e9192da9436f7434f3c61374816a9531fc98d2cf28b",
+      "migrated_sha256": "468c6222fda378b8a23953c30cfb2efcb1a1361af8c08a6c4092f9f025c7bcf4",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
       "updated_in": "1.16.1: original teaching files stay on Drive; 1.16.2: the public view leaves out links and citations of private files; 1.17.0: neutral catch-up wording, private source observations, explicit teacher-image permission/request route"
     },
@@ -106,7 +106,7 @@
       "heading": "Content rules",
       "destination": "instructions/content-and-curriculum.md",
       "source_sha256": "fb9b41871eef463014980a429f09a3829ff52863aa004db22e05debaeedc8683",
-      "migrated_sha256": "ae6ca9ad52f25306b320a7a8f4e0b46da325668404554f57338bc4cce03fcf3a",
+      "migrated_sha256": "62a303dfa136427707fba227dba284e781a8522828cd396d6f26b08f10fc277d",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
       "updated_in": "1.17.0: remove transcription and plain-language exemption; teach corrected content, model-free labels, integrate updates, subject-only quiz"
     },
@@ -121,7 +121,7 @@
       "heading": "Workflows",
       "destination": "instructions/wiki-workflows.md",
       "source_sha256": "4002b650b71d3afec1c296105ed32cc47d22be691ef1ca640204d1a696c97abc",
-      "migrated_sha256": "ce802b7eaae3f2de8575c1517011b95c1c970b5d1918aeadbd0207b81a09cf4e",
+      "migrated_sha256": "4eb27662a3b884430f7f13c9666b9cc9b96bea0accb6549d7b0fa3e56ea73059",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
       "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: public-safe anchored questions/decisions; private readings and coverage; independent reader check before machine list"
     },
@@ -129,7 +129,7 @@
       "heading": "Choosing and replacing authored visuals",
       "destination": "instructions/visual-policy.md",
       "source_sha256": "d6180905164864ce436be307edf626132fea3f122b9f5ba0596dad6208c27ba5",
-      "migrated_sha256": "725b7f088239162cfb90508108b82459560976a1d007646025a0dbeab00310a1",
+      "migrated_sha256": "f8155c59a011f647b1f68c3e59b136f62449ddb64835caac4eab469c62d48414",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
       "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: same notebook drawing, correct; independent acceptance; named replacement reasons"
     },

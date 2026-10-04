@@ -24,14 +24,23 @@ def material_problems(lesson: dict) -> list[str]:
         if not isinstance(name, str) or not re.fullmatch(r"\S(?:[^\r\n]*\S)? \([^()\r\n]+\)", name) \
                 or name != name.strip() or any(ord(c) < 32 for c in name):
             out.append("each material needs a single-line public name and kind: Name (kind)")
-        elif re.search(r"(?:^|[/\\\s])\S+\.(?:pdf|pptx?|jpe?g|png|heic)(?:\s|$)", name, re.I):
+        elif re.search(r"(?:^|[/\\\s])\S+\.(?:pdf|pptx?|jpe?g|png|heic|docx?|xlsx?|odp|ods|key)"
+                       r"(?:\s|$)", name, re.I) \
+                or re.match(r"^\d{4}-\d{2}-\d{2}-[A-Za-z0-9-]+ \(", name):
             out.append("material names must not be technical file names")
     return out
 
 
 def source_line(meta: dict) -> str:
     dates, materials = [], []
-    for lesson in meta.get("lessons", []):
+    lessons = meta.get("lessons")
+    if not isinstance(lessons, list):
+        raise ValueError("`lessons` must be a list")
+    for lesson in lessons:
+        if not isinstance(lesson, dict):
+            raise ValueError("each lesson must be a mapping")
+        if not isinstance(lesson.get("topics", []), list):
+            raise ValueError("lesson `topics` must be a list")
         value = lesson.get("date")
         if value is not None and not valid_date(value):
             raise ValueError("lesson date must be a real YYYY-MM-DD date")
@@ -81,13 +90,14 @@ def form_problems(repo: Path, rel: str, body: str, meta: dict) -> list[str]:
     visible = COMMENT.sub("", CODE_FENCE.sub("", body))
     heading = re.search(r"^# " + TITLE + r"\s*$", visible, re.M)
     if not heading:
-        return [f"lesson log needs '# {TITLE}' with 3-8 linked learning points"]
+        return [f"lesson log needs '# {TITLE}' with 3-8 top-level `*`/`-` bullets, "
+                "each linking `<topic>.md#<section>`"]
     section = re.split(r"^# ", visible[heading.end():], maxsplit=1, flags=re.M)[0]
-    points = re.findall(r"^ {0,3}[*+-] (.*(?:\n(?: {4,}|\t).*)*)", section, re.M)
+    points = _learning_points(section)
     out = []
     if not 3 <= len(points) <= 8:
-        out.append("lesson log needs 3-8 learning points")
-    topics = {str(t).split("#", 1)[0] for lesson in meta.get("lessons", [])
+        out.append("lesson log needs 3-8 top-level `*`/`-` bullets, each linking `<topic>.md#<section>`")
+    topics = {resolve(rel, str(t).split("#", 1)[0]) for lesson in meta.get("lessons", [])
               if isinstance(lesson, dict) and isinstance(lesson.get("topics", []), list)
               for t in lesson.get("topics", [])}
     for point in points:
@@ -97,10 +107,22 @@ def form_problems(repo: Path, rel: str, body: str, meta: dict) -> list[str]:
     return out
 
 
+def _learning_points(section: str) -> list[str]:
+    points, indent = [], None
+    for line in section.splitlines():
+        bullet = re.match(r"^( {0,3})[*+-] (.*)", line)
+        if bullet and (indent is None or len(bullet[1]) <= indent):
+            indent = len(bullet[1]) if indent is None else indent
+            points.append(bullet[2])
+        elif points and (not line.strip() or len(line) - len(line.lstrip(" ")) > indent):
+            points[-1] += "\n" + line
+    return points
+
+
 def _topic_section(repo: Path, rel: str, target: str, topics: set[str]) -> bool:
     file, sep, anchor = target.partition("#")
     resolved = resolve(rel, file)
-    if not sep or not anchor or file not in topics or resolved is None:
+    if not sep or not anchor or resolved not in topics or resolved is None:
         return False
     try:
         return read_page(repo, resolved).meta.get("type") == "topic"

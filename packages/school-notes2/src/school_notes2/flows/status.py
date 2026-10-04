@@ -1,7 +1,7 @@
 """`school-notes status [<learner>]` (plan 8.7): local state only, fast, no network."""
 
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from ..git import workbranch
@@ -11,6 +11,8 @@ from ..review import files as review_files
 from ..state import phase
 from ..state import safefs
 from ..state.files import read_json
+from ..wiki import drafts
+from ..wiki.pages import PageError
 from .context import Ctx
 
 OPEN_QUESTIONS = re.compile(r"^#+\s.*Nyitott kérdések", re.M)
@@ -31,6 +33,7 @@ def summary(ctx: Ctx) -> dict:
         "review_items": _review_items(ctx),
         "last_review": _last(tasks, "review"),
         "wiki_open_questions": _open_questions(ctx.notes_path),
+        "drafts": _drafts(ctx.notes_path),
         "references_without_map": _unmapped(ctx.notes_path),
         "pack_mb": _pack_mb(ctx.cfg.bare(ctx.name)),
         "log": str(ctx.cfg.log_path),
@@ -97,6 +100,15 @@ def _open_questions(repo: Path) -> list[str]:
     return out
 
 
+def _drafts(repo: Path) -> dict:
+    try:
+        return {"warnings": [{"file": rel, "message": message}
+                             for rel, message in drafts.warnings(repo, date.today())]} \
+            if repo.is_dir() else {"warnings": []}
+    except (PageError, OSError, safefs.UnsafePath) as exc:
+        return {"error": str(exc)}
+
+
 def _unmapped(repo: Path) -> list[str]:
     """Big reference material without a map: the writer must not read it (5.9, B29)."""
     out = []
@@ -145,6 +157,10 @@ def render(data: dict) -> str:
                  f"utolsó review: {data['last_review'] or '-'}")
     if data["wiki_open_questions"]:
         lines.append(f"„Nyitott kérdések” a wikiben: {len(data['wiki_open_questions'])} oldal")
+    for warning in data.get("drafts", {}).get("warnings", []):
+        lines.append(f"14 napnál régebbi draft: {warning['file']}")
+    if data.get("drafts", {}).get("error"):
+        lines.append(f"draft-áttekintés: {data['drafts']['error']}")
     for ref in data["references_without_map"]:
         lines.append(f"térkép nélkül, felvétel szükséges: {ref}")
     lines.append(f"pack: {data['pack_mb']} MiB; napló: {data['log']}")

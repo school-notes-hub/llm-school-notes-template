@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
 from ..state import safefs
 from . import frontmatter
 
@@ -15,6 +17,14 @@ COMMENT = re.compile(r"<!--.*?-->", re.S)
 LINK = re.compile(r"(?P<img>!?)\[(?P<text>(?:[^\[\]]|\[[^\]]*\])*)\]\((?P<target><[^>]*>|[^)\s]*)(?:\s+\"[^\"]*\")?\)")
 HTML_IMG = re.compile(r"<img\b[^>]*\bsrc=(?P<q>[\"'])(?P<target>.+?)(?P=q)", re.I)
 RESERVED = ("index.md", "log.md")
+
+
+class PageError(ValueError):
+    """A page-local metadata error, without quoting private YAML values."""
+
+    def __init__(self, page: str, problems: list[str]):
+        super().__init__(f"{page}: " + "; ".join(problems))
+        self.page, self.problems = page, problems
 
 
 @dataclass(frozen=True)
@@ -37,7 +47,10 @@ def read_text(repo: Path, rel: str) -> str:
 
 
 def read_page(repo: Path, rel: str) -> frontmatter.Page:
-    return frontmatter.split(safefs.read_text(repo, rel))
+    try:
+        return frontmatter.split(safefs.read_text(repo, rel))
+    except (ValueError, yaml.YAMLError) as exc:
+        raise PageError(rel, ["frontmatter is not valid YAML or not a mapping"]) from exc
 
 
 def is_file(repo: Path, rel: str) -> bool:

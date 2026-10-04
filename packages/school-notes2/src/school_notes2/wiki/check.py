@@ -306,7 +306,7 @@ def check_files(repo: Path, paths: list[str], *, today: date | None = None) -> l
         out += check_links(repo, rel, text)
     if not errors(out):
         out += [item(rel, None, message, "warning")
-                for rel, message in drafts.warnings(repo, today or date.today())]
+                for rel, message in drafts.warnings(repo, today or date.today(), paths=paths)]
     return out + check_renders(repo)
 
 
