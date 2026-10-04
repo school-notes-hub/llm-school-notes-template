@@ -112,4 +112,6 @@ def test_recheck_routed_value_cannot_upgrade_original_page(setup):
 
 def test_adjacent_fixed_source_parts_are_still_literals():
     text = markers.wrap("lesson-sources", "📎 Füzet: dátum nélküli óra\n")
-    assert generated.only_literals(text, "📎 Füzet: dátum nélküli óra")
+    assert generated.only_literals(text, "📎 Füzet: ")
+    assert not generated.only_literals(text, "📎 Füzet: dátum nélküli óra")
+    assert not generated.only_literals(text, "dátum nélküli óra")

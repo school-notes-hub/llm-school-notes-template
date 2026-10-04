@@ -34,8 +34,8 @@ def _literals(text):
             split = body.find(" · Tanári anyag: ")
             if split >= 0:
                 yield offset + split, offset + split + len(" · Tanári anyag: ")
-            for match in re.finditer(r"dátum nélküli óra", body[:split] if split >= 0 else body):
-                yield offset + match.start(), offset + match.end()
+            # "dátum nélküli óra" is not tool text: it reports a missing lesson date the
+            # writer can supply, so a finding about it stays an open item.
 
 
 def only_literals(text, quote):
