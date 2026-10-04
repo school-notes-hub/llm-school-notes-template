@@ -90,6 +90,6 @@ def public_problems(repo) -> list[dict]:
 
 
 def generate(ctx, task, plan_id, note):
-    if task.get("mode") == "repair":
+    if task.get("mode") == "repair" or task.get("paid_disabled"):
         return {"state": "disabled", "message": "Repair uses free local figures; paid generation is disabled."}
     return image_generate.generate(ctx.image_settings(), plan_id, note, log=ctx.log)

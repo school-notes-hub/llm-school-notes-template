@@ -8,9 +8,12 @@ from . import writer
 
 
 def completion(ctx, task):
-    notes = redact(writer.merge(writer.results(task, required=False))["owner_notes"])
+    notes = redact(writer.merge(writer.results(task, required=False))["owner_notes"]
+                   + task.get("reader_owner_notes", []) + task.get("recheck_owner_notes", [])
+                   + task.get("correction_result", {}).get("owner_notes", []))
     report = {"run_id": task.run_id, "phase": task.phase,
               "mode": task.get("mode", task.mode), "owner_notes": notes,
+              "reader_coverage": task.get("reader_coverage", []),
               "branch": f"notes/{task.run_id}" if task.get("no_push") else None}
     write_json(task.dir / "report.json", report)
     ctx.log.event("run.report", **report)

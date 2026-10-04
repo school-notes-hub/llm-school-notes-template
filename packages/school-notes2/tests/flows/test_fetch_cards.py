@@ -18,7 +18,7 @@ def context(repo, monkeypatch):
         return SimpleNamespace(returncode=0, stdout=(repo / "tools/subjects.json").read_bytes())
     wt = SimpleNamespace(run=git)
     ctx = SimpleNamespace(notes_path=repo, worktree=lambda _: wt, image_settings=lambda: None,
-                          tools_dir=lambda: None, cfg=SimpleNamespace(limits=SimpleNamespace(review_closures_per_run=20),
+                          tools_dir=lambda: None, cfg=SimpleNamespace(limits=SimpleNamespace(review_closures_per_run=20, max_agents=3),
                           sources=SimpleNamespace(
                               max_side_px=2000, jpeg_quality=85, pdf_dpi=200, pages_per_call=30)))
     monkeypatch.setattr(fetch, "_base", lambda *args: "a" * 40)

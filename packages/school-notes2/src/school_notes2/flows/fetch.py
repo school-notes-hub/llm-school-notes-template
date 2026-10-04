@@ -134,7 +134,11 @@ def prepare(ctx: Ctx, task: Task, *, new_subject_index) -> None:
     assigned = calls.assignments(ctx.notes_path, packages, pages, reviews, found["pending"],
                                  ctx.cfg.sources.pages_per_call, ctx.cfg.limits.review_closures_per_run,
                                  mode=task.mode)
+    from ..figures import pending as figure_pending
+    pending_figures = figure_pending.for_subjects(ctx.notes_path, {c["subject"] for c in assigned})
     task.set_phase("prepared", base=base, packages=packages, pages=pages,
+                   pending_figures=pending_figures,
+                   max_agents=ctx.cfg.limits.max_agents, attempt=1,
                    calls=assigned, ranges=calls.ranges(assigned) or [[0, 0]],
                    open_review_items=reviews,
                    pending_images=found["pending"],
@@ -232,6 +236,11 @@ def fetch_json(task: Task, k: int, *, whole_run: bool = False) -> dict:
                     pending_images=call["pending_images"])
         if "card" in call:
             data["card"] = call["card"]
+    if task.get("mode") == "fix":
+        data["mode"] = "fix"
+    data["pending_figures"] = [e for e in task.get("pending_figures", [])
+                               if whole_run or not data.get("subject") or
+                               e["commission"]["page"].split("/")[1] == data["subject"]]
     if task.get("mode") == "repair":
         data.update(mode="repair", repair_targets=task.get("repair_targets", []))
     if task.get("conflict_files"):

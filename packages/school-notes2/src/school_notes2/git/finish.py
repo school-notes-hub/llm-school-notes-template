@@ -14,7 +14,7 @@ from .workbranch import branch_name
 
 MAX_PUSH_ROUNDS = 3
 COMMIT_PATHS = ("wiki", "sources", "docs/review", "docs/evidence", "publication",
-                "tools/subjects.json", "docs/repair-queue.json")
+                "tools/subjects.json", "docs/repair-queue.json", "docs/figure-pending.json")
 
 
 class EditedDuringFinish(Exception):
@@ -32,6 +32,7 @@ class Hooks:
     snapshot: Callable[[], dict]            # hashes of the LLM-writable files (5.4/9)
     empty_blocks: Callable[[str], str]      # empty generated blocks (6.7)
     rerecord: Callable[[list[str]], None] = lambda paths: None   # Git merged tool files
+    final_keys: Callable[[], None] = lambda: None
     extra_paths: tuple[str, ...] = field(default_factory=tuple)   # interactive: references
 
 
@@ -186,6 +187,11 @@ def _publish_round(task: Task, wt: Git, hooks: Hooks, t: Timeouts) -> str:
     if g4_rebase(task, wt, hooks) == "empty":
         task.set_phase("pushed")       # the change is already upstream; nothing to push
         return "pushed"
+    hooks.final_keys()
+    _add(wt, hooks)
+    if not wt.ok("diff", "--cached", "--quiet"):
+        wt.run("commit", "--no-verify", "--amend", "--no-edit", timeout=LOCAL_TIMEOUT_S)
+        task.update(commit=head(wt))
     g5_build(task, wt, hooks)
     try:
         g6_push(task, wt, t)

@@ -1,0 +1,63 @@
+"""Fixed, generated pending notices; no model participates in export."""
+
+import hashlib
+import re
+
+from ..figures import commissions, pending
+from ..review import relations
+from ..state import safefs
+from ..wiki import drafts, frontmatter, lesson_log, markers
+from . import verdicts
+
+PAGE = "⏳ Ezt az oldalt még ellenőrizzük.\n"
+SECTION = "⏳ Ezt a részt még ellenőrizzük.\n"
+FIGURE = "⏳ Ehhez a részhez ábra készül.\n"
+
+
+def refresh(repo, pages):
+    known = relations.inventory(repo)["items"]
+    waiting = pending.load(repo)
+    written = []
+    for page in sorted(set(pages)):
+        if not safefs.is_file(repo, page) or not page.endswith(".md"):
+            continue
+        original = safefs.read_text(repo, page)
+        text = original
+        for name in markers.names(text):
+            if name.startswith(("pending-section-", "pending-figure-")):
+                text = markers.replace(text, name, "")
+        items = [i for i in known.values() if i.get("file") == page and i["status"] in ("open", "owner")]
+        page_notice = verdicts.valid(repo, page) is None or any(i.get("unlocated") for i in items)
+        sections = set()
+        for item in items:
+            quote = item.get("quote", "")
+            pattern = r"\s+".join(re.escape(w) for w in quote.split())
+            found = re.search(pattern, text) if pattern else None
+            headings = list(re.finditer(r"^#{1,6} .+$", text[:found.start()], re.M)) if found else []
+            if headings:
+                sections.add(headings[-1][0])
+            else:
+                page_notice = True
+        for heading in sorted(sections):
+            name = "pending-section-" + hashlib.sha256(heading.encode()).hexdigest()[:12]
+            if name in markers.names(text):
+                text = markers.replace(text, name, SECTION)
+            else:
+                text = text.replace(heading + "\n", heading + "\n\n" + markers.wrap(name, SECTION) + "\n", 1)
+        notice = PAGE if page_notice else drafts.NOTICE if frontmatter.split(text).meta.get("status") == "draft" else ""
+        text = lesson_log.after_header(text, "pending", notice)
+        for entry in waiting:
+            brief = entry["commission"]
+            if brief["page"] != page:
+                continue
+            name = "pending-figure-" + brief["id"]
+            if name in markers.names(text):
+                text = markers.replace(text, name, FIGURE)
+            else:
+                pattern = re.compile(commissions.MARKER.pattern + r"(?:\n|$)")
+                text = pattern.sub(lambda m: m[0] + "\n" + markers.wrap(name, FIGURE) + "\n"
+                                   if m[1] == brief["id"] else m[0], text)
+        if text != original:
+            safefs.write_text(repo, page, text)
+            written.append(page)
+    return written

@@ -8,7 +8,7 @@ import traceback
 
 from ..log import Log
 from ..notify import Mailer, Notice
-from ..state.errors import BadWork, NeedsOwner, Prerequisite, SnError, Transient
+from ..state.errors import BadWork, NeedsOwner, Prerequisite, SnError, Transient, WaitingQuota
 from ..state.phase import Task
 
 MAX_RETRIES = 3        # the failing hour plus the next two (8.1)
@@ -31,6 +31,10 @@ def on_error(exc: BaseException, *, task: Task | None, student: str, step: str, 
             _mail(mailer, student, f"{kind}:{step}", None, step, exc)
         return kind
     task.record_error(kind, str(exc))
+    if isinstance(exc, WaitingQuota):
+        if task.phase != "waiting_quota":
+            task.set_phase("waiting_quota", quota_phase=task.phase)
+        return kind
     if isinstance(exc, Transient):
         task.data["retries"] += 1
         task.save()

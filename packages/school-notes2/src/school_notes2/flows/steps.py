@@ -172,6 +172,8 @@ def regenerate(ctx: Ctx, task: Task) -> None:
     """Steps 5–6 again on a rebased tree (G4)."""
     check_changed(ctx, task)
     generate_all(ctx, task)
+    from .review_phases import final_keys
+    final_keys(ctx, task)
 
 
 def check_items(ctx: Ctx, task: Task) -> list[dict]:

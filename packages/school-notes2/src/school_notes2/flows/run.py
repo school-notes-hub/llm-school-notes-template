@@ -89,7 +89,8 @@ def _prerequisites(ctx: Ctx, task: Task | None) -> None:
     role, harness = ctx.cfg.role("writer")
     if not launch.login_ok(learner=ctx.name, run_id=task.run_id if task else "", role="writer",
                            harness=harness, image=ctx.image_tag(), log=ctx.log,
-                           allowed_domains=ctx.cfg.provider_domains):
+                           allowed_domains=ctx.cfg.provider_domains, max_agents=ctx.cfg.limits.max_agents,
+                           lease_dir=ctx.cfg.state_dir / "agent-leases"):
         raise Prerequisite(f"the {harness.name} login in the container expired",
                            todo=f"log in once: `school-notes login {ctx.name} writer`")
 
@@ -111,6 +112,8 @@ def _new_task(ctx: Ctx) -> Task | None:
 
 def advance(ctx: Ctx, task: Task) -> None:
     """Drive a cron notes task from its recorded phase to `done` (8.2)."""
+    if task.phase == "waiting_quota":
+        task.set_phase(task.get("quota_phase"))
     if task.get("mode") == "repair":
         from . import repair
         repair.prepare(ctx, task)

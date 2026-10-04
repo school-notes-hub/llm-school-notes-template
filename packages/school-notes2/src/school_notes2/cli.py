@@ -115,7 +115,8 @@ def _login(ctx, role_name: str) -> int:
     role, harness = ctx.cfg.role(role_name)
     return launch.run_login(learner=ctx.name, role=role_name, harness=harness,
                             image=ctx.image_tag(), log=ctx.log,
-                            allowed_domains=ctx.cfg.provider_domains + ctx.cfg.login_domains)
+                            allowed_domains=ctx.cfg.provider_domains + ctx.cfg.login_domains,
+                            max_agents=ctx.cfg.limits.max_agents, lease_dir=ctx.cfg.state_dir / "agent-leases")
 
 
 def _mcp(ctx, args) -> int:

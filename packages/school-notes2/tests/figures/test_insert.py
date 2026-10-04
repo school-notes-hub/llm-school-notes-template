@@ -150,3 +150,24 @@ def test_removed_banner_has_no_valid_verdict(repo, make_figure):
     text = markers.BLOCK.sub("", safefs.read_text(repo, brief["page"]))
     safefs.write_text(repo, brief["page"], text)
     assert len(insert.invalidated(repo)) == 1
+
+
+def test_reader_key_survives_tool_insertion(repo, make_figure):
+    from school_notes2.reader import units, verdicts
+    brief, candidate = make_figure()
+    page = brief["page"]
+    key = units.page_key(repo, page)
+    verdicts.record(repo, [{"file": page, "verdict": "ok"}], {page: key}, "reader", "date")
+    insert.insert(repo, brief, receipt(repo, brief, candidate), at="date")
+    assert units.page_key(repo, page) == key
+    assert verdicts.valid(repo, page)
+
+
+def test_pending_fetch_is_subject_scoped_and_excludes_owner(repo, make_figure):
+    brief, _ = make_figure()
+    pending.record(repo, brief, "run-1", [])
+    assert pending.for_subjects(repo, {"other"}) == []
+    assert len(pending.for_subjects(repo, {"physics"})) == 1
+    for rid in ("run-2", "run-3"):
+        pending.record(repo, brief, rid, [])
+    assert pending.for_subjects(repo, {"physics"}) == []

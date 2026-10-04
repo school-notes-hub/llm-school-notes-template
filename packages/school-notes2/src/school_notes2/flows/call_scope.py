@@ -48,7 +48,8 @@ def retry(ctx, task, items):
     if not pending or task.get("skip_writer"):
         raise SnError("finish failed without a writer assignment", details={"items": items})
     # Persist before invalidating checkpoints. Resume repeats only unfinished calls.
-    task.set_phase("writing", writing_k=pending[0], retry_calls=pending, retry_items=groups)
+    task.set_phase("writing", writing_k=pending[0], retry_calls=pending, retry_items=groups,
+                   attempt=task.get("attempt", 1) + 1, review_complete=False)
     invalidate(task)
 
 

@@ -18,6 +18,18 @@ if command[-2:] == ["auth", "status"] or command[-2:] == ["login", "status"]:
     sys.exit(0)
 sys.stdin.read()
 out = next((a.split(":")[0] for a in args if a.endswith(":/out:rw")), None)
+if out and any("-reader-" in a or "-recheck-" in a for a in args):
+    import json
+    incoming = next(a.split(":")[0] for a in args if a.endswith(":/in:ro"))
+    assigned = json.loads(Path(incoming, "assigned.json").read_text())
+    if "pages" in assigned:
+        review = {"pages": [{"file": p["file"], "verdict": "ok", "first_glance": ""}
+                            for p in assigned["pages"]], "findings": [], "owner_notes": []}
+    else:
+        review = {"hits": [{"hit_id": h, "verdict": "téves", "covered_by": None, "reason": "test"}
+                           for h in assigned["hits"]], "owner_notes": []}
+    Path(out, "review.json").write_text(json.dumps(review))
+    sys.exit(0)
 if out:                                   # the reviewer: read-only /work, writes /out
     review = {"verdict": "changes", "findings": [
         {"id": "R1", "file": "wiki/proba/elso.md", "line": 1, "problem": "Hiányzik egy példa.",

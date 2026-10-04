@@ -18,6 +18,7 @@ from ..state import safefs
 from ..state.errors import BadWork, NeedsOwner, Prerequisite, Transient
 from . import metrics as metrics_mod
 from .output import extract_stdout, read_file
+from .leases import guarded
 
 from .argv import (DEFAULT_LOGIN_DOMAINS, DEFAULT_PROVIDER_DOMAINS, EXIT_API,  # noqa: F401
                    EXIT_FIREWALL, EXIT_PREFLIGHT, LOGIN_COMMANDS, NOT_EXECUTABLE,
@@ -54,6 +55,9 @@ class RoleRun:
     label: str = "1"             # range k, or attempt; part of the transcript name
     allowed_domains: tuple[str, ...] = DEFAULT_PROVIDER_DOMAINS
     limits: Limits = Limits()
+    max_agents: int = 3
+    lease_dir: Path | None = None
+    attempt: int = 1
 
 
 @dataclass
@@ -156,7 +160,15 @@ def run_headless(run: RoleRun, *, log: Log, snapshot: Callable[[], object],
 
     Raises the 8.1 error class on failure; returns the Outcome on success.
     """
-    name = container_name(run.learner)
+    from .leases import acquire
+    root = run.lease_dir or run.task_dir / "agent-leases"
+    with acquire(root, run.learner, _volume_role(run.role_name), run.max_agents):
+        return _headless(run, log=log, snapshot=snapshot, podman=podman)
+
+
+def _headless(run, *, log, snapshot, podman):
+    name = container_name(run.learner, run_id=run.run_id, role=run.role_name,
+                          unit=run.label, attempt=run.attempt)
     remove_stale(name, podman)
     run.output_host.unlink(missing_ok=True)
     before = snapshot()
@@ -192,7 +204,7 @@ def run_headless(run: RoleRun, *, log: Log, snapshot: Callable[[], object],
 
 def _volume_role(role_name: str) -> str:
     """The reviewer has its own home; everything else (writer, chat) uses the writer's."""
-    return "reviewer" if role_name in ("reviewer", "figure-review") else "writer"
+    return "reviewer" if role_name in ("reviewer", "figure-review", "reader-1", "reader-2", "recheck") else "writer"
 
 
 def _run_fed(argv: list[str], stdin: bytes | None, out, name: str, timeout: float,
@@ -209,13 +221,14 @@ def _run_fed(argv: list[str], stdin: bytes | None, out, name: str, timeout: floa
     return timed_out, proc.returncode
 
 
+@guarded("writer")
 def run_interactive(*, learner: str, run_id: str, role: Role, harness: Harness, image: str,
                     mounts: Mounts, log: Log,
                     allowed_domains: tuple[str, ...] = DEFAULT_PROVIDER_DOMAINS,
                     limits: Limits = Limits(), podman: str = "podman") -> int:
     """The owner's `chat` session: same image, same MCP, interactive template, no timeout.
     It runs on the writer's home volume."""
-    name = container_name(learner)
+    name = container_name(learner, run_id=run_id, role="chat")
     remove_stale(name, podman)
     argv = podman_argv(learner=learner, image=image, run_id=run_id, mounts=mounts, name=name,
                        role="writer", interactive=True, allowed_domains=allowed_domains,
@@ -230,11 +243,12 @@ def run_interactive(*, learner: str, run_id: str, role: Role, harness: Harness, 
     return rc
 
 
+@guarded(None)
 def login_ok(*, learner: str, run_id: str, role: str, harness: Harness, image: str, log: Log,
              allowed_domains: tuple[str, ...] = DEFAULT_PROVIDER_DOMAINS,
              podman: str = "podman", timeout: float = 120) -> bool:
     """Run the template's login check in the image with the role's home volume."""
-    name = container_name(learner, "-login")
+    name = container_name(learner, run_id=run_id or "login", role=role + "-login")
     remove_stale(name, podman)
     argv = podman_argv(learner=learner, image=image, run_id=run_id, mounts=Mounts(home=True),
                        name=name, role=role, allowed_domains=allowed_domains,
@@ -253,12 +267,13 @@ def login_ok(*, learner: str, run_id: str, role: str, harness: Harness, image: s
     raise classify(proc.returncode, False, False, False, None, []) or Transient("login check")
 
 
+@guarded(None)
 def run_login(*, learner: str, role: str, harness: Harness, image: str, log: Log,
               allowed_domains: tuple[str, ...], podman: str = "podman") -> int:
     """The owner's one-off harness login on a role's home volume (plan 7.4, 10.4).
 
     `allowed_domains` must include the login sites (provider + login domains)."""
-    name = container_name(learner, "-login")
+    name = container_name(learner, run_id="login", role=role + "-login")
     remove_stale(name, podman)
     command = LOGIN_COMMANDS.get(family(harness))
     if command is None:
@@ -279,7 +294,7 @@ def run_offline(*, learner: str, run_id: str, image: str, in_dir: Path, out_dir:
                 command: list[str], log: Log, timeout: float, limits: Limits = Limits(),
                 podman: str = "podman") -> int:
     """A networkless helper container (SVG rasterising for the reviewer, plan 5.6/3)."""
-    name = container_name(learner, "-raster")
+    name = container_name(learner, run_id=run_id, role="raster")
     remove_stale(name, podman)
     argv = podman_argv(learner=learner, image=image, run_id=run_id, name=name, network=False,
                        mounts=Mounts(in_dir=in_dir, out_dir=out_dir, home=False),

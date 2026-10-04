@@ -83,7 +83,7 @@ def test_disagreement_reply_exactly_once_and_resume(tmp_path, report, verdict):
     with pytest.raises(files.ClosureError):
         relations.reply(tmp_path, key, verdict, "Második válasz.")
     if verdict == "keep":
-        assert files.open_items(tmp_path, "cron") == [{"file": rel, "item_id": "R1", "key": key, "round": 2, "status": "open"}]
+        assert files.open_items(tmp_path, "cron") == [{"file": rel, "item_id": "R1", "key": key, "round": 2, "status": "open", "chain": 0}]
         for status in ("disagree", "settled"):
             assert relations.closure_problems(tmp_path, {"file": rel, "item_id": "R1", "status": status,
                                                        "note": "Indok.", "question_id": "tema-datum"})

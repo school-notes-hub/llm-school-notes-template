@@ -41,3 +41,9 @@ class Race(SnError):
     """Push rejected because someone pushed first; not an error, the caller rebuilds."""
 
     kind = "race"
+
+
+class WaitingQuota(SnError):
+    """Pause the recorded phase; the next eligible round resumes it."""
+
+    kind = "waiting_quota"

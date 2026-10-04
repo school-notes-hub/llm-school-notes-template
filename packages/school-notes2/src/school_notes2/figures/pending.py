@@ -58,3 +58,13 @@ def restore(repo: Path, pages: set[str]) -> list[dict]:
         brief = entry["commission"]
         safefs.write_json(repo, f".school-notes/figures/{brief['id']}.json", brief)
     return entries
+
+
+def for_subjects(repo: Path, subjects: set[str]) -> list[dict]:
+    """Restore only eligible commissions for subjects already assigned to this run."""
+    entries = [e for e in load(repo) if e["runs"] < 3 and
+               e["commission"]["page"].split("/")[1] in subjects]
+    for entry in entries:
+        brief = entry["commission"]
+        safefs.write_json(repo, f".school-notes/figures/{brief['id']}.json", brief)
+    return entries

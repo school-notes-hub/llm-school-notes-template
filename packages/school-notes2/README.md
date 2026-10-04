@@ -322,3 +322,46 @@ in commission-ID order. It keeps the full commission and latest defects; unique 
 IDs make increments replay-safe. At three runs, `owner_required` is true and the
 commission is no longer eligible. The future orchestrator creates/notifies the owner
 item and the learner-facing pending notice. No owner wording is invented here.
+
+## Reader and shared correction phases (unit 2b)
+
+Notes finish now advances through durable `figures`, `inspecting`, `correcting`,
+`rechecking` and `review_ready` phases before the existing Git finish chain. They
+correspond to P2–P6; each attempt has separate call receipts. A valid completed
+output survives interruption. Invalid reviewer output permits one format retry;
+a crashed call permits one retry; timeout proceeds with the role's missing-review
+fallback. `waiting_quota` preserves its phase and does not consume these retries.
+The quota provider, weekly pre-call gate and T-125 suspension/notification policy
+remain the next operational unit; this unit supplies their resumable state boundary.
+
+The reader receives a read-only wiki snapshot with candidate images in place,
+assigned pages, diffs, questions, decisions and open/disputed items. Pass one has
+no machine-list file, source, evidence, rule module or writer explanation. Pass
+two runs only for nonempty warning lists, with `covered_by` deduplication. The
+three fixed Hungarian prompts and output schemas are `reader-1`, `reader-2` and
+`recheck`. Receipts are private; outputs are copied to `.school-notes/reader/`.
+
+P3 writes one run report; relation routing precedes writer assignment. P4 invokes
+the existing subject writer with `fix.txt`, the remaining closure capacity and a
+saved pre-fix tree. Failed fixes restore that tree; a completed or rolled-back P4
+can enter P6 directly when there is nothing to recheck. P5 judges only the closed
+items, new hits and changed figures. It never starts another correction pass.
+Open, disputed and owner items retain their chain and round metadata. A busy
+writer home (including an open interactive session) cannot launch a second
+writer: the P4 fallback leaves its items open for the next eligible run.
+
+Reader keys omit machine content and insertion markers. Figure keys keep the 2a
+contract. G4/G5 recompute keys on the final tree, remove stale verdict records and
+refresh fixed pending notices without an LLM or a publication hold. The final
+commit carries `School-Notes-Run`. Pending figures restore into subject-scoped
+fetch inputs; after three runs they become owner items. Starting a daily fix run
+without new sources remains part of the later scheduler unit.
+
+`[limits] max_agents = 3` is a positive integer, pinned for a run. Process-safe
+admission uses global slots and an exclusive lock per learner/home volume.
+Reader and figure review share the reviewer home and run sequentially. There is
+no parallel Claude experiment or B-mode activation here. Container names contain
+the learner, run, role, unit and attempt; stale cleanup uses only that exact name.
+The new tests cover both learners' shared behavior, physical blind inputs,
+interruption at each phase, bounded retries, rollback, disputes, admission and
+hash invalidation after a real local rebase.

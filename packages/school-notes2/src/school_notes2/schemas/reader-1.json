@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pages",
+    "findings",
+    "owner_notes"
+  ],
+  "properties": {
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "file",
+          "verdict",
+          "first_glance"
+        ],
+        "properties": {
+          "file": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "verdict": {
+            "enum": [
+              "ok",
+              "changes"
+            ]
+          },
+          "first_glance": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "file",
+          "quote",
+          "category",
+          "problem",
+          "suggestion",
+          "relates_to"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^F-[1-9][0-9]*$"
+          },
+          "file": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "quote": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "problem": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "suggestion": {
+            "type": "string"
+          },
+          "relates_to": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "new_evidence": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "owner_notes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "\\S"
+      }
+    }
+  }
+}

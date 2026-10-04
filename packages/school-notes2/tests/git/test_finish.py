@@ -427,3 +427,28 @@ def test_no_push_stops_after_commit_and_only_explicit_release_continues(env, mon
     assert finish.run(task, env.wt, hooks, T, {}) == "done"
     assert task.get("commit") == commit
     assert env.origin_log().count(f"Run-Id: {task.run_id}") == 1
+
+
+def test_t154_final_keys_on_rebased_commit_before_build(env):
+    from school_notes2.reader import units, verdicts
+    from school_notes2.state import safefs
+    task = env.start_run()
+    page = "wiki/a.md"
+    (env.path / page).write_text("changed first\nline 2\nline 3\n")
+    verdicts.record(env.path, [{"file": page, "verdict": "ok"}],
+                    {page: units.page_key(env.path, page)}, "model", "date")
+    env.other_push(page, "line 1\nline 2\nchanged last\n")
+    hooks = env.hooks()
+    hooks.message = fixed_message(task)
+    checked = []
+    def final_keys():
+        committed = env.wt.out("show", "HEAD:" + page)
+        assert "changed first" in committed and "changed last" in committed
+        checked.append(verdicts.invalidate(env.path))
+    def build(commit):
+        assert safefs.read_json(env.path, verdicts.PATH) == []
+        assert env.wt.out("show", commit + ":" + verdicts.PATH).strip() == "[]"
+        return {"commit": commit}
+    hooks.final_keys, hooks.build = final_keys, build
+    assert finish.run(task, env.wt, hooks, T, {}) == "done"
+    assert len(checked) == 1 and len(checked[0]) == 1

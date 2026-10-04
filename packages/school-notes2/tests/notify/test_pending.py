@@ -15,7 +15,7 @@ def context(tmp_path, log, learner):
     (tmp_path / "repo").mkdir(exist_ok=True)
     return SimpleNamespace(
         name=learner, notes_path=tmp_path / "repo", log=log,
-        cfg=SimpleNamespace(state_dir=tmp_path / "state",
+        cfg=SimpleNamespace(state_dir=tmp_path / "state", limits=SimpleNamespace(max_agents=3),
                             timeouts=SimpleNamespace(fetch_s=1, push_s=1, ls_remote_s=1)),
         mailer=Mailer(tmp_path / "rc", "o@example.com", tmp_path / "state/notify.json", log),
         worktree=lambda _: None, task_root=lambda: tmp_path,
@@ -42,8 +42,11 @@ def test_failed_finish_owner_notice_retries_in_next_run(tmp_path, log, monkeypat
         files.apply_closure(ctx.notes_path, f"old-{n}", [], listed)
     def content(ctx, task):
         outcome = files.apply_closure(ctx.notes_path, task.run_id, [], listed)
-        return SimpleNamespace(new_owner=outcome.new_owner, question=False)
+        return SimpleNamespace(new_owner=outcome.new_owner, question=False, result={"status": "done"})
     monkeypatch.setattr(steps, "content_steps", content)
+    from school_notes2.flows import review_phases
+    monkeypatch.setattr(review_phases, "advance", lambda ctx, task, notify:
+                        task.set_phase("finishing", review_complete=True))
     def git_finish(task, *args):
         task.set_phase("done")
         return "done"

@@ -23,9 +23,9 @@ def finish(ctx: Ctx, task: Task, *, notify_owner_items) -> str:
 
     Raises steps.CheckFailed (the writer must fix check.json), NeedsOwner, Transient."""
     wt = ctx.worktree("notes")
-    start = None
-    if task.phase in ("prepared", "writing", "finishing"):
-        task.set_phase("finishing")
+    start = _snapshot(ctx, task)
+    from . import review_phases
+    if task.phase in ("prepared", "writing", "finishing") and not task.get("review_complete"):
         start = _snapshot(ctx, task)
         prepared = steps.content_steps(ctx, task)
         notify_owner_items(prepared.new_owner)
@@ -33,8 +33,12 @@ def finish(ctx: Ctx, task: Task, *, notify_owner_items) -> str:
             raise NeedsOwner("the writer asked a blocking question",
                              todo="answer it in `school-notes chat`",
                              details={"questions": prepared.result.get("questions", [])})
+        task.set_phase("figures", inspection_result=prepared.result,
+                       attempt=task.get("attempt", 1), max_agents=task.get("max_agents", ctx.cfg.limits.max_agents))
+    if task.phase in (*review_phases.PHASES, "waiting_quota"):
+        review_phases.advance(ctx, task, notify_owner_items)
     elif task.get("rebase") == "conflict":
-        steps.content_steps(ctx, task)          # 6.7: the owner resolved it; check again
+        steps.regenerate(ctx, task)
     from . import repair, report
     if task.phase == "finishing":
         repair.complete(ctx, task)
@@ -46,10 +50,15 @@ def finish(ctx: Ctx, task: Task, *, notify_owner_items) -> str:
         snapshot=lambda: _snapshot(ctx, task),
         empty_blocks=markers.empty_all,
         rerecord=lambda paths: steps.rerecord(ctx, task, paths),
+        final_keys=lambda: review_phases.final_keys(ctx, task),
         extra_paths=("references",) if task.mode == "interactive" else ())
     t = git_finish.Timeouts(ctx.cfg.timeouts.fetch_s, ctx.cfg.timeouts.push_s,
                             ctx.cfg.timeouts.ls_remote_s)
-    state = git_finish.run(task, wt, hooks, t, start if start is not None else hooks.snapshot())
+    try:
+        state = git_finish.run(task, wt, hooks, t, start)
+    except git_finish.EditedDuringFinish:
+        task.set_phase("writing", review_complete=False, attempt=task.get("attempt", 1) + 1)
+        raise
     if state in ("done", "committed"):
         report.completion(ctx, task)
     return state
@@ -118,7 +127,8 @@ def message(ctx: Ctx, task: Task) -> str:
     role, _ = ctx.cfg.role("writer")
     title = _log_title(ctx, task) or f"{task.run_id}, {_count(ctx, task)} fájl"
     return (f"notes({ctx.name}): {title}\n\nRun-Id: {task.run_id}\nKind: notes\n"
-            f"Tool: school-notes {VERSION}\nWriter: {role.model}/{role.effort}\n")
+            f"Tool: school-notes {VERSION}\nWriter: {role.model}/{role.effort}\n"
+            f"School-Notes-Run: {task.get('mode') or ('chat' if task.mode == 'interactive' else 'run')}\n")
 
 
 def _log_title(ctx: Ctx, task: Task) -> str:

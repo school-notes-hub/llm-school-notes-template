@@ -89,6 +89,11 @@ def test_legacy_log_check_finish_and_rebase_regeneration(learning_run, monkeypat
         assert drafts.NOTICE in (ctx_.notes_path / upstream_page).read_text()
         assert NOTE not in steps.llm_snapshot(ctx_, task_)
     monkeypatch.setattr(steps, "regenerate", regenerate)
+    from school_notes2.reader import calls
+    monkeypatch.setattr(calls, "run", lambda repo, view, folder, stage, assigned, configured, **kw:
+                        {"status": "reviewed", "model": "fake/high", "review": {
+                            "pages": [{"file": p["file"], "verdict": "ok", "first_glance": ""}
+                                      for p in assigned["pages"]], "findings": [], "owner_notes": []}})
     monkeypatch.setattr(finish, "_build", lambda c, t, commit: {"commit": commit})
     assert finish.finish(ctx, task, notify_owner_items=lambda _: None) == "done"
     assert len(regenerated) == 1

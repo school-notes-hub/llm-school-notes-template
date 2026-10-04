@@ -32,7 +32,11 @@ OUTPUT_INSTRUCTION = {
 }
 
 
-def container_name(learner: str, suffix: str = "") -> str:
+def container_name(learner: str, suffix: str = "", *, run_id: str = "", role: str = "",
+                   unit: str = "1", attempt: int = 1) -> str:
+    if run_id:
+        parts = (learner, run_id, role, unit, str(attempt))
+        return "school-notes-" + "-".join(re.sub(r"[^a-zA-Z0-9_.-]", "-", p) for p in parts)
     return f"school-notes-{learner}{suffix}"
 
 
@@ -55,12 +59,12 @@ def api_domain(harness: Harness, allowed: tuple[str, ...]) -> str:
 
 def prompt(role_name: str, output_mode: str = "file") -> str:
     """The fixed prompt of a role, byte-identical on every call (K12)."""
-    if role_name not in (*ROLES, "fix", "figure-review"):
+    if role_name not in (*ROLES, "fix", "figure-review", "reader-1", "reader-2", "recheck"):
         raise ValueError(f"unknown prompt {role_name!r}")
     name = role_name
     text = resources.files(__package__).joinpath("prompts", f"{name}.txt").read_text("utf-8")
     instruction = OUTPUT_INSTRUCTION[output_mode]
-    if role_name == "figure-review":
+    if role_name in ("figure-review", "reader-1", "reader-2", "recheck"):
         instruction = ("A választ a `/out/review.json` fájlba írd." if output_mode == "file"
                        else "A válasz végén írd ki az egyetlen JSON-objektumot.")
     return text.replace("{output_instruction}", instruction)

@@ -6,7 +6,7 @@ from pathlib import Path
 from ..llm import launch
 from ..schemas import validate
 from ..state import safefs
-from ..state.errors import BadWork, Transient
+from ..state.errors import BadWork, Transient, WaitingQuota
 from . import commissions, context, inputs
 
 
@@ -94,9 +94,13 @@ def _resume(repo, briefs, name, run, folder, assigned, state, log, invoke):
         # Create the output directory before mounting it.
         safefs.write_json(folder, "out/.ready.json", {})
         try:
-            outcome = invoke(run, log=log, snapshot=lambda: launch.tree_fingerprint(folder / "out"))
+            outcome = invoke(replace(run, attempt=len(state["attempts"])), log=log, snapshot=lambda: launch.tree_fingerprint(folder / "out"))
             output = outcome.output
             validate_output(output, assigned, repo, briefs)
+        except WaitingQuota:
+            state["attempts"].pop()
+            safefs.write_json(folder, "state.json", state)
+            raise
         except launch.TimedOut:
             _failure(folder, state, "timeout", "figure reviewer timed out")
         except Transient as exc:

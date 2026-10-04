@@ -11,7 +11,8 @@ from .files import read_json, write_json
 
 SCHEMA = 1
 NOTES_PHASES = ("downloading", "downloaded", "moved", "prepared", "writing", "finishing",
-                "committed", "built", "pushing", "pushed", "done")
+                "figures", "inspecting", "correcting", "rechecking", "review_ready",
+                "waiting_quota", "committed", "built", "pushing", "pushed", "done")
 REVIEW_PHASES = ("prepared", "reviewing", "reviewed", "closing", "pushing", "done")
 PUBLISH_PHASES = ("prepared", "built", "pushing", "done")
 

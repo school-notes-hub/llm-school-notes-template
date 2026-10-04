@@ -66,7 +66,7 @@ def test_pending_images_and_review_items_are_subject_scoped(tmp_path):
 def test_writer_resume_reuses_validated_result_after_checkpoint_crash(tmp_path, monkeypatch):
     task = phase.create(tmp_path, "barna", "notes", "cron", "prepared")
     task.update(ranges=[[1, 1], [2, 2]], writing_k=1)
-    ctx = SimpleNamespace(cfg=SimpleNamespace(role=lambda _: (None, None)))
+    ctx = SimpleNamespace(cfg=SimpleNamespace(role=lambda _: (None, None), limits=SimpleNamespace(max_agents=3)))
     invoked = []
     monkeypatch.setattr(writer, "write_inputs", lambda *args: None)
     monkeypatch.setattr(writer, "_call", lambda ctx, task, k, *args: invoked.append(k) or {"status": "done"})
@@ -88,7 +88,7 @@ def test_writer_rechecks_each_call_before_saving_result(tmp_path, monkeypatch):
     from school_notes2.flows import steps
     task = phase.create(tmp_path, "barna", "notes", "cron", "writing")
     task.update(ranges=[[0, 0]])
-    ctx = SimpleNamespace(cfg=SimpleNamespace(role=lambda _: (None, None)))
+    ctx = SimpleNamespace(cfg=SimpleNamespace(role=lambda _: (None, None), limits=SimpleNamespace(max_agents=3)))
     monkeypatch.setattr(writer, "write_inputs", lambda *args: None)
     monkeypatch.setattr(writer, "_call", lambda *args: {"status": "done"})
     def bad(*args):

@@ -72,6 +72,12 @@ class Sources:
 
 @dataclass(frozen=True)
 class Limits:
+    max_agents: int = 3
+
+    def __post_init__(self):
+        if type(self.max_agents) is not int or self.max_agents < 1:
+            raise ConfigError("[limits] max_agents must be a positive integer")
+
     review_max_images: int = 30
     review_max_diff_kb: int = 300
     image_daily_usd: float = 1.0

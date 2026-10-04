@@ -95,7 +95,10 @@ def prepare(ctx, task):
         safefs.write_json(repo, queue.PATH, data)
         steps.record_tool_files(task, repo, [queue.PATH])
     failure.write_item(ctx, task)
+    from ..figures import pending as figure_pending
+    pending_figures = figure_pending.for_subjects(repo, {c["subject"] for c in calls})
     task.set_phase("prepared", calls=calls, repair_targets=targets, packages=[], pages=[],
+                   pending_figures=pending_figures,
                    ranges=[[0, 0]], open_review_items=[], pending_images=[],
                    skip_writer=bool(task.get("queue_only")), dot_git=safefs.read_text(repo, ".git"))
 

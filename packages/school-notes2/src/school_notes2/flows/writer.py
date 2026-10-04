@@ -5,7 +5,7 @@ from ..git import workbranch
 from ..llm import launch
 from ..mcp.jobs import JobStore
 from ..schemas import validate
-from ..state.errors import BadWork
+from ..state.errors import BadWork, Transient
 from ..state import safefs
 from ..state.files import read_json, write_json
 from ..state.phase import Task
@@ -35,6 +35,8 @@ def write_changes(ctx: Ctx, task: Task) -> None:
 def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
     """Call the writer for each remaining range; returns 'done' or 'question'."""
     role, harness = ctx.cfg.role("writer")
+    if task.get("max_agents") is None:
+        task.update(max_agents=ctx.cfg.limits.max_agents)
     call_scope.invalidate(task)
     n = len(task.get("ranges"))
     k = task.get("writing_k", 1)
@@ -42,8 +44,10 @@ def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
         task.set_phase("writing", writing_k=k)
         result = read_json(task.dir / f"result-{k}.json")
         if result is None or result["status"] == "question":
-            write_inputs(ctx, task, k)
-            result = _call(ctx, task, k, role, harness, handlers)
+            result = _fix_resume(ctx, task, k) if task.get("mode") == "fix" else None
+            if result is None:
+                write_inputs(ctx, task, k)
+                result = _invoke(ctx, task, k, role, harness, handlers)
             from . import steps
             try:
                 _check_call(ctx, task, k, result)
@@ -63,12 +67,13 @@ def _call(ctx: Ctx, task: Task, k: int, role, harness, handlers) -> dict:
     checks.begin(task)
     with mcp(ctx, task.dir, "cron", handlers, lambda: task.run_id) as sessdir:
         run = launch.RoleRun(
-            learner=ctx.name, run_id=task.run_id, role_name="writer", role=role,
+            learner=ctx.name, run_id=task.run_id, role_name="fix" if task.get("mode") == "fix" else "writer", role=role,
             harness=harness, image=ctx.image_tag(),
             mounts=launch.Mounts(work=ctx.notes_path, sessdir=sessdir),
             output_host=ctx.notes_path / workbranch.WORKDIR / "result.json",
             schema="result", task_dir=task.dir, label=str(k),
-            allowed_domains=ctx.cfg.provider_domains)
+            allowed_domains=ctx.cfg.provider_domains,
+            max_agents=task.get("max_agents", ctx.cfg.limits.max_agents), lease_dir=ctx.cfg.state_dir / "agent-leases")
         try:
             outcome = launch.run_headless(
                 run, log=ctx.log, snapshot=lambda: launch.tree_fingerprint(ctx.notes_path))
@@ -143,3 +148,40 @@ def _check_call(ctx, task, k, result):
     problems = call_scope.current(ctx, task, problems, k)
     if problems:
         raise steps.CheckFailed(problems)
+
+
+def _fix_resume(ctx, task, k):
+    """Recover a fix output before write_inputs removes it; one crash retry at most."""
+    state = dict(task.get("fix_calls", {}))
+    count = state.get(str(k), 0)
+    if count:
+        result = safefs.read_json(ctx.notes_path, ".school-notes/result.json")
+        try:
+            validate("result", result)
+        except ValueError:
+            if count >= 2:
+                raise BadWork("fix call interrupted twice without valid output") from None
+        else:
+            problems = checks.accounting(task, result)
+            if problems:
+                from .steps import CheckFailed
+                raise CheckFailed(problems)
+            return result
+    if not count:
+        safefs.unlink(ctx.notes_path, ".school-notes/result.json")
+    state[str(k)] = count + 1
+    task.update(fix_calls=state)
+    return None
+
+
+def _invoke(ctx, task, k, role, harness, handlers):
+    try:
+        return _call(ctx, task, k, role, harness, handlers)
+    except Transient:
+        if task.get("mode") != "fix":
+            raise
+        retried = task.get("fix_crash_retries", [])
+        if k in retried:
+            raise
+        task.update(fix_crash_retries=sorted(retried + [k]))
+        return _call(ctx, task, k, role, harness, handlers)

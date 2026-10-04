@@ -41,7 +41,7 @@ def test_success_argv_prompt_and_transcript(fake, role, harness, tmp_path, log, 
     outcome = go(run, log)
     assert outcome.output == {"status": "done"} and outcome.rc == 0 and outcome.changed
     argv = argv_lines(fake)
-    assert argv[:4] == ["run", "--rm", "--name", "school-notes-benedek"]
+    assert argv[:4] == ["run", "--rm", "--name", "school-notes-benedek-20261003-0100-ab12-writer-1-1"]
     for flag in ("--userns=keep-id", "no-new-privileges", "core=0", "--cap-add=NET_ADMIN,NET_RAW"):
         assert flag in argv
     assert f"{fake['FAKE_WORK']}:/work:rw" in argv
@@ -113,7 +113,7 @@ def test_login_check(fake, harness, tmp_path, log, monkeypatch):
                            image="img", log=log, podman=str(FAKE))
     argv = argv_lines(fake)
     assert "sn-agent-home-benedek-reviewer:/home/agent" in argv
-    assert argv[3] == "school-notes-benedek-login" and argv[-3:] == ["codex", "login", "status"]
+    assert argv[3] == "school-notes-benedek-r-reviewer-login-1-1" and argv[-3:] == ["codex", "login", "status"]
     assert not any(a.endswith(":/work:rw") for a in argv)
     set_mode(monkeypatch, "login_out")
     assert not launch.login_ok(learner="benedek", run_id="r", role="writer", harness=harness,

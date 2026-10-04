@@ -118,7 +118,8 @@ def _launch(ctx: Ctx, task: phase.Task, harness_name: str | None) -> None:
         launch.run_interactive(learner=ctx.name, run_id=task.run_id, role=role, harness=harness,
                                image=ctx.image_tag(),
                                mounts=launch.Mounts(work=ctx.notes_path, sessdir=sessdir),
-                               log=ctx.log, allowed_domains=ctx.cfg.provider_domains)
+                               log=ctx.log, allowed_domains=ctx.cfg.provider_domains, max_agents=ctx.cfg.limits.max_agents,
+                           lease_dir=ctx.cfg.state_dir / "agent-leases")
 
 
 def _role_for(ctx: Ctx, harness_name: str | None):

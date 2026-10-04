@@ -1,6 +1,7 @@
 """Check response, invocation accounting and file provenance (repair plan 5.3, 8)."""
 
 import hashlib
+from pathlib import Path
 from collections import Counter
 
 from ..review import warnings as verdicts
@@ -80,9 +81,13 @@ def source_warnings(ctx, task, paths: list[str]) -> list[dict]:
             continue
         old = wt.run("show", f"{base_of(task)}:{rel}", check=False)
         text = safefs.read_text(ctx.notes_path, rel)
+        previous = old.stdout.decode("utf-8", "replace") if old.returncode == 0 else ""
+        if task.get("correction_before"):
+            before = Path(task.get("correction_before"))
+            previous = safefs.read_text(before, rel) if safefs.is_file(before, rel) else ""
         if rel != "wiki/log.md":
             counts[rel] = 0
-        out += source_refs.scan(rel, text, old.stdout.decode("utf-8", "replace") if old.returncode == 0 else "",
+        out += source_refs.scan(rel, text, previous,
                                 full=task.get("mode") == "repair")
     counts.update(Counter(i["file"] for i in out))
     counts = dict(sorted(counts.items()))

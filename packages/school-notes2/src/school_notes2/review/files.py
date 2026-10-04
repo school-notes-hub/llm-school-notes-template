@@ -101,12 +101,13 @@ def _with_frontmatter(body: str, reviewer: str, frm: str, to: str, items: dict) 
     return fm.set_keys("\n" + body, values)
 
 
-def write_review(repo: Path, date: str, review: dict, reviewer: str, frm: str, to: str) -> Path:
+def write_review(repo: Path, date: str, review: dict, reviewer: str, frm: str, to: str, *,
+                 path: Path | None = None) -> Path:
     """A new review file from a validated review.json; returns its path."""
     ids = [f["id"] for f in review["findings"]]
     if len(set(ids)) != len(ids):
         raise ValueError("review.json: duplicate finding ids")
-    path = next_path(repo, date)
+    path = path or next_path(repo, date)
     known = relations.inventory(repo)
     active, pending, items, records = [], [], {}, {}
     for f in sorted(review["findings"], key=lambda f: _num(f["id"])):
@@ -115,10 +116,11 @@ def write_review(repo: Path, date: str, review: dict, reviewer: str, frm: str, t
             pending.append(f)
             continue
         active.append(f)
-        items[f["id"]] = status
-        records[f["id"]] = {"file": f["file"], "round": 1, "chain": relations.chain(f, known),
-                            "origin": "nightly", "category": f.get("category"),
-                            "relates_to": f.get("relates_to"), "unlocated": unlocated}
+        items[f["id"]] = "owner" if f.get("chain") == 1 else status
+        records[f["id"]] = {"file": f["file"], "round": 1, "chain": max(f.get("chain", 0), relations.chain(f, known)),
+                            "origin": f.get("origin", "nightly"), "category": f.get("category"),
+                            "relates_to": f.get("relates_to"), "unlocated": unlocated or f.get("unlocated", False),
+                            **{k: f[k] for k in ("quote", "hit_id", "figure_id") if k in f}}
     body = render_body(date, {**review, "findings": active}, frm, to)
     if pending:
         body += "\n## Függő (nyitott kérdésre vár)\n\n" + "\n".join(
@@ -166,8 +168,9 @@ def open_items(repo: Path, mode: str) -> list[dict]:
         items = read_items(repo, path) or {}
         rel = path.relative_to(repo).as_posix()
         found += [{"file": rel, "item_id": i, "key": f"{rel}#{i}", "status": items[i],
-                   "round": relations.details(_read(repo, path), i)["round"]} for i in sorted(items, key=_num)
-                  if items[i] in wanted]
+                   "round": relations.details(_read(repo, path), i)["round"],
+                   "chain": relations.details(_read(repo, path), i)["chain"]} for i in sorted(items, key=_num)
+                  if items[i] in wanted and (mode != "cron" or relations.details(_read(repo, path), i)["chain"] == 0)]
     return found
 
 

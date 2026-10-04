@@ -100,7 +100,7 @@ def task_context(tmp_path):
     for k in range(1, 4):
         write_json(task.dir / f"result-{k}.json", {"status": "done"})
     ctx = SimpleNamespace(notes_path=tmp_path, cfg=SimpleNamespace(role=lambda _: (None, None),
-                           limits=SimpleNamespace(review_closures_per_run=20)))
+                           limits=SimpleNamespace(review_closures_per_run=20, max_agents=3)))
     return ctx, task
 
 
