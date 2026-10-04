@@ -173,8 +173,13 @@ against the writer. Author text is checked before stamping as well as afterwards
 
 Cron persists the writer assignments in `phase.json`: subjects follow `tools/subjects.json`,
 new subjects follow by path; each call receives only its own packages, pages, card and
-located review/image assignments. Original page sequence IDs survive noncontiguous subject
-groups. Whole-run validation and machine metadata use the complete input. D16 still selects
+review/image assignments. The tool assigns at most 20 review items per run, in round-2,
+report-date and numeric item order. Unassigned items do not accrue untouched counts.
+Subjectless items go to the first call; asset items go to the subject of their first
+embedding content page by path. D36 ranges receive each review/image assignment once.
+Finish defects return to every affected subject; an unassignable finish defect is a tool
+error, not bad writer work. Retry assignments survive interrupted checkpoint invalidation.
+Original page sequence IDs survive noncontiguous subject groups. Whole-run validation and machine metadata use the complete input. D16 still selects
 whole packages up to `sources.pages_per_call` (30 by default); D36 splits only a single
 oversized package, sequentially. Each call is checked before its result checkpoint is saved;
 restart after saving reuses it. Existing saved runs without assignments keep their old ranges.
@@ -192,32 +197,53 @@ repair implementation. This unit does not launch the later figure-agent trial.
 
 `--no-push` stops at **committed**, before fetch, build, push or publication. The
 `notes/<run_id>` branch and task stay open. Repeating the command keeps the hold; cron also
-leaves it alone. Inspect that worktree/commit on the VM, then explicitly run
+leaves it alone and sends a daily reminder with the current phase.
+Inspect that worktree/commit on the VM, then explicitly run
 `school-notes finish <learner>` to resume the normal finish chain, or
 `school-notes status --clear <learner> notes --discard` to archive/discard it. `finish`
 may publish only under the existing learner configuration; the trial never changes it.
 `status --continue` alone does not release the no-push hold.
 
-Create the queue first with `repair <learner> --queue`. Edit only the `priority` fields
+Create the queue first with `repair <learner> --queue`. Edit only the `priority` and `urgent` fields
 in `docs/repair-queue.json`, then repeat `--queue` to reorder. Lower nonnegative numbers
-run first; null is unprioritized. This command accepts those uncommitted queue edits and
+run first; null is unprioritized. `urgent: true` is an owner designation, preserved
+on rebuild; default is false. A visible source-pattern match also makes a page urgent
+for ordering, without changing this owner field. No page names are built into the tool.
+This command accepts those uncommitted queue edits and
 rejects unrelated dirty files. It creates a normal tool-only notes commit (or holds it
 with `--no-push`). The queue has `items` and `figures`: page state is `pending`, `done` or
 `owner`; figure state starts as `pending` (awaiting inspection), later `keep`, `context`
 or `remake`. The tool does not judge diagrams. SVG hashes invalidate old judgements.
-Sorting follows plan 11.2: urgent pages, owner priority, descending pattern-hit count,
+Sorting follows plan 11.2: owner-designated or pattern-matching urgent pages, owner priority,
+descending pattern-hit count,
 descending actual lesson date, path. Filenames never supply lesson dates. Dependent lesson
 logs, chapter summaries and review pages wait for every referenced topic to be `done`.
+Invalid or dependency-blocked targets are rejected against the local `origin/main`
+snapshot before creating a task; they cannot stop another run or the cron.
 The scheduler reads the queue in its stored order after new packages and existing pending
 image work; the separate daily `fix` entry condition is staged with the later fix flow.
 Runs change status without rebuilding or reordering the queue. A direct topic repair
 without a queue is allowed, but does not create one or complete absent entries.
 
 Two bad repair attempts hand the topic to an owner review item: the failed work is archived
-as a local Git bundle, then a tool-only continuation commits the queue's `owner` state and
-notifies once. The next runnable entry can proceed. Dependencies of an owner-blocked topic
+as a local Git bundle, then a tool-only continuation commits the queue's `owner` state
+(if a queue exists) and notifies once. The next runnable entry can proceed. Dependencies of an owner-blocked topic
 remain blocked. Preparation, per-call result saving, queue replacement and the committed
 hold all have interruption/resume tests. No new phase or model is introduced.
+
+The controller's trial order (repair plan 13/1, K-6) is sequential. Every step uses
+`--no-push`; the controller (and the owner in the morning) inspects it, then `finish`
+closes it before the next step:
+
+1. Create the repair queue.
+2. Repair the polisz topic page.
+3. Repair its lesson log, after all its topic dependencies are done.
+4. Adjust only the polisz links in the Hellász summary. Use a topic-page repair pass
+   for these related-page link changes; do not target the summary for a full rewrite.
+
+The full summary rewrite belongs to implementation step 6, when every topic in the
+chapter is done. `require_ready` stays strict; held branches never satisfy the next
+run's dependencies. Queue-only and failed-repair handoff holds also resume with `finish`.
 
 ## Development
 

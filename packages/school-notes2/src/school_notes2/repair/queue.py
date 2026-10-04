@@ -10,8 +10,6 @@ from ..wiki import pages, source_refs
 
 PATH = "docs/repair-queue.json"
 DEPENDENT = ("lesson-notes", "chapter-summary", "review")
-URGENT = {"polisz-szuletese.md", "2026-10-03-polisz-szuletese-jegyzet.md",
-          "2026-10-02-gazdasagossag-ujratermeles-jegyzet.md"}
 
 
 def inventory(repo) -> dict:
@@ -78,7 +76,7 @@ def build(repo, previous=None) -> dict:
         matches = len(source_refs.scan(rel, safefs.read_text(repo, rel), full=True))
         items.append({"page": rel, "kind": page.meta.get("type", "concept"),
                       "status": before.get("status", "pending"), "priority": priority,
-                      "matches": matches, "urgent": matches > 0 or PurePosixPath(rel).name in URGENT,
+                      "matches": matches, "urgent": before.get("urgent", False),
                       "last_lesson": max([_date(page)] + [_date(book[p]) for p in links if p in book]),
                       "depends_on": dependencies(rel, book)})
     items.sort(key=sort_key)
@@ -90,7 +88,8 @@ def build(repo, previous=None) -> dict:
 
 def sort_key(item) -> tuple:
     stamp = date.fromisoformat(item["last_lesson"]).toordinal() if item["last_lesson"] else 0
-    return (not item["urgent"], item["priority"] if item["priority"] is not None else float("inf"),
+    return (not (item["urgent"] or item["matches"] > 0),
+            item["priority"] if item["priority"] is not None else float("inf"),
             -item["matches"], -stamp, item["page"])
 
 
@@ -113,7 +112,10 @@ def _figures(repo, book, previous) -> list[dict]:
 
 
 def load(repo) -> dict:
-    data = safefs.read_json(repo, PATH)
+    return validated(safefs.read_json(repo, PATH))
+
+
+def validated(data) -> dict:
     if data is None:
         return {"schema": 1, "items": [], "figures": []}
     try:

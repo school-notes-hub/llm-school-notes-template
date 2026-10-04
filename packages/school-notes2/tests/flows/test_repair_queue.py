@@ -72,10 +72,24 @@ def test_full_source_folders_and_svg_inventory_without_copying_sources(tmp_path)
     assert queue.build(tmp_path, result)["figures"][0]["status"] == "pending"
 
 
-def test_urgent_named_pages_do_not_depend_on_pattern_hit(tmp_path):
-    a = page(tmp_path, "polisz-szuletese")
-    page(tmp_path, "a")
-    assert queue.build(tmp_path)["items"][0]["page"] == a
+@pytest.mark.parametrize("student", ["benedek", "barna"])
+def test_urgent_is_owner_data_and_pattern_urgency_is_recomputed(tmp_path, student):
+    repo = tmp_path / student
+    repo.mkdir()
+    a, b = page(repo, "a"), page(repo, "b")
+    data = queue.build(repo)
+    assert not any(i["urgent"] for i in data["items"])
+    data["items"][1]["urgent"] = True
+    rebuilt = queue.build(repo, data)
+    assert rebuilt["items"][0]["page"] == b
+    assert queue.build(repo, rebuilt) == rebuilt
+    rebuilt["items"][0]["urgent"] = False
+    assert queue.build(repo, rebuilt)["items"][0]["page"] == a
+    page(repo, "b", body="A 3. dián ez látszik.\n")
+    matched = queue.build(repo)
+    assert matched["items"][0]["page"] == b and not matched["items"][0]["urgent"]
+    page(repo, "b")
+    assert queue.build(repo, matched)["items"][0]["page"] == a
 
 
 def test_queue_validation_refuses_ambiguous_or_invalid_state(tmp_path):

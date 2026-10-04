@@ -31,7 +31,8 @@ def restore(ctx, task):
     for item in data["items"]:
         if item["page"] == task.get("repair_topic"):
             item["status"] = "owner"
-    task.update(queue_only=True, repair_queue=data)
+    task.update(queue_only=True, repair_queue=data,
+                repair_queue_absent=not safefs.is_file(ctx.notes_path, queue.PATH))
 
 
 def write_item(ctx, task):

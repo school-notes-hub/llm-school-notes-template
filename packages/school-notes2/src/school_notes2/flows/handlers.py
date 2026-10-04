@@ -15,7 +15,7 @@ from ..wiki import public
 from ..wiki.check_result import check_result
 from . import fetch as fetch_flow
 from . import status as status_flow
-from . import checks, steps
+from . import call_scope, checks, steps
 from .context import Ctx
 
 
@@ -76,7 +76,7 @@ def check(ctx: Ctx, task) -> dict:
             problems += exc.items
     if metadata_valid:
         problems += public_problems(ctx.notes_path)
-    problems = checks.identify(problems, ctx.notes_path)
+    problems = checks.identify(call_scope.current(ctx, task, problems), ctx.notes_path)
     steps.write_check_items(ctx, problems)
     checks.tool_errors(ctx, task, problems)
     checks.remember(task, problems)

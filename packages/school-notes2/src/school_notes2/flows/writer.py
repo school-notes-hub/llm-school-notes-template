@@ -9,7 +9,7 @@ from ..state.errors import BadWork
 from ..state import safefs
 from ..state.files import read_json, write_json
 from ..state.phase import Task
-from . import checks
+from . import call_scope, checks
 from . import fetch as fetch_flow
 from .context import Ctx
 from .session import mcp
@@ -20,6 +20,7 @@ def write_inputs(ctx: Ctx, task: Task, k: int) -> None:
     root, workdir = ctx.notes_path, workbranch.WORKDIR
     safefs.write_json(root, f"{workdir}/fetch.json", fetch_flow.fetch_json(task, k))
     write_changes(ctx, task)
+    call_scope.write_check(ctx, task, k)
     safefs.unlink(root, f"{workdir}/result.json")
 
 
@@ -34,6 +35,7 @@ def write_changes(ctx: Ctx, task: Task) -> None:
 def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
     """Call the writer for each remaining range; returns 'done' or 'question'."""
     role, harness = ctx.cfg.role("writer")
+    call_scope.invalidate(task)
     n = len(task.get("ranges"))
     k = task.get("writing_k", 1)
     while k <= n:
@@ -127,15 +129,17 @@ def _check_call(ctx, task, k, result):
     validate("result", result)
     if result["status"] == "question":
         return
-    steps.guard_step(ctx, task)
-    reordered = steps.order_step(ctx, task)
-    if reordered:
-        raise steps.CheckFailed(reordered)
     fetch = fetch_flow.fetch_json(task, k)
     listed = {(i["file"], i["item_id"]) for i in fetch["open_review_items"]}
     problems = check_result(ctx.notes_path, result, fetch, listed,
                             ctx.cfg.limits.review_closures_per_run, whole_run=False)
+    for operation in (lambda: steps.guard_step(ctx, task),
+                      lambda: steps.check_changed(ctx, task, result=result)):
+        try:
+            operation()
+        except steps.CheckFailed as exc:
+            problems += exc.items
+    problems += steps.order_step(ctx, task)
+    problems = call_scope.current(ctx, task, problems, k)
     if problems:
-        steps.write_check_items(ctx, problems)
         raise steps.CheckFailed(problems)
-    steps.check_changed(ctx, task, result=result)

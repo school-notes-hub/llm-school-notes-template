@@ -203,7 +203,8 @@ def session_finish(ctx: Ctx) -> dict:
         raise NeedsOwner("there is no open run to finish", todo="call fetch first")
     ctx.lock().note("finish")       # this detached job holds the inherited lock (7.8)
     n = len(task.get("ranges"))
-    if task.mode == "cron" and not task.get("question") and task.get("writing_k", 1) <= n:
+    if (task.mode == "cron" and not task.get("skip_writer") and not task.get("question")
+            and task.get("writing_k", 1) <= n):
         return {"state": "saved", "message": "the remaining ranges continue in cron"}
     try:
         if task.get("question"):

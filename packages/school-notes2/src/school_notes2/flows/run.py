@@ -64,7 +64,8 @@ def ctx_bind(ctx: Ctx, task: Task) -> Task:
 def _may_run(ctx: Ctx, task: Task | None) -> bool:
     """5.1/1–2: needs-owner, an open interactive run, or stray edits keep cron away."""
     if task is not None and task.get("no_push"):
-        ctx.log.event("run.skip", "no_push", target=task.run_id)
+        _daily(ctx, "no_push", task.run_id, f"Visszatartott próba; fázis: {task.phase}. A cron vár.",
+               f"Nézd meg, majd school-notes finish {ctx.name}; vagy status --clear {ctx.name} notes --discard.")
         return False
     if task is not None and task.data.get("needs_owner"):
         ctx.log.event("run.skip", "needs_owner", target=task.run_id)
@@ -121,14 +122,8 @@ def advance(ctx: Ctx, task: Task) -> None:
     try:
         finish_flow.finish(ctx, task, notify_owner_items=lambda items: owner_items(ctx, task, items))
     except steps.CheckFailed as exc:
-        steps.write_check_items(ctx, exc.items)
-        k = len(task.get("ranges"))
-        for n, call in enumerate(task.get("calls", []), 1):
-            if any(i["file"].startswith(f"wiki/{call['subject']}/") for i in exc.items):
-                k = n
-                break
-        (task.dir / f"result-{k}.json").unlink(missing_ok=True)
-        task.set_phase("writing", writing_k=k)
+        from . import call_scope
+        call_scope.retry(ctx, task, exc.items)
         raise
 
 

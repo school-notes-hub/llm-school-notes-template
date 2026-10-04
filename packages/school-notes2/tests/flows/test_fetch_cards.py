@@ -18,7 +18,8 @@ def context(repo, monkeypatch):
         return SimpleNamespace(returncode=0, stdout=(repo / "tools/subjects.json").read_bytes())
     wt = SimpleNamespace(run=git)
     ctx = SimpleNamespace(notes_path=repo, worktree=lambda _: wt, image_settings=lambda: None,
-                          tools_dir=lambda: None, cfg=SimpleNamespace(sources=SimpleNamespace(
+                          tools_dir=lambda: None, cfg=SimpleNamespace(limits=SimpleNamespace(review_closures_per_run=20),
+                          sources=SimpleNamespace(
                               max_side_px=2000, jpeg_quality=85, pdf_dpi=200, pages_per_call=30)))
     monkeypatch.setattr(fetch, "_base", lambda *args: "a" * 40)
     monkeypatch.setattr(fetch.workbranch, "start", lambda *args, **kwargs: None)
@@ -27,6 +28,28 @@ def context(repo, monkeypatch):
     monkeypatch.setattr(fetch.image_plans, "restore", lambda *args: None)
     (repo / ".git").write_text("gitdir: unused\n")
     return ctx
+
+
+def test_prepare_persists_only_allocated_review_capacity(tmp_path, monkeypatch):
+    from school_notes2.review import files
+    from school_notes2.state import safefs
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subjects(repo)
+    ctx = context(repo, monkeypatch)
+    report = files.write_review(repo, "2026-10-04", {"verdict": "changes", "findings": [
+        {"id": f"R{n}", "file": "wiki/statika/topic.md", "problem": "Hiba."}
+        for n in range(1, 25)]}, "r", "a", "b")
+    task = phase.create(tmp_path / "tasks", "barna", "notes", "cron", "moved")
+    task.update(selected=[])
+    fetch.prepare(ctx, task, new_subject_index=fetch.new_subject)
+    task = phase.load(task.dir)
+    assert len(task.get("open_review_items")) == 20
+    assert task.get("calls")[0]["open_review_items"] == task.get("open_review_items")
+    assert not task.get("skip_writer")
+    files.apply_closure(repo, task.run_id, [], task.get("open_review_items"), 5)
+    counts = files.open_counts(safefs.read_text(repo, report.relative_to(repo).as_posix()))
+    assert set(counts) == {f"R{n}" for n in range(1, 21)}
 
 
 @pytest.mark.parametrize("student", ["benedek", "barna"])

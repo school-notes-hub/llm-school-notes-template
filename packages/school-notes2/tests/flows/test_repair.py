@@ -20,12 +20,20 @@ def context(tmp_path, log, monkeypatch):
     safefs.write_text(repo, ".git", "gitdir: unused\n")
     safefs.write_json(repo, "tools/subjects.json", {"subjects": {"m": {"card": CARD}}})
     topic = page(repo, "a")
-    wt = SimpleNamespace()
+    def git(*args, **kwargs):
+        if args[0] == "ls-tree":
+            raw = b"\0".join(f"100644 blob hash\t{p}".encode() for p in queue.inventory(repo))
+            return SimpleNamespace(returncode=0, stdout=raw)
+        rel = args[1].split(":", 1)[1]
+        exists = safefs.is_file(repo, rel)
+        return SimpleNamespace(returncode=0 if exists else 1,
+                               stdout=safefs.read_bytes(repo, rel) if exists else b"")
+    wt = SimpleNamespace(run=git, out=lambda *a, **kw: "")
     cfg = SimpleNamespace(root=tmp_path, role=lambda _: (None, None))
     mailed = []
     ctx = SimpleNamespace(name="barna", notes_path=repo, worktree=lambda _: wt,
                           task_root=lambda: tmp_path, log=log, cfg=cfg,
-                          mailer=SimpleNamespace(send_once=mailed.append))
+                          mailer=SimpleNamespace(send_once=mailed.append, send=mailed.append))
     monkeypatch.setattr(repair.repos, "rev", lambda *args: "a" * 40)
     monkeypatch.setattr(repair.workbranch, "changed_files", lambda *args: [])
     monkeypatch.setattr(repair.workbranch, "start", lambda *args, **kw: None)

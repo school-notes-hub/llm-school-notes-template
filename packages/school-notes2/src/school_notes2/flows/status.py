@@ -144,7 +144,8 @@ def render(data: dict) -> str:
                      f"kor={t['age_h']} h csomag={t['packages']} retries={t['retries']} "
                      f"llm_failures={t['llm_failures']}")
         if t.get("no_push"):
-            lines.append("próba: commit után megállt; folytatás: school-notes finish, vagy status --discard")
+            state = "commit után megállt" if t["phase"] == "committed" else f"folyamatban; fázis: {t['phase']}"
+            lines.append(f"próba: {state}; folytatás: school-notes finish, vagy status --discard")
     for n in data["needs_owner"]:
         lines.append(f"TULAJDONOSRA VÁR ({n['kind']} {n['run_id']}): {n['reason']} → {n['todo']}")
     if data["worktree_dirty_outside_run"]:

@@ -50,9 +50,37 @@ def test_queue_command_is_tool_only_and_persists_owner_priority_edits(world, mon
     assert phase.open_task(ctx.task_root(), ctx.name, "notes") is None
     data["items"][0]["status"] = "pending"
     data["items"][0]["priority"] = 1
+    data["items"][0]["urgent"] = True
     safefs.write_json(ctx.notes_path, queue.PATH, data)
     assert repair.repair(ctx, build_queue=True) == 0, ctx.cfg.log_path.read_text()[-3000:]
     assert '"priority": 1' in show(origin, f"main:{queue.PATH}")
+    assert '"urgent": true' in show(origin, f"main:{queue.PATH}")
+
+
+def test_queue_no_push_finishes_real_commit_chain(world):
+    ctx, origin, _, _ = world
+    assert repair.repair(ctx, build_queue=True, no_push=True) == 0
+    task = phase.open_task(ctx.task_root(), ctx.name, "notes")
+    assert task.phase == "committed" and not show(origin, f"main:{queue.PATH}")
+    assert chat.session_finish(ctx)["state"] == "done"
+    assert show(origin, f"main:{queue.PATH}")
+
+
+def test_direct_failed_no_push_handoff_finishes_without_queue(world, monkeypatch):
+    from school_notes2.state.errors import BadWork
+    ctx, origin, _, _ = world
+    def bad(*args):
+        raise BadWork("invalid repair")
+    monkeypatch.setattr(writer, "_call", bad)
+    for _ in range(2):
+        assert repair.repair(ctx, topic="wiki/proba/elso.md", no_push=True) == 1
+    assert repair.repair(ctx, topic="wiki/proba/elso.md", no_push=True) == 0
+    task = phase.open_task(ctx.task_root(), ctx.name, "notes")
+    assert task.phase == "committed" and task.get("skip_writer")
+    assert not safefs.is_file(ctx.notes_path, queue.PATH)
+    assert chat.session_finish(ctx)["state"] == "done"
+    assert not show(origin, f"main:{queue.PATH}")
+    assert "R1" in show(origin, f"main:{task.get('repair_owner_item')}")
 
 
 def test_new_packages_precede_queue_and_next_run_repairs_one_item(world, monkeypatch):
