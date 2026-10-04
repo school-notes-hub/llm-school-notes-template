@@ -60,17 +60,21 @@ def candidate(repo, brief, value, request=None):
     return {**value, "caption": caption}
 
 
-def records(repo, asset):
+def records(repo):
     """Presence binds this asset to the revocable request route, even if now invalid."""
+    found = {}
     for path in safefs.glob(repo, "docs/evidence/media", "docs/evidence/media/**/figure.json"):
         record = safefs.read_json(repo, path, {})
-        if record.get("license_request") and record.get("candidate", {}).get("asset") == asset:
-            yield path, record
+        asset = record.get("candidate", {}).get("asset")
+        if record.get("license_request") and asset:
+            found.setdefault(asset, []).append((path, record))
+    return found
 
 
-def rights(repo, asset):
+def rights(repo, asset, *, recorded=None):
     digest = sha256(repo, asset)
-    for path, record in records(repo, asset):
+    recorded = records(repo) if recorded is None else recorded
+    for path, record in recorded.get(asset, []):
         request = record.get("license_request")
         if (not request or record.get("candidate", {}).get("asset") != asset or
                 record.get("output_sha256") != digest or record.get("verdict", {}).get("verdict") != "accept"):
@@ -88,10 +92,12 @@ def preflight(repo):
     from ..wiki.public import linked_targets
     try:
         load(repo)
+        recorded = records(repo)
         assets, _ = linked_targets(repo, sorted(wiki_pages(repo)))
         invalid = [asset for asset in sorted(assets) if safefs.is_file(repo, asset)
                    and any(record.get("output_sha256") == sha256(repo, asset)
-                           for _, record in records(repo, asset)) and rights(repo, asset) is None]
+                           for _, record in recorded.get(asset, []))
+                   and rights(repo, asset, recorded=recorded) is None]
         if invalid:
             raise ValueError("permission changed or withdrawn: " + ", ".join(invalid))
     except (ValueError, OSError) as exc:

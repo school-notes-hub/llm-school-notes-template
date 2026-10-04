@@ -79,6 +79,33 @@ def test_changed_source_or_asset_invalidates_permission(repo, make_figure):
     assert licenses.permission(repo, request) is None
 
 
+@pytest.mark.parametrize("operation", ["public", "preflight"])
+def test_license_records_scanned_once_per_call_and_never_stale(repo, make_figure, monkeypatch, operation):
+    safefs.write_text(repo, "wiki/index.md", "# Kezdőlap\n")
+    brief, value, request = requested(repo, make_figure)
+    grant(repo)
+    candidate = commissions.candidate(repo, brief)
+    insert.insert(repo, brief, receipt(repo, brief, candidate), at="date")
+    safefs.write_bytes(repo, "wiki/assets/other.png", b"other")
+    text = safefs.read_text(repo, brief["page"])
+    safefs.write_text(repo, brief["page"], text + "\n![Other](../assets/other.png)\n")
+    calls = []
+    original = licenses.records
+    def scan(*args):
+        calls.append(args)
+        return original(*args)
+    monkeypatch.setattr(licenses, "records", scan)
+    def invoke():
+        return public.build(repo, lambda _: ("generated", "test")) if operation == "public" else licenses.preflight(repo)
+    invoke()
+    assert len(calls) == 1
+    grant(repo, scope="none")
+    from school_notes2.state.errors import NeedsOwner
+    with pytest.raises(public.PublicError if operation == "public" else NeedsOwner):
+        invoke()
+    assert len(calls) == 2
+
+
 def test_material_hash_comes_from_original_document_not_extracted_image(repo):
     safefs.write_text(repo, "sources/pkg/document.md", "extracted")
     safefs.write_bytes(repo, "sources/pkg/figures/a.png", b"image")

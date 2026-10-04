@@ -191,3 +191,25 @@ def test_real_rejection_replaces_previous_missing_verdict(tmp_path):
     # A changed alt gives a legacy figure a new ID; the same image has now been judged.
     figure_waiting.apply(tmp_path, [], [{**spec, "id": "new"}])
     assert not figure_waiting.active(tmp_path)
+
+
+def test_only_unchanged_legacy_licensed_assets_skip_discovery(tmp_path):
+    from school_notes2.wiki import public
+    page, asset = "wiki/a.md", "wiki/assets/a.png"
+    safefs.write_text(tmp_path, page, "# A\n\n![Ábra](assets/a.png)\n\nCC credit.\n")
+    safefs.write_bytes(tmp_path, asset, png())
+    safefs.write_json(tmp_path, "publication/public.json", {"assets": [{
+        "path": asset, "sha256": public.sha256(tmp_path, asset), "rights": "licensed",
+        "rightsEvidence": "CC credit"}]})
+    unit = {"topic": page, "pages": [page]}
+    before = safefs.read_bytes(tmp_path, page)
+    assert night_figures.discover(tmp_path, unit) == []
+    safefs.write_bytes(tmp_path, asset, b"changed")
+    assert len(night_figures.discover(tmp_path, unit)) == 1
+    safefs.write_bytes(tmp_path, asset, png())
+    # A request-based license still follows independent review and revocation.
+    safefs.write_json(tmp_path, "docs/evidence/media/request/figure.json", {
+        "candidate": {"asset": asset}, "license_request": {"id": "request"},
+        "commission": {"page": page, "id": "request", "anchor": "A", "kind": "figure"}})
+    assert len(night_figures.discover(tmp_path, unit)) == 1
+    assert safefs.read_bytes(tmp_path, page) == before

@@ -10,8 +10,9 @@ from typing import Callable
 
 from ..evidence import records
 from ..git.run import Git, classify, failure_text
-from ..state import phase
+from ..state import phase, safefs
 from ..state.errors import Race, Transient
+from ..wiki import public
 from . import files, index, relations
 from .nightly import MAIN_REF, fetch, load_review, rev
 
@@ -116,6 +117,10 @@ def close(task: phase.Task, repo: Git, wt: Git, ident: Identity, t: Timeouts = T
     """Write the report, index and evidence; commit R; push main=R, claude-reviewed=M."""
     review = load_review(task)
     base, head, end = task.get("base"), task.get("H"), task.get("T")
+    if task.get("topic_review") and not task.get("topic_results"):
+        from . import topic_result, topics
+        if public.dumps(topic_result.state(task)) == topics.text(repo, head, topics.STATE):
+            return _finish(task, repo, head, base)
 
     def write(worktree: Path) -> list[str]:
         responses, dropped = relations.valid_responses(review.get("responses", []), relations.inventory(worktree))
@@ -131,8 +136,14 @@ def close(task: phase.Task, repo: Git, wt: Git, ident: Identity, t: Timeouts = T
         extra = []
         if task.get("topic_review"):
             from . import topic_result
-            extra, closure_owners = topic_result.apply(task, worktree, ident)
+            extra, closure_owners, notes = topic_result.apply(task, worktree, ident)
             owners += closure_owners
+            notes = [" ".join(n.split()) for n in notes if n not in review.get("owner_notes", [])]
+            if notes:
+                safefs.write_text(worktree, rel, safefs.read_text(worktree, rel)
+                                  + "\n## Tulajdonosi észrevételek\n\n" + "".join(f"* {n}\n" for n in notes))
+                safefs.write_json(task.dir, "review.json", {**review, "owner_notes":
+                    list(dict.fromkeys(review.get("owner_notes", []) + notes))})
         task.update(notify_owner_items=owners)
         written = replied + extra + [report.relative_to(worktree).as_posix(),
                    index.update(worktree).relative_to(worktree).as_posix()]

@@ -9,7 +9,7 @@ import hashlib
 
 from ..figures import commissions, context, inputs, insert, review
 from ..state import safefs
-from ..wiki import frontmatter, pages
+from ..wiki import frontmatter, pages, public
 from . import relations
 
 
@@ -43,6 +43,9 @@ def discover(repo, unit):
     result, assets = [], set()
     embedded = relations.related_pages(repo)
     evidence = [safefs.read_json(repo, p) for p in safefs.glob(repo, "docs/evidence/media", "docs/evidence/media/**/figure.json")]
+    requested = {r.get("candidate", {}).get("asset") for r in evidence if r.get("license_request")}
+    licensed = {a["path"]: a["sha256"] for a in public.read_existing(repo).get("assets", [])
+                if a.get("rights") == "licensed" and a["path"] not in requested}
     for page in unit["pages"]:
         if not page.endswith(".md") or page.startswith("wiki/assets/"):
             continue
@@ -50,6 +53,8 @@ def discover(repo, unit):
         for link in pages.links(text):
             asset = pages.resolve(page, link.target)
             if not link.image or not asset or not asset.startswith("wiki/assets/") or asset in assets:
+                continue
+            if asset in licensed and pages.is_file(repo, asset) and pages.sha256(repo, asset) == licensed[asset]:
                 continue
             primary = min(embedded.get(asset, {page}), key=lambda p: (commissions.topic(repo, p), p))
             if commissions.topic(repo, primary) != unit["topic"] or page != primary:

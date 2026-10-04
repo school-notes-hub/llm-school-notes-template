@@ -91,7 +91,7 @@ def test_check_during_background_generation_preserves_all_task_state(learning_ru
     assert not safefs.walk_files(ctx.notes_path, "docs/evidence/image-generation")
 
 
-def test_generated_receipts_are_one_sorted_write_and_learner_scoped(repo, tmp_path):
+def test_generated_receipts_are_one_sorted_write_and_learner_scoped(repo, tmp_path, monkeypatch):
     entries = {name: {"learner": learner, "attempts": [{"state": "generated", "sha256": digest}]}
                for name, learner, digest in [("b", "sample", "b" * 64), ("other", "other", "c" * 64),
                                              ("a", "sample", "a" * 64)]}
@@ -106,6 +106,24 @@ def test_generated_receipts_are_one_sorted_write_and_learner_scoped(repo, tmp_pa
     entries = dict(reversed(list(entries.items())))
     generation_receipts.refresh(ctx, phase.load(task.dir))
     assert safefs.read_bytes(repo, paths[0]) == before
+    legacy = "docs/evidence/image-generation/old-run.json"
+    safefs.write_text(repo, legacy, '{"rights": "generated", "outputs": []}\n')
+    old = safefs.read_bytes(repo, legacy)
+    writes = []
+    original = generation_receipts.journal.write
+    def record(*args, **kwargs):
+        writes.append(args[2])
+        return original(*args, **kwargs)
+    monkeypatch.setattr(generation_receipts.journal, "write", record)
+    next_task = phase.create(tmp_path / "tasks", "sample", "notes", "cron", "finishing")
+    generation_receipts.refresh(ctx, next_task)
+    assert not writes
+    entries["new"] = {"learner": "sample", "attempts": [{"state": "generated", "sha256": "d" * 64}]}
+    generation_receipts.refresh(ctx, next_task)
+    assert writes == paths
+    assert safefs.walk_files(repo, "docs/evidence/image-generation") == sorted(paths + [legacy])
+    assert safefs.read_bytes(repo, legacy) == old
+    assert safefs.read_json(repo, paths[0])["outputs"] == ["a" * 64, "b" * 64, "d" * 64]
 
 
 def test_approved_request_fetch_status_and_repair_queue(repo, tmp_path):

@@ -17,7 +17,14 @@ def run(ctx, task):
     results = {e["unit"]["topic"]: e for e in task.get("topic_results", [])}
     blocked = {e["topic"]: e for e in topics.unblocked(
         task.get("blocked_topics", []), ctx.cfg.state_dir, ctx.name)}
-    task.set_phase("reviewing", blocked_topics=[blocked[k] for k in sorted(blocked)])
+    failures = {e["topic"]: e for e in topics.unblocked(
+        task.get("nightly_state", {}).get("failed_topics", []), ctx.cfg.state_dir, ctx.name)}
+    failures.update({e["topic"]: e for e in task.get("failed_topics", [])})
+    for topic, entry in results.items():
+        if entry["receipt"]["status"] == "reviewed":
+            failures.pop(topic, None)
+    task.set_phase("reviewing", blocked_topics=[blocked[k] for k in sorted(blocked)],
+                   failed_topics=[failures[k] for k in sorted(failures)])
     for unit in task.get("units", []):
         topic = unit["topic"]
         if topic in blocked or topic in results:
@@ -36,6 +43,7 @@ def run(ctx, task):
         receipt = topic_call.run(work, folder, data["assigned"], call, log=ctx.log)
         entry = {"unit": unit, "input": data, "receipt": receipt}
         if receipt["status"] == "reviewed":
+            task.update(failed_topics=[e for e in task.get("failed_topics", []) if e["topic"] != topic])
             role, _ = ctx.cfg.role("figure-review") if "figure-review" in ctx.cfg.roles else (replace(configured, timeout_s=1800), harness)
             renderer = Renderer(ctx.release() / "packages/study-site", ctx.cfg.browser,
                                 folder / "render", timeout_s=ctx.cfg.timeouts.rasterize_s)
@@ -48,7 +56,7 @@ def run(ctx, task):
         results[topic] = entry
         task.update(topic_results=[results[k] for k in sorted(results)],
                     blocked_topics=[blocked[k] for k in sorted(blocked)])
-    complete = not blocked and all(results.get(u["topic"], {}).get("receipt", {}).get("status") == "reviewed"
+    complete = not blocked and all(topic_result.complete(results.get(u["topic"], {}))
                                    for u in task.get("units", []))
     task.update(all_topics_done=complete)
     topic_result.assemble(task, repo, work)

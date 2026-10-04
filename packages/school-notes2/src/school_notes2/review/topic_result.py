@@ -5,7 +5,7 @@ import re
 from ..reader import notices, verdicts
 from ..reader.units import page_key
 from ..state import safefs
-from ..wiki import frontmatter
+from ..wiki import frontmatter, public
 from . import figure_waiting, files, relations, topics, warnings
 
 
@@ -73,15 +73,29 @@ def assemble(task, repo, work):
     return value
 
 
+def complete(entry):
+    return entry.get("receipt", {}).get("status") == "reviewed" and not entry.get("figure_pending")
+
+
+def state(task):
+    done = {r["topic"]: r["commit"] for r in task.get("nightly_state", {}).get("done_topics", [])}
+    for entry in task.get("topic_results", []):
+        if complete(entry):
+            done[entry["unit"]["topic"]] = task.get("H")
+    return topics.validated({
+        "done_topics": [] if task.get("all_topics_done", False) else [
+            {"topic": t, "commit": done[t]} for t in sorted(done)],
+        "blocked_topics": sorted(task.get("blocked_topics", []), key=lambda r: r["topic"]),
+        "failed_topics": sorted(task.get("failed_topics", []), key=lambda r: r["topic"])})
+
+
 def apply(task, work, ident):
     """Replayed on each fresh main during atomic close; keys remain bound to H."""
-    written, owners = [], []
-    done = {r["topic"]: r["commit"] for r in task.get("nightly_state", {}).get("done_topics", [])}
+    written, owners, notes = [], [], []
     for entry in task.get("topic_results", []):
         if entry["receipt"]["status"] != "reviewed":
             continue
         unit, receipt = entry["unit"], entry["receipt"]
-        done[unit["topic"]] = task.get("H")
         model, value = receipt["model"], receipt["review"]
         current = [p for p in value["pages"] if safefs.is_file(work, p["file"])
                    and page_key(work, p["file"]) == unit["keys"][p["file"]]]
@@ -103,19 +117,19 @@ def apply(task, work, ident):
     written += figure_waiting.apply(work,
         [p for e in task.get("topic_results", []) for p in e.get("figure_pending", [])],
         [s for e in task.get("topic_results", []) for s in e.get("figure_checked", [])])
-    complete = task.get("all_topics_done", False)
-    state = topics.validated({
-        "done_topics": [] if complete else [{"topic": t, "commit": done[t]} for t in sorted(done)],
-        "blocked_topics": sorted(task.get("blocked_topics", []), key=lambda r: r["topic"]),
-        "failed_topics": task.get("failed_topics", [])})
-    safefs.write_json(work, topics.STATE, state)
+    safefs.write_json(work, topics.STATE, state(task))
     if not safefs.is_file(work, verdicts.PATH):
         safefs.write_json(work, verdicts.PATH, [])
     verdicts.invalidate(work)
     touched = {p for u in task.get("units", []) for p in u["assigned_pages"]}
     written += notices.refresh(work, sorted(touched))
+    try:
+        public.write(work, public.either(public.render_rights(work), public.media_receipt_rights(work)))
+        written.append("publication/public.json")
+    except public.PublicError as exc:
+        notes.append(f"A public.json újraépítése sikertelen: {exc}")
     written += [topics.STATE, verdicts.PATH]
-    return sorted(set(written)), owners
+    return sorted(set(written)), owners, notes
 
 
 def apply_item(work, original, answer):

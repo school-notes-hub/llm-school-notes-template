@@ -17,7 +17,7 @@ def refresh(ctx, task):
     hashes = outputs(ctx.image_settings())
     if not hashes:
         return
-    path = f"docs/evidence/image-generation/{task.run_id}.json"
+    path = "docs/evidence/image-generation/ledger.json"
     text = dumps({"rights": "generated", "outputs": hashes})
     if not safefs.is_file(ctx.notes_path, path) or safefs.read_text(ctx.notes_path, path) != text:
         journal.write(ctx, task, path, text, whole=True)

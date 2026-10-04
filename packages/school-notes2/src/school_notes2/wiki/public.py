@@ -100,12 +100,13 @@ def linked_targets(repo: Path, pages: list[str]) -> tuple[set[str], set[str]]:
     return images, citations
 
 
-def asset_entry(repo: Path, rel: str, known: dict, rights: RightsLookup) -> dict | None:
+def asset_entry(repo: Path, rel: str, known: dict, rights: RightsLookup, *, recorded=None) -> dict | None:
     entry = {"path": rel, "sha256": sha256(repo, rel)}
     old = known.get(rel)
     from ..figures import licenses
-    if list(licenses.records(repo, rel)):
-        found = licenses.rights(repo, rel)
+    recorded = licenses.records(repo) if recorded is None else recorded
+    if recorded.get(rel):
+        found = licenses.rights(repo, rel, recorded=recorded)
         return {**entry, "rights": found[0], "rightsEvidence": found[1]} if found else None
     if old and old.get("sha256") == entry["sha256"] and old.get("rights") in (
             "authored", "generated", "public-domain", "standard", "licensed"):
@@ -113,7 +114,7 @@ def asset_entry(repo: Path, rel: str, known: dict, rights: RightsLookup) -> dict
         if old.get("rightsEvidence"):
             entry["rightsEvidence"] = old["rightsEvidence"]
         return entry
-    found = licenses.rights(repo, rel) or rights(rel)
+    found = rights(rel)
     if found is None:
         return None
     entry["rights"], entry["rightsEvidence"] = found
@@ -122,6 +123,8 @@ def asset_entry(repo: Path, rel: str, known: dict, rights: RightsLookup) -> dict
 
 def build(repo: Path, rights: RightsLookup, existing: dict | None = None) -> dict:
     """The full public.json value; `existing` supplies fixed fields and known asset rights."""
+    from ..figures import licenses
+    recorded = licenses.records(repo)
     existing = existing if existing is not None else read_existing(repo)
     order = page_order(repo)
     images, citations = linked_targets(repo, order)
@@ -132,7 +135,7 @@ def build(repo: Path, rights: RightsLookup, existing: dict | None = None) -> dic
         value["sourceNote"] = note
     value.setdefault("version", 1)
     value["pages"] = [page_entry(repo, rel) for rel in order]
-    assets = {rel: asset_entry(repo, rel, known, rights)
+    assets = {rel: asset_entry(repo, rel, known, rights, recorded=recorded)
               for rel in sorted(i for i in images if is_file(repo, i))}
     unknown = [rel for rel, entry in assets.items() if entry is None]
     if unknown:
