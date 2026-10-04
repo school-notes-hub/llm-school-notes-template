@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["done_topics", "blocked_topics"],
+  "additionalProperties": false,
+  "properties": {
+    "done_topics": {"type": "array", "items": {
+      "type": "object", "required": ["topic", "commit"], "additionalProperties": false,
+      "properties": {"topic": {"type": "string", "pattern": "^wiki/"}, "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}
+    }},
+    "blocked_topics": {"type": "array", "items": {
+      "type": "object", "required": ["topic", "since_commit", "reason"], "additionalProperties": false,
+      "properties": {"topic": {"type": "string", "pattern": "^wiki/"}, "since_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                     "reason": {"type": "string"}, "at": {"type": "string"}}
+    }},
+    "failed_topics": {"type": "array", "items": {
+      "type": "object", "required": ["topic", "count", "at"], "additionalProperties": false,
+      "properties": {"topic": {"type": "string", "pattern": "^wiki/"}, "count": {"type": "integer", "minimum": 1}, "at": {"type": "string"}}
+    }}
+  }
+}

@@ -55,7 +55,7 @@ def collect(repo: Path, changed: list[str], closures=(), briefs=()) -> list[dict
         context = set()
         for page in sorted(pages - assigned):
             meta = frontmatter.split(safefs.read_text(repo, page)).meta
-            if meta.get("type") in ("summary", "review") and any(
+            if meta.get("type") in ("summary", "chapter-summary", "review") and any(
                     resolve(page, link.target.split("#", 1)[0]) == topic
                     for link in links(safefs.read_text(repo, page))):
                 context.add(page)

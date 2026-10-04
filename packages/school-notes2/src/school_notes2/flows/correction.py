@@ -176,10 +176,11 @@ def validated(ctx, child, root, items, result):
             "tool_state": {k: child.get(k, {}) for k in ("tool_writes", "tool_parts", "tool_hashes")}}
 
 
-def _scope(ctx, root, items):
+def _scope(ctx, root, items, extra_paths=()):
     allowed = {i.get("file") for i in items}  # Report paths are tool-owned, never writable.
     allowed.update(relations.details(safefs.read_text(ctx.notes_path, i["file"]), i["item_id"]).get("file")
                    for i in items)
+    allowed.update(extra_paths)
     before = set(safefs.read_json(root, "snapshot.json"))
     for path in sorted(before | set(safefs.walk_files(ctx.notes_path, "wiki"))):
         if not path.startswith("wiki/") or path.startswith("wiki/assets/") or path == "wiki/log.md":

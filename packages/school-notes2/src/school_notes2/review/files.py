@@ -77,10 +77,18 @@ def render_body(date: str, review: dict, frm: str, to: str) -> str:
            f"Tartomány: `{frm[:12]}..{to[:12]}`. Értékelés: {verdict}.", ""]
     if review["findings"]:
         out += ["## Megállapítások", ""]
+    previous_topic = None
     for f in review["findings"]:
+        if f.get("topic") and f["topic"] != previous_topic:
+            previous_topic = f["topic"]
+            out += [f"## Témakör: {previous_topic}", ""]
         out += [f"### {f['id']} – {_location(f)}", "", f"**Probléma:** {f['problem']}", ""]
         if f.get("suggestion"):
             out += [f"**Javaslat:** {f['suggestion']}", ""]
+    for topic in review.get("topics", []):
+        if not topic["findings"]:
+            out += [f"## Témakör: {topic['topic']}", "",
+                    f"{topic['mode']}: {topic['status']}.", ""]
     if review.get("figures"):
         out += ["## Ábrák", ""]
     for fig in review.get("figures", []):
@@ -115,9 +123,13 @@ def write_review(repo: Path, date: str, review: dict, reviewer: str, frm: str, t
         if status == "pending":
             pending.append(f)
             continue
+        if "chain" in f and f.get("origin", "nightly") == "nightly":
+            other = known["items"].get(f.get("relates_to"), {})
+            if other.get("status") in ("fixed", "settled"):
+                status = "owner" if f["chain"] else "open"
         active.append(f)
         items[f["id"]] = "owner" if f.get("chain") == 1 else status
-        records[f["id"]] = {"file": f["file"], "round": 1, "chain": max(f.get("chain", 0), relations.chain(f, known)),
+        records[f["id"]] = {"file": f["file"], "round": 1, "chain": f.get("chain", relations.chain(f, known)),
                             "origin": f.get("origin", "nightly"), "category": f.get("category"),
                             "relates_to": f.get("relates_to"), "unlocated": unlocated or f.get("unlocated", False),
                             **{k: f[k] for k in ("quote", "hit_id", "figure_id", "outside_assignment") if k in f}}
@@ -228,6 +240,7 @@ def _apply_one(repo: Path, path: Path, run_id: str, closures: dict, listed: list
     touched = sorted(set(closures) | set(listed), key=_num)
     before = {i: items[i] for i in touched if i in items}
     entries = []
+    details = dict(page.meta.get("item_details", {}))
     for item_id in touched:
         c = closures.get(item_id)
         status = c["status"] if c else "untouched"
@@ -237,13 +250,16 @@ def _apply_one(repo: Path, path: Path, run_id: str, closures: dict, listed: list
         entries.append((item_id, status, note))
         if status in (FIXED, DISAGREE, "question", "settled"):
             items[item_id] = status
+            record = relations.details(text, item_id)
+            record.pop("recheck", None)
+            details[item_id] = record
     body = body.rstrip("\n") + "\n\n" + _done_section(run_id, entries, before)
     counts = open_counts(body)
     new_owner = [i for i, s in items.items() if s == OPEN and counts.get(i, 0) >= owner_after]
     for item_id in new_owner:
         items[item_id] = OWNER
     new_text = fm.set_keys(f"---\n{page.raw_meta}\n---\n{body}",
-                           {"items": items, "status": compute_status(items)})
+                           {"items": items, "item_details": details, "status": compute_status(items)})
     if new_text != text:
         _write(repo, path, new_text)
     return new_owner

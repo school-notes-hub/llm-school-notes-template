@@ -37,6 +37,8 @@ def nightly(ctx: Ctx) -> int:
         if task is None:
             task = _prepare(ctx, tasks)
         if task is not None:
+            if task.get("max_agents") is None:
+                task.update(max_agents=ctx.cfg.limits.max_agents)
             if task.phase == "waiting_quota":
                 task.set_phase(task.get("quota_phase"))
             if task.phase in ("prepared", "reviewing"):
@@ -65,9 +67,7 @@ def _unfinished(tasks: list[phase.Task]):
 
 def _prepare(ctx: Ctx, tasks: list[phase.Task]):
     return review.prepare(ctx.task_root(), ctx.name, ctx.bare(), ctx.worktree("review"),
-                          max_images=ctx.cfg.limits.review_max_images,
-                          max_diff_kb=ctx.cfg.limits.review_max_diff_kb,
-                          fetch_timeout=ctx.cfg.timeouts.fetch_s,
+                          fetch_timeout=ctx.cfg.timeouts.fetch_s, max_agents=ctx.cfg.limits.max_agents,
                           rasterize=lambda svgs, out: _rasterize(ctx, svgs, out))
 
 
@@ -94,9 +94,14 @@ def _prerequisites(ctx: Ctx) -> None:
 
 
 def _review(ctx: Ctx, task: phase.Task) -> None:
-    _prerequisites(ctx)
+    if task.get("units") != []:
+        _prerequisites(ctx)
     review.resume_prepared(task, ctx.bare(), ctx.worktree("review"),
                            lambda svgs, out: _rasterize(ctx, svgs, out))
+    if task.get("topic_review"):
+        from . import night_topics
+        night_topics.run(ctx, task)
+        return
     role, harness = ctx.cfg.role("reviewer")
     out = task.dir / "out"
     out.mkdir(exist_ok=True)

@@ -128,8 +128,13 @@ def close(task: phase.Task, repo: Git, wt: Git, ident: Identity, t: Timeouts = T
         rel = report.relative_to(worktree).as_posix()
         owners = [{"file": rel, "item_id": key, "reason": "review finding requires an owner decision"}
                   for key, status in (files.read_items(worktree, report) or {}).items() if status == files.OWNER]
+        extra = []
+        if task.get("topic_review"):
+            from . import topic_result
+            extra, closure_owners = topic_result.apply(task, worktree, ident)
+            owners += closure_owners
         task.update(notify_owner_items=owners)
-        written = replied + [report.relative_to(worktree).as_posix(),
+        written = replied + extra + [report.relative_to(worktree).as_posix(),
                    index.update(worktree).relative_to(worktree).as_posix()]
         written += records.append(worktree, records.from_reviewer(review.get("figures", [])),
                                   kind="review",
@@ -138,7 +143,9 @@ def close(task: phase.Task, repo: Git, wt: Git, ident: Identity, t: Timeouts = T
         return written
 
     def choose_m(r: str, head_now: str) -> str:
-        # Quiet night and no cut: the marker may include the report itself (M = R).
+        if task.get("topic_review"):
+            return head if task.get("all_topics_done") else base
+        # Legacy tasks keep their original marker contract.
         return r if end == head and head_now == head else end
 
     n = len(review["findings"])

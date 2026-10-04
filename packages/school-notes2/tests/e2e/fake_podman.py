@@ -31,10 +31,15 @@ if out and any("-reader-" in a or "-recheck-" in a for a in args):
     Path(out, "review.json").write_text(json.dumps(review))
     sys.exit(0)
 if out:                                   # the reviewer: read-only /work, writes /out
-    review = {"verdict": "changes", "findings": [
-        {"id": "R1", "file": "wiki/proba/elso.md", "line": 1, "problem": "Hiányzik egy példa.",
-         "suggestion": "Adj hozzá egy példát.", "relates_to": None}], "figures": []}
-    Path(out, "review.json").write_text(__import__("json").dumps(review), encoding="utf-8")
+    import json
+    incoming = next(a.split(":")[0] for a in args if a.endswith(":/in:ro"))
+    assigned = json.loads(Path(incoming, "assigned.json").read_text())
+    page = assigned["pages"][0]
+    review = {"verdict": "changes", "pages": [{"file": p, "verdict": "changes" if p == page else "ok"}
+                                             for p in assigned["pages"]], "findings": [
+        {"id": "R1", "file": page, "quote": "Új bekezdés.", "problem": "Hiányzik egy példa.",
+         "suggestion": "Adj hozzá egy példát.", "relates_to": None}], "items": [], "hits": [], "owner_notes": []}
+    Path(out, "review.json").write_text(json.dumps(review), encoding="utf-8")
     sys.exit(0)
 writer = Path(__file__).with_name("fake_writer.py")
 Path(work).with_name(f"{Path(work).name}-writer-prompt.txt").write_text(prompt, encoding="utf-8")

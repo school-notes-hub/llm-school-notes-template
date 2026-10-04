@@ -4,7 +4,11 @@
   "type": "object",
   "required": [
     "verdict",
-    "findings"
+    "pages",
+    "findings",
+    "items",
+    "hits",
+    "owner_notes"
   ],
   "additionalProperties": false,
   "properties": {
@@ -30,7 +34,8 @@
           "id",
           "file",
           "problem",
-          "relates_to"
+          "relates_to",
+          "quote"
         ],
         "properties": {
           "id": {
@@ -70,67 +75,6 @@
           "quote": {
             "type": "string",
             "minLength": 1
-          }
-        }
-      }
-    },
-    "figures": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "file",
-          "page",
-          "verdict",
-          "observed"
-        ],
-        "properties": {
-          "file": {
-            "type": "string"
-          },
-          "page": {
-            "type": "string"
-          },
-          "verdict": {
-            "type": "string"
-          },
-          "checks": {
-            "type": "object"
-          },
-          "observed": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "responses": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "key",
-          "verdict",
-          "answer"
-        ],
-        "properties": {
-          "key": {
-            "type": "string",
-            "pattern": "^docs/review/(?!.*\\.\\.)[^\\\\#]+\\.md#R[0-9]+$"
-          },
-          "verdict": {
-            "enum": [
-              "accept",
-              "keep"
-            ]
-          },
-          "answer": {
-            "type": "string",
-            "pattern": "\\S"
           }
         }
       }

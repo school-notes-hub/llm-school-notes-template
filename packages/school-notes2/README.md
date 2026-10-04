@@ -59,14 +59,13 @@ also across an interrupted move.
 The prompts' reader yardstick is the learner's school year: the tool fills `{grade}` from
 the configuration, as it fills `{output_instruction}`.
 
-The source-grounded repair rules and writer/fix prompts describe the target step-1/2
-contracts; their remaining flow integration is staged separately. `fix.txt` is loadable,
-but this unit does not introduce a fix run or the new reviewer state machine. The current
-nightly prompt uses the existing output contract, with additive private `owner_notes`.
+The source-grounded repair rules and writer/fix prompts support the P1–P6 flow.
+Source-free daily fixes use `fix.txt`; nightly review uses a separate topic contract
+with exact page, closure and warning accounting and private `owner_notes`.
 Writer `owner_notes` are emitted as `writer.owner_notes` JSONL log events and, at completion,
 in the private task `report.json`, the finish response and an existing once-per-run e-mail
-notice, with token-like secrets redacted. The new full e-mail layout remains step 3. The additive figure lists and `coverage` survive range merging; their remaining
-consumers are staged separately. Warning decisions are validated per writer invocation. `coverage` records
+notice, with token-like secrets redacted. Operational reports provide the full e-mail layout.
+The additive figure lists and `coverage` survive range merging. Warning decisions are validated per writer invocation. `coverage` records
 `source`, `unit` and either a `target` topic-section link or an omission `reason`,
 without creating an image evidence record. `question`/`settled` closures now validate the reference on the item's page and close it.
 A disagreement requires a substantive note; one reviewer reply may reopen it at round 2,
@@ -125,7 +124,7 @@ clock or rejecting the tool's own writes. No new phase or LLM call is introduced
 Source-reference patterns in `study-site/public-patterns.json` are warning-only. The scanner
 uses changed lines, including Markdown title/description, Mermaid and SVG labels, with the
 structural exceptions from repair plan 8.2. `source_refs.scan(full=True)` and task data
-`mode: repair` support the later repair entry point. No rule enters the publication gate.
+`mode: repair` support the repair entry point. No rule enters the publication gate.
 The fixed corpus is tested against the optional local learner checkouts, read-only.
 `SN_LEARNER_REPOS` may supply their paths as a colon-separated list (directories named
 `school-notes-<learner>-active`); absent that variable, the tests search the usual sibling
@@ -141,8 +140,8 @@ decisions are missing; cron cannot overwrite the owner's answer.
 Later tool warnings without decisions are persisted with `unhandled` for reviewer handoff.
 Accepted/false-positive list verdicts use `review.warnings.record` and the private
 `warning-verdicts.json`; repeating a write is idempotent, content changes invalidate it.
-The reader's two-pass orchestration and nightly warning-list assembly remain later units;
-the storage API returns `hiba` findings for their review-item creation.
+The reader's second pass and nightly topic calls consume these lists;
+the storage API returns `hiba` findings for review-item creation.
 
 Review metadata is additive `item_details`, keeping old `items: {R1: status}` maps readable.
 Legacy headings supply the page when metadata is absent. Full keys avoid cross-report R1
@@ -163,7 +162,7 @@ Reviewer input groups only open, owner and disagree items by page. Independent r
 transitions and appended tool sections merge during rebase; contradictory edits still stop.
 An upstream transition to an item in a new closure's `before` map also stops the merge,
 so repeated finish cannot restore an obsolete status.
-The full nightly targeting/blame policy remains later work.
+Nightly targeting and blame-based chain routing are implemented by unit 5 below.
 No new phase, LLM role or call is added; persisted checks, verdict writes and replies have
 interruption/resume coverage.
 
@@ -233,8 +232,8 @@ descending actual lesson date, path. Filenames never supply lesson dates. Depend
 logs, chapter summaries and review pages wait for every referenced topic to be `done`.
 Invalid or dependency-blocked targets are rejected against the local `origin/main`
 snapshot before creating a task; they cannot stop another run or the cron.
-The scheduler reads the queue in its stored order after new packages and existing pending
-image work; the separate daily `fix` entry condition is staged with the later fix flow.
+The scheduler reads the queue in its stored order after new packages and daily fix work
+(including eligible pending figures).
 Runs change status without rebuilding or reordering the queue. A direct topic repair
 without a queue is allowed, but does not create one or complete absent entries.
 
@@ -359,8 +358,7 @@ Reader keys omit machine content and insertion markers. Figure keys keep the 2a
 contract. G4/G5 recompute keys on the final tree, remove stale verdict records and
 refresh fixed pending notices without an LLM or a publication hold. The final
 commit carries `School-Notes-Run`. Pending figures restore into subject-scoped
-fetch inputs; after three runs they become owner items. Starting a daily fix run
-without new sources remains part of the later scheduler unit.
+fetch inputs; after three runs they become owner items. Unit 5 starts a daily fix run without new sources when writer items or pending figures remain.
 
 `[limits] max_agents = 3` is a positive integer, pinned for a run. Process-safe
 admission uses global slots and an exclusive lock per learner/home volume.
@@ -449,11 +447,8 @@ P4 still rolls a timed-out correction back (5.6); the second consecutive timeout
 also stops the parent run (6.6). Quota waits preserve the correction and do not use
 its crash retry budget.
 
-The current nightly implementation still reviews a commit range. Its timeout unit
-is the pinned range end (T); it now preserves that task instead of halving/discarding
-it. The per-unit counter is ready for topic labels, but topic splitting, targeted
-nightly review and per-topic durations remain plan 13/5. No new nightly workflow
-or student-facing wording is invented here.
+Unit 5 replaces the original capped nightly range with topic calls, while retaining
+this scheduler, quota gate and timeout policy.
 
 Processing invocations accumulate active elapsed time (quota-wait hours do not
 count). Work over ten minutes gets a private summary through the durable notice
@@ -490,3 +485,54 @@ No new phase, model call or publishing switch is introduced.
 Run the JS export tests with `node test/learning-export.test.mjs` in `packages/study-site`.
 Set `STUDY_BROWSER` to the installed Chromium executable for both synthetic learners'
 actual HTML/PDF/site-file negative tests; without it those two browser builds skip.
+
+## Topic-based nightly review and daily fixes (unit 5)
+
+The night pins `claude-reviewed..H`, derives topic units from actual author changes
+and unanswered review closures, and calls the reviewer once per topic in path order.
+D60's `review_max_images` and `review_max_diff_kb` configuration keys are removed;
+remove them from installed configuration before upgrading. The reviewer timeout
+defaults to 5400 seconds; explicit configuration still wins. Fix-only topic ranges
+use the literal targeted-review prompt; any ordinary author commit selects full review.
+Per-topic receipts recover valid output after a crash and skip completed calls after
+quota suspension. Format and crash retries are bounded independently; timeout has
+no immediate retry. The configured `claude-review` template leaves native Agent/Task
+tools enabled, without MCP; the real VM confirmation remains the deployment test.
+
+`docs/review/nightly-state.json` carries each completed topic's own reviewed commit,
+blocked topics with their original range start, and consecutive failed-night counts.
+A timeout/failure ends that topic's work for this night; other topics continue. Two
+consecutive failed nights block only that topic. `status --clear <learner> reviewer
+--continue` clears the timeout counters and records a local unblock timestamp; the
+next report persists the removal. The global marker advances exactly to H only when
+all topics are complete. One report commit contains topic sections, closure replies,
+hash-bound page/figure verdicts, warning decisions and recomputed pending notices.
+Concurrent changes invalidate H-bound verdicts, without overwriting a newer valid one.
+
+A quota suspension is a continuation of the same night: successful results remain
+in durable task receipts and the report commits once the invocation can finish.
+Timeout nights commit partial results and `done_topics` immediately. This preserves
+one report commit per night and append-only pushed history; publishing a quota-time
+partial commit and later extending it would require another commit or history rewriting.
+An abrupt process crash likewise resumes from receipts before committing its report.
+
+Unreviewed embedded figures use the existing independent figure reviewer, including
+phone rendering, with four figures per topic call. Legacy image identity markers exist
+only in a private review view. Receipts bind the original image/context fingerprint;
+the source page and asset are not rewritten. Existing valid figure verdicts skip the
+call. Missing/rejected figure checks remain visible as review findings and pending
+notices. Nightly never generates an image or runs an LLM during publication.
+
+A source-free daily `fix` run follows new Drive packages and precedes the one-time
+repair queue. It assigns open/round-2 items and eligible pending figures, uses P1 in
+fix mode, only figure checks in P2/P3, then P6. No reader call or second correction
+pass is introduced. Every new finding is located at H; Git blame determines whether
+its quote was last changed by a fix commit, in full and targeted mode alike. Such a
+finding, or `not-ok` on a fix commit's `fixed` closure, goes to owner with chain 1.
+`keep` reopens the existing disagreement at round 2. Successful P5 fixed verdicts
+are now persisted as well, so nightly does not judge the same closure twice.
+
+The upgrade tests retain legacy saved-report closure recovery. New fake-harness tests
+cover preparation, valid-output recovery, missing-topic continuation, failed-topic
+blocking/clearing, exact accounting, a report push interrupted before its checkpoint,
+targeted mode, blame routing, daily fix admission and legacy figure inspection.

@@ -18,7 +18,7 @@ def load(repo: Path) -> list[dict]:
 def pending(repo: Path, items: list[dict], review_ids=()) -> list[dict]:
     closed = {key(v) for v in load(repo)}
     return [i for i in items if i.get("id") not in review_ids and
-            (i.get("kind") != "source_ref" or key(i) not in closed)]
+            (i.get("kind") not in ("source_ref", "public_footnote") or key(i) not in closed)]
 
 
 def record(repo: Path, assigned: list[dict], verdicts: list[dict]) -> list[dict]:

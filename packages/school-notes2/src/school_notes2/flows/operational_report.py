@@ -110,7 +110,9 @@ def ended(ctx, kind, started, before, *, successful=True):
                   "fázis": task.phase, "blokkolt": task.get("blocked_topics", []),
                   "időtúllépések": read_json(ctx.cfg.state_dir / ctx.name / "timeouts.json", {}).get("reviewer", {}),
                   "új tételek": len(review.get("findings", [])), "owner_notes": review.get("owner_notes", []),
-                  "jelölő": task.get("T") if task.phase == "done" else "nem lépett: " + task.phase,
+                  "jelölő": task.get("M") if task.phase == "done" else "nem lépett: " + task.phase,
+                  "jelölő oka": "minden témakör kész" if task.get("all_topics_done") else "hiányzó vagy blokkolt témakör",
+                  "témakörök": review.get("topics", []), "kihagyott": task.get("skipped_topics", []),
                   "keretállapot": read_json(ctx.cfg.state_dir / "quota.json", {}), "tokenek": _metrics(task)}
         pending.send(ctx, Notice(ctx.name, f"nightly:{task.run_id}:{terminal(task)}", task.run_id,
                                  "nightly", "éjszakai review", json.dumps(redact(report), ensure_ascii=False, indent=2), "Az éjszakai munka összesítése."))

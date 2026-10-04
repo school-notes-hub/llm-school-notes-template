@@ -106,7 +106,11 @@ def invalidated(repo: Path) -> list[dict]:
         if removed(repo, record):
             continue
         try:
-            current = context.verdict_key(repo, record["commission"], record["candidate"])
+            if record.get("night_spec"):
+                from ..review.night_figures import fingerprint
+                current = fingerprint(repo, record["night_spec"])
+            else:
+                current = context.verdict_key(repo, record["commission"], record["candidate"])
         except (OSError, ValueError):
             current = None
         if current != record["key"]:
@@ -117,6 +121,8 @@ def invalidated(repo: Path) -> list[dict]:
 def removed(repo: Path, record: dict) -> bool:
     if not safefs.is_file(repo, record["file"]):
         return True
+    if record.get("night_spec"):
+        return False  # fingerprint detects changed or removed legacy embeddings.
     text = safefs.read_text(repo, record["file"])
     return (markers.read(text, f"figure-{record['id']}") is None and
             not any(page == record["file"] for page, _ in commissions.markers(repo).get(record["id"], [])))

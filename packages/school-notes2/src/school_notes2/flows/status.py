@@ -47,6 +47,7 @@ def summary(ctx: Ctx) -> dict:
         "images": _images(ctx),
         "review_items": _review_items(ctx),
         "last_review": _last(tasks, "review"),
+        "nightly_state": _nightly_state(ctx),
         "wiki_open_questions": _open_questions(ctx.notes_path),
         "drafts": _drafts(ctx.notes_path),
         "cards": _cards(ctx.notes_path),
@@ -168,7 +169,7 @@ def _pack_mb(bare: Path) -> float:
 def render(data: dict) -> str:
     """The console form of `summary`."""
     lines = [f"== {data['learner']}"]
-    for key, label in (("vm_lock", "VM-zár"), ("round", "kör"), ("quota", "heti keret"), ("timeouts", "T-125"), ("figure_requests", "licenckérelmek")):
+    for key, label in (("vm_lock", "VM-zár"), ("round", "kör"), ("quota", "heti keret"), ("timeouts", "T-125"), ("figure_requests", "licenckérelmek"), ("nightly_state", "éjszakai témakörök")):
         if data.get(key):
             lines.append(label + ": " + json.dumps(data[key], ensure_ascii=False, sort_keys=True))
     lock = data["lock"]
@@ -209,3 +210,17 @@ def render(data: dict) -> str:
         lines.append(f"térkép nélkül, felvétel szükséges: {ref}")
     lines.append(f"pack: {data['pack_mb']} MiB; napló: {data['log']}")
     return "\n".join(lines)
+
+
+def _nightly_state(ctx):
+    from ..review import topics
+    from ..git import repos
+    wt = ctx.worktree("review")
+    try:
+        state = topics.read_state(ctx.bare(), repos.rev(wt, "refs/remotes/origin/main"))
+        cleared = read_json(ctx.cfg.state_dir / ctx.name / "nightly-cleared.json", {}).get("at", "")
+        if cleared:
+            state["blocked_topics"] = [b for b in state.get("blocked_topics", []) if b.get("at", "") > cleared]
+        return state
+    except (OSError, ValueError):
+        return {}

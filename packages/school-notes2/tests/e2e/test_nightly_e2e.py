@@ -37,10 +37,12 @@ def test_nightly_review_end_to_end(world, tmp_path):
     assert "R1: open" in text and "### R1" in text
     reviewed = subprocess.run(["git", f"--git-dir={origin}", "rev-parse", "claude-reviewed", "main"],
                               capture_output=True, text=True).stdout.split()
-    assert reviewed[0] == reviewed[1]          # quiet night: M = R
+    assert reviewed[0] != reviewed[1]          # marker is pinned H; report is R
     assert nightly_flow.nightly(ctx) == 0      # nothing new: empty range, no call
     again = [t for t in phase.all_tasks(ctx.task_root(), "benedek") if t.kind == "review"]
-    assert len(again) == 1
+    assert len(again) == 2
+    second = next(t for t in again if t.run_id != task.run_id)
+    assert second.get("units") == []  # Own report never invokes a reviewer.
 
 
 def test_nightly_without_marker_needs_owner(world):
