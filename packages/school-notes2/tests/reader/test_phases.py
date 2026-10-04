@@ -7,6 +7,7 @@ from school_notes2.llm import launch
 from school_notes2.reader import calls, notices, units, verdicts
 from school_notes2.review import files, relations
 from school_notes2.state import phase, safefs
+from tests.conftest import record_render
 from school_notes2.state.errors import BadWork, WaitingQuota
 from school_notes2.wiki import frontmatter, source_refs
 from .test_reader import pass1
@@ -322,6 +323,7 @@ def test_partial_figure_batch_finalizes_only_good_candidates_and_keeps_reason(se
                      "caption": "", "form": "diagram", "tool": "test", "elements": [],
                      "visible_text": [], "attempt": 1}
         safefs.write_bytes(ctx.notes_path, candidate["asset"], data.getvalue())
+        record_render(ctx.notes_path, candidate["asset"])
         safefs.write_json(ctx.notes_path, f".school-notes/figures/{fid}.json", brief)
         safefs.write_json(ctx.notes_path, f".school-notes/figures/{fid}/figure.json", candidate)
         safefs.write_text(ctx.notes_path, page, safefs.read_text(ctx.notes_path, page) + f"\n<!-- figure: {fid} -->\n")

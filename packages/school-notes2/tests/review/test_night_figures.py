@@ -8,6 +8,7 @@ from school_notes2.figures import insert, review
 from school_notes2.llm.launch import Mounts, RoleRun
 from school_notes2.review import night_figures
 from school_notes2.state import safefs
+from tests.conftest import record_render
 
 
 def png():
@@ -21,6 +22,7 @@ def test_legacy_image_checked_once_and_context_invalidates(tmp_path, log, monkey
     repo.mkdir()
     safefs.write_text(repo, "wiki/s/a.md", "---\ntype: concept\n---\n# A\n\nTananyag.\n\n![Rajz](../assets/a.png)\n")
     safefs.write_bytes(repo, "wiki/assets/a.png", png())
+    record_render(repo, "wiki/assets/a.png")
     unit = {"topic": "wiki/s/a.md", "pages": ["wiki/s/a.md"]}
     root = tmp_path / "night"
     root.mkdir()
@@ -138,6 +140,7 @@ def test_failed_figure_is_operational_only_and_notice_clears(tmp_path, log, monk
     page = "wiki/s/a.md"
     safefs.write_text(repo, page, "# A\n\n![Rajz](../assets/a.png)\n")
     safefs.write_bytes(repo, "wiki/assets/a.png", png())
+    record_render(repo, "wiki/assets/a.png")
     role = Role("claude-review", "fake", "high", 1800)
     run = RoleRun("one", "night", "reviewer", role, Harness("claude-review", [], [], []), "fake", Mounts(),
                   folder / "unused", "figure-review", folder, grade=9)
@@ -166,6 +169,7 @@ def test_rejected_figure_problem_is_readable(tmp_path, log, monkeypatch):
     page = "wiki/a.md"
     safefs.write_text(repo, page, "# A\n\n![Rajz](assets/a.png)\n")
     safefs.write_bytes(repo, "wiki/assets/a.png", png())
+    record_render(repo, "wiki/assets/a.png")
     role = Role("claude-review", "fake", "high", 1800)
     run = RoleRun("one", "night", "reviewer", role, Harness("claude-review", [], [], []), "fake", Mounts(),
                   folder / "unused", "figure-review", folder, grade=9)

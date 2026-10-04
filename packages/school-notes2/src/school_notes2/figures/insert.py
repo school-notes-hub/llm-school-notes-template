@@ -17,6 +17,7 @@ def insert(repo: Path, brief: dict, receipt: dict, *, at: str) -> list[str]:
 
     The page is written last: a crash during evidence writes is harmless to replay.
     Recompute the key at call time, including after rebase; never trust an earlier check.
+    `rights: authored` is documentary; rights.authored_candidate decides eligibility.
     """
     if receipt.get("status") != "reviewed" or not receipt.get("model"):
         raise ValueError("independent review receipt required")

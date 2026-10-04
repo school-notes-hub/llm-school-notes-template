@@ -16,8 +16,8 @@ def test_review_ready_public_failure_then_clear_replays_finalize(
     ctx = context(tmp_path, log, learner)
     brief, candidate = make_figure()
     safefs.write_text(repo, "wiki/index.md", "# Jegyzetek\n")
-    candidate["source"] = "wiki/assets/physics/forces.py"
-    safefs.write_text(repo, candidate["source"], "# Drawing source\n")
+    candidate["asset"] = candidate["source"] = "wiki/assets/physics/forces.svg"
+    safefs.write_text(repo, candidate["asset"], '<svg xmlns="http://www.w3.org/2000/svg"/>')
     safefs.write_json(repo, ".school-notes/figures/forces/figure.json", candidate)
     task = phase.create(tmp_path, learner, "notes", "cron", "review_ready")
     task.update(ranges=[], inspection_figures=[{"brief": brief, "candidate": candidate}],

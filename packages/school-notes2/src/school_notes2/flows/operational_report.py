@@ -76,9 +76,6 @@ def completed(ctx, task, report, duration, *, finishing=False):
     notes += task.get("reader_owner_notes", []) + task.get("recheck_owner_notes", [])
     notes += task.get("correction_result", {}).get("owner_notes", []) + report.get("owner_notes", [])
     report["owner_notes"] = list(dict.fromkeys(notes))
-    report.update(details(ctx, task), időtartam_s=round(duration, 3), időpont=now_iso(), fázis=task.phase)
-    report = redact(report)
-    write_json(task.dir / "report.json", report)
     receipt = terminal(task)
     # An explicit finish can also stop at --no-push's committed branch. It has
     # no completion summary, but still delivers the writer's owner notes.
@@ -87,10 +84,23 @@ def completed(ctx, task, report, duration, *, finishing=False):
     # ten minutes, and an interrupted delivery must retry the same notice.
     notices = task.get("completion_notices", {})
     choice = notices.get(notice_key)
+    if receipt == "needs_owner" and choice == "owner_notes":
+        choice = None  # A resumed older task may have pinned the premature choice.
     if notice_key and choice is None:
-        choice = "completion" if duration > 600 and receipt else "owner_notes" if report["owner_notes"] else None
+        choice = ("completion" if duration > 600 and receipt else
+                  "owner_notes" if receipt != "needs_owner" and report["owner_notes"] else None)
         if choice:
             task.update(completion_notices={**notices, notice_key: choice})
+    if choice == "completion":
+        try:
+            report.update(details(ctx, task))
+        except Exception:
+            report = {k: report[k] for k in ("run_id", "phase", "mode", "owner_notes", "reader_coverage", "branch")
+                      if k in report}
+            ctx.log.event("report.details_failed", run_id=task.run_id)
+    report.update(időtartam_s=round(duration, 3), időpont=now_iso(), fázis=task.phase)
+    report = redact(report)
+    write_json(task.dir / "report.json", report)
     if choice == "completion":
         pending.send(ctx, Notice(ctx.name, f"completion:{task.run_id}:{receipt}", task.run_id, "finish", "feldolgozás",
                                  json.dumps(report, ensure_ascii=False, indent=2), "A feldolgozás összesítése."))

@@ -7,13 +7,13 @@ from xml.etree import ElementTree
 
 from ..state import safefs
 from ..wiki.check import check_renders
-from ..wiki import frontmatter, source_refs
-from . import context
+from ..wiki import frontmatter, rights, source_refs
+from . import context, licenses
 
 NUMBER = re.compile(r"(?<![\w#])[-+]?\d+(?:[.,]\d+)?")
 
 
-def report(repo: Path, brief: dict, candidate: dict) -> dict:
+def report(repo: Path, brief: dict, candidate: dict, *, generated=None, request=None) -> dict:
     errors, warnings = [], []
     asset = candidate.get("asset")
     source = candidate.get("source")
@@ -23,18 +23,7 @@ def report(repo: Path, brief: dict, candidate: dict) -> dict:
             errors.append(f"missing file: {rel}")
     if errors:
         return {"errors": errors, "warnings": warnings}
-    if receipt:
-        errors.extend(i["message"] for i in check_renders(repo, [receipt]))
-        if not errors:
-            data = safefs.read_json(repo, receipt)
-            name = Path(asset).name if asset else ""
-            entry = data["outputs"].get(name, {})
-            if (str(Path(receipt).parent / name) != asset or
-                    entry.get("sha256") != hashlib.sha256(safefs.read_bytes(repo, asset)).hexdigest()):
-                errors.append("candidate is not a hashed output of render.json")
-    elif asset and Path(asset).suffix == ".svg":
-        if not source:
-            errors.append("SVG candidate needs editable source or render.json")
+    errors.extend(rights_errors(repo, brief, candidate, generated=generated, request=request))
     if source:
         source_text = safefs.read_text(repo, source)
         edges = re.findall(r"(?:->|--)\s*[^;\n]+", source_text)
@@ -50,6 +39,37 @@ def report(repo: Path, brief: dict, candidate: dict) -> dict:
     if candidate["alt"] == meta.get("title"):
         warnings.append({"code": "alt-title", "message": "alt equals page title"})
     return {"errors": sorted(errors), "warnings": sorted(warnings, key=lambda w: w["code"])}
+
+
+def rights_errors(repo, brief, candidate, *, generated=None, request=None):
+    """Resolve a candidate's publication route before spending a review call."""
+    asset, source, receipt = (candidate.get(k) for k in ("asset", "source", "render"))
+    errors = []
+    if asset and not receipt:
+        rendered = rights.rendered(repo)(asset)
+        receipt = rendered[1] if rendered else None
+    if receipt:
+        errors.extend(i["message"] for i in check_renders(repo, [receipt]))
+        if not errors:
+            data = safefs.read_json(repo, receipt)
+            name = Path(asset).name if asset else ""
+            entry = data["outputs"].get(name, {})
+            if (str(Path(receipt).parent / name) != asset or
+                    entry.get("sha256") != hashlib.sha256(safefs.read_bytes(repo, asset)).hexdigest()):
+                errors.append("candidate is not a hashed output of render.json")
+    elif asset and Path(asset).suffix == ".svg":
+        if not source:
+            errors.append("SVG candidate needs editable source or render.json")
+    if asset and not receipt and not rights.authored_candidate(repo, candidate):
+        known = rights.media(repo)(asset)
+        request = request or licenses.request_for(repo, brief["id"])
+        if request:
+            licenses.candidate(repo, brief, candidate, request)
+        elif not (known and known[0] == "generated") and not (generated and generated(asset)):
+            errors.append("candidate has no rights path: provide a matching render.json output, "
+                          "generation record, licensed request, or an own SVG with an identical "
+                          "SVG source under wiki/assets/")
+    return errors
 
 
 def svg_hints(text: str, brief: dict, embedding: dict) -> list[dict]:

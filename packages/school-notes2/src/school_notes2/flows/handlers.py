@@ -10,6 +10,7 @@ from ..state import safefs
 from ..wiki import check as wiki_check
 from ..wiki import public
 from ..wiki.check_result import check_result
+from . import generation_receipts
 from . import fetch as fetch_flow
 from . import status as status_flow
 from . import call_scope, checks, steps
@@ -69,14 +70,14 @@ def check(ctx: Ctx, task) -> dict:
             listed = {(i["file"], i["item_id"]) for i in fetch["open_review_items"]}
             problems += check_result(ctx.notes_path, result, fetch, listed,
                                      ctx.cfg.limits.review_closures_per_run, whole_run=False,
-                                     base_content=steps.base_reader(ctx, task))
+                                     base_content=steps.base_reader(ctx, task),
+                                     generated=lambda rel: generation_receipts.rights(ctx)(rel))
     if not wiki_check.errors(problems):
         try:
             learning.refresh(ctx, task)
         except steps.CheckFailed as exc:
             problems += exc.items
     if metadata_valid:
-        from . import generation_receipts
         problems += public_problems(ctx.notes_path, generation_receipts.rights(ctx))
     problems = checks.identify(call_scope.current(ctx, task, problems), ctx.notes_path)
     steps.write_check_items(ctx, problems)

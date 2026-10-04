@@ -5,6 +5,7 @@ import pytest
 from PIL import Image
 
 from school_notes2.state import safefs
+from tests.conftest import record_render
 
 
 @pytest.fixture
@@ -36,5 +37,6 @@ def make_figure(repo):
                      "visible_text": ["F"], "attempt": 1}
         safefs.write_json(repo, f".school-notes/figures/{fid}.json", brief)
         safefs.write_json(repo, f".school-notes/figures/{fid}/figure.json", candidate)
+        record_render(repo, asset)
         return brief, candidate
     return make

@@ -11,6 +11,7 @@ from school_notes2.llm.argv import prompt
 from school_notes2.reader import calls, contracts, inputs, units, verdicts
 from school_notes2.review import relations
 from school_notes2.state import phase, safefs
+from tests.conftest import record_render
 from school_notes2.wiki.check_result import check_result
 from .test_phases import finding, install_reader
 from .test_reader import pass1
@@ -25,6 +26,7 @@ def figure(ctx, task, page):
     data = io.BytesIO()
     Image.new("RGB", (20, 10), "white").save(data, format="PNG")
     safefs.write_bytes(ctx.notes_path, candidate["asset"], data.getvalue())
+    record_render(ctx.notes_path, candidate["asset"])
     safefs.write_text(ctx.notes_path, page, safefs.read_text(ctx.notes_path, page) + "\n<!-- figure: f -->\n")
     safefs.write_json(ctx.notes_path, ".school-notes/figures/f.json", brief)
     safefs.write_json(ctx.notes_path, ".school-notes/figures/f/figure.json", candidate)

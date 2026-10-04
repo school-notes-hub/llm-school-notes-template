@@ -91,6 +91,9 @@ def test_svg_hints_are_only_warnings(repo, make_figure):
     source = "wiki/assets/physics/forces.dot"
     safefs.write_text(repo, source, 'digraph { a -> b [style=invis]; }')
     candidate.update(asset=asset, source=source, alt="Forces")
+    safefs.write_json(repo, "wiki/assets/physics/render.json", {
+        "source": source, "source_sha256": hashlib.sha256(safefs.read_bytes(repo, source)).hexdigest(),
+        "outputs": {"forces.svg": {"sha256": hashlib.sha256(safefs.read_bytes(repo, asset)).hexdigest()}}})
     report = machine.report(repo, brief, candidate)
     assert not report["errors"]
     assert {w["code"] for w in report["warnings"]} == {"phone-font", "numbers", "source-pattern", "invisible-edges", "alt-title"}

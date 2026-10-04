@@ -33,6 +33,8 @@ def media(repo: Path):
     def lookup(rel):
         digest = sha256(repo, rel)
         for kind, entries in (("generated", records), ("authored", authored)):
+            if kind == "authored" and not rel.endswith(".svg"):
+                continue
             found = next(((kind, path) for recorded, path in sorted(entries, key=lambda r: r[1])
                           if recorded == digest), None)
             if found:
@@ -42,10 +44,16 @@ def media(repo: Path):
 
 
 def authored_candidate(repo: Path, candidate: dict) -> bool:
-    """A local editable source identifies the writer's own, non-licensed candidate."""
+    """Decide own-SVG eligibility; `rights: authored` only documents this decision.
+
+    The field itself grants no rights. Media lookup also requires an independent
+    accept and the current output hash; raster authorship needs render.json.
+    """
     asset, source = candidate.get("asset", ""), candidate.get("source", "")
     return (candidate.get("state") == "candidate" and asset.startswith("wiki/assets/") and
-            source.startswith("wiki/assets/") and safefs.is_file(repo, source))
+            asset.endswith(".svg") and source.startswith("wiki/assets/") and
+            source.endswith(".svg") and safefs.is_file(repo, asset) and safefs.is_file(repo, source) and
+            (source == asset or safefs.read_bytes(repo, source) == safefs.read_bytes(repo, asset)))
 
 
 def rendered(repo: Path):

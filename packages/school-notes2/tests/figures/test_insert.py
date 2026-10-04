@@ -95,8 +95,8 @@ def test_replacement_retains_old_file_and_only_removes_its_link(repo, make_figur
 
 def test_insertion_resume_after_evidence_before_page(repo, make_figure, monkeypatch):
     brief, candidate = make_figure()
-    candidate["source"] = "wiki/assets/physics/forces.py"
-    safefs.write_text(repo, candidate["source"], "# Drawing source\n")
+    candidate["asset"] = candidate["source"] = "wiki/assets/physics/forces.svg"
+    safefs.write_text(repo, candidate["asset"], '<svg xmlns="http://www.w3.org/2000/svg"/>')
     safefs.write_json(repo, ".school-notes/figures/forces/figure.json", candidate)
     judged = receipt(repo, brief, candidate)
     original = safefs.write_text

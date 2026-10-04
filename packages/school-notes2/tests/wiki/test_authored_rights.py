@@ -24,9 +24,9 @@ def test_accepted_authored_figure_without_render(repo, explicit, source):
 def authored(repo, source="asset"):
     asset = "wiki/assets/own.svg"
     safefs.write_text(repo, asset, '<svg xmlns="http://www.w3.org/2000/svg"/>')
-    editable = asset if source == "asset" else "wiki/assets/own.py"
+    editable = asset if source == "asset" else "wiki/assets/own-source.svg"
     if editable != asset:
-        safefs.write_text(repo, editable, "# editable drawing source\n")
+        safefs.write_bytes(repo, editable, safefs.read_bytes(repo, asset))
     safefs.write_text(repo, "wiki/own.md", "# Saját ábra\n\n![Ábra](assets/own.svg)\n")
     record = {"candidate": {"state": "candidate", "asset": asset, "source": editable},
               "verdict": {"verdict": "accept"}, "output_sha256": public.sha256(repo, asset)}
@@ -76,3 +76,33 @@ def test_generated_receipt_keeps_precedence_over_local_source(repo, origin):
         value = {"decision": "accepted", "sha256": record["output_sha256"]}
     safefs.write_json(repo, path, value)
     assert public.media_receipt_rights(repo)(asset) == ("generated", path)
+
+
+@pytest.mark.parametrize("extension", ["png", "jpg", "webp", "gif", "avif", "svg"])
+@pytest.mark.parametrize("explicit", [False, True])
+def test_unrelated_editable_source_never_grants_figure_rights(repo, extension, explicit):
+    asset, record = authored(repo)
+    candidate = record["candidate"]
+    candidate["asset"] = f"wiki/assets/unproven.{extension}"
+    safefs.write_bytes(repo, candidate["asset"], safefs.read_bytes(repo, asset))
+    candidate["source"] = "wiki/assets/unrelated.py"
+    safefs.write_text(repo, candidate["source"], "# Drawing source\n")
+    if explicit:
+        record["rights"] = "authored"
+    safefs.write_json(repo, "docs/evidence/media/own/figure.json", record)
+    assert public.media_receipt_rights(repo)(candidate["asset"]) is None
+
+
+def test_svg_source_must_remain_byte_identical(repo):
+    asset, record = authored(repo, source="editable")
+    safefs.write_json(repo, "docs/evidence/media/own/figure.json", record)
+    assert public.media_receipt_rights(repo)(asset)[0] == "authored"
+    safefs.write_text(repo, record["candidate"]["source"], '<svg width="100"/>')
+    assert public.media_receipt_rights(repo)(asset) is None
+
+
+def test_svg_receipt_does_not_grant_raster_authorship_for_identical_bytes(repo):
+    asset, record = authored(repo)
+    safefs.write_json(repo, "docs/evidence/media/own/figure.json", record)
+    safefs.write_bytes(repo, "wiki/assets/copy.png", safefs.read_bytes(repo, asset))
+    assert public.media_receipt_rights(repo)("wiki/assets/copy.png") is None

@@ -9,6 +9,7 @@ from ..sources import calls
 from ..state import phase, safefs
 from ..state.errors import BadWork, Transient, WaitingQuota
 from ..wiki import frontmatter
+from . import generation_receipts
 from . import checks, handlers, inspection, steps, writer
 
 PREFIXES = ("wiki", "docs", "publication", "tools", ".school-notes")
@@ -144,7 +145,6 @@ def apply(ctx, task, root, saved, edits=None):
     from . import licensing
     licensing.refresh(ctx, task, result, task.get("pages", []))
     if result.get("figures"):
-        from . import generation_receipts
         generation_receipts.refresh(ctx, task)
     outcome = files.apply_closure(ctx.notes_path, f"{task.run_id}-fix-a{task.get('attempt', 1)}", result.get("review_closure", []),
                                   task.get("correction_items", []), ctx.cfg.limits.owner_after_open)
@@ -171,7 +171,8 @@ def validated(ctx, child, root, items, result):
     supplied = fetch.fetch_json(child, 1, grade=ctx.student.grade, repo=ctx.notes_path, whole_run=True)
     problems = check_result(ctx.notes_path, result, supplied,
                             {(i["file"], i["item_id"]) for i in items}, len(items),
-                            base_content=steps.base_reader(ctx, child))
+                            base_content=steps.base_reader(ctx, child),
+                            generated=lambda rel: generation_receipts.rights(ctx)(rel))
     if problems:
         raise steps.CheckFailed(problems)
     steps.guard_step(ctx, child)

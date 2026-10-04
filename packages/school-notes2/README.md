@@ -460,7 +460,10 @@ previous 500-character truncation. Summaries are sent once per terminal state
 (done, owner intervention or closure). Quota waits and retry invocations only
 accumulate elapsed time; they send no summary. Owner notes are included in that
 summary, without a separate owner-notes e-mail; runs of at most ten minutes send
-their notes in one separate notice. The choice survives retries and crossing the
+their notes in one separate notice at done/closed/finish. A needs_owner stop defers
+that notice until completion, preserving earlier notes across continuation. Summary
+details are computed only for a summary notice; failed detail collection falls back
+to the basic report. The choice survives retries and crossing the
 ten-minute boundary during notification. Error and owner-item notices are unchanged.
 The VM verification/deployment,
 T-144 owner gate and cron installation are outside this repository change.
@@ -472,9 +475,13 @@ T-144 owner gate and cron installation are outside this repository change.
 `docs/evidence/image-generation/` are copied from the host ledger in the main content flow and cannot collide with
 accepted figure identities. A request-based licensed image always revalidates its grant; hash-matching legacy licensed rights survive without a request record.
 An independently accepted `figure.json` also grants `authored` rights for its exact
-`output_sha256` when the non-generated, non-licensed candidate has its own editable
-source under `wiki/assets/` (including the asset itself). Insertion records the rights
-class; older accepted records without that field use the same source/hash checks.
+`output_sha256` only for a non-generated, non-licensed SVG whose source is the asset
+itself or a byte-identical SVG under `wiki/assets/`. Raster authorship still requires
+`render.json`. Insertion's rights field documents the decision; the shared eligibility
+function and hash checks decide rights even for older records without that field.
+Candidate preflight rejects missing rights paths before independent review, using
+render outputs, generation receipts (including the host ledger), licensed requests
+or that own-SVG rule.
 `figures/requests.py` and `figures/licenses.py` own the private request/license
 contracts; `flows/licensing.py` files requests through the existing tool-write
 journal before inspection. Source image hashes are distinct from the uploaded

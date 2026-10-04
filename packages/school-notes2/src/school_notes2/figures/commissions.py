@@ -139,7 +139,8 @@ def assignments(result: dict, pending: list[dict]) -> list[dict]:
     return sorted(listed, key=lambda a: a["id"])
 
 
-def check(repo: Path, assignments: list[dict], drawings: list[dict] = ()) -> list[dict]:
+def check(repo: Path, assignments: list[dict], drawings: list[dict] = (), *,
+          generated=None, requests=()) -> list[dict]:
     from ..wiki.check import item
     out = []
     try:
@@ -157,13 +158,15 @@ def check(repo: Path, assignments: list[dict], drawings: list[dict] = ()) -> lis
             brief = read(repo, fid)
             if not safefs.is_file(repo, path):
                 raise ValueError("missing figure.json; write a candidate or an explicit failed state with reason")
-            out.extend(item(path, None, message) for message in preflight(repo, brief))
+            request = next((r for r in requests if r["id"] == fid), None)
+            out.extend(item(path, None, message) for message in
+                       preflight(repo, brief, generated=generated, request=request))
         except (ValueError, OSError) as exc:
             out.append(item(path, None, str(exc)))
     return out
 
 
-def preflight(repo: Path, brief: dict) -> list[str]:
+def preflight(repo: Path, brief: dict, *, generated=None, request=None) -> list[str]:
     from . import context, machine
     from .render import png
     value = candidate(repo, brief)
@@ -172,7 +175,7 @@ def preflight(repo: Path, brief: dict) -> list[str]:
     if value["state"] != "candidate":
         context.embedding(repo, brief, {"alt": "", "caption": ""})
         return []
-    errors = machine.report(repo, brief, value)["errors"]
+    errors = machine.report(repo, brief, value, generated=generated, request=request)["errors"]
     context.embedding(repo, brief, value)
     if not errors:
         context.verdict_key(repo, brief, value)

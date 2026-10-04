@@ -165,7 +165,8 @@ def test_report_distinguishes_changed_pages_context_and_historical_findings(worl
         "docs/review/previous.md#R2": {"file": "wiki/m/topic.md", "status": "fixed"}}})
     write_json(ctx.cfg.state_dir / ctx.name / "timeout-events.json", [
         {"run_id": task.run_id + "-fix-a1", "role": "writer"}, {"run_id": "other", "role": "writer"}])
-    result = operational_report.completed(ctx, task, {"mode": "run"}, 60)
+    task.set_phase("done")
+    result = operational_report.completed(ctx, task, {"mode": "run"}, 601)
     assert result["változott oldalak"] == ["wiki/m/topic.md"]
     topic = result["témák"][0]
     assert (topic["leletek"], topic["lezárt"], topic["vitatott"], topic["nyitott"]) == (3, 1, 1, 1)

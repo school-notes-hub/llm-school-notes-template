@@ -10,6 +10,7 @@ from school_notes2.review import close, figure_waiting, night_figures, topics
 from school_notes2.state import phase, safefs
 from school_notes2.wiki import public
 from tests.review.test_night_figures import png
+from tests.conftest import record_render
 from tests.review.test_topics import IDENT, context, good, prepare
 
 
@@ -56,6 +57,8 @@ def test_nightly_public_refresh_survives_close_crash(tmp_path, repos, log, monke
 @pytest.mark.parametrize("suspended", [False, True])
 def test_missing_figure_retried_after_suspension_and_next_night(tmp_path, repos, log, monkeypatch, learner, suspended):
     page, asset = "wiki/a.md", "wiki/assets/a.png"
+    safefs.write_bytes(repos.laptop, asset, png())
+    record_render(repos.laptop, asset)
     repos.commit({page: "# A\n\n![Ábra](assets/a.png)\n", asset: png()})
     ctx = context(tmp_path, repos, log, learner)
     monkeypatch.setattr(launch, "run_headless", good)

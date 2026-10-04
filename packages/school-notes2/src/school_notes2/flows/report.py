@@ -3,7 +3,7 @@
 from ..mcp.redact import redact
 from ..notify import Notice
 from ..notify import pending
-from ..state.files import write_json
+from ..state.files import read_json, write_json
 from . import writer
 
 
@@ -21,7 +21,9 @@ def completion(ctx, task):
                                  "Dönts a kép felhasználási jogáról a tulajdonosi munkamenetben."))
     notes = redact(merged["owner_notes"]
                    + task.get("reader_owner_notes", []) + task.get("recheck_owner_notes", [])
-                   + task.get("correction_result", {}).get("owner_notes", []))
+                   + task.get("correction_result", {}).get("owner_notes", [])
+                   + read_json(task.dir / "report.json", {}).get("owner_notes", []))
+    notes = list(dict.fromkeys(notes))
     report = {"run_id": task.run_id, "phase": task.phase,
               "mode": task.get("mode", "chat" if task.mode == "interactive" else "run"), "owner_notes": notes,
               "reader_coverage": task.get("reader_coverage", []),

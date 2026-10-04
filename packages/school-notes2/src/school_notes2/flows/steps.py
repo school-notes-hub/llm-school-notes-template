@@ -21,6 +21,7 @@ from ..wiki import check as wiki_check
 from ..wiki import generate, guard, machine, public
 from ..wiki import order as wiki_order
 from ..wiki.check_result import check_result
+from . import generation_receipts
 from . import fetch as fetch_flow
 from . import checks, journal, writer
 from .context import Ctx
@@ -156,7 +157,8 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
                                   whole_run=True)
     listed = fetch["open_review_items"]
     problems = check_result(repo, result, fetch, {(i["file"], i["item_id"]) for i in listed},
-                            ctx.cfg.limits.review_closures_per_run, base_content=base_reader(ctx, task))
+                            ctx.cfg.limits.review_closures_per_run, base_content=base_reader(ctx, task),
+                            generated=lambda rel: generation_receipts.rights(ctx)(rel))
     if wiki_check.errors(problems):
         raise CheckFailed(problems)
     check_changed(ctx, task, result=result)  # Validate author text before any tool stamp.
@@ -174,7 +176,6 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
     _record_writes(task, repo, whole=outcome.written + evidence, parts=[])
     from . import licensing
     licensing.refresh(ctx, task, result, fetch["pages"])
-    from . import generation_receipts
     generation_receipts.refresh(ctx, task)
     generate_all(ctx, task)
     return Prepared(result, result["status"] == "question", outcome.new_owner)

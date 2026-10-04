@@ -44,3 +44,15 @@ def local_origin(monkeypatch):
     from school_notes2.git import run
     fixed = tuple(c for c in run.FIXED_C if not c.startswith("protocol.file"))
     monkeypatch.setattr(run, "FIXED_C", fixed + ("protocol.file.allow=always",))
+
+
+def record_render(repo: Path, asset: str) -> None:
+    """Give synthetic raster candidates the same hash-bound proof as real renders."""
+    from school_notes2.state import safefs
+    from school_notes2.wiki.pages import sha256
+    folder, name = asset.rsplit("/", 1)
+    source, receipt = f"{folder}/drawing.py", f"{folder}/render.json"
+    safefs.write_text(repo, source, "# Drawing source\n")
+    outputs = safefs.read_json(repo, receipt, {}).get("outputs", {})
+    outputs[name] = {"sha256": sha256(repo, asset)}
+    safefs.write_json(repo, receipt, {"source": source, "source_sha256": sha256(repo, source), "outputs": outputs})

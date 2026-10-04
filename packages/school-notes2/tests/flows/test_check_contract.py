@@ -268,3 +268,35 @@ def test_incomplete_question_chat_stays_with_owner(learning_run, monkeypatch, ca
     assert safefs.read_json(ctx.notes_path, ".school-notes/result.json") == own
     assert "missing decision for missed" in safefs.read_json(ctx.notes_path, ".school-notes/check.json")[0]["message"]
     assert not (task.dir / "result-1.json").exists()
+
+
+@pytest.mark.parametrize("generated", [False, True])
+def test_candidate_rights_are_reported_to_writer_using_live_host_ledger(learning_run, monkeypatch, generated):
+    from school_notes2.wiki.pages import sha256
+    ctx, task = learning_run
+    asset = "wiki/assets/proba/candidate.png"
+    safefs.write_bytes(ctx.notes_path, asset, b"synthetic image")
+    brief = {"id": "candidate", "page": TOPIC, "anchor": "Rajz", "kind": "figure",
+             "purpose": "Megértés", "must_show": ["Irány"], "avoid_misreading": "Ellentétes irány",
+             "taught_conventions": [], "text_complete_without_figure": True}
+    candidate = {"state": "candidate", "asset": asset, "alt": "Irány", "caption": "",
+                 "form": "diagram", "tool": "test", "elements": [], "visible_text": [], "attempt": 1}
+    safefs.write_text(ctx.notes_path, TOPIC, safefs.read_text(ctx.notes_path, TOPIC) +
+                      "\n# Rajz\n\n<!-- figure: candidate -->\n")
+    safefs.write_json(ctx.notes_path, ".school-notes/figures/candidate.json", brief)
+    safefs.write_json(ctx.notes_path, ".school-notes/figures/candidate/figure.json", candidate)
+    result = {"status": "done", "figures": [{k: brief[k] for k in ("id", "kind", "page")}]}
+    safefs.write_json(ctx.notes_path, ".school-notes/result.json", result)
+    jobs = {"candidate": {"learner": ctx.name, "attempts": [
+        {"state": "generated", "preview_sha256": sha256(ctx.notes_path, asset)}]}} if generated else {}
+    monkeypatch.setattr(ctx, "image_settings", lambda: SimpleNamespace(learner=ctx.name, ledger=lambda: {"jobs": jobs}))
+    answer = handlers.check(ctx, task)
+    assert answer["ok"] is generated, answer
+    if not generated:
+        assert any("no rights path" in p["message"] and p["file"].endswith("candidate/figure.json")
+                   for p in answer["problems"])
+        with pytest.raises(steps.CheckFailed, match="check"):
+            writer._check_call(ctx, task, 1, result)
+    else:
+        writer._check_call(ctx, task, 1, result)
+    assert not safefs.exists(ctx.notes_path, "docs/evidence/image-generation/ledger.json")
