@@ -5,3 +5,4 @@ packages/school-notes2/src/school_notes2/ops/config.example.toml benedek  # depl
 packages/school-notes2/src/school_notes2/ops/config.example.toml barna  # deployment example (G-17)
 instructions/note-formatting.md forgatonyomatek  # physics terminology example, subject level (G-22)
 examples/technical-visuals/index.html forgatonyomatek  # lever demo, subject level (G-22)
+subject-cards.json kommunikacio  # the subject name Kommunikáció, not a learner page
