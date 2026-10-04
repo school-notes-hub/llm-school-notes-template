@@ -151,6 +151,9 @@ chain 1 and owner. Owner items use the existing once-per-item notification path,
 a durable handoff across closing restarts. Failed deliveries retry on later nights;
 the per-item receipt skips already delivered notices, and the handoff completes only
 after every notice has a receipt. Invalid or stale responses are dropped and logged.
+Notes-run owner items, repair handoffs and `owner_notes` mail also enter the private
+per-learner `pending-owner-notices.json` before delivery. Every `run` retries that
+queue, even after the originating task has completed; receipts prevent duplicate mail.
 Reviewer input groups only open, owner and disagree items by page. Independent review
 transitions and appended tool sections merge during rebase; contradictory edits still stop.
 An upstream transition to an item in a new closure's `before` map also stops the merge,
@@ -175,10 +178,15 @@ Cron persists the writer assignments in `phase.json`: subjects follow `tools/sub
 new subjects follow by path; each call receives only its own packages, pages, card and
 review/image assignments. The tool assigns at most 20 review items per run, in round-2,
 report-date and numeric item order. Unassigned items do not accrue untouched counts.
+Interactive preparation puts owner items first within the same capacity, so the owner
+can settle them in chat. Both dated report names and repair run IDs supply calendar dates.
 Subjectless items go to the first call; asset items go to the subject of their first
 embedding content page by path. D36 ranges receive each review/image assignment once.
-Finish defects return to every affected subject; an unassignable finish defect is a tool
-error, not bad writer work. Retry assignments survive interrupted checkpoint invalidation.
+Finish defects return to every affected subject; subjectless wiki files and unembedded
+assets return to the first call. A defect outside writer paths is a tool error.
+Retry assignments survive interrupted checkpoint invalidation. Relation discovery skips
+unreadable page frontmatter; metadata checks report old defects to the owner and new
+defects to the writer, keeping preparation and chat available for repairs.
 Original page sequence IDs survive noncontiguous subject groups. Whole-run validation and machine metadata use the complete input. D16 still selects
 whole packages up to `sources.pages_per_call` (30 by default); D36 splits only a single
 oversized package, sequentially. Each call is checked before its result checkpoint is saved;
@@ -231,15 +239,16 @@ as a local Git bundle, then a tool-only continuation commits the queue's `owner`
 remain blocked. Preparation, per-call result saving, queue replacement and the committed
 hold all have interruption/resume tests. No new phase or model is introduced.
 
-The controller's trial order (repair plan 13/1, K-6) is sequential. Every step uses
+The controller's trial order (repair plan 13/1, K-6) is sequential. Steps 1–3 use
 `--no-push`; the controller (and the owner in the morning) inspects it, then `finish`
 closes it before the next step:
 
 1. Create the repair queue.
 2. Repair the polisz topic page.
 3. Repair its lesson log, after all its topic dependencies are done.
-4. Adjust only the polisz links in the Hellász summary. Use a topic-page repair pass
-   for these related-page link changes; do not target the summary for a full rewrite.
+4. Separately inspect the polisz link adjustments in the Hellász summary, already
+   made in step 2's topic-page commit. This is inspection only, with no separate
+   command or repair pass.
 
 The full summary rewrite belongs to implementation step 6, when every topic in the
 chapter is done. `require_ready` stays strict; held branches never satisfy the next

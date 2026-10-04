@@ -29,7 +29,7 @@ def context(tmp_path, log, monkeypatch):
         return SimpleNamespace(returncode=0 if exists else 1,
                                stdout=safefs.read_bytes(repo, rel) if exists else b"")
     wt = SimpleNamespace(run=git, out=lambda *a, **kw: "")
-    cfg = SimpleNamespace(root=tmp_path, role=lambda _: (None, None))
+    cfg = SimpleNamespace(root=tmp_path, state_dir=tmp_path / "state", role=lambda _: (None, None))
     mailed = []
     ctx = SimpleNamespace(name="barna", notes_path=repo, worktree=lambda _: wt,
                           task_root=lambda: tmp_path, log=log, cfg=cfg,

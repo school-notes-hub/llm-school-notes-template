@@ -9,6 +9,7 @@ from ..images import plans as image_plans
 from ..llm import launch
 from ..log import TZ
 from ..notify import Notice
+from ..notify import pending as owner_notices
 from ..state import phase
 from ..state.errors import NeedsOwner, Prerequisite
 from ..state.phase import Task
@@ -27,6 +28,7 @@ def run(ctx: Ctx) -> int:
     task = None
     try:
         setup.ensure(ctx)
+        owner_notices.retry(ctx)
         _settle_images(ctx)
         task = phase.open_task(ctx.task_root(), ctx.name, "notes")
         if not _may_run(ctx, task):
@@ -131,11 +133,11 @@ def owner_items(ctx: Ctx, task: Task, items: list[dict]) -> bool:
     """Mail once per owner item; return True only when all have delivery receipts."""
     delivered = True
     for item in sorted(items, key=lambda i: (i["file"], i["item_id"])):
-        sent = ctx.mailer.send_once(Notice(ctx.name, f"review_owner:{item['file']}:{item['item_id']}",
+        sent = owner_notices.send(ctx, Notice(ctx.name, f"review_owner:{item['file']}:{item['item_id']}",
                                task.run_id, "finish", "owner", f"{item['file']} {item['item_id']}: "
                                + item.get("reason", "stayed open five times"),
                                "settle it in `school-notes chat`"))
-        if sent is None:
+        if not sent:
             delivered = False
     return delivered
 

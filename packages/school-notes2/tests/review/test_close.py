@@ -190,7 +190,7 @@ def test_close_decision_owner_notification_survives_crash(tmp_path, repos, monke
     from school_notes2.notify import Mailer
     delivered = []
     monkeypatch.setattr(Mailer, "_deliver", lambda self, message: delivered.append(message) or True)
-    ctx = SimpleNamespace(name="benedek", mailer=Mailer(
+    ctx = SimpleNamespace(name="benedek", cfg=SimpleNamespace(state_dir=tmp_path), mailer=Mailer(
         tmp_path / "rc", "owner@example.com", tmp_path / "notify.json", repos.repo.log))
     # Simulate a crash after send_once; its stable key prevents a second delivery.
     real_owner = run.owner_items

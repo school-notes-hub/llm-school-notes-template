@@ -93,8 +93,8 @@ def test_fifth_open_moves_to_owner_once(tmp_path):
     assert owners[:4] == [[], [], [], []]
     assert owners[4] == [{"file": rel, "item_id": "R1"}] and owners[5] == []
     assert meta(path)["items"]["R1"] == "owner"
-    assert files.open_items(tmp_path, "cron") == [{"file": rel, "item_id": "R2", "key": f"{rel}#R2", "round": 1}]
-    assert {"file": rel, "item_id": "R1", "key": f"{rel}#R1", "round": 1} in files.open_items(tmp_path, "interactive")
+    assert files.open_items(tmp_path, "cron") == [{"file": rel, "item_id": "R2", "key": f"{rel}#R2", "round": 1, "status": "open"}]
+    assert {"file": rel, "item_id": "R1", "key": f"{rel}#R1", "round": 1, "status": "owner"} in files.open_items(tmp_path, "interactive")
 
 
 @pytest.mark.parametrize("closure", [

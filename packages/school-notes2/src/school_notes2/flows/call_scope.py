@@ -35,6 +35,8 @@ def retry(ctx, task, items):
         for item in items:
             name = located[item["file"]]
             k = next((n for n, c in enumerate(assigned, 1) if name and c["subject"] == name), None)
+            if not name and item["file"].startswith("wiki/"):
+                k = 1  # Same fallback as the original subjectless/asset assignment.
             if k is None:
                 unassigned.append(item)
             else:

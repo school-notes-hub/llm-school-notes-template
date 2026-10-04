@@ -2,6 +2,7 @@
 
 from ..mcp.redact import redact
 from ..notify import Notice
+from ..notify import pending
 from ..state.files import write_json
 from . import writer
 
@@ -14,7 +15,7 @@ def completion(ctx, task):
     write_json(task.dir / "report.json", report)
     ctx.log.event("run.report", **report)
     if notes:
-        ctx.mailer.send_once(Notice(ctx.name, f"owner_notes:{task.run_id}", task.run_id,
+        pending.send(ctx, Notice(ctx.name, f"owner_notes:{task.run_id}", task.run_id,
                                     "finish", "owner_notes", "\n\n".join(notes),
                                     "Olvasd át a kihagyott lépések indokát és a jobb javaslatot."))
     from ..repair import failure

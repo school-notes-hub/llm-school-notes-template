@@ -65,7 +65,7 @@ def test_nightly_retries_only_failed_owner_items_after_reload(tmp_path, log, mon
         return len(attempted) != 2
     monkeypatch.setattr(Mailer, "_deliver", deliver)
     def context():
-        return SimpleNamespace(name=learner, mailer=Mailer(
+        return SimpleNamespace(name=learner, cfg=SimpleNamespace(state_dir=tmp_path), mailer=Mailer(
             tmp_path / "rc", "owner@example.com", tmp_path / "notify.json", log))
     nightly._notify_owners(context(), task)
     assert not phase.load(task.dir).get("owners_notified")

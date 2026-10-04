@@ -165,7 +165,7 @@ def open_items(repo: Path, mode: str) -> list[dict]:
     for path in review_files(repo):
         items = read_items(repo, path) or {}
         rel = path.relative_to(repo).as_posix()
-        found += [{"file": rel, "item_id": i, "key": f"{rel}#{i}",
+        found += [{"file": rel, "item_id": i, "key": f"{rel}#{i}", "status": items[i],
                    "round": relations.details(_read(repo, path), i)["round"]} for i in sorted(items, key=_num)
                   if items[i] in wanted]
     return found

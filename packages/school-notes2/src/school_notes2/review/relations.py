@@ -4,6 +4,8 @@ import re
 from collections import Counter
 from pathlib import Path
 
+import yaml
+
 from ..state import safefs
 from ..wiki import decisions, frontmatter
 from ..wiki.pages import CODE_FENCE, links, resolve, wiki_pages
@@ -22,7 +24,10 @@ def details(text: str, item_id: str) -> dict:
 def page_ids(repo: Path, rel: str) -> tuple[set[str], set[str]]:
     if not rel.startswith("wiki/") or not rel.endswith(".md") or not safefs.is_file(repo, rel):
         return set(), set()
-    page = frontmatter.split(safefs.read_text(repo, rel))
+    try:
+        page = frontmatter.split(safefs.read_text(repo, rel))
+    except (ValueError, yaml.YAMLError):
+        return set(), set()  # The metadata check owns these errors.
     body = CODE_FENCE.sub("", page.body)
     # Only anchors attached to actual open-question items count.
     lines = body.splitlines()
@@ -66,9 +71,13 @@ def related_ids(repo: Path, rel: str) -> tuple[set[str], set[str]]:
 
 def related_pages(repo: Path) -> dict[str, set[str]]:
     """Use the same embedding-page relation for closures, routing and reviewer input."""
-    pages = {rel: {rel} for rel in sorted(wiki_pages(repo))}
-    for rel in sorted(pages):
-        text = frontmatter.split(safefs.read_text(repo, rel)).body
+    pages = {}
+    for rel in sorted(wiki_pages(repo)):
+        try:
+            text = frontmatter.split(safefs.read_text(repo, rel)).body
+        except (ValueError, yaml.YAMLError):
+            continue  # Keep preparation/check routing usable for metadata repair.
+        pages[rel] = {rel}
         for link in links(text):
             asset = resolve(rel, link.target)
             if link.image and asset and not asset.endswith(".md"):

@@ -130,9 +130,10 @@ def prepare(ctx: Ctx, task: Task, *, new_subject_index) -> None:
     task.update(tool_writes={}, tool_parts={})
     steps.record_tool_files(task, ctx.notes_path, written)
     reviews = calls.select_reviews(review_files.open_items(ctx.notes_path, task.mode),
-                                   ctx.cfg.limits.review_closures_per_run)
+                                   ctx.cfg.limits.review_closures_per_run, mode=task.mode)
     assigned = calls.assignments(ctx.notes_path, packages, pages, reviews, found["pending"],
-                                 ctx.cfg.sources.pages_per_call, ctx.cfg.limits.review_closures_per_run)
+                                 ctx.cfg.sources.pages_per_call, ctx.cfg.limits.review_closures_per_run,
+                                 mode=task.mode)
     task.set_phase("prepared", base=base, packages=packages, pages=pages,
                    calls=assigned, ranges=calls.ranges(assigned) or [[0, 0]],
                    open_review_items=reviews,

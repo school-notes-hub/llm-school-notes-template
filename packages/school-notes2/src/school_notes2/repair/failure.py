@@ -2,6 +2,7 @@
 
 from ..git import discard, repos
 from ..notify import Notice
+from ..notify import pending
 from ..state import safefs
 from ..state.errors import BadWork
 from ..wiki import frontmatter
@@ -52,6 +53,6 @@ def write_item(ctx, task):
 
 def notify(ctx, task):
     if task.get("repair_owner_item"):
-        ctx.mailer.send_once(Notice(ctx.name, f"repair_owner:{task.run_id}", task.run_id,
+        pending.send(ctx, Notice(ctx.name, f"repair_owner:{task.run_id}", task.run_id,
                                     "repair", "owner", f"{task.get('repair_topic')}: két sikertelen átdolgozás.",
                                     f"Dönts a {task.get('repair_owner_item')} R1 tételéről; a sor többi eleme folytatódik."))

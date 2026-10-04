@@ -1,5 +1,7 @@
 """Durable writer assignments: subjects.json order, one subject per call (T-121)."""
 
+import re
+from datetime import date
 from pathlib import PurePosixPath
 
 from ..review import relations
@@ -9,19 +11,27 @@ from . import cards
 
 
 def review_order(item):
-    return (item.get("round", 1) != 2, PurePosixPath(item["file"]).name[:10],
+    # Regular reports use YYYY-MM-DD; repair reports start with a YYYYMMDD run ID.
+    match = re.match(r"^(\d{4})-?(\d{2})-?(\d{2})-", PurePosixPath(item["file"]).name)
+    try:
+        day = date(*map(int, match.groups())) if match else date.max
+    except ValueError:
+        day = date.max
+    return (item.get("round", 1) != 2, day,
             int(item["item_id"][1:]), item["file"], item["item_id"])
 
 
-def select_reviews(reviews, limit=20):
-    return sorted(reviews, key=review_order)[:limit]
+def select_reviews(reviews, limit=20, *, mode="cron"):
+    return sorted(reviews, key=lambda i: (
+        mode == "interactive" and i.get("status") != "owner", *review_order(i)))[:limit]
 
 
 def assignments(repo, packages: list[dict], pages: list[dict], reviews: list[dict],
-                pending: list[dict], limit: int = 30, review_limit: int = 20) -> list[dict]:
+                pending: list[dict], limit: int = 30, review_limit: int = 20, *,
+                mode: str = "cron") -> list[dict]:
     config = safefs.read_json(repo, "tools/subjects.json") or {}
     order = list(config.get("subjects", {}))
-    reviews = select_reviews(reviews, review_limit)
+    reviews = select_reviews(reviews, review_limit, mode=mode)
     inventory = relations.inventory(repo)["items"] if reviews else {}
     embedded = relations.related_pages(repo)
     review_subjects = {i["file"] + "#" + i["item_id"]:

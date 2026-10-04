@@ -136,13 +136,47 @@ def test_finish_returns_all_subject_errors_and_reuses_other_checkpoints(tmp_path
     assert phase.load(task.dir).get("writing_k") == 4
 
 
-def test_unassignable_finish_error_is_program_error_without_writer_strike(tmp_path):
+@pytest.mark.parametrize("rel", [".school-notes/result.json", "publication/public.json",
+                                 "docs/review/report.md", "tools/subjects.json"])
+def test_unassignable_finish_error_is_program_error_without_writer_strike(tmp_path, rel):
     ctx, task = task_context(tmp_path)
     before = (task.dir / "result-3.json").read_bytes()
     with pytest.raises(SnError, match="cannot be assigned") as error:
-        call_scope.retry(ctx, task, [check.item(".school-notes/result.json", None, "bad aggregate")])
+        call_scope.retry(ctx, task, [check.item(rel, None, "bad aggregate")])
     assert error.value.kind == "program" and task.data["llm_failures"] == 0
     assert (task.dir / "result-3.json").read_bytes() == before and task.phase == "finishing"
+
+
+@pytest.mark.parametrize("rel", ["wiki/log.md", "wiki/index.md", "wiki/assets/orphan.svg"])
+def test_g5_subjectless_error_retries_first_call(tmp_path, monkeypatch, rel):
+    from school_notes2.flows import finish
+    from school_notes2.site.build import BuildContentError
+    ctx, task = task_context(tmp_path)
+    ctx.worktree = lambda _: None
+    ctx.bare = lambda: None
+    ctx.log = None
+    ctx.cfg.timeouts = SimpleNamespace(fetch_s=1, ls_remote_s=1)
+    monkeypatch.setattr(run.fetch_flow, "advance", lambda *a: None)
+    monkeypatch.setattr(finish.site_publish, "fetch_gh_pages", lambda *a, **kw: None)
+    monkeypatch.setattr(finish.site_publish, "changed_since_publish", lambda *a: [])
+    monkeypatch.setattr(finish, "renderer", lambda _: None)
+    items = [check.item(rel, None, "G5 defect")]
+    def build(*a, **kw):
+        raise BuildContentError(items)
+    monkeypatch.setattr(finish.site_build, "build", build)
+    monkeypatch.setattr(finish, "finish", lambda ctx, task, **kw: finish._build(ctx, task, "a" * 40))
+    with pytest.raises(steps.CheckFailed):
+        run.advance(ctx, task)
+    invoked = []
+    def write(ctx, task, k, *args):
+        invoked.append(k)
+        assert safefs.read_json(tmp_path, ".school-notes/check.json") == items
+        return {"status": "done"}
+    monkeypatch.setattr(writer, "_call", write)
+    monkeypatch.setattr(writer, "write_changes", lambda *a: None)
+    monkeypatch.setattr(writer, "_check_call", lambda *a: None)
+    assert writer.run_ranges(ctx, phase.load(task.dir), None) == "done"
+    assert invoked == [1]
 
 
 def test_new_invocation_defects_replace_original_retry_input(tmp_path):
