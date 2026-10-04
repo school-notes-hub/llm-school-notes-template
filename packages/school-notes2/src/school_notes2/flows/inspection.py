@@ -46,8 +46,7 @@ def candidate_state(ctx, task, brief):
     try:
         candidate = commissions.candidate(ctx.notes_path, brief)
         if candidate["state"] == "candidate":
-            from ..figures import machine
-            errors = machine.report(ctx.notes_path, brief, candidate)["errors"]
+            errors = commissions.preflight(ctx.notes_path, brief)
             if errors:
                 raise ValueError("; ".join(errors))
             if "mermaid" in candidate or candidate.get("asset", "").endswith(".svg"):
@@ -94,7 +93,7 @@ def inspect(ctx, task):
         for name, batch in figure_inputs.batches(repo, fresh):
             receipt = figures(ctx, task, batch, name)
             for brief in batch:
-                receipts[brief["id"]] = receipt
+                receipts[brief["id"]] = figure_review.for_figure(receipt, brief["id"])
             findings += figure_findings(batch, receipt)
             notes += receipt.get("review", {}).get("owner_notes", [])
         saved = {"findings": findings, "notes": notes, "pages": pages, "receipts": receipts, "coverage": coverage}

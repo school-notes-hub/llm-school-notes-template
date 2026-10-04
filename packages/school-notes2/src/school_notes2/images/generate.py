@@ -23,6 +23,13 @@ RETRYABLE = ("not-sent", "http-429")
 def generate(settings: ImageSettings, plan_id: str, repair_note: str | None = None, *,
              log: Log, sleep=time.sleep) -> dict:
     plans.check_id(plan_id)
+    from ..figures import commissions, context
+    try:
+        brief = commissions.read(settings.worktree, plan_id)
+        commissions.validate_assignments(settings.worktree, [{k: brief[k] for k in ("id", "page", "kind")}])
+        context.embedding(settings.worktree, brief, {"alt": "", "caption": ""})
+    except (ValueError, OSError) as exc:
+        return {"state": "error", "message": f"figure commission required before generation: {exc}"}
     if repair_note is not None and len(repair_note) > MAX_REPAIR_CHARS:
         return {"state": "error", "message": f"repair_note is longer than {MAX_REPAIR_CHARS}"}
     with images_lock(settings.lock_path, settings.lock_timeout_s):
@@ -32,7 +39,7 @@ def generate(settings: ImageSettings, plan_id: str, repair_note: str | None = No
             return {"state": "error", "message": str(exc)}
         plans.keep(settings, plan_id)
         job_path = plans.write_job(settings, plan_id, job)
-        blocked = _blocked(settings, job["id"])
+        blocked = _blocked(settings, job["id"], repairing=bool(repair_note))
         if blocked:
             log.event("image.generate", blocked["state"], target=plan_id)
             return blocked
@@ -45,7 +52,7 @@ def generate(settings: ImageSettings, plan_id: str, repair_note: str | None = No
         return result
 
 
-def _blocked(settings: ImageSettings, job_id: str) -> dict | None:
+def _blocked(settings: ImageSettings, job_id: str, *, repairing: bool = False) -> dict | None:
     ledger = settings.ledger()
     entry = ledger["jobs"].get(job_id)
     if entry and entry.get("accepted"):
@@ -54,7 +61,7 @@ def _blocked(settings: ImageSettings, job_id: str) -> dict | None:
         return {"state": "waiting-unknown",
                 "message": "a paid image call has an unknown outcome; generation waits "
                            "(settled automatically after 24 hours)"}
-    if entry and awaiting_review(entry):
+    if entry and awaiting_review(entry) and not repairing:
         return None
     if entry and attempts_used(entry) >= settings.max_attempts:
         return {"state": "exhausted", "message": "all attempts used; only interactive work"}
@@ -91,7 +98,7 @@ def _attempts(settings, job, job_path, repair_note, log, sleep) -> dict:
                 return {"state": "error", "message": str(exc)}
             last = _last_attempt(settings, job["id"])
             failure = last.get("failure") if last and last["state"] == "failed" else None
-            if failure in RETRYABLE and delay is not None and _blocked(settings, job["id"]) is None:
+            if failure in RETRYABLE and delay is not None and _blocked(settings, job["id"], repairing=bool(repair_note)) is None:
                 log.event("image.generate", f"retry ({failure})", target=job["id"])
                 sleep(delay)
                 continue

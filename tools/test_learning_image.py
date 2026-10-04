@@ -75,6 +75,19 @@ class ExecutorTest(unittest.TestCase):
     def generate(self, repair=None):
         return m.run_generate(self.config,self.path,repair,self.fake)
 
+    def test_targeted_candidate_repair_needs_no_legacy_accept_and_keeps_limits(self):
+        first = self.generate()
+        self.assertEqual(self.generate()['number'], first['number'])
+        self.assertEqual(self.calls, 1)
+        repair = self.root / 'repair.txt'
+        repair.write_text('Correct the title')
+        for number in (2, 3):
+            self.assertEqual(self.generate(repair)['number'], number)
+        with self.assertRaisesRegex(ValueError, 'Attempt bound'):
+            self.generate(repair)
+        self.assertEqual(self.calls, 3)
+        self.assertFalse(any((self.repo / 'wiki').rglob('*.webp')))
+
     def report(self, result, decision='accepted'):
         p=self.root/'review.json'
         m.write(p, {'sha256':result['sha256'],'verifier':'test','checked_at':m.now(),'observed':'Synthetic near-white test image, not teaching content','decision':decision,'checks':dict.fromkeys(m.CHECKS,'pass'),'material_defects':['test rejection'] if decision=='rejected' else []})

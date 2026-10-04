@@ -26,11 +26,12 @@ def valid(repo, page):
 
 def invalidate(repo):
     records = safefs.read_json(repo, PATH, [])
+    removed = [r for r in records if r.get("role") == "figure-review" and insert.removed(repo, r)]
     stale = insert.invalidated(repo)
     for r in records:
         if r.get("role") == "reader" and (not safefs.is_file(repo, r["file"]) or
                                          page_key(repo, r["file"]) != r["key"]):
             stale.append(r)
-    if stale:
-        safefs.write_json(repo, PATH, [r for r in records if r not in stale])
+    if stale or removed:
+        safefs.write_json(repo, PATH, [r for r in records if r not in stale and r not in removed])
     return sorted(stale, key=lambda r: (r["file"], r["key"], r["role"]))

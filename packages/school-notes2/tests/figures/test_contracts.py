@@ -1,3 +1,4 @@
+import hashlib
 import copy
 
 import pytest
@@ -136,7 +137,7 @@ def test_mermaid_requires_commission_in_both_modes(repo, make_figure):
         g = GuardInput(repo, [Change(page, "added")], lambda p: None, interactive=interactive)
         assert "Mermaid" in run(g)[0].message
     candidate.pop("asset")
-    candidate["mermaid"] = 1
+    candidate["mermaid"] = hashlib.sha256(b"graph LR\n A --> B\n").hexdigest()
     safefs.write_json(repo, ".school-notes/figures/forces/figure.json", candidate)
     assert not run(g)
 
@@ -170,6 +171,8 @@ def test_render_receipt_is_a_hard_check(repo, make_figure, mutation):
     safefs.write_json(repo, candidate["render"], receipt)
     report = machine.report(repo, brief, candidate)
     assert bool(report["errors"]) == (mutation != "none")
+    safefs.write_json(repo, ".school-notes/figures/forces/figure.json", candidate)
+    assert bool(commissions.check(repo, [{k: brief[k] for k in ("id", "page", "kind")}])) == (mutation != "none")
 
 
 def test_changed_asset_alone_cannot_bypass_independent_review(repo, make_figure):

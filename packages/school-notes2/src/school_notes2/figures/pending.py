@@ -26,7 +26,9 @@ def load(repo: Path) -> list[dict]:
 
 
 def record(repo: Path, brief: dict, run_id: str, defects: list[dict]) -> dict:
+    from .commissions import check_identity
     validate("figure-commission", brief)
+    check_identity(repo, brief)
     if not run_id:
         raise ValueError("pending figures need a run id")
     entries = {e["commission"]["id"]: e for e in load(repo)}

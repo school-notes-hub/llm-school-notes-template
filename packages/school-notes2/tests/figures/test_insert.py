@@ -149,7 +149,10 @@ def test_removed_banner_has_no_valid_verdict(repo, make_figure):
     insert.insert(repo, brief, receipt(repo, brief, candidate), at="date")
     text = markers.BLOCK.sub("", safefs.read_text(repo, brief["page"]))
     safefs.write_text(repo, brief["page"], text)
-    assert len(insert.invalidated(repo)) == 1
+    from school_notes2.reader import verdicts
+    assert not insert.invalidated(repo)
+    assert not verdicts.invalidate(repo)
+    assert safefs.read_json(repo, insert.VERDICTS) == []
 
 
 def test_reader_key_survives_tool_insertion(repo, make_figure):

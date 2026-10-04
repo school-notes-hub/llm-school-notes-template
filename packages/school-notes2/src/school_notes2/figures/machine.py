@@ -56,10 +56,16 @@ def svg_hints(text: str, brief: dict, embedding: dict) -> list[dict]:
     root = ElementTree.fromstring(text)
     labels = " ".join("".join(e.itertext()) for e in root.iter() if e.tag.split("}")[-1] == "text")
     warnings = []
-    width = float(root.get("viewBox", "0 0 0 0").split()[2])
+    try:
+        width = float(re.split(r"[\s,]+", root.get("viewBox", "").strip())[2])
+    except (ValueError, IndexError):
+        width = 0
     if not width:
         match = re.match(r"[\d.]+", root.get("width", "0"))
-        width = float(match[0]) if match else 0
+        try:
+            width = float(match[0]) if match else 0
+        except ValueError:
+            width = 0
     sizes = [float(n) for n in re.findall(r"font-size[=:]\s*[\"']?(\d+(?:\.\d+)?)", text)]
     if sizes and width and min(sizes) * 390 / width < 12:
         warnings.append({"code": "phone-font", "message": "Projected smallest font below 12 px",

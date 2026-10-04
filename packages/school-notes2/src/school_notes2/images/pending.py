@@ -5,14 +5,10 @@ is not used up, and no paid call has an unknown outcome. Exhausted images are li
 separately for `status` and the one-time e-mail.
 """
 
-from datetime import date
-from pathlib import Path
-
 from ..state import safefs
-from ..state.files import read_json, write_json
 from . import plans
 from .budget import budget_left, unknown_calls
-from .generate import attempts_used, awaiting_review
+from .generate import attempts_used
 from .settings import ImageSettings
 
 
@@ -21,17 +17,14 @@ def scan(settings: ImageSettings) -> dict:
     waiting = bool(unknown_calls(ledger))
     has_budget = budget_left(ledger, settings.today(), settings.daily_usd, settings.reservation_usd,
                        settings.monthly_usd)
-    result = {"pending": [], "accepted_not_inserted": [], "exhausted": [], "missing_plan": [],
+    result = {"pending": [], "exhausted": [], "missing_plan": [],
               "waiting_unknown": waiting, "budget_left": has_budget}
     for plan_id, pages in sorted(plans.find_markers(settings.worktree).items()):
         item = {"plan_id": plan_id, "page": pages[0]}
         entry = ledger["jobs"].get(plans.job_id(settings.learner, plan_id))
         if not _plan_exists(settings, plan_id):
             result["missing_plan"].append(item)
-        elif entry and entry.get("accepted"):
-            result["accepted_not_inserted"].append(item)
-        elif (entry and attempts_used(entry) >= settings.max_attempts
-              and not awaiting_review(entry)):
+        elif entry and attempts_used(entry) >= settings.max_attempts:
             result["exhausted"].append(item)
         elif has_budget and not waiting:
             result["pending"].append(item)
@@ -41,12 +34,3 @@ def scan(settings: ImageSettings) -> dict:
 def _plan_exists(settings: ImageSettings, plan_id: str) -> bool:
     return (safefs.is_file(settings.worktree, plans.target(plan_id))
             or (settings.plans_dir / f"{plan_id}.json").is_file())
-
-
-def image_only_run_allowed(state_file: Path, today: date) -> bool:
-    """A run without a new notebook, only to fill images, at most once a day."""
-    return (read_json(state_file, {}) or {}).get("last") != today.isoformat()
-
-
-def record_image_only_run(state_file: Path, today: date) -> None:
-    write_json(state_file, {"last": today.isoformat()})

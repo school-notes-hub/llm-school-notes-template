@@ -1,3 +1,4 @@
+import hashlib
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -134,10 +135,10 @@ def test_mermaid_candidate_is_rendered_in_reader_view(setup):
     ctx, task, page = setup
     safefs.write_text(ctx.notes_path, page, safefs.read_text(ctx.notes_path, page) +
                       "\n<!-- figure: flow -->\n\n```mermaid\ngraph LR; A-->B\n```\n")
-    candidate = {"state": "candidate", "mermaid": 1, "alt": "Folyamat", "caption": "A után B.",
+    candidate = {"state": "candidate", "mermaid": hashlib.sha256(b"graph LR; A-->B\n").hexdigest(), "alt": "Folyamat", "caption": "A után B.",
                  "form": "diagram", "tool": "mermaid", "elements": [], "visible_text": [], "attempt": 1}
     safefs.write_json(ctx.notes_path, ".school-notes/figures/flow/figure.json", candidate)
-    brief = {"id": "flow", "page": page, "kind": "figure"}
+    brief = {"id": "flow", "page": page, "kind": "figure", "anchor": "Téma"}
     rendered = []
     def render(kind, data, fid):
         rendered.append((kind, data, fid))

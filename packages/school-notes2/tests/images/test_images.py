@@ -9,26 +9,19 @@ from decimal import Decimal
 
 import pytest
 
-from school_notes2.images import accept as accept_mod
 from school_notes2.images import generate as gen
 from school_notes2.images import pending
 from school_notes2.images.budget import images_lock
 from school_notes2.images.plans import PlanError
 from school_notes2.images.settings import budapest_today
 
-from image_fakes import KEY, verdict, write_shim
+from image_fakes import KEY, prepare_candidate, independent_accept, write_shim
 
 PAGE = "wiki/gazdasag/termeles.md"
 
 
 def run(settings, log, plan_id="termeles-banner", **kw):
     return gen.generate(settings, plan_id, log=log, sleep=lambda s: None, **kw)
-
-
-def accept(settings, log, review, evidence=None):
-    sink = evidence if evidence is not None else []
-    return accept_mod.accept(settings, "termeles-banner", review, verifier="gpt-6-astra/high",
-                             append_evidence=lambda page, entry: sink.append((page, entry)), log=log)
 
 
 def test_generate_gives_image_and_preview_and_keeps_marker(make_settings, fake_api, log):
@@ -53,33 +46,27 @@ def test_key_only_in_child_environment(make_settings, fake_api, log, monkeypatch
     assert all(KEY not in " ".join(argv) for argv in seen)
 
 
-def test_accept_fills_machine_fields_inserts_and_records(make_settings, fake_api, log):
+def test_independent_accept_inserts_exact_preview_and_records_reviewer(make_settings, fake_api, log):
     s = make_settings()
-    run(s, log)
-    evidence = []
-    result = accept(s, log, verdict(), evidence)
-    assert result["state"] == "accepted"
+    generated = run(s, log)
+    brief, candidate = prepare_candidate(s)
+    assert (s.worktree / candidate["asset"]).read_bytes() == (s.worktree / generated["preview"]).read_bytes()
+    written = independent_accept(s)
+    assert PAGE in written and candidate["asset"] in written
     text = (s.worktree / PAGE).read_text()
     assert "<!-- image: termeles-banner -->" not in text
-    assert "![Termelési tényezők](../assets/banner/benedek-termeles-banner.webp)" in text
-    assert "evidence: ../../docs/evidence/media/benedek-termeles-banner/review-1.json" in text
-    report = json.loads((s.worktree / "docs/evidence/media/benedek-termeles-banner/review-1.json").read_text())
-    assert report["verifier"] == "gpt-6-astra/high" and len(report["sha256"]) == 64
-    assert report["publication"]["quality"] == 85 and len(report["publication"]["sha256"]) == 64
-    paths = {w["path"] for w in result["tool_writes"]}
-    assert {"wiki/assets/banner/benedek-termeles-banner.webp", PAGE,
-            "docs/evidence/media/benedek-termeles-banner/receipt-1.json"} <= paths
-    assert evidence[0][0] == PAGE and evidence[0][1]["entry_id"] == "image:benedek-termeles-banner:1"
-    again = accept(s, log, verdict(), evidence)  # idempotent: no second insertion or record
-    assert again["state"] == "accepted" and again["page"] is None and len(evidence) == 1
+    assert "generated figure-termeles-banner" in text
+    record = json.loads((s.worktree / "docs/evidence/media/termeles-banner/figure.json").read_text())
+    assert record["verifier"] == "independent/high"
+    assert independent_accept(s) == written
+    assert (s.worktree / PAGE).read_text() == text
 
 
-def test_rejection_keeps_marker_and_repair_uses_an_attempt(make_settings, fake_api, log):
+def test_repair_keeps_marker_and_uses_an_attempt(make_settings, fake_api, log):
     s = make_settings()
     run(s, log)
-    assert accept(s, log, verdict("rejected"))["state"] == "rejected"
     assert "<!-- image: termeles-banner -->" in (s.worktree / PAGE).read_text()
-    assert run(s, log)["state"] == "error"  # a rejected image needs a repair note
+    assert run(s, log)["number"] == 1  # rereading does not spend
     second = run(s, log, repair_note="A cím legyen nagyobb.")
     assert second["state"] == "generated" and second["number"] == 2
     assert "A cím legyen nagyobb." in fake_api.requests[-1]["body"]["prompt"]
@@ -156,10 +143,9 @@ def test_exhausted_image_is_not_pending_and_never_called(make_settings, fake_api
     s = make_settings()
     for n in range(3):
         run(s, log, repair_note="javítás" if n else None)
-        accept(s, log, verdict("rejected"))
     assert fake_api.calls == 3
     scan = pending.scan(s)
-    assert scan["pending"] == [] and scan["exhausted"] == [{"plan_id": "termeles-banner", "page": PAGE}]
+    assert scan["exhausted"] == [{"plan_id": "termeles-banner", "page": PAGE}]
     assert run(s, log, repair_note="még egyszer")["state"] == "exhausted"
     assert fake_api.calls == 3
 
@@ -175,16 +161,10 @@ def test_kept_plan_is_restored_in_a_later_run(make_settings, fake_api, log):
     s = make_settings()
     run(s, log)
     (s.worktree / ".school-notes/images/termeles-banner.json").unlink()  # fetch wipes .school-notes
-    assert accept(s, log, verdict())["state"] == "accepted"
-
-
-def test_image_only_run_once_a_day(tmp_path):
-    state = tmp_path / "image-only.json"
-    today = date(2026, 10, 3)
-    assert pending.image_only_run_allowed(state, today)
-    pending.record_image_only_run(state, today)
-    assert not pending.image_only_run_allowed(state, today)
-    assert pending.image_only_run_allowed(state, date(2026, 10, 4))
+    from school_notes2.images import plans
+    assert plans.restore(s, ["termeles-banner"]) == ["termeles-banner"]
+    prepare_candidate(s)
+    assert PAGE in independent_accept(s)
 
 
 def test_invalid_input_is_refused(make_settings, fake_api, log):
@@ -192,9 +172,7 @@ def test_invalid_input_is_refused(make_settings, fake_api, log):
     with pytest.raises(PlanError):
         run(s, log, plan_id="../x")
     run(s, log)
-    bad = verdict()
-    del bad["checks"]["phone"]
-    assert accept(s, log, bad)["state"] == "error"
+    assert run(s, log, repair_note="x" * 2001)["state"] == "error"
     assert fake_api.calls == 1
 
 

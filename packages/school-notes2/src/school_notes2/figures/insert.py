@@ -3,7 +3,6 @@
 import hashlib
 from pathlib import Path
 
-from ..images.accept import comment_safe
 from ..state import safefs
 from ..wiki import markers
 from ..wiki.pages import relative
@@ -21,6 +20,8 @@ def insert(repo: Path, brief: dict, receipt: dict, *, at: str) -> list[str]:
     """
     if receipt.get("status") != "reviewed" or not receipt.get("model"):
         raise ValueError("independent review receipt required")
+    commissions.validate_assignments(repo, [{k: brief[k] for k in ("id", "page", "kind")}])
+    commissions.check_identity(repo, brief)
     fid = brief["id"]
     verdicts = [v for v in receipt["review"]["figures"] if v["id"] == fid]
     if len(verdicts) != 1 or verdicts[0]["verdict"] != "accept":
@@ -94,6 +95,8 @@ def invalidated(repo: Path) -> list[dict]:
     for record in safefs.read_json(repo, VERDICTS, []):
         if record.get("role") != "figure-review":
             continue
+        if removed(repo, record):
+            continue
         try:
             current = context.verdict_key(repo, record["commission"], record["candidate"])
         except (OSError, ValueError):
@@ -101,3 +104,18 @@ def invalidated(repo: Path) -> list[dict]:
         if current != record["key"]:
             stale.append(record)
     return sorted(stale, key=lambda r: (r["file"], r["key"]))
+
+
+def removed(repo: Path, record: dict) -> bool:
+    if not safefs.is_file(repo, record["file"]):
+        return True
+    text = safefs.read_text(repo, record["file"])
+    return (markers.read(text, f"figure-{record['id']}") is None and
+            not any(page == record["file"] for page, _ in commissions.markers(repo).get(record["id"], [])))
+
+
+def comment_safe(text: str) -> str:
+    """No `--` inside an HTML comment: `-->` would expose its private contents."""
+    while "--" in text:
+        text = text.replace("--", "- -")
+    return text

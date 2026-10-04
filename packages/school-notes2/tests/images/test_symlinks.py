@@ -4,34 +4,24 @@ import os
 
 import pytest
 
-from school_notes2.images import accept as accept_mod
 from school_notes2.images import generate as gen
 from school_notes2.images import plans
 from school_notes2.state.safefs import UnsafePath
 
-from image_fakes import verdict
+from image_fakes import prepare_candidate, independent_accept
 
 PLAN = ".school-notes/images/termeles-banner.json"
-
-
-def accept(settings, log):
-    return accept_mod.accept(settings, "termeles-banner", verdict(), verifier="w/high",
-                             append_evidence=lambda page, entry: None, log=log)
 
 
 def test_review3_b1_dangling_plan_link_does_not_create_a_host_file(make_settings, fake_api, log,
                                                                     tmp_path):
     """generate keeps the plan, the LLM swaps it for a dangling link to ~/.bash_aliases,
-    image_accept would restore it: the canary must not appear."""
+    restoring it must not create the canary."""
     s = make_settings()
     assert gen.generate(s, "termeles-banner", log=log, sleep=lambda x: None)["state"] == "generated"
     canary = tmp_path / "bash_aliases"
     (s.worktree / PLAN).unlink()
     os.symlink(canary, s.worktree / PLAN)
-    try:
-        accept(s, log)
-    except UnsafePath:
-        pass
     with pytest.raises(UnsafePath):
         plans.restore(s, ["termeles-banner"])
     assert not canary.exists()
@@ -76,7 +66,7 @@ def test_linked_assets_folder_stops_learning_image(make_settings, fake_api, log,
         os.rename(assets, tmp_path / "assets-moved")
     os.symlink(outside, assets)
     with pytest.raises(UnsafePath):
-        accept(s, log)
+        prepare_candidate(s)
     assert list(outside.iterdir()) == []
 
 
@@ -90,46 +80,39 @@ def test_markers_behind_a_linked_folder_are_not_seen(make_settings, tmp_path):
 
 
 JOB = "benedek-termeles-banner"
-RECEIPTS = f"docs/evidence/media/{JOB}"
+RECEIPTS = "docs/evidence/media/termeles-banner"
 
 
-def test_round2_b1_links_in_the_receipt_folder_are_never_followed(make_settings, fake_api, log,
-                                                                  tmp_path):
-    """Verification review 2.1: learning_image.py writes job.json via job.json.tmp, prompt-N
-    and receipt-N into the receipt folder – planted links there must not reach the host."""
+def test_receipt_symlink_cannot_overwrite_external_evidence(make_settings, fake_api, log, tmp_path):
     s = make_settings()
-    assert gen.generate(s, "termeles-banner", log=log, sleep=lambda x: None)["state"] == "generated"
+    gen.generate(s, "termeles-banner", log=log, sleep=lambda x: None)
+    prepare_candidate(s)
     folder = s.worktree / RECEIPTS
     folder.mkdir(parents=True)
-    canaries = {name: tmp_path / f"canary-{name}" for name in
-                ("job.json.tmp", "prompt-1.txt", "receipt-1.json")}
-    for name, canary in canaries.items():
-        os.symlink(canary, folder / name)
-    answer = accept(s, log)
-    assert answer["state"] == "accepted", answer
-    assert not any(c.exists() for c in canaries.values())
-    assert not (folder / "prompt-1.txt").is_symlink()         # replaced, never followed
-    assert not (folder / "receipt-1.json").is_symlink()
+    canary = tmp_path / "canary.json"
+    os.symlink(canary, folder / "figure.json")
+    with pytest.raises(UnsafePath):
+        independent_accept(s)
+    assert not canary.exists()
 
 
 def test_round2_b1_linked_receipt_folder_is_refused(make_settings, fake_api, log, tmp_path):
     s = make_settings()
     gen.generate(s, "termeles-banner", log=log, sleep=lambda x: None)
+    prepare_candidate(s)
     outside = tmp_path / "receipts-outside"
     outside.mkdir()
     (s.worktree / "docs/evidence/media").mkdir(parents=True, exist_ok=True)
     os.symlink(outside, s.worktree / RECEIPTS)
-    try:
-        answer = accept(s, log)
-    except UnsafePath:
-        answer = {"state": "error"}
-    assert answer["state"] != "accepted"
+    with pytest.raises(UnsafePath):
+        independent_accept(s)
     assert list(outside.iterdir()) == []
 
 
 def test_learning_image_works_on_a_staging_copy_only(tmp_path):
     """copy_back takes only the job's receipt folder and its asset from the staging copy."""
     from school_notes2.images.executor import ExecutorError, copy_back
+    RECEIPTS = f"docs/evidence/media/{JOB}"
     work, stage = tmp_path / "work", tmp_path / "stage"
     (work / "wiki").mkdir(parents=True)
     (stage / "wiki").mkdir(parents=True)

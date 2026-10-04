@@ -2,7 +2,7 @@
 
 import hashlib
 
-from school_notes2.images.accept import comment_safe
+from school_notes2.figures.insert import comment_safe
 from school_notes2.sources.duplicates import known_hashes, original_key
 from school_notes2.wiki import check, frontmatter, guard, machine, public
 from school_notes2.wiki.guard import Change, GuardInput

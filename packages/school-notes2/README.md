@@ -265,8 +265,8 @@ The tests use real `git` with local bare origins, and fake Drive, OpenRouter and
 
 ## Independent figures (unit 2a)
 
-`figures/` is a separately callable pipeline; P2–P5, owner notifications and the
-pending notice/fetch handoff join in unit 2b. No new scheduler phase is enabled here.
+`figures/` is a separately callable pipeline, wired into P2–P5, owner notifications
+and the pending notice/fetch handoff by unit 2b. Units 2a and 2b deploy together.
 The existing `image_generate` retains its budget and attempt limits. `image_accept`
 is no longer an MCP tool in either mode. The writer guard refuses direct insertion
 of new/changed image bytes, including SVG; an inline Mermaid change requires a
@@ -285,8 +285,10 @@ has `asset` (the final publication bytes under `wiki/assets/`), `alt`, `caption`
 (possibly empty), `form`, `tool`, `elements[{element, meaning}]`, `visible_text`,
 `attempt`, and optional `source` or `render`. Generated images use the publication
 preview bytes, not a different later encoding. Source drawings require private
-`corrections[]` (possibly empty) and cannot use `no-figure`. Mermaid uses a one-based
-`mermaid` block number instead of `asset`; its Markdown remains inline.
+`corrections[]` (possibly empty) and cannot use `no-figure`. Mermaid uses the SHA-256 of its UTF-8 fenced source (including the trailing newline)
+in `mermaid` instead of `asset`; exactly one matching block must be in the named
+section. Its Markdown and identity marker remain inline. Reordering unchanged blocks
+does not require new commissions.
 
 Call `commissions.validate_assignments`, then `inputs.batches` and
 `review.run_batch` with a configured reviewer `RoleRun`. It uses the configured
@@ -294,8 +296,9 @@ Call `commissions.validate_assignments`, then `inputs.batches` and
 mounted read-only at `/work`. `figures.render.Renderer` invokes the study-site's
 existing Mermaid renderer/SVG sanitizer and an offline browser rasterization;
 it needs the installed study-site dependencies and Chromium. Tests inject a renderer
-and harness. A rendering failure is a hard preparation error for the caller to turn
-into a failed/pending commission; heuristic warnings never prevent review.
+and harness. Preparation isolates each failed figure and persists its reason; the remaining
+figures are reviewed. The saved preparation and receipt survive interruption.
+Heuristic warnings never prevent review.
 
 Each call receives full/390px images, editable source/render record, machine hints,
 commission, embedding section and neighbours, source crop when present, other uses,
@@ -320,8 +323,7 @@ banner keys bind image bytes, title and description. Rule versions are excluded.
 `pending.record/load/eligible/restore/clear` maintains `docs/figure-pending.json`
 in commission-ID order. It keeps the full commission and latest defects; unique run
 IDs make increments replay-safe. At three runs, `owner_required` is true and the
-commission is no longer eligible. The future orchestrator creates/notifies the owner
-item and the learner-facing pending notice. No owner wording is invented here.
+commission is no longer eligible. The 2b orchestrator creates/notifies the owner item and the learner-facing pending notice. No owner wording is invented here.
 
 ## Reader and shared correction phases (unit 2b)
 
@@ -365,3 +367,23 @@ the learner, run, role, unit and attempt; stale cleanup uses only that exact nam
 The new tests cover both learners' shared behavior, physical blind inputs,
 interruption at each phase, bounded retries, rollback, disputes, admission and
 hash invalidation after a real local rebase.
+
+Unit 2a review repairs: P1 validates candidates, crop bounds, marker placement and
+notebook-drawing assignments. Figure IDs cannot overwrite another commission's
+history. Section keys exclude other images and machine blocks, including at shared
+uses; finalization prunes deleted figures without stale-verdict noise. The writer
+copies generated publication-preview bytes into `wiki/assets/` before handing off
+its candidate; the tool inserts only the independently accepted version. The old
+`images.accept` module and generation-only cron path are removed. Paid generation
+requires a valid commission/marker and retains existing cost/attempt limits.
+The B-mode `figure.txt` remains deferred to implementation step 13/8.
+Deploy with no open notes tasks: numeric Mermaid candidates and saved review
+inputs from the earlier contract must not resume under the new schema. Existing
+committed evidence stays private history; obsolete verdict keys become invalid
+through the normal final-key check, without a model call or publication hold.
+
+The real SVG/Mermaid rasterizer tests run with `npm test` in `packages/study-site`.
+Set `CHROMIUM_EXECUTABLE` to the installed Chromium path if needed (default:
+`/usr/bin/chromium`). They require a host on which Chromium can launch; they are
+not silently skipped in a restricted sandbox. Python tests use a fake `node`
+executable to verify argument, output and failure handling without Chromium.

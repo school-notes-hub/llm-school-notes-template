@@ -1,6 +1,7 @@
 """Small review batches, with only observed-content inputs, never the generating prompt."""
 
 import hashlib
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
@@ -32,7 +33,14 @@ def prepare(repo: Path, briefs: list[dict], folder: Path, render: Render) -> dic
     if len(topics) != 1:
         raise ValueError("one primary topic per review call")
     folder.mkdir(parents=True, exist_ok=True)
-    items = [_figure(repo, brief, folder, render) for brief in briefs]
+    items, failed = [], []
+    for brief in sorted(briefs, key=lambda b: commissions.order(repo, b)):
+        try:
+            items.append(_figure(repo, brief, folder, render))
+        except (ValueError, OSError, subprocess.TimeoutExpired) as exc:
+            failed.append({"id": brief["id"], "state": "failed", "reason": str(exc)})
+            for suffix in ("", "-phone", "-crop"):
+                safefs.unlink(folder, f"images/{brief['id']}{suffix}.png")
     inventory = reviewer_inventory(repo)
     pages = sorted({use["page"] for item in items for use in item["uses"]})
     assigned = {"figures": [{"id": i["commission"]["id"], "key": i["key"]} for i in items]}
@@ -40,7 +48,7 @@ def prepare(repo: Path, briefs: list[dict], folder: Path, render: Render) -> dic
     safefs.write_json(folder, "input.json", {
         "figures": items, "topic_figures": topic_figures(repo, topics.pop()),
         "relations": {p: inventory["pages"].get(p, {}) for p in pages}})
-    return assigned
+    return {**assigned, "failed": failed}
 
 
 def _figure(repo: Path, brief: dict, folder: Path, render: Render) -> dict:

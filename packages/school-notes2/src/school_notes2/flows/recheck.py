@@ -23,7 +23,7 @@ def run(ctx, task):
         for name, batch in figure_inputs.batches(repo, changed):
             receipt = inspection.figures(ctx, task, batch, "recheck-" + name)
             for brief in batch:
-                receipts[brief["id"]] = receipt
+                receipts[brief["id"]] = inspection.figure_review.for_figure(receipt, brief["id"])
         saved = {"units": checked, "receipts": receipts}
         safefs.write_json(root, "p5.json", saved)
     _apply(ctx, task, saved)

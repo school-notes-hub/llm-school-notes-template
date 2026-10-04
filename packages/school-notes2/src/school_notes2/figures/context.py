@@ -35,7 +35,16 @@ def without_replaced(text: str, page: str, asset: str | None) -> str:
 
 
 def canonical(text: str, page: str, brief: dict) -> str:
-    text = without_replaced(text, page, brief.get("replaces"))
+    # Other figures and tool bookkeeping cannot invalidate this figure's context.
+    # Its own image, alt and caption are bound separately in verdict_key.
+    text = markers.BLOCK.sub("", text)
+    text = DESCRIPTION.sub("", text)
+    text = LINK.sub(lambda m: "" if m["img"] else m[0], text)
+    text = MARKER.sub("", text)
+    return re.sub(r"\n(?:[ \t]*\n)+", "\n\n", text).strip()
+
+
+def with_markers(text: str) -> str:
     def block(match):
         name = match["name"]
         return f"<!-- figure: {name[7:]} -->" if name.startswith("figure-") else ""
@@ -61,7 +70,7 @@ def section(text: str, anchor: str) -> tuple[str, str]:
 
 def embedding(repo: Path, brief: dict, candidate: dict) -> dict:
     page = brief["page"]
-    text = canonical(safefs.read_text(repo, page), page, brief)
+    text = with_markers(safefs.read_text(repo, page))
     meta = frontmatter.split(text).meta
     if brief["kind"] == "banner":
         return {"page": page, "title": meta.get("title", ""),
@@ -71,7 +80,7 @@ def embedding(repo: Path, brief: dict, candidate: dict) -> dict:
         raise ValueError("figure marker is outside the commission section")
     if "mermaid" in candidate and mermaid_source(repo, brief, candidate) not in body:
         raise ValueError("Mermaid block is outside the commission section")
-    return {"page": page, "section": body, "context": around,
+    return {"page": page, "section": canonical(body, page, brief), "context": around,
             "alt": candidate["alt"], "caption": candidate["caption"].rstrip("\n")}
 
 
@@ -96,11 +105,13 @@ def verdict_key(repo: Path, brief: dict, candidate: dict) -> str:
 
 
 def mermaid_source(repo: Path, brief: dict, candidate: dict) -> str:
-    graphs = list(MERMAID.finditer(safefs.read_text(repo, brief["page"])))
-    number = candidate["mermaid"]
-    if number > len(graphs):
-        raise ValueError("Mermaid block does not exist")
-    return graphs[number - 1][1]
+    text = safefs.read_text(repo, brief["page"])
+    body, _ = section(text, brief["anchor"])
+    graphs = [m[1] for m in MERMAID.finditer(body)
+              if hashlib.sha256(m[1].encode()).hexdigest() == candidate["mermaid"]]
+    if len(graphs) != 1:
+        raise ValueError("Mermaid source hash must identify exactly one block in the commission section")
+    return graphs[0]
 
 
 def page_context(repo: Path, page: str) -> dict:
@@ -156,9 +167,14 @@ def usage_keys(repo: Path, brief: dict, candidate: dict) -> list[dict]:
         for link in links(text):
             if not link.image or resolve(page, link.target) != asset:
                 continue
-            position = len("\n".join(text.splitlines()[:link.line - 1]))
+            position = sum(len(line) for line in text.splitlines(keepends=True)[:link.line - 1])
             before = text[:position]
             heads = list(HEAD.finditer(CODE_FENCE.sub("", before)))
             body = section(text, heads[-1][2])[0] if heads else frontmatter.split(text).body
-            result.append({"page": page, "alt": link.text, "section_sha256": digest(body)})
+            block = next((m for m in markers.BLOCK.finditer(text)
+                          if m.start() <= position < m.end() and m["name"].startswith("figure-")), None)
+            caption = embedded_candidate(repo, {"page": page, "id": block["name"][7:]}, candidate)["caption"] if block else ""
+            result.append({"page": page, "alt": link.text,
+                           "caption": caption,
+                           "section_sha256": digest(canonical(body, page, brief))})
     return result

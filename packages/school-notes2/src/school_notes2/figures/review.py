@@ -47,19 +47,30 @@ def run_batch(repo: Path, briefs: list[dict], name: str, run: launch.RoleRun, *,
     saved = safefs.read_json(folder, "accepted.json")
     if saved is not None:
         assigned = {"figures": [{"id": v["id"], "key": v["key"]} for v in saved["review"]["figures"]]}
-        if {b["id"] for b in briefs} != {v["id"] for v in assigned["figures"]}:
+        saved_ids = {v["id"] for v in assigned["figures"] + saved.get("failed", [])}
+        if {b["id"] for b in briefs} != saved_ids:
             raise ValueError("saved review belongs to different assignments")
         validate_output(saved["review"], assigned, repo, briefs)
         _save(repo, name, saved)
         return saved
-    assigned = inputs.prepare(repo, briefs, folder / "in", render)
+    assigned = safefs.read_json(folder, "prepared.json")
+    if assigned is None:
+        assigned = inputs.prepare(repo, briefs, folder / "in", render)
+        safefs.write_json(folder, "prepared.json", assigned)
+    prepared_ids = {v["id"] for v in assigned["figures"] + assigned.get("failed", [])}
+    if {b["id"] for b in briefs} != prepared_ids:
+        raise ValueError("saved preparation belongs to different assignments")
+    if not assigned["figures"]:
+        return {"status": "pending", "reason": "no prepared candidates", "failed": assigned["failed"]}
+    ready_ids = {v["id"] for v in assigned["figures"]}
+    briefs = [b for b in briefs if b["id"] in ready_ids]
     signature = context.digest({p: context.digest(safefs.read_bytes(folder, p).hex())
                                 for p in safefs.walk_files(folder, "in") if p != "in/format-error.json"})
     state = safefs.read_json(folder, "state.json", {})
     if state and state["input"] != signature:
         raise ValueError("review input changed; use a new review batch (repair/recheck)")
     if not state:
-        state = {"input": signature, "attempts": [], "status": "ready"}
+        state = {"input": signature, "attempts": [], "status": "ready", "failed": assigned["failed"]}
         safefs.write_json(folder, "state.json", state)
     configured = replace(run, role_name="figure-review", role=replace(run.role, timeout_s=1800),
                          mounts=launch.Mounts(work=repo / "wiki", work_readonly=True,
@@ -77,7 +88,7 @@ def _resume(repo, briefs, name, run, folder, assigned, state, log, invoke):
             _save(repo, name, saved)
             return saved
         if state["status"] == "pending":
-            return {"status": "pending", "reason": state["reason"]}
+            return {"status": "pending", "reason": state["reason"], "failed": state.get("failed", [])}
         if state["attempts"] and state["attempts"][-1] == "running":
             try:
                 output = safefs.read_json(folder, "out/review.json")
@@ -124,7 +135,7 @@ def _accept(repo, briefs, name, run, folder, state, output):
     by_id = {v["id"]: v for v in output["figures"]}
     output = {**output, "figures": [by_id[b["id"]] for b in briefs]}
     receipt = {"status": "reviewed", "model": f"{run.role.model}/{run.role.effort}",
-               "review": output, "input": state["input"]}
+               "review": output, "input": state["input"], "failed": state.get("failed", [])}
     safefs.write_json(folder, "accepted.json", receipt)  # durable before either repo write
     _save(repo, name, receipt)
     return receipt
@@ -133,3 +144,8 @@ def _accept(repo, briefs, name, run, folder, state, output):
 def _save(repo, name, receipt):
     safefs.write_json(repo, f".school-notes/figure-review/{name}.json", receipt["review"])
     safefs.write_json(repo, f".school-notes/figure-review/{name}.receipt.json", receipt)
+
+
+def for_figure(receipt: dict, fid: str) -> dict:
+    failure = next((f for f in receipt.get("failed", []) if f["id"] == fid), None)
+    return {"status": "pending", "reason": failure["reason"]} if failure else receipt

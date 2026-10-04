@@ -109,6 +109,9 @@ def check_links(repo: Path, rel: str, text: str) -> list[dict]:
     out = []
     for link in links(text):
         target = link.target
+        if link.image and not (resolve(rel, target) or "").startswith(("wiki/assets/", "sources/", "references/")):
+            out.append(item(rel, link.line, "embedded image must be a local file under wiki/assets/"))
+            continue
         if not target or target.startswith(("http://", "https://", "mailto:")):
             continue
         if target.startswith("/") or re.match(r"^[a-z][a-z0-9+.-]*:", target, re.I):

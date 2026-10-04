@@ -34,14 +34,13 @@ from . import steps
 from .context import Ctx
 
 
-def start(ctx: Ctx, mode: str, drive, *, allow_image_only: bool) -> Task | None:
-    """Create a run when there is work: ready packages, or (interactive) always, or pending
-    images once a day (5.1/3). Returns the task in phase `downloading`, or None."""
+def start(ctx: Ctx, mode: str, drive) -> Task | None:
+    """Create a run for ready packages, or always in an interactive session."""
     ready = _scan(ctx, drive, mode)
-    if not ready and mode == "cron" and not allow_image_only:
+    if not ready and mode == "cron":
         return None
     task = phase.create(ctx.task_root(), ctx.name, "notes", mode, "downloading")
-    task.update(candidates=[_pack(p) for p in ready], image_only=not ready and mode == "cron")
+    task.update(candidates=[_pack(p) for p in ready])
     return task
 
 

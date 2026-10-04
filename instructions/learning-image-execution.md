@@ -2,6 +2,8 @@
 
 This is the runnable banner/infographic path. The author reads the relevant [workflow](media-workflows.md), [prompt stage](media-prompts.md), profile and evidence, writes a compact checked plan, then calls `tools/learning_image.py`. The CLI does not decide facts or visually review an image. Its inputs and receipts are portable across roles; no full curriculum corpus or private learner profile goes to the image provider.
 
+In a school-notes run, the [run contract](school-notes-run.md#subject-cards-and-figure-handoff) takes precedence: the writer uses MCP `image_generate`, and only the tool inserts an independently accepted figure. The standalone CLI review/insertion examples below are not the run protocol.
+
 ## Install and configure
 
 From the configured repository, run `uv sync --locked`. Python 3.10+, Pillow and Linux `flock` are sufficient. Keep the OpenRouter key in a protected file outside Git or the environment. The selected provider/model is `openai/gpt-image-2.5-sunburst`, fixed in the executor; no silent provider fallback. The [OpenRouter image API](https://openrouter.ai/docs/guides/overview/multimodal/image-generation) returns an inline raster and usage metadata. A missing cost or interrupted response is unresolved, not free.
@@ -79,7 +81,7 @@ uv run tools/learning_image.py --config /private/policy.json review --job docs/e
 
 Acceptance rechecks sources and output hash, copies a versioned final PNG to `wiki/assets/` (banners to `wiki/assets/banner/`), and retains the plan, exact prompt, review and cost receipt in `docs/evidence/media/<id>/`. It never overwrites differing bytes. The author then inserts the accepted image with accurate alt text, scoped source caption and an observed hash-bound `image-description` comment, updates evidence/index and commits. Do all images for a page before editing its embeds; otherwise its source hash changes and the second job correctly stops as stale. The same applies to source-summary pages used by several jobs.
 
-Review rejection permits one targeted repair with `generate --repair /private/repair.txt` on the SAME job. It regenerates from the checked plan plus the concrete correction; it is not an edit API or a promise to preserve pixels. Each repair needs full-image review. At three attempts use the best acceptable candidate by its hash, or keep a suitable old image/text and record the precise unresolved question. A new filename never resets attempts.
+A generated candidate (after the author inspects it) or a recorded review rejection permits a targeted repair with `generate --repair /private/repair.txt` on the SAME job. It regenerates from the checked plan plus the concrete correction; it is not an edit API or a promise to preserve pixels. Each repair needs full-image review. At three attempts use the best acceptable candidate by its hash, or keep a suitable old image/text and record the precise unresolved question. A new filename never resets attempts.
 
 ## Recovery, checks and limitations
 

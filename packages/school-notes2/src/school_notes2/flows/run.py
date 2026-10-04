@@ -97,13 +97,7 @@ def _prerequisites(ctx: Ctx, task: Task | None) -> None:
 
 def _new_task(ctx: Ctx) -> Task | None:
     drive = fetch_flow.drive_client(ctx)
-    state = ctx.cfg.state_dir / ctx.name / "image-only-run.json"
-    today = datetime.now(TZ).date()
-    found = image_pending.scan(ctx.image_settings())
-    allow = bool(found["pending"]) and image_pending.image_only_run_allowed(state, today)
-    task = fetch_flow.start(ctx, "cron", drive, allow_image_only=allow)
-    if task is not None and task.get("image_only"):
-        image_pending.record_image_only_run(state, today)
+    task = fetch_flow.start(ctx, "cron", drive)
     if task is None:
         from . import repair
         task = repair.next_task(ctx)

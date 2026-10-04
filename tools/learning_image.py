@@ -341,10 +341,10 @@ def run_generate(config, job_path, repair=None, transport=None):
             if any(a['state'] == 'unknown' or a.get('cost_usd') is None for a in other['attempts']):
                 raise ValueError('Reconcile pending provider call/cost before new spending')
         last = last_outcome(entry['attempts']) if entry else None
-        if last and last['state'] == 'generated':
+        if last and last['state'] == 'generated' and not repair:
             return {'state': 'needs-review', **last, 'folder': str(attempt_folder(config, job, last))}
-        if last and (not repair or last['state'] != 'rejected'):
-            raise ValueError('Repair requires a recorded rejected review and targeted instructions')
+        if last and (not repair or last['state'] not in ('generated', 'rejected')):
+            raise ValueError('Repair requires a generated or rejected candidate and targeted instructions')
         if entry and len(counted(entry['attempts'])) >= int(config.get('max_attempts', 3)):
             raise ValueError('Attempt bound reached; select a usable candidate or request a specific exception')
         if repair and not last:

@@ -83,7 +83,7 @@ def _settle(ctx: Ctx, task: phase.Task, ask, say) -> bool:
 def interactive_fetch(ctx: Ctx) -> phase.Task:
     """A run for the session: ready packages, or none (repairs and free editing, 5.2)."""
     drive = _drive_or_none(ctx)
-    task = fetch_flow.start(ctx, "interactive", drive, allow_image_only=True)
+    task = fetch_flow.start(ctx, "interactive", drive)
     run_flow.ctx_bind(ctx, task)
     fetch_flow.advance(ctx, task, lambda: drive)
     return task

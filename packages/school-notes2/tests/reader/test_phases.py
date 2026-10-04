@@ -279,3 +279,46 @@ def test_recovered_fix_result_still_needs_warning_accounting(setup):
     safefs.write_json(ctx.notes_path, ".school-notes/result.json", {"status": "done"})
     with pytest.raises(steps.CheckFailed):
         writer._fix_resume(ctx, task, 1)
+
+
+def test_partial_figure_batch_finalizes_only_good_candidates_and_keeps_reason(setup, monkeypatch):
+    import io
+    from PIL import Image
+    from school_notes2.figures import context, pending
+    ctx, task, page = setup
+    install_reader(monkeypatch, page)
+    data = io.BytesIO()
+    Image.new("RGB", (20, 10), "white").save(data, format="PNG")
+    briefs = []
+    for fid in ("good", "bad"):
+        brief = {"id": fid, "page": page, "anchor": "Téma", "kind": "figure",
+                 "purpose": "Teach", "must_show": ["force"], "avoid_misreading": "direction",
+                 "taught_conventions": [], "text_complete_without_figure": True}
+        candidate = {"state": "candidate", "asset": f"wiki/assets/{fid}.png", "alt": "Force",
+                     "caption": "", "form": "diagram", "tool": "test", "elements": [],
+                     "visible_text": [], "attempt": 1}
+        safefs.write_bytes(ctx.notes_path, candidate["asset"], data.getvalue())
+        safefs.write_json(ctx.notes_path, f".school-notes/figures/{fid}.json", brief)
+        safefs.write_json(ctx.notes_path, f".school-notes/figures/{fid}/figure.json", candidate)
+        safefs.write_text(ctx.notes_path, page, safefs.read_text(ctx.notes_path, page) + f"\n<!-- figure: {fid} -->\n")
+        briefs.append(brief)
+    task.update(inspection_result={"status": "done", "figures": [{k: b[k] for k in ("id", "page", "kind")} for b in briefs]})
+    monkeypatch.setattr(inspection, "render", lambda *a: lambda kind, data, fid: data)
+    def partial(*args):
+        brief = briefs[0]
+        candidate = safefs.read_json(ctx.notes_path, ".school-notes/figures/good/figure.json")
+        return {"status": "reviewed", "model": "independent/high", "review": {
+            "figures": [{"id": "good", "key": context.verdict_key(ctx.notes_path, brief, candidate),
+                         "verdict": "accept", "observed": "Force", "defects": [],
+                         "text_mismatch": [], "relates_to": None}], "owner_notes": []},
+            "failed": [{"id": "bad", "state": "failed", "reason": "render failed"}]}
+    monkeypatch.setattr(inspection, "figures", partial)
+    inspection.prepare(ctx, task)
+    inspection.inspect(ctx, task)
+    review_phases.finalize(ctx, task)
+    review_phases.finalize(ctx, phase.load(task.dir))
+    text = safefs.read_text(ctx.notes_path, page)
+    assert "generated figure-good" in text and "<!-- figure: bad -->" in text
+    entries = pending.load(ctx.notes_path)
+    assert len(entries) == 1 and entries[0]["commission"]["id"] == "bad"
+    assert entries[0]["runs"] == 1 and entries[0]["defects"][0]["observed"] == "render failed"

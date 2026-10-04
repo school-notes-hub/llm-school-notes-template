@@ -3,6 +3,7 @@
 from ..figures import insert, pending
 from ..reader import notices, report, verdicts
 from ..review import relations
+from ..state import safefs
 from ..state.errors import WaitingQuota
 from . import correction, inspection, recheck, steps
 
@@ -56,7 +57,11 @@ def finalize(ctx, task):
                 ctx.log.event("figure.stale", id=brief["id"], reason=str(exc))
         if state["candidate"]["state"] == "no-figure":
             continue
-        entry = pending.record(repo, brief, task.run_id, verdict.get("defects", []))
+        defects = verdict.get("defects", [])
+        reason = receipt.get("reason") or state["candidate"].get("reason")
+        if not defects and reason:
+            defects = [{"location": brief["id"], "observed": reason, "expected": "valid reviewed candidate"}]
+        entry = pending.record(repo, brief, task.run_id, defects)
         written.append(pending.PATH)
         if entry["owner_required"]:
             owners.append({"file": brief["page"], "quote": f"<!-- figure: {brief['id']} -->",
@@ -76,6 +81,7 @@ def final_keys(ctx, task):
     pages = {r["file"] for r in stale}
     pages.update(p for u in task.get("inspection_units", []) for p in u["pages"])
     written = notices.refresh(ctx.notes_path, sorted(pages)) if task.get("review_complete") else []
-    steps.record_tool_files(task, ctx.notes_path, written + ([verdicts.PATH] if stale else []))
+    steps.record_tool_files(task, ctx.notes_path, written +
+                           ([verdicts.PATH] if safefs.is_file(ctx.notes_path, verdicts.PATH) else []))
     ctx.log.event("review.final_keys", invalidated=len(stale))
     return stale

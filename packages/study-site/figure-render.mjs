@@ -15,8 +15,18 @@ try {
   await page.route('**/*', route => route.abort());
   await page.setContent('<!doctype html><body style="margin:0"></body>');
   await page.evaluate(async encoded => {
+    const svg = new DOMParser().parseFromString(new TextDecoder().decode(Uint8Array.from(atob(encoded), c => c.charCodeAt(0))), 'image/svg+xml').documentElement;
+    const box = svg.getAttribute('viewBox')?.trim().split(/[\s,]+/).map(Number);
+    // Mermaid emits width="100%"; a data-URL img otherwise defaults to 300×150.
+    if (box?.length === 4 && box.slice(2).every(n => Number.isFinite(n) && n > 0)) {
+      for (const [name, size] of [['width', box[2]], ['height', box[3]]]) {
+        if (!svg.hasAttribute(name) || svg.getAttribute(name).endsWith('%')) {
+          svg.setAttribute(name, String(Math.ceil(size)));
+        }
+      }
+    }
     const image = document.createElement('img');
-    image.src = `data:image/svg+xml;base64,${encoded}`;
+    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(svg))}`;
     document.body.append(image);
     await image.decode();
   }, svg.toString('base64'));

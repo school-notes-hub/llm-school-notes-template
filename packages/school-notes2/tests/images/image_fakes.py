@@ -107,16 +107,39 @@ def make_worktree(root: Path, learner: str) -> Path:
     images = work / ".school-notes/images"
     images.mkdir(parents=True)
     (images / "termeles-banner.json").write_text(json.dumps(PLAN), encoding="utf-8")
+    from school_notes2.state import safefs
+    safefs.write_json(work, ".school-notes/figures/termeles-banner.json", {
+        "id": "termeles-banner", "page": "wiki/gazdasag/termeles.md", "anchor": "Termelési tényezők",
+        "kind": "banner", "purpose": "Orient", "must_show": ["Termelési tényezők"],
+        "avoid_misreading": "No example", "taught_conventions": [], "text_complete_without_figure": True})
     return work
 
 
-def verdict(decision="accepted", **extra) -> dict:
-    review = {"observed": "Cím és műhelyjelenet.", "decision": decision,
-              "checks": {k: "pass" for k in ("sources", "context", "text", "visual_claims",
-                                              "learning_goal", "phone", "a4")} | {"arrows": "not-applicable"},
-              "material_defects": [] if decision == "accepted" else ["A cím hibás."],
-              "description": "Termelési tényezők cím; pék és műhely.",
-              "publication": {"observed": "A tömörített előnézet olvasható.", "checked": True}}
-    review.update(extra)
-    return review
+def prepare_candidate(settings):
+    """The writer copies the exact publication preview and writes the figure handoff."""
+    from school_notes2.state import safefs
+    from school_notes2.figures import commissions
+    fid = "termeles-banner"
+    brief = commissions.read(settings.worktree, fid)
+    previews = sorted((settings.worktree / ".school-notes/images").glob(f"{fid}-*-publication.webp"))
+    preview = previews[-1]
+    attempt = int(preview.name.removeprefix(fid + "-").split("-", 1)[0])
+    asset = f"wiki/assets/banner/{fid}-{attempt}.webp"
+    safefs.copy_in(preview, settings.worktree, asset)
+    candidate = {"state": "candidate", "asset": asset, "alt": "Termelési tényezők", "caption": "",
+                 "form": "banner", "tool": "image_generate", "elements": [], "visible_text": ["Termelési tényezők"],
+                 "attempt": attempt}
+    safefs.write_json(settings.worktree, f".school-notes/figures/{fid}/figure.json", candidate)
+    return brief, candidate
 
+
+def independent_accept(settings):
+    from school_notes2.figures import commissions, context, insert
+    fid = "termeles-banner"
+    brief = commissions.read(settings.worktree, fid)
+    candidate = commissions.candidate(settings.worktree, brief)
+    verdict = {"id": fid, "key": context.verdict_key(settings.worktree, brief, candidate),
+               "verdict": "accept", "observed": "Cím és műhelyjelenet.", "defects": [],
+               "text_mismatch": [], "relates_to": None}
+    return insert.insert(settings.worktree, brief, {"status": "reviewed", "model": "independent/high",
+                         "review": {"figures": [verdict], "owner_notes": []}}, at="date")

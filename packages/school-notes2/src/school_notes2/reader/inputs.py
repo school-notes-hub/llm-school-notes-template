@@ -37,9 +37,10 @@ def preview(repo: Path, destination: Path, briefs: list[dict], render=None) -> N
             continue
         link = f"![{candidate['alt']}](<{relative(page, asset)}>)\n\n{candidate['caption']}"
         if "mermaid" in candidate:
-            graphs = list(commissions.MERMAID.finditer(text))
-            graph = graphs[candidate["mermaid"] - 1]
-            text = text[:graph.start()] + link + text[graph.end():]
+            body, _ = context.section(text, brief["anchor"])
+            graph = next(m for m in commissions.MERMAID.finditer(body) if m[1] == data.decode())
+            offset = text.index(body)
+            text = text[:offset + graph.start()] + link + text[offset + graph.end():]
             link = ""
         text = commissions.MARKER.sub(lambda m: link if m[1] == brief["id"] else m[0], text)
         safefs.write_text(destination, page, text)

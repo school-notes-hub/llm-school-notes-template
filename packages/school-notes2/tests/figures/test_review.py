@@ -1,3 +1,4 @@
+import hashlib
 import io
 from dataclasses import replace
 from types import SimpleNamespace
@@ -62,7 +63,7 @@ def test_mermaid_is_rendered_not_just_passed_as_text(repo, make_figure, tmp_path
     text = safefs.read_text(repo, brief["page"]) + "```mermaid\ngraph LR\n A --> B\n```\n"
     safefs.write_text(repo, brief["page"], text)
     candidate.pop("asset")
-    candidate["mermaid"] = 1
+    candidate["mermaid"] = hashlib.sha256(b"graph LR\n A --> B\n").hexdigest()
     safefs.write_json(repo, ".school-notes/figures/forces/figure.json", candidate)
     seen = []
     def renderer(kind, data, fid):

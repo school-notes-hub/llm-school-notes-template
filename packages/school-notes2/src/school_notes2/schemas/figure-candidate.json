@@ -30,8 +30,8 @@
       "minLength": 1
     },
     "mermaid": {
-      "type": "integer",
-      "minimum": 1
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
     },
     "alt": {
       "type": "string",
