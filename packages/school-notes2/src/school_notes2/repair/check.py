@@ -29,7 +29,7 @@ def problems(ctx, task, paths):
             continue
         old, new = frontmatter.split(before).meta, frontmatter.split(after).meta
         for key in ("lessons", "date_note", "topics"):
-            if old.get(key) != new.get(key):
+            if _protected(key, old.get(key)) != _protected(key, new.get(key)):
                 out.append(item(rel, None, f"repair: preserve existing {key}"))
         anchors = re.findall(r'<!--\s*q:\s*[^>]+-->|<a\s+[^>]*(?:id|name)=[^>]+>\s*</a>', before)
         if any(a not in after for a in anchors):
@@ -38,6 +38,15 @@ def problems(ctx, task, paths):
             if _without_links(part(before)) != _without_links(part(after)):
                 out.append(item(rel, None, "repair: related lesson logs and summaries allow only link adjustments"))
     return out
+
+
+def _protected(key, value):
+    """A repair may add or correct `lessons[].materials` (plan 7.3: the writer names the teacher
+    material of old lesson logs); every other lesson field stays as it was."""
+    if key == "lessons" and isinstance(value, list):
+        return [{k: v for k, v in lesson.items() if k != "materials"} if isinstance(lesson, dict) else lesson
+                for lesson in value]
+    return value
 
 
 def _without_links(text):

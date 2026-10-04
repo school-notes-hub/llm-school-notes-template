@@ -146,6 +146,23 @@ def test_repair_protects_related_prose_dates_and_scope(tmp_path, log, monkeypatc
     assert any("outside" in i["message"] for i in found)
 
 
+def test_repair_may_add_lesson_materials_only(tmp_path, log, monkeypatch):
+    ctx, topic, _ = context(tmp_path, log, monkeypatch)
+    rel = page(ctx.notes_path, "old-log", "lesson-notes", body="Régi tananyag [A](a.md).\n",
+               lessons=[{"date_note": "Nem ismert", "topics": ["a.md"]}])
+    old = {p: safefs.read_text(ctx.notes_path, p) for p in [topic, rel]}
+    ctx.worktree = lambda _: SimpleNamespace(run=lambda *args, **kw: SimpleNamespace(
+        returncode=0, stdout=old[args[1].split(":", 1)[1]].encode()))
+    task = phase.create(tmp_path, "barna", "notes", "cron", "writing")
+    task.update(mode="repair", base="base", repair_targets=[{"page": rel, "kind": "lesson-notes", "related": [topic]}])
+    with_materials = old[rel].replace("topics: [a.md]", "topics: [a.md], materials: ['A téma (prezentáció)']")
+    assert with_materials != old[rel]
+    safefs.write_text(ctx.notes_path, rel, with_materials)
+    assert not [i for i in check.problems(ctx, task, [rel]) if "lessons" in i["message"]]
+    safefs.write_text(ctx.notes_path, rel, with_materials.replace("Nem ismert", "2026-10-01"))
+    assert any("preserve existing lessons" in i["message"] for i in check.problems(ctx, task, [rel]))
+
+
 def test_lesson_log_shortening_requires_coverage_and_checks():
     fetch = {"repair_targets": [{"kind": "lesson-notes"}]}
     assert check.coverage({"status": "done"}, fetch)
