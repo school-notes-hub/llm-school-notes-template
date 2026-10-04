@@ -34,6 +34,8 @@ def summary(ctx: Ctx) -> dict:
         "last_review": _last(tasks, "review"),
         "wiki_open_questions": _open_questions(ctx.notes_path),
         "drafts": _drafts(ctx.notes_path),
+        "source_ref_counts": next((t.get("source_ref_counts", {}) for t in reversed(tasks)
+                                   if t.kind == "notes"), {}),
         "references_without_map": _unmapped(ctx.notes_path),
         "pack_mb": _pack_mb(ctx.cfg.bare(ctx.name)),
         "log": str(ctx.cfg.log_path),
@@ -51,6 +53,7 @@ def _task(t: phase.Task) -> dict:
     return {"kind": t.kind, "mode": t.mode, "run_id": t.run_id, "phase": t.phase,
             "age_h": _age_h(t.data["created"]), "packages": len(t.get("packages", [])),
             "retries": t.data["retries"], "llm_failures": t.data["llm_failures"],
+            "source_ref_counts": t.get("source_ref_counts", {}),
             "last_error": t.data.get("last_error"), "questions": t.get("question", [])}
 
 

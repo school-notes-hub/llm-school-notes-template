@@ -22,13 +22,13 @@ LOGIN_COMMANDS = {"codex": ["codex", "login", "--device-auth"], "claude": ["clau
 PLACEHOLDER = re.compile(r"\{(model|effort)\}")
 OUTPUT_INSTRUCTION = {
     "file": ("A választ a `/out/review.json` fájlba írd egyetlen JSON-objektumként: "
-             "`verdict` (ok | changes), `findings` [{id: R1…, file, line, problem, suggestion}], "
+             "`verdict` (ok | changes), `findings` [{id: R1…, file, line, problem, suggestion, relates_to, new_evidence?}], "
              "`figures` [{file, page, verdict, checks, observed, description}], "
-             "`family_questions` [], `owner_notes` [szöveg]."),
+             "`responses` [{key, verdict: accept | keep, answer}], `owner_notes` [szöveg]."),
     "stdout": ("A válaszod végén írd ki a review-t egyetlen JSON-objektumként: "
-               "`verdict` (ok | changes), `findings` [{id: R1…, file, line, problem, suggestion}], "
+               "`verdict` (ok | changes), `findings` [{id: R1…, file, line, problem, suggestion, relates_to, new_evidence?}], "
                "`figures` [{file, page, verdict, checks, observed, description}], "
-               "`family_questions` [], `owner_notes` [szöveg]."),
+               "`responses` [{key, verdict: accept | keep, answer}], `owner_notes` [szöveg]."),
 }
 
 

@@ -3,6 +3,7 @@
 from pathlib import Path, PurePosixPath
 
 from ..state import safefs
+from ..review.relations import closure_problems
 from .check import item
 
 # A check's image must be a committed file: a source page or a wiki asset (4.5, 4.8).
@@ -26,7 +27,11 @@ def check_result(repo: Path, result: dict, fetch: dict, open_items: set[tuple[st
     closures = result.get("review_closure") or []
     if len([c for c in closures if c["status"] != "open"]) > closure_limit:
         out.append(item(RESULT, None, f"review_closure: at most {closure_limit} items per run"))
+    keys = [(c["file"], c["item_id"]) for c in closures]
+    if len(keys) != len(set(keys)):
+        out.append(item(RESULT, None, "review_closure: duplicate item keys"))
     for c in closures:
+        out += [item(RESULT, None, f"review_closure: {m}") for m in closure_problems(repo, c)]
         if not safefs.is_file(repo, c["file"]):
             out.append(item(RESULT, None, f"review_closure: {c['file']} does not exist"))
         elif (c["file"], c["item_id"]) not in open_items:

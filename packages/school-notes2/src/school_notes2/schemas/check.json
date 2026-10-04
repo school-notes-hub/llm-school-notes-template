@@ -5,5 +5,9 @@
   "items": {"type": "object", "additionalProperties": false, "required": ["file", "line", "message"],
             "properties": {"file": {"type": "string"}, "line": {"type": ["integer", "null"]},
                            "message": {"type": "string"},
-                           "severity": {"enum": ["error", "warning"]}}}
+                           "severity": {"enum": ["error", "warning"]},
+                           "id": {"type": "string"}, "kind": {"type": "string"},
+                           "line_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                           "occurrence": {"type": "integer", "minimum": 1},
+                           "unhandled": {"type": "boolean"}}}
 }

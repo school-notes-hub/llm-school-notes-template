@@ -52,7 +52,8 @@ def test_nightly_uses_current_output_contract_without_transcription_goal():
     assert 'A tételek nem jelölik ki, mit nézz: amiről nincs tétel, azt is te találod meg.' in file_text
     assert 'A tankönyvet és a tanári anyagot ne nézd át önmagukban.' in file_text
     assert 'Magad nem kérdezel a családtól' in file_text
-    assert '`family_questions` []' in file_text
+    assert 'family_questions' not in file_text
+    assert 'relates_to' in file_text
     with pytest.raises(ValueError):
         prompt('unknown')
 

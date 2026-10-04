@@ -93,8 +93,8 @@ def test_fifth_open_moves_to_owner_once(tmp_path):
     assert owners[:4] == [[], [], [], []]
     assert owners[4] == [{"file": rel, "item_id": "R1"}] and owners[5] == []
     assert meta(path)["items"]["R1"] == "owner"
-    assert files.open_items(tmp_path, "cron") == [{"file": rel, "item_id": "R2"}]
-    assert {"file": rel, "item_id": "R1"} in files.open_items(tmp_path, "interactive")
+    assert files.open_items(tmp_path, "cron") == [{"file": rel, "item_id": "R2", "key": f"{rel}#R2", "round": 1}]
+    assert {"file": rel, "item_id": "R1", "key": f"{rel}#R1", "round": 1} in files.open_items(tmp_path, "interactive")
 
 
 @pytest.mark.parametrize("closure", [
@@ -153,8 +153,11 @@ def test_free_text_cannot_forge_closure_section(tmp_path, field):
 
 
 @pytest.mark.parametrize("status", ["question", "settled"])
-def test_additive_closure_status_stays_open_until_reference_handling(tmp_path, status):
+def test_reference_closure_status_requires_existing_anchor(tmp_path, status):
     path, rel = _review(tmp_path)
+    page = tmp_path / "wiki/a/x.md"
+    page.parent.mkdir(parents=True)
+    page.write_text("# Nyitott kérdések\n\n<!-- q: tema-kerdes -->\n1. Mi a helyes név?\n")
     files.apply_closure(tmp_path, "run", [{"file": rel, "item_id": "R1", "status": status,
                                           "question_id": "tema-kerdes"}], files.open_items(tmp_path, "cron"))
-    assert meta(path)["items"]["R1"] == "open"
+    assert meta(path)["items"]["R1"] == status

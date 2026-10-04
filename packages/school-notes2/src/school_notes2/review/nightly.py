@@ -20,6 +20,7 @@ from ..sources.order import natural_key
 from ..state import safefs
 from ..state.files import read_json, write_bytes, write_json, write_text
 from ..wiki import markers
+from . import relations
 
 DIFF_PATHS = ("wiki", "docs/review", "docs/evidence/pages")
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"}
@@ -151,6 +152,7 @@ def write_input(repo: Git, wt: Git, rng: Range, in_dir: Path, rasterize: Rasteri
     if svgs:
         rasterize(svgs, out_dir)  # network-less container (plan 5.6/3), never on the host
     write_json(in_dir / "images.json", listing, 0o644)
+    write_json(in_dir / "relations.json", relations.inventory(wt.work_tree), 0o644)
 
 
 def prepare(root: Path, student: str, repo: Git, wt: Git, *, max_images: int, max_diff_kb: int,
@@ -170,7 +172,7 @@ def prepare(root: Path, student: str, repo: Git, wt: Git, *, max_images: int, ma
 
 def resume_prepared(task: phase.Task, repo: Git, wt: Git, rasterize: Rasterize) -> None:
     """Rebuild a half-written input folder from the recorded H/T (crash after create)."""
-    if task.get("input_ready"):
+    if task.get("input_ready") and (task.dir / "in" / "relations.json").is_file():
         return
     base, end = task.get("base"), task.get("T")
     rng = Range(base, task.get("H"), end, task.get("commits"), build_patch(repo, base, end),
@@ -248,5 +250,9 @@ def pending_close(tasks: list[phase.Task]) -> phase.Task | None:
 
 def load_review(task: phase.Task) -> dict:
     review = json.loads((task.dir / "review.json").read_text(encoding="utf-8"))
-    validate("review", review)
-    return review
+    # Already saved reports from the previous contract remain resumable.
+    legacy = {**review, "findings": [{"relates_to": None, **f} for f in review["findings"]]}
+    legacy.pop("family_questions", None)
+    validate("review", legacy)
+    return {**legacy, **({"family_questions": review["family_questions"]}
+                       if "family_questions" in review else {})}

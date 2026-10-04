@@ -2,6 +2,13 @@
 
 Newest first. Each entry says what changed in the shared files and what an existing wiki must do when it applies the update (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)). A wiki records the version it is on in `PROFILE.md`.
 
+## Unreleased - unit 1c checks and review closure
+
+- Warning-only source-reference scanning covers changed Markdown public text, Mermaid labels and SVG text, with the plan's structural exceptions and a fixed two-learner corpus. Add complete check counts, error-first ordering, explicit truncation, durable three-call invocation limits, writer warning accounting and `unhandled` handoff. List verdict storage binds acceptance to file, normalized line hash and occurrence.
+- Activate reference-aware `question`/`settled` closure, required disagreement reasons, one reviewer response and round-2 closure limits. Add full review keys and relation routing. New reviewer output requires `relates_to` and removes direct family questions; saved old reports still resume. Reader/list orchestration and the new nightly controller remain staged.
+- Fix T-152 by resetting bad-work failures only with a successful G5 build. T-016 checks whole-file hashes and actual provenance; a tool metadata stamp does not make author errors program errors. No new phase or model is introduced.
+- Migration (controller-owned): synchronize the shared run instructions and changelog through Template updates; deploy the package and matching prompts/schemas together. Existing report status maps remain readable; per-item metadata is additive. No learner edits, version bump, commit, release or deployment by this unit.
+
 ## Unreleased - unit 1a review corrections
 
 - Align the additive result schema and prompts, separating `coverage[]` from image `checks`; narrow fix mode to assigned repairs. Figure handoff now says to leave the marker and commission. Zero daily image budget keeps the pending generation list empty. The example nightly reviewer timeout is 5400 s; deployment remains the controller's work.

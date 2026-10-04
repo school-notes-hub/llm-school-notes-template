@@ -22,7 +22,7 @@ from ..wiki import frontmatter, generate, guard, machine, markers, public
 from ..wiki import order as wiki_order
 from ..wiki.check_result import check_result
 from . import fetch as fetch_flow
-from . import writer
+from . import checks, writer
 from .context import Ctx
 
 TOOL_WHOLE_FILES = ("tools/subjects.json", "publication/public.json", "docs/review/index.md")
@@ -107,6 +107,9 @@ def merged_result(ctx: Ctx, task: Task) -> dict:
         own = safefs.read_json(ctx.notes_path, f"{workbranch.WORKDIR}/result.json")
         if own is not None:
             validate("result", own)
+            problems = checks.accounting(task, own)
+            if problems:
+                raise CheckFailed(problems)
             write_json(task.dir / f"result-{min(task.get('writing_k', n), n)}.json", own)
     if task.get("skip_writer"):
         return {"status": "done"}
@@ -141,13 +144,14 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
                             ctx.cfg.limits.review_closures_per_run)
     if wiki_check.errors(problems):
         raise CheckFailed(problems)
+    check_changed(ctx, task, result=result)  # Validate author text before any tool stamp.
     by, at = _writer_label(ctx), now_iso()
     parts = machine.write_lesson_notes(repo, result.get("notes", []), fetch,
                                        ctx.student.grade, by, at)
     parts += machine.stamp_generated(repo, changed_paths(ctx, task), by, at)
     machine.add_subjects(repo, result.get("new_subjects", []), _drive_names(task))
     _record_writes(task, repo, whole=[], parts=parts)
-    check_changed(ctx, task)
+    check_changed(ctx, task, result=result)
     outcome = review_files.apply_closure(repo, task.run_id, result.get("review_closure", []),
                                          listed, ctx.cfg.limits.owner_after_open)
     evidence = records.append(repo, records.from_writer(result.get("checks", [])),
@@ -168,17 +172,21 @@ def check_items(ctx: Ctx, task: Task) -> list[dict]:
     from . import learning
     today = learning.observation_date(task)
     learning.validate(ctx, task)
-    return wiki_check.check_files(ctx.notes_path, sorted(llm_snapshot(ctx, task)), today=today)
+    paths = sorted(llm_snapshot(ctx, task))
+    items = wiki_check.check_files(ctx.notes_path, paths, today=today)
+    checks.tool_errors(ctx, task, items)
+    return checks.identify(items + checks.source_warnings(ctx, task, changed_paths(ctx, task)))
 
 
-def check_changed(ctx: Ctx, task: Task) -> None:
+def check_changed(ctx: Ctx, task: Task, *, result: dict | None = None) -> None:
     """Step 5: the mechanical check of the run's changed files."""
     items = check_items(ctx, task)
     errors = wiki_check.errors(items)
     if errors:
         raise CheckFailed(errors)
-    safefs.write_json(ctx.notes_path, f"{workbranch.WORKDIR}/check.json",
-                      [i for i in items if i.get("severity") == "warning"])
+    if result is None:
+        result = writer.merge(writer.results(task, required=False))
+    write_check_items(ctx, checks.after_writer(ctx, task, result, items))
 
 
 def generate_all(ctx: Ctx, task: Task) -> None:
@@ -194,12 +202,15 @@ def generate_all(ctx: Ctx, task: Task) -> None:
         public.write(repo, public.either(public.render_rights(repo),
                                          public.media_receipt_rights(repo)))
     except public.PublicError as exc:
-        raise CheckFailed([wiki_check.item(p, None, exc.reason) for p in exc.paths])
+        problems = [wiki_check.item(p, None, exc.reason) for p in exc.paths]
+        checks.tool_errors(ctx, task, problems)
+        raise CheckFailed(problems)
     review_index.update(repo)
     _record_writes(task, repo, whole=list(TOOL_WHOLE_FILES), parts=indexes)
 
 
 def write_check_items(ctx: Ctx, items: list[dict]) -> None:
+    items = checks.identify(items)
     validate("check", items)
     safefs.write_json(ctx.notes_path, f"{workbranch.WORKDIR}/check.json", items)
 
@@ -235,7 +246,11 @@ def _record_writes(task: Task, repo: Path, *, whole: list[str], parts: list[str]
     for rel in parts:
         if safefs.is_file(repo, rel):
             tool_parts[rel] = guard.parts_hash(safefs.read_text(repo, rel))
-    task.update(tool_writes=files, tool_parts=tool_parts)
+    hashes = dict(task.get("tool_hashes", {}))
+    for rel in sorted(set(whole + parts)):
+        if safefs.is_file(repo, rel):
+            hashes[rel] = hashlib.sha256(safefs.read_bytes(repo, rel)).hexdigest()
+    task.update(tool_writes=files, tool_parts=tool_parts, tool_hashes=hashes)
 
 
 def _writer_label(ctx: Ctx) -> str:

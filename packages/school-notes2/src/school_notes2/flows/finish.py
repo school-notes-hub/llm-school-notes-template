@@ -11,7 +11,7 @@ from ..site import publish as site_publish
 from ..state.errors import NeedsOwner, SnError
 from ..state.phase import Task
 from ..wiki import markers
-from . import steps
+from . import checks, steps
 from .context import Ctx
 
 LOG_LINE = re.compile(r"^\s*[*-]\s+(?:\*\*[^*]+\*\*:\s*)?(.*)$")
@@ -28,8 +28,6 @@ def finish(ctx: Ctx, task: Task, *, notify_owner_items) -> str:
         task.set_phase("finishing")
         start = _snapshot(ctx, task)
         prepared = steps.content_steps(ctx, task)
-        task.data["llm_failures"] = 0       # the work passed the check: a success (8.1)
-        task.save()
         notify_owner_items(prepared.new_owner)
         if prepared.question:
             raise NeedsOwner("the writer asked a blocking question",
@@ -79,6 +77,7 @@ def _build(ctx: Ctx, task: Task, commit: str) -> dict:
                                   log=ctx.log)
     except site_build.BuildContentError as exc:
         steps.write_check_items(ctx, exc.problems)
+        checks.tool_errors(ctx, task, exc.problems)
         raise steps.CheckFailed(exc.problems) from None
     return {"commit": record.commit, "output": str(record.output),
             "duration_s": record.duration_s}

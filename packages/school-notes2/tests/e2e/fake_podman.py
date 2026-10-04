@@ -21,7 +21,7 @@ out = next((a.split(":")[0] for a in args if a.endswith(":/out:rw")), None)
 if out:                                   # the reviewer: read-only /work, writes /out
     review = {"verdict": "changes", "findings": [
         {"id": "R1", "file": "wiki/proba/elso.md", "line": 1, "problem": "Hiányzik egy példa.",
-         "suggestion": "Adj hozzá egy példát."}], "figures": [], "family_questions": []}
+         "suggestion": "Adj hozzá egy példát.", "relates_to": None}], "figures": []}
     Path(out, "review.json").write_text(__import__("json").dumps(review), encoding="utf-8")
     sys.exit(0)
 writer = Path(__file__).with_name("fake_writer.py")

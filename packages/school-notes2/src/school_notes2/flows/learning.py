@@ -12,7 +12,7 @@ from ..state.phase import Task
 from ..state.errors import NeedsOwner
 from ..wiki import decisions, drafts, guard, lesson_log
 from ..wiki.pages import PageError, read_page, wiki_pages
-from . import steps
+from . import checks, steps
 from .context import Ctx
 
 
@@ -39,6 +39,7 @@ def validate(ctx: Ctx, task: Task) -> None:
         except PageError as exc:
             problems += [steps.wiki_check.item(rel, None, m) for m in exc.problems]
     if problems:
+        checks.tool_errors(ctx, task, problems)
         changed = steps.llm_snapshot(ctx, task)
         outside = [p for p in problems if p["file"] not in changed]
         if outside:
@@ -85,7 +86,10 @@ def _settle_pending(ctx: Ctx, task: Task) -> None:
     elif actual != recorded.get(rel):
         raise NeedsOwner(f"interrupted tool write was edited: {rel}",
                          todo="inspect the worktree in `school-notes chat`")
-    task.update(**{key: recorded}, learning_pending=None)
+    hashes = dict(task.get("tool_hashes", {}))
+    if text is not None and actual != pending["before"]:
+        hashes[rel] = hashlib.sha256(text.encode()).hexdigest()
+    task.update(**{key: recorded}, tool_hashes=hashes, learning_pending=None)
 
 
 def _write(ctx: Ctx, task: Task, rel: str, text: str, *, whole: bool) -> None:
@@ -97,4 +101,5 @@ def _write(ctx: Ctx, task: Task, rel: str, text: str, *, whole: bool) -> None:
         hashlib.sha256(old.encode()).hexdigest() if whole else guard.parts_hash(old))
     task.update(**{key: recorded}, learning_pending={"path": rel, "whole": whole, "before": before})
     safefs.write_text(ctx.notes_path, rel, text)
+    steps.record_tool_files(task, ctx.notes_path, [rel])
     task.update(learning_pending=None)

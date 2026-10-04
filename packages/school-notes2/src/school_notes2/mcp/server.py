@@ -42,7 +42,8 @@ class Tool:
 
 TOOLS = {
     "check": Tool("Run the full check now (background job; follow it with `wait`). Problems "
-                  "come back as {file, line, message}; fix them and call check again.",
+                  "include errors and warning ids. At most three calls per invocation; decide warnings "
+                  "in result.json. If truncated, read .school-notes/check.json.",
                   NO_ARGS, True),
     "image_generate": Tool(
         "Generate the image of a plan in .school-notes/images/<plan_id>.json (background job). "

@@ -11,11 +11,12 @@ from pathlib import Path
 
 from ..state import safefs
 from ..wiki import frontmatter as fm
+from . import relations
 
 REVIEW_DIR = Path("docs/review")
 OPEN, OWNER, FIXED, DISAGREE = "open", "owner", "fixed", "disagree"
 WORDS = {"fixed": "javítva", "disagree": "nem ért egyet", "open": "nyitva",
-         "untouched": "nem érintett"}
+         "untouched": "nem érintett", "question": "nyitott kérdés", "settled": "rendezett"}
 DONE_HEADING = re.compile(r"^## Végrehajtva \((?P<run>[^)]+)\)$", re.M)
 DONE_LINE = re.compile(r"^\* (?P<item>R\d+) – (?P<word>javítva|nem ért egyet|nyitva|nem érintett)",
                        re.M)
@@ -106,9 +107,24 @@ def write_review(repo: Path, date: str, review: dict, reviewer: str, frm: str, t
     if len(set(ids)) != len(ids):
         raise ValueError("review.json: duplicate finding ids")
     path = next_path(repo, date)
-    items = {i: OPEN for i in sorted(ids, key=_num)}
-    _write(repo, path, _with_frontmatter(render_body(date, review, frm, to), reviewer, frm, to,
-                                         items))
+    known = relations.inventory(repo)
+    active, pending, items, records = [], [], {}, {}
+    for f in sorted(review["findings"], key=lambda f: _num(f["id"])):
+        status, unlocated = relations.route(f, known)
+        if status == "pending":
+            pending.append(f)
+            continue
+        active.append(f)
+        items[f["id"]] = status
+        records[f["id"]] = {"file": f["file"], "round": 1, "chain": f.get("chain", 0),
+                            "origin": f.get("origin", "nightly"), "category": f.get("category"),
+                            "relates_to": f.get("relates_to"), "unlocated": unlocated}
+    body = render_body(date, {**review, "findings": active}, frm, to)
+    if pending:
+        body += "\n## Függő (nyitott kérdésre vár)\n\n" + "\n".join(
+            f"* {_one_line(f['file'])}: {_one_line(f['problem'])}" for f in pending) + "\n"
+    text = _with_frontmatter(body, reviewer, frm, to, items)
+    _write(repo, path, fm.set_keys(text, {"item_details": records}))
     return path
 
 
@@ -149,7 +165,8 @@ def open_items(repo: Path, mode: str) -> list[dict]:
     for path in review_files(repo):
         items = read_items(repo, path) or {}
         rel = path.relative_to(repo).as_posix()
-        found += [{"file": rel, "item_id": i} for i in sorted(items, key=_num)
+        found += [{"file": rel, "item_id": i, "key": f"{rel}#{i}",
+                   "round": relations.details(_read(repo, path), i)["round"]} for i in sorted(items, key=_num)
                   if items[i] in wanted]
     return found
 
@@ -198,6 +215,9 @@ def _apply_one(repo: Path, path: Path, run_id: str, closures: dict, listed: list
     page = fm.split(text)
     body, items = _without_own_section(page.body, dict(page.meta["items"]), run_id)
     for item_id, c in closures.items():
+        problems = relations.closure_problems(repo, c)
+        if problems:
+            raise ClosureError("; ".join(problems))
         if item_id not in items:
             raise ClosureError(f"{path.name}: no item {item_id}")
         if items[item_id] not in (OPEN, OWNER):
@@ -208,8 +228,11 @@ def _apply_one(repo: Path, path: Path, run_id: str, closures: dict, listed: list
     for item_id in touched:
         c = closures.get(item_id)
         status = c["status"] if c else "untouched"
-        entries.append((item_id, status, c.get("note", "") if c else ""))
-        if status in (FIXED, DISAGREE):
+        note = c.get("note", "") if c else ""
+        if c:
+            note = " ".join(filter(None, [note, c.get("question_id"), c.get("decision_id")]))
+        entries.append((item_id, status, note))
+        if status in (FIXED, DISAGREE, "question", "settled"):
             items[item_id] = status
     body = body.rstrip("\n") + "\n\n" + _done_section(run_id, entries, before)
     counts = open_counts(body)
@@ -228,10 +251,6 @@ def apply_closure(repo: Path, run_id: str, closures: list[dict], listed: list[di
     """Apply the merged `review_closure` and the fetch.json item list (plan 4.7, 5.7)."""
     by_file: dict[str, dict] = {}
     for c in closures:
-        if c["status"] in ("question", "settled"):
-            # Additive result contract: keep the item open until reference-aware
-            # closure handling lands. Never turn these into an unchecked closure.
-            continue
         by_file.setdefault(c["file"], {})[c["item_id"]] = c
     listed_by_file: dict[str, list[str]] = {}
     for item in listed:

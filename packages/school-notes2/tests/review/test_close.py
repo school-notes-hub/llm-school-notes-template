@@ -9,7 +9,7 @@ from .conftest import sh
 
 IDENT = close.Identity("benedek", "opus-5.5/high", "2.0.0", "2026-10-04", "2026-10-04T03:20:00+02:00")
 REVIEW = {"verdict": "changes",
-          "findings": [{"id": "R1", "file": "wiki/a.md", "line": 1, "problem": "Elírás."}],
+          "findings": [{"id": "R1", "file": "wiki/a.md", "line": 1, "problem": "Elírás.", "relates_to": None}],
           "figures": [{"file": "wiki/assets/f.svg", "page": "wiki/a.md", "verdict": "jó",
                        "observed": "Két nyíl."}]}
 

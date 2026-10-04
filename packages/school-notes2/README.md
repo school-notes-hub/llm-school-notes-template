@@ -56,12 +56,12 @@ contracts; their remaining flow integration is staged separately. `fix.txt` is l
 but this unit does not introduce a fix run or the new reviewer state machine. The current
 nightly prompt uses the existing output contract, with additive private `owner_notes`.
 Writer `owner_notes` are also emitted as `writer.owner_notes` JSONL log events, with
-token-like secrets redacted. The additive figure lists, `coverage` and `warnings`
-survive range merging; their consumers are staged separately. `coverage` records
+token-like secrets redacted. The additive figure lists and `coverage` survive range merging; their remaining
+consumers are staged separately. Warning decisions are validated per writer invocation. `coverage` records
 `source`, `unit` and either a `target` topic-section link or an omission `reason`,
-without creating an image evidence record. The schema accepts `question`/`settled`
-closures and their reference IDs; until reference-aware closure handling lands,
-these items remain open. No new review-state transition is introduced here.
+without creating an image evidence record. `question`/`settled` closures now validate the reference on the item's page and close it.
+A disagreement requires a substantive note; one reviewer reply may reopen it at round 2,
+where only `fixed` or `question` can close it.
 
 Reader wording is defined in PROFILE's *Wording* table. Like `generate.TABLE_HEAD`,
 the current tool-rendered catch-up heading in `wiki/catch_up.py` is Hungarian;
@@ -82,7 +82,10 @@ exclusion from open questions. Cron compares the raw decision YAML against the b
 before auto-fixes; alias-resolved values are compared too. Interactive answers may
 replace questions with decisions. The private `docs/review/dontesek.md` is generated
 in page-path/ID order. Frontmatter and comment anchors never enter the site or print
-payload. Reviewer `relates_to` routing belongs to the later reviewer integration.
+payload. Review findings use `relates_to` with a page question/decision ID or the complete
+`docs/review/<file>.md#R<n>` key. The private `relations.json` input supplies those keys.
+New review output requires that field and no longer accepts `family_questions`; already
+saved old reports can still finish without losing their historical questions.
 
 `status` accepts `draft`, `stable`, `deprecated`; absence means stable. The protected
 `draft_tracking: {since: YYYY-MM-DD, lessons: [...]}` field starts when the tool first
@@ -103,6 +106,38 @@ unchanged pages requires owner intervention instead of returning to the writer. 
 records each impending replacement before writing and pins the observation date in
 the existing task state, so interrupted generation resumes without restarting the
 clock or rejecting the tool's own writes. No new phase or LLM call is introduced.
+
+
+## Checks and review closure (unit 1c)
+
+Source-reference patterns in `study-site/public-patterns.json` are warning-only. The scanner
+uses changed lines, including Markdown title/description, Mermaid and SVG labels, with the
+structural exceptions from repair plan 8.2. `source_refs.scan(full=True)` and task data
+`mode: repair` support the later repair entry point. No rule enters the publication gate.
+The fixed corpus is tested against both optional local learner checkouts, read-only.
+Per-file counts (before verdict suppression) appear in logs and status.
+
+MCP check returns errors first, full counts, `truncated` and the full-list path. A durable
+counter permits three checks per invocation, including across background-job restarts;
+interactive fetch does not reset it. The last own check's warning IDs must have decisions.
+Later tool warnings without decisions are persisted with `unhandled` for reviewer handoff.
+Accepted/false-positive list verdicts use `review.warnings.record` and the private
+`warning-verdicts.json`; repeating a write is idempotent, content changes invalidate it.
+The reader's two-pass orchestration and nightly warning-list assembly remain later units;
+the storage API returns `hiba` findings for their review-item creation.
+
+Review metadata is additive `item_details`, keeping old `items: {R1: status}` maps readable.
+Legacy headings supply the page when metadata is absent. Full keys avoid cross-report R1
+collisions. Question/decision references are page-local. Existing question/open-item
+references go to the pending section, decisions to owner, unknown references to unlocated.
+Owner notification and the full nightly targeting/chain policy remain controller-layer work.
+No new phase, LLM role or call is added; persisted checks, verdict writes and replies have
+interruption/resume coverage.
+
+`llm_failures` resets with the successful G5 build checkpoint. T-016 uses last-written
+whole-file hashes plus provenance: stamping machine fields cannot turn a changed author
+page into tool-owned output. Exact tool-only output errors are program errors, never strikes
+against the writer. Author text is checked before stamping as well as afterwards.
 
 ## Development
 

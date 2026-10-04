@@ -12,7 +12,7 @@ from ..evidence import records
 from ..git.run import Git, classify, failure_text
 from ..state import phase
 from ..state.errors import Race, Transient
-from . import files, index
+from . import files, index, relations
 from .nightly import MAIN_REF, fetch, load_review, rev
 
 ROUNDS = 3
@@ -118,8 +118,10 @@ def close(task: phase.Task, repo: Git, wt: Git, ident: Identity, t: Timeouts = T
     base, head, end = task.get("base"), task.get("H"), task.get("T")
 
     def write(worktree: Path) -> list[str]:
+        replied = [relations.reply(worktree, r["key"], r["verdict"], r["answer"])
+                   for r in sorted(review.get("responses", []), key=lambda r: r["key"])]
         report = files.write_review(worktree, ident.date, review, ident.reviewer, base, end)
-        written = [report.relative_to(worktree).as_posix(),
+        written = replied + [report.relative_to(worktree).as_posix(),
                    index.update(worktree).relative_to(worktree).as_posix()]
         written += records.append(worktree, records.from_reviewer(review.get("figures", [])),
                                   kind="review",

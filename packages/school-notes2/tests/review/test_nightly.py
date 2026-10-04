@@ -122,3 +122,14 @@ def test_pending_close_finds_reviewed_task(tmp_path):
     assert nightly.pending_close(phase.all_tasks(tmp_path, "benedek")).run_id == t.run_id
     with pytest.raises(Exception):
         nightly.record_review(t, {"verdict": "maybe", "findings": []})
+
+
+def test_resume_old_prepared_input_adds_relation_keys(tmp_path, repos):
+    repos.commit({"wiki/a.md": "# Nyitott kérdések\n\n<!-- q: a-datum -->\n1. Mi a dátum?\n"})
+    task = prepare(tmp_path, repos)
+    target = task.dir / "in/relations.json"
+    original = target.read_bytes()
+    target.unlink()  # A prepared task from the previous contract.
+    nightly.resume_prepared(task, repos.repo, repos.wt, fake_rasterize)
+    assert target.read_bytes() == original
+    assert json.loads(original)["pages"]["wiki/a.md"]["questions"] == ["a-datum"]

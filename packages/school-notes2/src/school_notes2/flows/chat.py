@@ -12,7 +12,7 @@ from ..state import phase
 from ..state.errors import NeedsOwner, SnError, Transient
 from ..state import safefs
 from ..state.files import write_json
-from . import clear, fetch as fetch_flow
+from . import checks, clear, fetch as fetch_flow
 from . import finish as finish_flow
 from . import handlers, policy, run as run_flow, setup, steps, writer
 from .context import Ctx
@@ -108,6 +108,7 @@ def _launch(ctx: Ctx, task: phase.Task, harness_name: str | None) -> None:
     h = handlers.build(ctx, None, fetch=lambda: session_fetch(ctx),
                        finish=lambda: session_finish(ctx))
     print(f"Munkamappa: {ctx.notes_path}  (futás: {task.run_id})", file=sys.stderr)
+    checks.begin(task)
     with mcp(ctx, task.dir, "interactive", h, lambda: _current_run(ctx)) as sessdir:
         launch.run_interactive(learner=ctx.name, run_id=task.run_id, role=role, harness=harness,
                                image=ctx.image_tag(),
@@ -151,6 +152,8 @@ def save_session_result(ctx: Ctx, task: phase.Task) -> bool:
         return False
     own = safefs.read_json(ctx.notes_path, ".school-notes/result.json")
     if own is None or schema_errors("result", own) or own.get("status") != "done":
+        return False
+    if checks.accounting(task, own):
         return False
     n = len(task.get("ranges"))
     k = min(task.get("writing_k", 1), n)

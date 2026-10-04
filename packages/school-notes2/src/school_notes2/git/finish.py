@@ -234,6 +234,7 @@ def g5_build(task: Task, wt: Git, hooks: Hooks) -> None:
     if task.get("build", {}).get("commit") == commit:
         return
     record = hooks.build(commit)
+    task.data["llm_failures"] = 0  # T-152: only a successful G5 ends the bad-work streak.
     task.set_phase("built", build=record)
 
 

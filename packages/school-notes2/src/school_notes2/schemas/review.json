@@ -8,15 +8,21 @@
     "owner_notes": {"type": "array", "items": {"type": "string", "pattern": "\\S"}},
     "verdict": {"enum": ["ok", "changes"]},
     "findings": {"type": "array", "items": {"type": "object", "additionalProperties": false,
-      "required": ["id", "file", "problem"],
+      "required": ["id", "file", "problem", "relates_to"],
       "properties": {"id": {"type": "string", "pattern": "^R[0-9]+$"}, "file": {"type": "string"},
                      "line": {"type": ["integer", "null"]}, "problem": {"type": "string", "minLength": 1},
-                     "suggestion": {"type": "string"}}}},
+                     "suggestion": {"type": "string"},
+                     "relates_to": {"type": ["string", "null"], "pattern": "^(?:[a-z0-9-]+|docs/review/(?!.*\\.\\.)[^\\\\#]+\\.md#R[0-9]+)$"},
+                     "new_evidence": {"type": "string", "pattern": "\\S"},
+                     "category": {"type": "string"},
+                     "origin": {"enum": ["reader", "list", "figure", "recheck", "nightly"]},
+                     "chain": {"enum": [0, 1]},
+                     "unlocated": {"type": "boolean"}}}},
     "figures": {"type": "array", "items": {"type": "object", "additionalProperties": false,
       "required": ["file", "page", "verdict", "observed"],
       "properties": {"file": {"type": "string"}, "page": {"type": "string"},
                      "verdict": {"type": "string"}, "checks": {"type": "object"},
                      "observed": {"type": "string"}, "description": {"type": "string"}}}},
-    "family_questions": {"type": "array", "items": {"type": "string"}}
+    "responses": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["key", "verdict", "answer"], "properties": {"key": {"type": "string", "pattern": "^docs/review/(?!.*\\.\\.)[^\\\\#]+\\.md#R[0-9]+$"}, "verdict": {"enum": ["accept", "keep"]}, "answer": {"type": "string", "pattern": "\\S"}}}}
   }
 }

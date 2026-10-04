@@ -9,6 +9,7 @@ from ..state.errors import BadWork
 from ..state import safefs
 from ..state.files import read_json, write_json
 from ..state.phase import Task
+from . import checks
 from . import fetch as fetch_flow
 from .context import Ctx
 from .session import mcp
@@ -49,6 +50,7 @@ def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
 
 
 def _call(ctx: Ctx, task: Task, k: int, role, harness, handlers) -> dict:
+    checks.begin(task)
     with mcp(ctx, task.dir, "cron", handlers, lambda: task.run_id) as sessdir:
         run = launch.RoleRun(
             learner=ctx.name, run_id=task.run_id, role_name="writer", role=role,
@@ -66,6 +68,11 @@ def _call(ctx: Ctx, task: Task, k: int, role, harness, handlers) -> dict:
             # The MCP handlers saved the run meanwhile (tool writes, closures); a later save
             # from this stale copy would drop them.
             task.reload()
+    from . import steps
+    problems = checks.accounting(task, outcome.output)
+    if problems:
+        steps.write_check_items(ctx, problems)
+        raise steps.CheckFailed(problems)
     return outcome.output
 
 
@@ -100,5 +107,7 @@ def merge(results_: list[dict]) -> dict:
         for c in r.get("review_closure", []):
             closures[(c["file"], c["item_id"])] = c
     merged["notes"] = [{"file": f, "pages": sorted(p)} for f, p in sorted(notes.items())]
-    merged["review_closure"] = list(closures.values())
+    merged["review_closure"] = [closures[k] for k in sorted(closures)]
+    warnings = {w["id"]: w for w in merged["warnings"]}
+    merged["warnings"] = [warnings[k] for k in sorted(warnings)]
     return merged

@@ -49,7 +49,7 @@ def test_additive_lists_validate_and_survive_merge():
     merged = merge([data, data])
     validate("result", merged)
     for key, values in ADDITIONS.items():
-        assert merged[key] == values + values
+        assert merged[key] == (values if key == "warnings" else values + values)
     assert merged["checks"] == []  # coverage is not image evidence
 
 

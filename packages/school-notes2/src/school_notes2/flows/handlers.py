@@ -15,7 +15,7 @@ from ..wiki import public
 from ..wiki.check_result import check_result
 from . import fetch as fetch_flow
 from . import status as status_flow
-from . import steps
+from . import checks, steps
 from .context import Ctx
 
 
@@ -32,8 +32,13 @@ def build(ctx: Ctx, task_dir=None, *, fetch=None, finish=None) -> Handlers:
             raise NeedsOwner("there is no open run in this session", todo="call fetch first")
         return found
 
+    budget_dir = task_dir
+    if budget_dir is None:
+        active = phase.open_task(ctx.task_root(), ctx.name, "notes")
+        budget_dir = active.dir if active is not None else None
+
     return Handlers(
-        check=lambda: check(ctx, task()),
+        check=lambda: check(ctx, task(), budget_dir=budget_dir),
         image_generate=lambda plan_id, note: image_generate.generate(
             ctx.image_settings(), plan_id, note, log=ctx.log),
         image_accept=lambda plan_id, review: accept(ctx, task(), plan_id, review),
@@ -41,9 +46,12 @@ def build(ctx: Ctx, task_dir=None, *, fetch=None, finish=None) -> Handlers:
         fetch=fetch, finish=finish)
 
 
-def check(ctx: Ctx, task) -> dict:
+def check(ctx: Ctx, task, *, budget_dir=None) -> dict:
     """The writer's own check at the end of its work: guard, result.json, changed files.
     Applies unambiguous auto-fixes and refreshes tool-rendered learning metadata."""
+    budget = phase.load(budget_dir) if budget_dir is not None and budget_dir != task.dir else task
+    if not checks.take(budget):
+        return dict(checks.LIMIT)
     problems: list[dict] = []
     try:
         steps.guard_step(ctx, task)
@@ -73,9 +81,11 @@ def check(ctx: Ctx, task) -> dict:
             problems += exc.items
     if not wiki_check.errors(problems):
         problems += public_problems(ctx.notes_path)
+    problems = checks.identify(problems)
     steps.write_check_items(ctx, problems)
-    errors = wiki_check.errors(problems)
-    return {"ok": not errors, "errors": len(errors), "problems": problems[:50]}
+    checks.tool_errors(ctx, task, problems)
+    checks.remember(task, problems)
+    return checks.response(problems)
 
 
 def public_problems(repo) -> list[dict]:
