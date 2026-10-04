@@ -68,3 +68,15 @@ def test_existing_subject_settings_get_only_missing_display_fields(repo):
     before = path.read_bytes()
     assert not machine.add_subjects(repo, new, {})
     assert path.read_bytes() == before
+
+
+def test_new_subject_name_is_the_drive_subject_folder_not_the_package():
+    from school_notes2.flows import steps
+    from school_notes2.state.phase import Task
+    task = Task.__new__(Task)
+    task.data = {"data": {
+        "selected": [{"package": {"name": "2026-10-03", "subject_name": "Történelem"}}],
+        "packages": [{"subject": "tortenelem", "drive_folder": "2026-10-03"},
+                     {"subject": "uj", "drive_folder": "ismeretlen"}]}}
+    task.get = lambda key, default=None: task.data["data"].get(key, default)
+    assert steps._drive_names(task) == {"tortenelem": "Történelem", "uj": "uj"}

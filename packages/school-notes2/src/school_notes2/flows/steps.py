@@ -297,7 +297,12 @@ def _writer_label(ctx: Ctx) -> str:
 
 
 def _drive_names(task: Task) -> dict[str, str]:
-    return {p["subject"]: p["drive_folder"] for p in task.get("packages", [])}
+    """A new subject's display name is its Drive subject folder (e.g. "Történelem"), never the
+    package folder (e.g. "2026-10-03"); the slug is the last resort."""
+    subjects = {i["package"]["name"]: i["package"].get("subject_name")
+                for i in task.get("selected", []) if isinstance(i.get("package"), dict)}
+    return {p["subject"]: subjects.get(p["drive_folder"]) or p["subject"]
+            for p in task.get("packages", [])}
 
 
 def llm_snapshot(ctx: Ctx, task: Task) -> dict:
