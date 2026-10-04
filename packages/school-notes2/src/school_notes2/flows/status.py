@@ -47,6 +47,7 @@ def summary(ctx: Ctx) -> dict:
         "images": _images(ctx),
         "review_items": _review_items(ctx),
         "last_review": _last(tasks, "review"),
+        "nightly_state": _nightly_state(ctx),
         "wiki_open_questions": _open_questions(ctx.notes_path),
         "drafts": _drafts(ctx.notes_path),
         "cards": _cards(ctx.notes_path),
@@ -172,7 +173,7 @@ def render(data: dict) -> str:
     lines = [f"== {data['learner']}"]
     for key, label in (("vm_lock", "VM-zár"), ("round", "kör"), ("quota", "heti keret"), ("timeouts", "T-125"), ("figure_requests", "licenckérelmek"),
                        ("approved_figure_requests", "engedélyezve, beillesztésre vár"),
-                       ("license_error", "licencadat javítandó")):
+                       ("license_error", "licencadat javítandó"), ("nightly_state", "éjszakai témakörök")):
         if data.get(key):
             lines.append(label + ": " + json.dumps(data[key], ensure_ascii=False, sort_keys=True))
     lock = data["lock"]
@@ -225,3 +226,17 @@ def _permissions(repo):
     except (ValueError, OSError, safefs.UnsafePath, NeedsOwner) as exc:
         todo = getattr(exc, "todo", "correct docs/licenses.json")
         return {"figure_requests": [], "approved_figure_requests": [], "license_error": f"{exc}; {todo}"}
+
+
+def _nightly_state(ctx):
+    from ..review import figure_waiting, topics
+    from ..git import repos
+    wt = ctx.worktree("review")
+    try:
+        head = repos.rev(wt, "refs/remotes/origin/main")
+        state = topics.read_state(ctx.bare(), head)
+        state["pending_figures"] = json.loads(topics.text(ctx.bare(), head, figure_waiting.PATH) or "[]")
+        state["blocked_topics"] = topics.unblocked(state.get("blocked_topics", []), ctx.cfg.state_dir, ctx.name)
+        return state
+    except (OSError, ValueError):
+        return {}

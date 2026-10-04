@@ -110,9 +110,8 @@ def images(repo: Git, a: str, b: str) -> list[dict]:
     return sorted(found, key=lambda img: natural_key(img["path"]))     # 4.3: 2 before 10
 
 
-def select(repo: Git, *, max_images: int, max_diff_kb: int, max_commits: int | None,
-           fetch_timeout: float) -> Range | None:
-    """Fetch and choose the range; None when nothing is new (no LLM call)."""
+def select(repo: Git, *, fetch_timeout: float) -> Range | None:
+    """Pin the entire range. D60's image/diff and D85's commit caps are removed."""
     fetch(repo, fetch_timeout)
     base, head = rev(repo, MARKER_REF), rev(repo, MAIN_REF)
     if not base:
@@ -120,16 +119,8 @@ def select(repo: Git, *, max_images: int, max_diff_kb: int, max_commits: int | N
     if not repo.ok("merge-base", "--is-ancestor", base, head):
         raise NeedsOwner("origin/claude-reviewed is not an ancestor of origin/main",
                          todo="check the claude-reviewed branch on GitHub")
-    commits = repo.out("rev-list", "--reverse", f"{base}..{head}").split()
-    if not commits:
-        return None
-    chosen = None
-    for i, commit in enumerate(commits[:max_commits or len(commits)]):
-        patch, imgs = build_patch(repo, base, commit), images(repo, base, commit)
-        if i and (len(patch.encode()) > max_diff_kb * 1024 or len(imgs) > max_images):
-            break
-        chosen = Range(base, head, commit, commits[:i + 1], patch, imgs)
-    return chosen
+    commits = repo.out("rev-list", "--reverse", "--topo-order", f"{base}..{head}").split()
+    return Range(base, head, head, commits, "") if commits else None
 
 
 def write_input(repo: Git, wt: Git, rng: Range, in_dir: Path, rasterize: Rasterize) -> None:
@@ -155,25 +146,28 @@ def write_input(repo: Git, wt: Git, rng: Range, in_dir: Path, rasterize: Rasteri
     write_json(in_dir / "relations.json", relations.reviewer_inventory(wt.work_tree), 0o644)
 
 
-def prepare(root: Path, student: str, repo: Git, wt: Git, *, max_images: int, max_diff_kb: int,
-            fetch_timeout: float, rasterize: Rasterize, previous: phase.Task | None = None):
-    """Create the review task (phase `prepared`), or return None for an empty range."""
-    rng = select(repo, max_images=max_images, max_diff_kb=max_diff_kb,
-                 max_commits=next_cap(previous), fetch_timeout=fetch_timeout)
+def prepare(root: Path, student: str, repo: Git, wt: Git, *, fetch_timeout: float,
+            rasterize: Rasterize, max_agents: int = 3):
+    rng = select(repo, fetch_timeout=fetch_timeout)
     if rng is None:
         return None
     task = phase.create(root, student, "review", "cron", "prepared")
-    task.update(base=rng.base, H=rng.head, T=rng.end, commits=rng.commits,
-                images=len(rng.images), diff_bytes=len(rng.patch.encode()))
-    write_input(repo, wt, rng, task.dir / "in", rasterize)
-    task.update(input_ready=True)
+    task.update(base=rng.base, H=rng.head, T=rng.head, commits=rng.commits,
+                topic_review=True, max_agents=max_agents)
+    resume_prepared(task, repo, wt, rasterize)
     return task
 
 
 def resume_prepared(task: phase.Task, repo: Git, wt: Git, rasterize: Rasterize) -> None:
-    """Rebuild a half-written input folder from the recorded H/T (crash after create)."""
-    known = read_json(task.dir / "in" / "relations.json")
-    if task.get("input_ready") and known is not None and "items" not in known:
+    """Recover the pinned tree even after a partial report was committed."""
+    wt.run("switch", "--detach", "--discard-changes", task.get("H"))
+    if task.get("topic_review"):
+        from . import topics
+        if task.get("units") is None:
+            state = topics.read_state(repo, task.get("H"))
+            grouped, skipped = topics.plan(repo, wt.work_tree, task.get("base"), task.get("H"), state)
+            task.update(units=grouped, nightly_state=state, skipped_topics=skipped,
+                        blocked_topics=state.get("blocked_topics", []), input_ready=True)
         return
     base, end = task.get("base"), task.get("T")
     rng = Range(base, task.get("H"), end, task.get("commits"), build_patch(repo, base, end),
@@ -225,28 +219,6 @@ def _valid_figures(task: phase.Task, figures: list[dict], worktree: Path | None)
     return kept, dropped
 
 
-def record_timeout(task: phase.Task) -> None:
-    """A reviewer timeout is not an error: the next night tries half the commits."""
-    task.data["closed"] = True
-    task.update(timed_out=True)
-
-
-def next_cap(previous: phase.Task | None) -> int | None:
-    if previous is None or not previous.get("timed_out"):
-        return None
-    return max(1, len(previous.get("commits", [])) // 2)
-
-
-def stuck_commit(previous: list[phase.Task]) -> str | None:
-    """The single commit that timed out on the last two nights in a row, if any (5.6/6)."""
-    last = [t for t in previous if t.kind == "review"][-2:]
-    if len(last) < 2 or not all(t.get("timed_out") and len(t.get("commits", [])) == 1
-                                for t in last):
-        return None
-    first, second = (t.get("commits")[0] for t in last)
-    return first if first == second else None
-
-
 def pending_close(tasks: list[phase.Task]) -> phase.Task | None:
     """An earlier review whose review.json is valid but whose closing did not finish."""
     for task in tasks:
@@ -257,6 +229,8 @@ def pending_close(tasks: list[phase.Task]) -> phase.Task | None:
 
 def load_review(task: phase.Task) -> dict:
     review = json.loads((task.dir / "review.json").read_text(encoding="utf-8"))
+    if task.get("topic_review"):
+        return review  # Tool-assembled from separately validated topic receipts.
     # Already saved reports from the previous contract remain resumable.
     legacy = {**review, "findings": [{"relates_to": None, **{
         k: v for k, v in f.items() if k not in ("origin", "chain", "unlocated")}}

@@ -20,6 +20,9 @@ def clear(ctx: Ctx, kind: str, action: str) -> str:
         if action != "continue":
             return "Időtúllépési szerep csak --continue paranccsal oldható fel."
         timeouts.clear(ctx, kind)
+        if kind == "reviewer":
+            from ..state.files import write_json
+            write_json(ctx.cfg.state_dir / ctx.name / "nightly-cleared.json", {"at": now_iso()})
         task_kind = "review" if kind == "reviewer" else "notes"
         task = phase.open_task(ctx.task_root(), ctx.name, task_kind)
         if kind in ("writer", "reviewer") and task is not None and (task.data.get("needs_owner") or {}).get("class") == "timeout":

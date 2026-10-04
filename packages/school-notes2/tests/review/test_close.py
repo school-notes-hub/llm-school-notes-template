@@ -14,10 +14,19 @@ REVIEW = {"verdict": "changes",
                        "observed": "Két nyíl."}]}
 
 
+def legacy_prepare(root, student, repo, wt, *, fetch_timeout, rasterize, **obsolete):
+    task = nightly.prepare(root, student, repo, wt, fetch_timeout=fetch_timeout, rasterize=rasterize)
+    if obsolete.get("max_diff_kb") == 1:
+        task.update(T=task.get("commits")[0])  # Previously saved D60-cut task.
+    task.update(topic_review=False)
+    nightly.resume_prepared(task, repo, wt, rasterize)
+    return task
+
+
 def reviewed(tmp_path, repos, **kw):
     args = dict(max_images=30, max_diff_kb=300, fetch_timeout=60, rasterize=lambda s, o: [])
     args.update(kw)
-    task = nightly.prepare(tmp_path / "srv", "benedek", repos.repo, repos.wt, **args)
+    task = legacy_prepare(tmp_path / "srv", "benedek", repos.repo, repos.wt, **args)
     nightly.record_review(task, REVIEW)
     return task
 

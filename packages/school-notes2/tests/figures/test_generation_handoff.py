@@ -59,9 +59,10 @@ def test_legacy_image_marker_does_not_start_a_generation_only_run(monkeypatch):
     monkeypatch.setattr(fetch, "_scan", lambda *a: [])
     ctx = SimpleNamespace()
     assert fetch.start(ctx, "cron", None) is None
-    from school_notes2.flows import repair
+    from school_notes2.flows import repair, fix
     monkeypatch.setattr(fetch, "drive_client", lambda *a: None)
     monkeypatch.setattr(repair, "next_task", lambda *a: None)
+    monkeypatch.setattr(fix, "next_task", lambda *a: None)
     # ctx deliberately has no image settings: there is no image-only scan or spending.
     assert run._new_task(ctx) is None
 

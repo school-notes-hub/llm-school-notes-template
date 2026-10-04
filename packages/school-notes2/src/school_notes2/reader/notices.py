@@ -4,7 +4,7 @@ import hashlib
 import re
 
 from ..figures import commissions, pending, requests
-from ..review import relations
+from ..review import figure_waiting, relations
 from ..state import safefs
 from ..wiki import drafts, frontmatter, lesson_log, markers
 from . import verdicts
@@ -19,6 +19,7 @@ def refresh(repo, pages):
     waiting = pending.load(repo)
     waiting += [{"commission": r} for r in requests.active(repo)]
     waiting = list({e["commission"]["id"]: e for e in waiting}.values())
+    nightly_waiting = figure_waiting.active(repo)
     written = []
     for page in sorted(set(pages)):
         if not safefs.is_file(repo, page) or not page.endswith(".md"):
@@ -59,7 +60,22 @@ def refresh(repo, pages):
                 pattern = re.compile(commissions.MARKER.pattern + r"(?:\n|$)")
                 text = pattern.sub(lambda m: m[0] + "\n" + markers.wrap(name, FIGURE) + "\n"
                                    if m[1] == brief["id"] else m[0], text)
+        for entry in nightly_waiting:
+            spec = entry["spec"]
+            if spec["page"] == page:
+                text = _night_figure(text, spec)
         if text != original:
             safefs.write_text(repo, page, text)
             written.append(page)
     return written
+
+
+def _night_figure(text, spec):
+    name = "pending-figure-" + spec["id"]
+    if name in markers.names(text):
+        return markers.replace(text, name, FIGURE)
+    heading = next((h[0] for h in re.finditer(r"^#{1,6} (.+)$", text, re.M)
+                    if h[1] == spec["anchor"]), None)
+    if heading:
+        return text.replace(heading + "\n", heading + "\n\n" + markers.wrap(name, FIGURE) + "\n", 1)
+    return lesson_log.after_header(text, name, FIGURE)

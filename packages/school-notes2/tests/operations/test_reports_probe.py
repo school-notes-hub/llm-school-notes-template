@@ -234,3 +234,17 @@ def test_claude_helper_401_returns_only_unknown(monkeypatch, capsys):
     output = capsys.readouterr()
     assert json.loads(output.out) == {"remaining": None, "reset": None}
     assert "secret-test-value" not in output.out + output.err
+
+
+@pytest.mark.parametrize("completed", [False, True])
+def test_partial_night_email_keeps_actual_marker(world, monkeypatch, completed):
+    ctx, _, _, notices = world
+    task = phase.create(ctx.task_root(), ctx.name, "review", "cron", "reviewing")
+    task.update(base="old-marker", H="new-head", T="new-head", all_topics_done=False)
+    if completed:
+        task.set_phase("done", M="old-marker")
+    else:
+        task.mark_needs_owner("preflight", "retry", "needs_owner")
+    operational_report.ended(ctx, "nightly", 0, {task.run_id: True})
+    data = json.loads(notices[-1].message)
+    assert data["jelölő"] == "old-marker" and "hiányzó" in data["jelölő oka"]

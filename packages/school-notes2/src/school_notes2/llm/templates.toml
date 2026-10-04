@@ -54,6 +54,8 @@ interactive = [
   "--disallowedTools", "WebSearch", "WebFetch",
 ]
 
+# Native Agent/Task tools stay enabled: no --tools allow-list and no Agent/Task denial.
+# Subagents share this headless call's timeout and read-only mounts; no MCP is configured.
 [harnesses.claude-review]
 login_check = ["claude", "auth", "status"]
 output = "file"

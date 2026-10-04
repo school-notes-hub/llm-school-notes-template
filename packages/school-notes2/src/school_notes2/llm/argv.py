@@ -70,7 +70,7 @@ def prompt(role_name: str, output_mode: str = "file", *, grade: int) -> str:
     name = role_name
     text = resources.files(__package__).joinpath("prompts", f"{name}.txt").read_text("utf-8")
     instruction = OUTPUT_INSTRUCTION[output_mode]
-    if role_name in ("figure-review", "reader-1", "reader-2", "recheck"):
+    if role_name in ("reviewer", "figure-review", "reader-1", "reader-2", "recheck"):
         instruction = ("A választ a `/out/review.json` fájlba írd." if output_mode == "file"
                        else "A válasz végén írd ki az egyetlen JSON-objektumot.")
     return text.replace("{output_instruction}", instruction).replace("{grade}", str(grade))

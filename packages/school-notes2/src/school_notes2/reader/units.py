@@ -12,8 +12,8 @@ from ..wiki.pages import links, resolve, wiki_pages
 
 
 def page_key(repo: Path, page: str, *, banner_image: str | None = None) -> str:
-    from ..flows.steps import _llm_part
-    text = _llm_part(safefs.read_text(repo, page))
+    from ..wiki.author import part
+    text = part(safefs.read_text(repo, page))
     text = re.sub(r"\n?" + commissions.MARKER.pattern + r"\n{0,2}", "", text)
     meta = frontmatter.split(safefs.read_text(repo, page)).meta
     if meta.get("banner_from"):
@@ -55,7 +55,7 @@ def collect(repo: Path, changed: list[str], closures=(), briefs=()) -> list[dict
         context = set()
         for page in sorted(pages - assigned):
             meta = frontmatter.split(safefs.read_text(repo, page)).meta
-            if meta.get("type") in ("summary", "review") and any(
+            if meta.get("type") in ("summary", "chapter-summary", "review") and any(
                     resolve(page, link.target.split("#", 1)[0]) == topic
                     for link in links(safefs.read_text(repo, page))):
                 context.add(page)

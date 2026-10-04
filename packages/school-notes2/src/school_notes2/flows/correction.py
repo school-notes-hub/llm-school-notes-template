@@ -162,7 +162,7 @@ def apply(ctx, task, root, saved, edits=None):
 
 def validated(ctx, child, root, items, result):
     """Both writers enter the same result, scope, path and content gates."""
-    _scope(ctx, root, items)
+    check_scope(ctx, root, items)
     problems = checks.accounting(child, result)
     if problems:
         raise steps.CheckFailed(problems)
@@ -182,10 +182,17 @@ def validated(ctx, child, root, items, result):
             "tool_state": {k: child.get(k, {}) for k in ("tool_writes", "tool_parts", "tool_hashes")}}
 
 
-def _scope(ctx, root, items):
-    allowed = {i.get("file") for i in items}  # Report paths are tool-owned, never writable.
-    allowed.update(relations.details(safefs.read_text(ctx.notes_path, i["file"]), i["item_id"]).get("file")
+def check_scope(ctx, root, items, extra_paths=()):
+    from ..reader import units
+    # Use the pre-edit tree: edits must not expand their own authorization.
+    repo = root / "before"
+    allowed = set(extra_paths)
+    allowed.update(relations.details(safefs.read_text(repo, i["file"]), i["item_id"]).get("file")
                    for i in items)
+    embedded = relations.related_pages(repo)
+    allowed.update(p for asset in sorted(p for p in allowed if p) for p in embedded.get(asset, []))
+    for unit in units.collect(repo, sorted(p for p in allowed if p)):
+        allowed.update(unit["pages"] + unit["context"])
     before = set(safefs.read_json(root, "snapshot.json"))
     for path in sorted(before | set(safefs.walk_files(ctx.notes_path, "wiki"))):
         if not path.startswith("wiki/") or path.startswith("wiki/assets/") or path == "wiki/log.md":

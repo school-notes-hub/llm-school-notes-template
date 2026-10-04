@@ -17,6 +17,7 @@ from ..state.errors import BadWork, NeedsOwner
 from ..state import safefs
 from ..state.files import write_json
 from ..state.phase import Task
+from ..wiki.author import part as _llm_part
 from ..wiki import check as wiki_check
 from ..wiki import frontmatter, generate, guard, machine, markers, public
 from ..wiki import order as wiki_order
@@ -326,21 +327,3 @@ def _llm_hash(rel: str, data: bytes) -> str:
     if rel.endswith(".md"):
         data = _llm_part(data.decode("utf-8", "replace")).encode("utf-8").rstrip(b"\n")
     return hashlib.sha256(data).hexdigest()
-
-
-def _llm_part(text: str) -> str:
-    """The text without generated blocks and machine frontmatter keys."""
-    from ..figures.commissions import MARKER
-    from ..wiki.banners import canonical_reference
-    text = canonical_reference(text)
-    text = markers.BLOCK.sub(lambda m: f"<!-- figure: {m['name'][7:]} -->"
-                             if m["name"].startswith("figure-") else m[0], text)
-    text = MARKER.sub(lambda m: f"<!-- figure: {m[1]} -->", text)
-    # Adding a tool block is not an author edit either. Strip its insertion separators,
-    # preserving whitespace everywhere else (including the author's code examples).
-    text = re.sub(r"\n?" + markers.BLOCK.pattern + r"\n{0,2}", "", text, flags=re.S | re.M)
-    try:
-        meta = frontmatter.split(text).meta
-    except Exception:  # noqa: BLE001 - unreadable frontmatter: compare the whole text
-        return text
-    return frontmatter.strip_keys(text, machine.machine_keys(meta))

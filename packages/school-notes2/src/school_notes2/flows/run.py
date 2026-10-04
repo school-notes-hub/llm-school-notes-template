@@ -101,6 +101,9 @@ def _new_task(ctx: Ctx) -> Task | None:
     drive = fetch_flow.drive_client(ctx)
     task = fetch_flow.start(ctx, "cron", drive)
     if task is None:
+        from . import fix
+        task = fix.next_task(ctx)
+    if task is None:
         from . import repair
         task = repair.next_task(ctx)
     return task
@@ -112,7 +115,10 @@ def advance(ctx: Ctx, task: Task) -> None:
     licenses.preflight(ctx.notes_path)
     if task.phase == "waiting_quota":
         task.set_phase(task.get("quota_phase"))
-    if task.get("mode") == "repair":
+    if task.get("mode") == "fix":
+        from . import fix
+        fix.prepare(ctx, task)
+    elif task.get("mode") == "repair":
         from . import repair
         repair.prepare(ctx, task)
     else:
@@ -122,6 +128,10 @@ def advance(ctx: Ctx, task: Task) -> None:
             raise NeedsOwner("the writer asked a blocking question",
                              todo=f"answer it in `school-notes chat {ctx.name}`",
                              details={"questions": task.get("question", [])})
+    if task.get("mode") == "fix" and not task.get("review_complete"):
+        from . import correction
+        correction.check_scope(ctx, task.dir / "fix-before", task.get("open_review_items", []),
+                               [e["commission"]["page"] for e in task.get("pending_figures", [])])
     try:
         finish_flow.finish(ctx, task, notify_owner_items=lambda items: owner_items(ctx, task, items))
     except steps.CheckFailed as exc:

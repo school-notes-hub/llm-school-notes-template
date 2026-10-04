@@ -37,10 +37,14 @@ def test_nightly_review_end_to_end(world, tmp_path):
     assert "R1: open" in text and "### R1" in text
     reviewed = subprocess.run(["git", f"--git-dir={origin}", "rev-parse", "claude-reviewed", "main"],
                               capture_output=True, text=True).stdout.split()
-    assert reviewed[0] == reviewed[1]          # quiet night: M = R
+    assert reviewed[0] == reviewed[1]          # quiet close: M=R
     assert nightly_flow.nightly(ctx) == 0      # nothing new: empty range, no call
     again = [t for t in phase.all_tasks(ctx.task_root(), "benedek") if t.kind == "review"]
     assert len(again) == 1
+    assert subprocess.run(["git", f"--git-dir={origin}", "rev-parse", "main"],
+                          capture_output=True, text=True, check=True).stdout.strip() == reviewed[1]
+    assert nightly_flow.nightly(ctx) == 0      # the third night is still empty
+    assert len([t for t in phase.all_tasks(ctx.task_root(), "benedek") if t.kind == "review"]) == 1
 
 
 def test_nightly_without_marker_needs_owner(world):

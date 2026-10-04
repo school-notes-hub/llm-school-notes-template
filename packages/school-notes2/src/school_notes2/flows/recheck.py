@@ -71,6 +71,11 @@ def _apply(ctx, task, saved):
         for item in review["items"]:
             if item["verdict"] in ("accept", "keep"):
                 written.append(relations.reply(ctx.notes_path, item["key"], item["verdict"], item["answer"]))
+            elif item["verdict"] == "ok":
+                from ..review.topic_result import apply_item
+                path, _ = apply_item(ctx.notes_path, {"status": "fixed"}, item)
+                if path:
+                    written.append(path)
             elif item["verdict"] == "not-ok":
                 written.append(report.reopen(ctx.notes_path, item["key"], item["answer"]))
         new = report.list_findings(ctx.notes_path, entry["hits"], review["hits"])

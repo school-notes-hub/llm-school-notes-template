@@ -1,0 +1,148 @@
+"""Merge trusted topic receipts; apply closure/chain rules on the final report tree."""
+
+import re
+
+from ..reader import notices, verdicts
+from ..reader.units import page_key
+from ..state import safefs
+from ..wiki import frontmatter
+from . import figure_waiting, files, relations, topics, warnings
+
+
+def chain(repo, head, finding, *, fix_touched=False):
+    """Locate the quote at H, then inspect every covered line's last author commit."""
+    quote = finding.get("quote", "")
+    text = topics.text(repo, head, finding["file"])
+    matches = _matches(quote, text)
+    if len(matches) != 1:
+        text, quote = _plain(text), _plain(quote)
+        matches = _matches(quote, text)
+    if len(matches) != 1:
+        return {**finding, "line": None, "unlocated": True, "chain": int(fix_touched)}
+    match = matches[0]
+    first = text[:match.start()].count("\n") + 1
+    last = text[:match.end()].count("\n") + 1
+    proc = repo.run("blame", "--line-porcelain", "-L", f"{first},{last}", head, "--", finding["file"], check=False)
+    commits = sorted(set(re.findall(r"^([0-9a-f]{40}) \d+ \d+", proc.stdout.decode(), re.M)))
+    return {**finding, "line": first, "unlocated": False,
+            "chain": int(any(topics.is_fix(repo, c) for c in commits))}
+
+
+def _matches(quote, text):
+    pattern = r"\s+".join(re.escape(w) for w in quote.split())
+    return list(re.finditer(pattern, text)) if pattern else []
+
+
+def _plain(text):
+    """Remove inline Markdown without changing line numbers used by blame."""
+    text = re.sub(r"!?\[([^]\n]+)\]\([^\n)]*\)", r"\1", text)
+    text = re.sub(r"\[\^[^]\n]+\]", "", text)
+    text = re.sub(r"\\([\\`*_{}\[\]()#+.!$-])", r"\1", text)
+    return re.sub(r"[*_`$]", "", text)
+
+
+def assemble(task, repo, work):
+    findings, notes, sections = [], [], []
+    for entry in task.get("topic_results", []):
+        unit, receipt = entry["unit"], entry["receipt"]
+        section = {"topic": unit["topic"], "mode": unit["mode"], "status": receipt["status"],
+                   "duration_s": receipt.get("duration_s", 0), "findings": []}
+        if receipt["status"] == "reviewed":
+            value = receipt["review"]
+            fix_touched = unit["mode"] == "targeted" or any(topics.is_fix(repo, c) for c in unit["commits"])
+            own = [chain(repo, task.get("H"), f, fix_touched=fix_touched) for f in value["findings"]]
+            # Generate list findings without changing the pinned worktree's verdict store.
+            by_id = {h["id"]: h for h in entry["input"]["hits"]}
+            for hit in value["hits"]:
+                if hit["verdict"] == "hiba" and not hit.get("covered_by"):
+                    row = by_id[hit["hit_id"]]
+                    lines = topics.text(repo, task.get("H"), row["file"]).splitlines()
+                    f = {"file": row["file"], "quote": lines[row["line"] - 1], "problem": hit["reason"],
+                         "category": "forráskötött", "relates_to": None, "hit_id": row["id"]}
+                    own.append(chain(repo, task.get("H"), f, fix_touched=fix_touched))
+            own += [chain(repo, task.get("H"), f, fix_touched=fix_touched) for f in entry.get("figure_findings", [])]
+            for f in sorted(own, key=lambda f: (f["file"], f.get("line") or 0, f["problem"], f.get("quote", ""))):
+                f = {**f, "id": f"R{len(findings) + 1}", "topic": unit["topic"]}
+                findings.append(f)
+                section["findings"].append(f["id"])
+            notes += value.get("owner_notes", []) + entry.get("figure_notes", [])
+        sections.append(section)
+    value = {"verdict": "changes" if findings else "ok", "findings": findings,
+             "owner_notes": notes, "topics": sections}
+    safefs.write_json(task.dir, "review.json", value)
+    return value
+
+
+def apply(task, work, ident):
+    """Replayed on each fresh main during atomic close; keys remain bound to H."""
+    written, owners = [], []
+    done = {r["topic"]: r["commit"] for r in task.get("nightly_state", {}).get("done_topics", [])}
+    for entry in task.get("topic_results", []):
+        if entry["receipt"]["status"] != "reviewed":
+            continue
+        unit, receipt = entry["unit"], entry["receipt"]
+        done[unit["topic"]] = task.get("H")
+        model, value = receipt["model"], receipt["review"]
+        current = [p for p in value["pages"] if safefs.is_file(work, p["file"])
+                   and page_key(work, p["file"]) == unit["keys"][p["file"]]]
+        if current:
+            verdicts.record(work, current, unit["keys"], model, ident.at)
+        for item in value["items"]:
+            original = next(i for i in entry["input"]["items"] if i["key"] == item["key"])
+            path, owner = apply_item(work, original, item)
+            if path:
+                written.append(path)
+            if owner:
+                owners.append(owner)
+        hits = entry["input"]["hits"]
+        if hits:
+            warnings.record(work, hits, [{**h, "id": h["hit_id"]} for h in value["hits"]])
+            written.append(warnings.PATH)
+        from . import night_figures
+        written += night_figures.apply(work, entry.get("figure_records", []), ident.at)
+    written += figure_waiting.apply(work,
+        [p for e in task.get("topic_results", []) for p in e.get("figure_pending", [])],
+        [s for e in task.get("topic_results", []) for s in e.get("figure_checked", [])])
+    complete = task.get("all_topics_done", False)
+    state = topics.validated({
+        "done_topics": [] if complete else [{"topic": t, "commit": done[t]} for t in sorted(done)],
+        "blocked_topics": sorted(task.get("blocked_topics", []), key=lambda r: r["topic"]),
+        "failed_topics": task.get("failed_topics", [])})
+    safefs.write_json(work, topics.STATE, state)
+    if not safefs.is_file(work, verdicts.PATH):
+        safefs.write_json(work, verdicts.PATH, [])
+    verdicts.invalidate(work)
+    touched = {p for u in task.get("units", []) for p in u["assigned_pages"]}
+    written += notices.refresh(work, sorted(touched))
+    written += [topics.STATE, verdicts.PATH]
+    return sorted(set(written)), owners
+
+
+def apply_item(work, original, answer):
+    key, verdict = answer["key"], answer["verdict"]
+    known = relations.inventory(work)["items"].get(key, {})
+    if known.get("status") != original["status"]:
+        return None, None  # Concurrent owner/writer closure wins; never resurrect it.
+    if verdict in ("accept", "keep"):
+        if known.get("response"):
+            return None, None
+        return relations.reply(work, key, verdict, answer["answer"]), None
+    rel, item_id = key.rsplit("#", 1)
+    text = safefs.read_text(work, rel)
+    page = frontmatter.split(text)
+    detail = relations.details(text, item_id)
+    if original["status"] == "fixed" and detail.get("recheck"):
+        return None, None
+    detail["recheck" if original["status"] == "fixed" else "nightly"] = {
+        "verdict": verdict, "answer": answer["answer"]}
+    items = dict(page.meta["items"])
+    owner = None
+    if verdict == "not-ok":
+        detail["chain"] = int(original.get("fix_commit", False))
+        items[item_id] = "owner" if detail["chain"] else "open"
+        if detail["chain"]:
+            owner = {"file": rel, "item_id": item_id, "reason": answer["answer"]}
+    records = {**page.meta.get("item_details", {}), item_id: detail}
+    safefs.write_text(work, rel, frontmatter.set_keys(text, {
+        "items": items, "item_details": records, "status": files.compute_status(items)}))
+    return rel, owner

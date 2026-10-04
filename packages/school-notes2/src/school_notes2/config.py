@@ -2,6 +2,7 @@
 
 import re
 import tomllib
+import warnings
 from importlib import resources
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -84,8 +85,6 @@ class Limits:
         if type(self.max_agents) is not int or self.max_agents < 1:
             raise ConfigError("[limits] max_agents must be a positive integer")
 
-    review_max_images: int = 30
-    review_max_diff_kb: int = 300
     image_daily_usd: float = 1.0
     image_monthly_usd: float = 10.0
     image_reservation_usd: float = 0.05
@@ -161,7 +160,12 @@ def _path(value: str) -> Path:
 
 
 def _sub(cls, table: dict | None):
-    table = table or {}
+    table = dict(table or {})
+    if cls is Limits:
+        for key in sorted({"review_max_images", "review_max_diff_kb"} & table.keys()):
+            warnings.warn(f"[limits] {key} is obsolete and ignored; remove it before the next release",
+                          FutureWarning, stacklevel=2)
+            del table[key]
     known = set(cls.__dataclass_fields__)
     unknown = set(table) - known
     if unknown:
@@ -197,7 +201,7 @@ def _role(name: str, t: dict, harnesses: dict) -> Role:
         raise ConfigError(f"[roles.{name}] unknown harness {t['harness']!r}")
     if t["effort"] not in ("low", "medium", "high"):
         raise ConfigError(f"[roles.{name}] effort must be at most high")
-    defaults = {"writer": 7200, "reader": Role.timeout_s}
+    defaults = {"writer": 7200, "reviewer": 5400, "reader": Role.timeout_s}
     timeout = t.get("timeout_s", defaults.get(name)) if name in defaults else t["timeout_s"]
     return Role(harness=t["harness"], model=t["model"], effort=t["effort"],
                 timeout_s=int(timeout), nested_sandbox=bool(t.get("nested_sandbox", False)),
