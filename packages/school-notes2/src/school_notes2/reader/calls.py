@@ -8,8 +8,6 @@ from ..state import safefs
 from ..state.errors import BadWork, Transient, WaitingQuota
 from . import contracts
 
-TIMEOUTS = {"reader-1": 1800, "reader-2": 600, "recheck": 1200}
-
 
 def run(repo, view, folder, stage, assigned, configured, *, log, invoke=None, allowed_paths=()):
     invoke = invoke or launch.run_headless
@@ -19,7 +17,7 @@ def run(repo, view, folder, stage, assigned, configured, *, log, invoke=None, al
     if saved is not None:
         return saved
     state = safefs.read_json(folder, "state.json", {"attempts": [], "status": "ready"})
-    role = replace(configured, role_name=stage, role=replace(configured.role, timeout_s=TIMEOUTS[stage]),
+    role = replace(configured, role_name=stage, role=configured.role.for_stage(stage),
                    mounts=launch.Mounts(work=view / "wiki", work_readonly=True,
                                        in_dir=folder / "in", out_dir=folder / "out"),
                    output_host=folder / "out/review.json", schema=stage,

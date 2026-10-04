@@ -79,7 +79,7 @@ def _dispatch(ctx, args) -> int:
     from .flows import chat, nightly, run, setup
     if args.command == "repair":
         from .flows import repair
-        return repair.repair(ctx, topic=args.topic, build_queue=args.queue, no_push=args.no_push)
+        return repair.repair(ctx, topic=args.topic, build_queue=args.queue, no_push=args.no_push, manual=True)
     if args.command == "run":
         return run.run(ctx, manual=args.manual)
     if args.command == "nightly":
@@ -101,7 +101,7 @@ def _dispatch(ctx, args) -> int:
 from .flows.operation import entry
 
 
-@entry("owner")
+@entry("owner", manual=True)
 def _owner_step(ctx, command: str) -> int:
     """`fetch`/`finish` from the host shell: the same functions as the session's MCP."""
     from .flows import chat, policy
@@ -151,7 +151,10 @@ def _status(cfg, args, context) -> int:
         if kind not in ("notes", "review", "publish", "writer", "reader", "figure-review", "figure", "reviewer") or not args.action:
             raise SystemExit("usage: status --clear <learner> notes|review|publish|writer|reader|figure-review|figure|reviewer "
                              "--continue|--discard")
-        print(clear.clear(context.make(cfg, learner), kind, args.action))
+        result = clear.clear(context.make(cfg, learner), kind, args.action)
+        if isinstance(result, int):
+            return result
+        print(result)
         return 0
     learners = [args.learner] if args.learner else list(cfg.students)
     data = [status.summary(context.make(cfg, name, console=False)) for name in learners]

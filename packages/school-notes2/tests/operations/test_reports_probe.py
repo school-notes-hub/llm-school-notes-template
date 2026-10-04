@@ -80,15 +80,16 @@ def test_completion_full_body_threshold_and_resume(world, monkeypatch):
     assert not notices  # exactly 600 is not longer than ten minutes
     monkeypatch.setattr(operational_report.time, "monotonic", lambda: 11)
     operational_report.ended(ctx, "run", 10, {task.run_id: True})
-    assert len(notices) == 1
-    assert read_json(task.dir / "report.json")["időtartam_s"] == 601
-    body = render(notices[0], "owner@example.test").get_content()
-    assert len(body) > 1000 and "keretállapot" in body and "owner_notes" in body
-    assert "⏳-jelzések" in body and "időtúllépések" in body
+    assert not notices  # an unfinished invocation never sends a summary
     task = phase.load(task.dir)
     task.set_phase("done")
     operational_report.ended(ctx, "run", 10, {task.run_id: True})
-    assert len(notices) == 2 and notices[0].kind != notices[1].kind
+    assert len(notices) == 1
+    assert read_json(task.dir / "report.json")["időtartam_s"] == 602
+    body = render(notices[0], "owner@example.test").get_content()
+    assert len(body) > 1000 and "keretállapot" in body and "owner_notes" in body
+    assert "⏳-jelzések" in body and "időtúllépések" in body
+    assert notices[0].kind == f"completion:{task.run_id}:done"
 
 
 def test_status_only_reads_operations_and_quota(world):
@@ -123,7 +124,9 @@ def test_claude_401_never_emits_token(monkeypatch):
     from school_notes2.llm import quota_probe
     from pathlib import Path
     monkeypatch.setattr(Path, "read_text", lambda *a, **k: '{"claudeAiOauth":{"accessToken":"private-test-token"}}')
+    monkeypatch.setattr(quota_probe.subprocess, "check_output", lambda *a, **kw: "2.1.7 (Claude Code)")
     def fail(request, timeout):
+        assert request.get_header("User-agent") == "claude-code/2.1.7"
         assert request.get_header("Anthropic-beta") == "oauth-2025-04-20"
         raise urllib.error.HTTPError(request.full_url, 401, "unauthorized", {}, None)
     monkeypatch.setattr(quota_probe.urllib.request, "build_opener", lambda *a: SimpleNamespace(open=fail))
@@ -212,3 +215,22 @@ def test_report_figure_outcomes_excludes_no_figure(world):
                                      for fid, verdict in (("accepted", "accept"), ("rejected", "reject"))})
     assert operational_report.details(ctx, task)["témák"][0]["ábrák"] == {
         "elfogadva": 1, "elutasítva": 1, "függő": 1}
+
+
+def test_claude_helper_401_returns_only_unknown(monkeypatch, capsys):
+    import runpy
+    import sys
+    import urllib.error
+    from pathlib import Path
+    from school_notes2.llm import quota_probe
+    monkeypatch.setattr(sys, "argv", ["quota_probe.py", "claude"])
+    monkeypatch.setattr(Path, "read_text", lambda *a, **kw: '{"claudeAiOauth":{"accessToken":"secret-test-value"}}')
+    monkeypatch.setattr(subprocess, "check_output", lambda *a, **kw: "2.1.7 (Claude Code)")
+    def fail(request, timeout):
+        assert request.get_header("User-agent") == "claude-code/2.1.7"
+        raise urllib.error.HTTPError(request.full_url, 401, "secret-test-value", {}, None)
+    monkeypatch.setattr(quota_probe.urllib.request, "build_opener", lambda *a: SimpleNamespace(open=fail))
+    runpy.run_path(quota_probe.__file__, run_name="__main__")
+    output = capsys.readouterr()
+    assert json.loads(output.out) == {"remaining": None, "reset": None}
+    assert "secret-test-value" not in output.out + output.err

@@ -62,6 +62,14 @@ def _metrics(task):
     return totals
 
 
+def terminal(task):
+    if task.data.get("needs_owner"):
+        return "needs_owner"
+    if task.data.get("closed"):
+        return "closed"
+    return "done" if task.phase == "done" else None
+
+
 def completed(ctx, task, report, duration):
     from . import writer
     notes = writer.merge(writer.results(task, required=False) if task.get("ranges") else [])["owner_notes"]
@@ -71,24 +79,22 @@ def completed(ctx, task, report, duration):
     report.update(details(ctx, task), időtartam_s=round(duration, 3), időpont=now_iso(), fázis=task.phase)
     report = redact(report)
     write_json(task.dir / "report.json", report)
-    if duration > 600:
-        from .operation import TIMING
-        timing = TIMING.get()
-        receipt = "done" if task.phase == "done" else f"{timing[0] if timing else duration:.6f}"
+    receipt = terminal(task)
+    if duration > 600 and receipt:
         pending.send(ctx, Notice(ctx.name, f"completion:{task.run_id}:{receipt}", task.run_id, "finish", "feldolgozás",
                                  json.dumps(report, ensure_ascii=False, indent=2), "A feldolgozás összesítése."))
     return report
 
 
-def ended(ctx, kind, started, before):
+def ended(ctx, kind, started, before, *, successful=True):
     """Persist active elapsed time, including interrupted/quota-limited invocations."""
     elapsed = time.monotonic() - started
     tasks = phase.all_tasks(ctx.task_root(), ctx.name)
     wanted = "review" if kind == "nightly" else "notes"
     candidates = [t for t in tasks if t.kind == wanted and (t.run_id not in before or before[t.run_id] and before[t.run_id] != t.data)]
     if not candidates:
-        if kind == "nightly":
-            ctx.mailer.send_once(Notice(ctx.name, "nightly-empty:" + now_iso(), "", "nightly", "éjszakai review",
+        if kind == "nightly" and successful and not any(t.kind == "review" and t.open for t in tasks):
+            ctx.mailer.send_once(Notice(ctx.name, "nightly-empty:" + now_iso()[:10], "", "nightly", "éjszakai review",
                                         f"{now_iso()}: nincs feldolgozott tartomány; időtartam: {elapsed:.1f} s.", "Nincs teendő."))
         return
     task = candidates[-1]
@@ -96,6 +102,8 @@ def ended(ctx, kind, started, before):
     timing = TIMING.get()
     baseline = timing[1].get(task.run_id, 0) if timing else task.get("active_seconds", 0)
     task.update(active_seconds=max(task.get("active_seconds", 0), baseline + elapsed))
+    if not terminal(task):
+        return
     if kind == "nightly":
         review = read_json(task.dir / "review.json", {})
         report = {"időpont": now_iso(), "időtartam_s": task.get("active_seconds"), "tartomány": [task.get("base"), task.get("T")],
@@ -104,7 +112,7 @@ def ended(ctx, kind, started, before):
                   "új tételek": len(review.get("findings", [])), "owner_notes": review.get("owner_notes", []),
                   "jelölő": task.get("T") if task.phase == "done" else "nem lépett: " + task.phase,
                   "keretállapot": read_json(ctx.cfg.state_dir / "quota.json", {}), "tokenek": _metrics(task)}
-        pending.send(ctx, Notice(ctx.name, f"nightly:{task.run_id}:{task.phase}:{task.data['updated']}", task.run_id,
+        pending.send(ctx, Notice(ctx.name, f"nightly:{task.run_id}:{terminal(task)}", task.run_id,
                                  "nightly", "éjszakai review", json.dumps(redact(report), ensure_ascii=False, indent=2), "Az éjszakai munka összesítése."))
     elif task.get("active_seconds", 0) > 600:
         report = read_json(task.dir / "report.json", {"mode": task.get("mode", "chat" if task.mode == "interactive" else "run")})

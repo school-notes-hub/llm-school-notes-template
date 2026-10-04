@@ -22,7 +22,10 @@ def cfg(tmp_path):
 def test_round_three_students_nightly_first_table_order(cfg, monkeypatch):
     calls = []
     monkeypatch.setattr(scheduler, "now", lambda: datetime(2026, 10, 4, 8, tzinfo=TZ))
-    monkeypatch.setattr(scheduler.nightly, "nightly", lambda c: calls.append(("night", c.name)))
+    def night(ctx):
+        calls.append(("night", ctx.name))
+        phase.create(ctx.task_root(), ctx.name, "review", "cron", "done")
+    monkeypatch.setattr(scheduler.nightly, "nightly", night)
     monkeypatch.setattr(scheduler.run, "run", lambda c: calls.append(("run", c.name)))
     scheduler.round(cfg)
     assert calls == [(k, n) for k in ("night", "run") for n in cfg.students]
@@ -62,6 +65,8 @@ def test_crossing_hour_not_elapsed_sixty_minutes(cfg, monkeypatch):
 
 
 def test_crash_resumes_review_before_other_steps(cfg, monkeypatch):
+    from school_notes2.notify import Mailer
+    monkeypatch.setattr(Mailer, "_deliver", lambda *a: True)
     calls = []
     monkeypatch.setattr(scheduler, "now", lambda: datetime(2026, 10, 4, 8, tzinfo=TZ))
     def night(ctx):
@@ -73,9 +78,8 @@ def test_crash_resumes_review_before_other_steps(cfg, monkeypatch):
         task.set_phase("done")
     monkeypatch.setattr(scheduler.nightly, "nightly", night)
     monkeypatch.setattr(scheduler.run, "run", lambda c: None)
-    for _ in cfg.students:
-        with pytest.raises(RuntimeError):
-            scheduler.round(cfg)
+    scheduler.round(cfg)
+    assert not read_json(cfg.state_dir / "round.json")["nightly_started"]
     scheduler.round(cfg)
     assert calls == list(cfg.students)
     assert read_json(cfg.state_dir / "round.json")["status"] == "done"
@@ -119,7 +123,10 @@ def test_skipped_learner_stays_due_and_owner_stop_is_not_restarted(cfg, monkeypa
     clock = datetime(2026, 10, 4, 8, tzinfo=TZ)
     monkeypatch.setattr(scheduler, "now", lambda: clock)
     calls = []
-    monkeypatch.setattr(scheduler.nightly, "nightly", lambda c: calls.append(c.name))
+    def night(ctx):
+        calls.append(ctx.name)
+        phase.create(ctx.task_root(), ctx.name, "review", "cron", "done")
+    monkeypatch.setattr(scheduler.nightly, "nightly", night)
     monkeypatch.setattr(scheduler.run, "run", lambda c: None)
     monkeypatch.setattr(scheduler.run, "_lock_alert", lambda *a: None)
     lock = ctx.lock()

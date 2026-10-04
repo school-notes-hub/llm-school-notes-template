@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ..log import now_iso
 from ..notify import Notice, pending
+from ..state import phase
 from ..state.errors import WaitingQuota
 from ..state.files import read_json, write_json
 from . import argv
@@ -50,7 +51,7 @@ def check(ctx, run, manual, cache):
         previous = state.get(family, {})
         state[family] = {**value, "last_known": value if value["remaining"] is not None else previous.get("last_known")}
         write_json(path, state)
-        ctx.log.event("quota.read", "unknown" if value["remaining"] is None else "ok", harness=family, **value)
+        ctx.log.bind(student="VM", run_id="").event("quota.read", "unknown" if value["remaining"] is None else "ok", harness=family, **value)
         if value["remaining"] is None:
             ctx.mailer.send(Notice("VM", f"quota_unknown:{family}", run.run_id, run.role_name,
                                    "keret", f"{ctx.name}: a {family} heti kerete nem kérdezhető le ({value['at']}).",
@@ -68,11 +69,18 @@ def wait(ctx, run, cache):
     window = value.get("reset") or "unknown-" + now_iso()[:10]
     remaining = value.get("remaining")
     shown = "ismeretlen" if remaining is None else f"{remaining}%"
+    kind = "review" if run.role_name == "reviewer" else "notes"
+    task = phase.open_task(ctx.task_root(), ctx.name, kind)
+    interactive = task is not None and task.mode == "interactive"
+    work = "éjszakai review" if kind == "review" else "jegyzetírás"
+    continuation = (f"A folytatáshoz indítsd újra: school-notes chat {ctx.name}."
+                    if interactive else "Visszatöltődés után onnan folytatódik.")
+    command = (f"school-notes chat {ctx.name}" if interactive else
+               f"school-notes {'nightly' if kind == 'review' else 'run'} {ctx.name} --manual")
     pending.send(ctx, Notice("VM", f"quota:{family}:{window}", run.run_id, run.role_name,
                                 "keret", f"{ctx.name}: {family}, maradék: {shown}. "
-                                "A munka vár; visszatöltődés után onnan folytatódik.",
-                                f"Kézi indítás: school-notes {'nightly' if run.role_name == 'reviewer' else 'run'} {ctx.name} --manual"))
-    raise WaitingQuota(f"{family}: visszatöltődés után onnan folytatódik")
+                                f"A {work} áll. {continuation}", f"Kézi indítás: {command}"))
+    raise WaitingQuota(f"{family}: a {work} vár. {continuation}")
 
 
 def exhausted(transcript):

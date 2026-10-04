@@ -8,7 +8,7 @@ import hashlib
 import os
 import subprocess
 import time
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
@@ -163,34 +163,8 @@ def run_headless(run: RoleRun, *, log: Log, snapshot: Callable[[], object],
 
     Raises the 8.1 error class on failure; returns the Outcome on success.
     """
-    from ..flows.operation import CURRENT
-    from . import quota, timeouts
-    current = CURRENT.get()
-    if current:
-        ctx, manual, cache = current
-        configured = ctx.cfg.roles.get(timeouts.role_name(run.role_name))
-        if configured and run.role_name not in ("writer", "fix", "reviewer"):
-            if run.role_name == "reader-2":
-                configured = replace(configured, timeout_s=configured.list_timeout_s)
-            elif run.role_name == "recheck":
-                configured = replace(configured, timeout_s=configured.recheck_timeout_s)
-            run = replace(run, role=configured, harness=ctx.cfg.harnesses[configured.harness])
-        if timeouts.blocked(ctx, run):
-            raise TimedOut("A szerep tulajdonosi döntésre vár.", details={"suspended": True})
-        quota.check(ctx, run, manual, cache)
-    try:
-        outcome = _admitted(run, log=log, snapshot=snapshot, podman=podman)
-    except WaitingQuota:
-        if current:
-            quota.wait(ctx, run, cache)
-        raise
-    except TimedOut as exc:
-        if current:
-            exc.details["count"] = timeouts.record(ctx, run)
-        raise
-    if current:
-        timeouts.success(ctx, run)
-    return outcome
+    from . import guard
+    return guard.headless(run, lambda admitted: _admitted(admitted, log=log, snapshot=snapshot, podman=podman))
 
 
 def _admitted(run, *, log, snapshot, podman):
@@ -259,18 +233,8 @@ def _run_fed(argv: list[str], stdin: bytes | None, out, name: str, timeout: floa
 
 
 def run_interactive(**kwargs):
-    from ..flows.operation import CURRENT
-    from . import quota
-    current = CURRENT.get()
-    if current:
-        ctx, manual, cache = current
-        run = RoleRun(ctx.name, kwargs["run_id"], "writer", kwargs["role"], kwargs["harness"],
-                      kwargs["image"], kwargs["mounts"], ctx.notes_path / ".school-notes/result.json",
-                      "result", ctx.cfg.root / "tasks" / ctx.name / kwargs["run_id"], ctx.student.grade,
-                      allowed_domains=kwargs.get("allowed_domains", DEFAULT_PROVIDER_DOMAINS),
-                      max_agents=kwargs.get("max_agents", ctx.cfg.limits.max_agents))
-        quota.check(ctx, run, manual, cache)
-    return _interactive(**kwargs)
+    from . import guard
+    return guard.interactive(kwargs, _interactive)
 
 
 @guarded("writer")

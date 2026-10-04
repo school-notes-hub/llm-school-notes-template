@@ -158,3 +158,27 @@ def test_new_night_does_not_inherit_legacy_d85_range_halving(world, monkeypatch)
     monkeypatch.setattr(nightly.review, "prepare", lambda *a, **kw: options.append(kw))
     nightly._prepare(ctx, [task])
     assert "previous" not in options[0]
+
+
+@pytest.mark.parametrize("configured", [False, True])
+@pytest.mark.parametrize("stage,field", [("reader-1", "timeout_s"), ("reader-2", "list_timeout_s"),
+                                         ("recheck", "recheck_timeout_s")])
+def test_reader_call_timeout_comes_only_from_role(world, monkeypatch, configured, stage, field):
+    from school_notes2.config import Role
+    from school_notes2.flows import inspection
+    from school_notes2.reader import calls
+    from types import SimpleNamespace
+    ctx, task, call, _ = world
+    roles = {"reviewer": replace(call.role, timeout_s=5400)}
+    if configured:
+        roles["reader"] = replace(call.role, timeout_s=1901, list_timeout_s=701, recheck_timeout_s=1301)
+    ctx.cfg = replace(ctx.cfg, roles=roles, harnesses={"codex": call.harness})
+    expected = getattr(roles["reader"], field) if configured else getattr(Role, field)
+    seen = []
+    monkeypatch.setattr(calls.contracts, "check", lambda *a, **kw: {})
+    def invoke(run, **kw):
+        seen.append(run.role.timeout_s)
+        return SimpleNamespace(output={})
+    calls.run(ctx.notes_path, ctx.notes_path, task.dir / stage, stage, {}, inspection.role(ctx, task),
+              log=ctx.log, invoke=invoke)
+    assert seen == [expected]

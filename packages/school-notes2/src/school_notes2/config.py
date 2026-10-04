@@ -3,7 +3,7 @@
 import re
 import tomllib
 from importlib import resources
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 DEFAULT_PATH = Path("~/.config/school-notes/config.toml").expanduser()
@@ -42,10 +42,14 @@ class Role:
     harness: str
     model: str
     effort: str
-    timeout_s: int
+    timeout_s: int = 1800
     nested_sandbox: bool = False
     list_timeout_s: int = 600
     recheck_timeout_s: int = 1200
+
+    def for_stage(self, stage: str) -> "Role":
+        timeout = {"reader-2": self.list_timeout_s, "recheck": self.recheck_timeout_s}.get(stage, self.timeout_s)
+        return replace(self, timeout_s=timeout)
 
 
 @dataclass(frozen=True)
@@ -130,7 +134,11 @@ class Config:
         return self.students[name]
 
     def role(self, name: str) -> tuple[Role, Harness]:
-        role = self.roles[name]
+        if name == "reader" and name not in self.roles:
+            role = replace(self.roles["reviewer"], timeout_s=Role.timeout_s,
+                           list_timeout_s=Role.list_timeout_s, recheck_timeout_s=Role.recheck_timeout_s)
+        else:
+            role = self.roles[name]
         return role, self.harnesses[role.harness]
 
     @property
@@ -189,10 +197,12 @@ def _role(name: str, t: dict, harnesses: dict) -> Role:
         raise ConfigError(f"[roles.{name}] unknown harness {t['harness']!r}")
     if t["effort"] not in ("low", "medium", "high"):
         raise ConfigError(f"[roles.{name}] effort must be at most high")
+    defaults = {"writer": 7200, "reader": Role.timeout_s}
+    timeout = t.get("timeout_s", defaults.get(name)) if name in defaults else t["timeout_s"]
     return Role(harness=t["harness"], model=t["model"], effort=t["effort"],
-                timeout_s=int(t.get("timeout_s", 7200) if name == "writer" else t["timeout_s"]), nested_sandbox=bool(t.get("nested_sandbox", False)),
-                list_timeout_s=int(t.get("list_timeout_s", 600)),
-                recheck_timeout_s=int(t.get("recheck_timeout_s", 1200)))
+                timeout_s=int(timeout), nested_sandbox=bool(t.get("nested_sandbox", False)),
+                list_timeout_s=int(t.get("list_timeout_s", Role.list_timeout_s)),
+                recheck_timeout_s=int(t.get("recheck_timeout_s", Role.recheck_timeout_s)))
 
 
 def default_harnesses() -> dict:

@@ -38,14 +38,14 @@ class Mailer:
         sent = read_json(self.state, {}) or {}
         key = f"{notice.student}:{notice.kind}"
         if sent.get(key) == today():
-            self.log.event("notify.skip", target=key)
+            self.log.bind(student=notice.student).event("notify.skip", target=key)
             return False
         if not self._deliver(render(notice, self.to)):
             return False
         sent = {k: v for k, v in sent.items() if v == today()}
         sent[key] = today()
         write_json(self.state, sent)
-        self.log.event("notify.mail", target=key)
+        self.log.bind(student=notice.student).event("notify.mail", target=key)
         return True
 
     def send_once(self, notice: Notice) -> bool | None:
@@ -57,7 +57,7 @@ class Mailer:
             return False
         if self._deliver(render(notice, self.to)):
             write_json(path, sorted(done | {key}))
-            self.log.event("notify.mail_once", target=key)
+            self.log.bind(student=notice.student).event("notify.mail_once", target=key)
             return True
         return None
 

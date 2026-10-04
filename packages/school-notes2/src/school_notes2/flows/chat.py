@@ -21,7 +21,7 @@ from .operation import entry
 from .session import mcp
 
 
-@entry("chat")
+@entry("chat", manual=True)
 def chat(ctx: Ctx, harness_name: str | None, ask=input, say=print) -> int:
     lock = ctx.lock()
     lock.acquire("chat", on_wait=lambda h: say(f"A zárat {h.get('kind')} tartja "

@@ -414,6 +414,10 @@ the next date. A round crossing an hourly boundary starts one immediate successo
 each successor makes the same decision, without collecting missed-hour jobs.
 The single cron job replaces the previous per-learner jobs. Direct run/nightly,
 repair, chat, host fetch/finish and owner clear share the same VM admission.
+Manual commands, chat, host fetch/finish and clear return 75 with a Hungarian
+stderr message if the VM lock is busy; cron round returns 0 without waiting.
+A failing learner step is logged and mailed daily; later learners still run.
+Finishing an older night does not consume today’s new review.
 The lock is inherited by detached MCP jobs and is never forcibly broken. A busy
 lock older than twelve hours triggers the existing daily notification path.
 
@@ -421,10 +425,13 @@ Weekly quota probes use the role's home in a short container without a model cal
 Codex app-server JSON-RPC and Claude OAuth usage. Only the weekly window counts.
 The cache is shared by harness family for one round. Unknown usage (including 401)
 permits the call, logs the failure and mails daily; known remaining usage at or
-below 2% pauses in `waiting_quota`. `run/nightly --manual` bypass only this pre-call
-gate. Recognized harness quota error events still pause manual runs. No credentials
-or provider error bodies leave the helper. `status` reads persisted observations
-and the last known value without probing.
+below 2% pauses in `waiting_quota`. `run/nightly --manual`, chat, host fetch/finish
+and CLI repair bypass only this pre-call gate. Recognized harness quota error
+events still pause manual runs. Interactive waits name `school-notes chat` as
+the continuation command and do not promise automatic resumption. No credentials
+or provider error bodies leave the helper. Claude sends `claude-code/<version>`
+using the container’s installed CLI version; it never refreshes tokens. `status`
+reads persisted observations and the last known value without probing.
 
 T-125 counters are separate from bad-work strikes, persist per learner/role, and
 reset on a successful role call. Reader passes/recheck share the reader counter;
@@ -451,6 +458,7 @@ count). Work over ten minutes gets a private summary through the durable notice
 queue, including available per-topic review/figure outcomes, pending indicators,
 timeouts, quota observations, owner notes and transcript metrics. Nights report
 even empty ranges. The email renderer preserves the full summary instead of the
-previous 500-character truncation. A resumed task reports its eventual completion
-separately from an earlier interrupted invocation. The VM verification/deployment,
+previous 500-character truncation. Summaries are sent once per terminal state
+(done, owner intervention or closure). Quota waits and retry invocations only
+accumulate elapsed time; they send no summary. The VM verification/deployment,
 T-144 owner gate and cron installation are outside this repository change.

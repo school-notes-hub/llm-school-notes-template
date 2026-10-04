@@ -1,5 +1,6 @@
 """`finish` (plan 5.4): content steps 1–9, then the Git order G0–G9 with the site hooks."""
 
+import hashlib
 import re
 from pathlib import Path
 
@@ -93,12 +94,33 @@ def _snapshot(ctx: Ctx, task: Task, authored=()) -> dict:
     if task.mode != "interactive":
         return {}
     snapshot = steps.llm_snapshot(ctx, task)
+    snapshot.update(_candidate_snapshot(ctx.notes_path))
     # Accepted candidate bytes become tool-owned, but were authored before finish.
     # Keep comparing those bytes even after the insertion records their ownership.
-    for rel in sorted(set(authored) & set(task.get("tool_writes", {}))):
+    for rel in sorted((set(authored) & set(task.get("tool_writes", {}))) - set(snapshot)):
         snapshot[rel] = steps._llm_hash(rel, safefs.read_bytes(ctx.notes_path, rel)) \
             if safefs.is_file(ctx.notes_path, rel) else None
-    return snapshot
+    # P2 may replace the candidate metadata with a failure. Keep its original asset
+    # in this invocation's comparison even then, including assets unchanged at base.
+    for rel in sorted(p for p in set(snapshot) | set(authored) if p.startswith("wiki/assets/")):
+        snapshot[rel] = hashlib.sha256(safefs.read_bytes(ctx.notes_path, rel)).hexdigest() \
+            if safefs.is_file(ctx.notes_path, rel) else None
+    return dict(sorted(snapshot.items()))
+
+
+def _candidate_snapshot(repo):
+    out = {}
+    for path in safefs.walk_files(repo, ".school-notes/figures"):
+        if not path.endswith("/figure.json"):
+            continue
+        try:
+            candidate = safefs.read_json(repo, path)
+            asset = candidate.get("asset") if isinstance(candidate, dict) else None
+            if isinstance(asset, str) and asset.startswith("wiki/assets/"):
+                out[asset] = hashlib.sha256(safefs.read_bytes(repo, asset)).hexdigest() if safefs.is_file(repo, asset) else None
+        except (ValueError, OSError):
+            continue  # Candidate contract errors belong to check/P2.
+    return out
 
 
 def renderer(ctx: Ctx) -> site_build.Renderer:

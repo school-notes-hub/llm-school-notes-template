@@ -308,7 +308,7 @@ def llm_snapshot(ctx: Ctx, task: Task) -> dict:
 def _llm_hash(rel: str, data: bytes) -> str:
     data = data.replace(b"\r\n", b"\n").rstrip(b"\n")   # the check's own auto-fixes
     if rel.endswith(".md"):
-        data = _llm_part(data.decode("utf-8", "replace")).encode("utf-8")
+        data = _llm_part(data.decode("utf-8", "replace")).encode("utf-8").rstrip(b"\n")
     return hashlib.sha256(data).hexdigest()
 
 

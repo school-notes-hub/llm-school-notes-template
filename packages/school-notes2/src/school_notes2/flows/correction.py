@@ -125,10 +125,11 @@ def run(ctx, task, edits=None):
 
 def apply(ctx, task, root, saved, edits=None):
     if saved["status"] == "rollback":
-        before = steps.llm_snapshot(ctx, task) if edits is not None else None
+        from .finish import _snapshot
+        before = _snapshot(ctx, task) if edits is not None else None
         restore(ctx.notes_path, root)
         if edits is not None:
-            edits["restores"].append((before, steps.llm_snapshot(ctx, task)))
+            edits["restores"].append((before, _snapshot(ctx, task)))
         task.update(correction_result={"status": "done"}, correction_rolled_back=True,
                     correction_rollback_reason=saved["reason"], correction_rollback_items=saved.get("items", []),
                     correction_rejected_patch=saved.get("rejected_patch"))

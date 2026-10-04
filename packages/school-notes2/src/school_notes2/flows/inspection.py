@@ -17,7 +17,7 @@ def folder(task):
 
 
 def role(ctx, task, name="reader"):
-    configured, harness = ctx.cfg.role(name if name in getattr(ctx.cfg, "roles", {}) else "reviewer")
+    configured, harness = ctx.cfg.role(name if name == "reader" or name in getattr(ctx.cfg, "roles", {}) else "reviewer")
     return launch.RoleRun(ctx.name, task.run_id, "reader-1", configured, harness,
                           ctx.image_tag(), launch.Mounts(), task.dir / "unused.json",
                           "reader-1", folder(task), grade=ctx.student.grade,

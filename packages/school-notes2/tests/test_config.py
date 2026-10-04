@@ -90,3 +90,12 @@ def test_operational_cli_and_reader_stage_timeouts():
     reader, _ = cfg.role("reader")
     assert (reader.timeout_s, reader.list_timeout_s, reader.recheck_timeout_s) == (1800, 700, 1300)
     assert cfg.nightly_after == "04:20"
+
+
+def test_reader_defaults_are_role_defaults_without_reviewer_timeout_leakage():
+    data = {**BASE, "roles": {**BASE["roles"], "reader": {
+        k: v for k, v in BASE["roles"]["reviewer"].items() if k != "timeout_s"}}}
+    for cfg in (config.parse(BASE), config.parse(data)):
+        reader, _ = cfg.role("reader")
+        assert (reader.timeout_s, reader.list_timeout_s, reader.recheck_timeout_s) == (
+            config.Role.timeout_s, config.Role.list_timeout_s, config.Role.recheck_timeout_s)

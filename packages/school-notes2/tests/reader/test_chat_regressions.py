@@ -279,3 +279,53 @@ def test_check_rollback_details_survive_receipt_restart(session, monkeypatch, co
     saved = safefs.read_json(inspection.folder(task) / "correction", "receipt.json")
     assert saved["items"] == items[:10] and saved["rejected_patch"] == answer["rejected_patch"]
     assert safefs.read_json(ctx.notes_path, ".school-notes/check.json") != items
+
+
+@pytest.mark.parametrize("edit", [False, True])
+def test_base_candidate_is_guarded_after_insertion_and_restart(guarded_session, monkeypatch, edit):
+    from school_notes2.flows import review_phases
+    ctx, task, page = guarded_session
+    brief, candidate = figure(ctx, task, page)
+    wt = ctx.worktree("notes")
+    wt.run("add", page, candidate["asset"])
+    wt.run("commit", "-m", "existing candidate")
+    task.update(base=wt.out("rev-parse", "HEAD").strip())
+    assert candidate["asset"] in finish._snapshot(ctx, task)
+    install_reader(monkeypatch, page)
+    monkeypatch.setattr(inspection, "figures", lambda *a: acceptance(ctx, brief, candidate))
+    original = review_phases.finalize
+    def finalize(*args):
+        original(*args)
+        if edit:
+            # Include a byte-only edit that the old newline-normalized hash missed.
+            safefs.write_bytes(ctx.notes_path, candidate["asset"],
+                               safefs.read_bytes(ctx.notes_path, candidate["asset"]) + b"\n")
+    monkeypatch.setattr(review_phases, "finalize", finalize)
+    assert chat.session_finish(ctx)["state"] == ("edited" if edit else "done")
+    # The candidate remains covered even after tool ownership was saved and reloaded.
+    fresh = phase.load(task.dir)
+    before = finish._snapshot(ctx, fresh)
+    safefs.write_bytes(ctx.notes_path, candidate["asset"], b"late edit")
+    assert finish._snapshot(ctx, fresh, before) != before
+
+
+def test_base_candidate_failure_does_not_look_like_an_edit(guarded_session, monkeypatch):
+    ctx, task, page = guarded_session
+    brief, candidate = figure(ctx, task, page)
+    wt = ctx.worktree("notes")
+    wt.run("add", page, candidate["asset"])
+    wt.run("commit", "-m", "existing candidate")
+    task.update(base=wt.out("rev-parse", "HEAD").strip())
+    install_reader(monkeypatch, page)
+    def failed(ctx, task, brief):
+        value = {"state": "failed", "reason": "Renderhiba"}
+        safefs.write_json(ctx.notes_path, ".school-notes/figures/f/figure.json", value)
+        return value
+    monkeypatch.setattr(inspection, "candidate_state", failed)
+    def commit(task, wt, hooks, timeouts, start):
+        assert hooks.snapshot() == start
+        task.set_phase("done")
+        return "done"
+    monkeypatch.setattr(finish.git_finish, "run", commit)
+    assert chat.session_finish(ctx)["state"] == "done"
+    assert "generated figure-f" not in safefs.read_text(ctx.notes_path, page)
