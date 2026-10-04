@@ -417,7 +417,8 @@ repair, chat, host fetch/finish and owner clear share the same VM admission.
 Manual commands, chat, host fetch/finish and clear return 75 with a Hungarian
 stderr message if the VM lock is busy; cron round returns 0 without waiting.
 A failing learner step is logged and mailed daily; later learners still run.
-Finishing an older night does not consume today’s new review.
+An empty successful night also consumes today's review slot. Finishing an older
+night does not consume today’s new review.
 The lock is inherited by detached MCP jobs and is never forcibly broken. A busy
 lock older than twelve hours triggers the existing daily notification path.
 
@@ -430,7 +431,8 @@ and CLI repair bypass only this pre-call gate. Recognized harness quota error
 events still pause manual runs. Interactive waits name `school-notes chat` as
 the continuation command and do not promise automatic resumption. No credentials
 or provider error bodies leave the helper. Claude sends `claude-code/<version>`
-using the container’s installed CLI version; it never refreshes tokens. `status`
+using the image's build-time `CLAUDE_CODE_VERSION` (or `unknown` when absent),
+without invoking the CLI; it never refreshes tokens. `status`
 reads persisted observations and the last known value without probing.
 
 T-125 counters are separate from bad-work strikes, persist per learner/role, and

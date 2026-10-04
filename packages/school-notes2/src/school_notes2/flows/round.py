@@ -71,15 +71,14 @@ def _step(ctx, kind, action, started, state, path, cache):
         ctx.log.event("round.skip", "learner_locked", target=ctx.name)
         run._lock_alert(ctx, ctx.lock().holder())
         return
-    previous = {t.run_id for t in phase.all_tasks(ctx.task_root(), ctx.name)
-                if t.kind == "review"} if kind == "nightly" else set()
+    previous = phase.open_task(ctx.task_root(), ctx.name, "review") if kind == "nightly" else None
+    day = started.date().isoformat()
+    resumed_older = previous is not None and previous.data["created"][:10] < day
     state.update(step=kind, learner=ctx.name)
     write_json(path, state)
     with operation.scope(ctx, cache=cache):
         result = action(ctx)
-    if kind == "nightly" and result in (None, 0):
-        current = {t.run_id for t in phase.all_tasks(ctx.task_root(), ctx.name) if t.kind == "review"}
-        # Only a new run consumes today's review; a continuation keeps its date.
-        if current - previous:
-            nights[ctx.name] = started.date().isoformat()
-            write_json(path, state)
+    if kind == "nightly" and result in (None, 0) and not resumed_older:
+        # An empty night also consumes today; only an older continuation is exempt.
+        nights[ctx.name] = day
+        write_json(path, state)

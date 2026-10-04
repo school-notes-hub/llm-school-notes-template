@@ -72,15 +72,17 @@ def wait(ctx, run, cache):
     kind = "review" if run.role_name == "reviewer" else "notes"
     task = phase.open_task(ctx.task_root(), ctx.name, kind)
     interactive = task is not None and task.mode == "interactive"
-    work = "éjszakai review" if kind == "review" else "jegyzetírás"
+    work = "az éjszakai review" if kind == "review" else "a jegyzetírás"
+    if run.role_name in ("reader", "reader-1", "reader-2", "recheck", "figure-review"):
+        work = "a jegyzet lektorálása"
     continuation = (f"A folytatáshoz indítsd újra: school-notes chat {ctx.name}."
                     if interactive else "Visszatöltődés után onnan folytatódik.")
     command = (f"school-notes chat {ctx.name}" if interactive else
                f"school-notes {'nightly' if kind == 'review' else 'run'} {ctx.name} --manual")
     pending.send(ctx, Notice("VM", f"quota:{family}:{window}", run.run_id, run.role_name,
                                 "keret", f"{ctx.name}: {family}, maradék: {shown}. "
-                                f"A {work} áll. {continuation}", f"Kézi indítás: {command}"))
-    raise WaitingQuota(f"{family}: a {work} vár. {continuation}")
+                                f"{work.capitalize()} áll. {continuation}", f"Kézi indítás: {command}"))
+    raise WaitingQuota(f"{family}: {work} vár. {continuation}")
 
 
 def exhausted(transcript):

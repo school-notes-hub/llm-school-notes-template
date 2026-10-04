@@ -253,9 +253,19 @@ def test_vm_quota_and_lock_notice_logs_have_vm_identity(world, monkeypatch):
     assert all(e["student"] == "VM" for e in events)
 
 
-def test_empty_night_does_not_claim_a_new_review_run(cfg, monkeypatch):
-    monkeypatch.setattr(scheduler, "now", lambda: datetime(2026, 10, 4, 8, tzinfo=TZ))
-    monkeypatch.setattr(scheduler.nightly, "nightly", lambda c: 0)
+@pytest.mark.parametrize("result", [None, 0])
+def test_empty_night_claims_today_and_four_oclock_skips_it(cfg, monkeypatch, result):
+    clock = datetime(2026, 10, 4, 3, 15, tzinfo=TZ)
+    calls = []
+    monkeypatch.setattr(scheduler, "now", lambda: clock)
+    def night(ctx):
+        calls.append(ctx.name)
+        return result
+    monkeypatch.setattr(scheduler.nightly, "nightly", night)
     monkeypatch.setattr(scheduler.run, "run", lambda c: 0)
     scheduler.round(cfg)
-    assert read_json(cfg.state_dir / "round.json")["nightly_started"] == {}
+    assert read_json(cfg.state_dir / "round.json")["nightly_started"] == {
+        name: "2026-10-04" for name in cfg.students}
+    clock = clock.replace(hour=4, minute=0)
+    scheduler.round(cfg)
+    assert calls == list(cfg.students)

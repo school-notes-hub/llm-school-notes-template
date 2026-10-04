@@ -124,7 +124,7 @@ def test_claude_401_never_emits_token(monkeypatch):
     from school_notes2.llm import quota_probe
     from pathlib import Path
     monkeypatch.setattr(Path, "read_text", lambda *a, **k: '{"claudeAiOauth":{"accessToken":"private-test-token"}}')
-    monkeypatch.setattr(quota_probe.subprocess, "check_output", lambda *a, **kw: "2.1.7 (Claude Code)")
+    monkeypatch.setenv("CLAUDE_CODE_VERSION", "2.1.7")
     def fail(request, timeout):
         assert request.get_header("User-agent") == "claude-code/2.1.7"
         assert request.get_header("Anthropic-beta") == "oauth-2025-04-20"
@@ -225,7 +225,7 @@ def test_claude_helper_401_returns_only_unknown(monkeypatch, capsys):
     from school_notes2.llm import quota_probe
     monkeypatch.setattr(sys, "argv", ["quota_probe.py", "claude"])
     monkeypatch.setattr(Path, "read_text", lambda *a, **kw: '{"claudeAiOauth":{"accessToken":"secret-test-value"}}')
-    monkeypatch.setattr(subprocess, "check_output", lambda *a, **kw: "2.1.7 (Claude Code)")
+    monkeypatch.setenv("CLAUDE_CODE_VERSION", "2.1.7")
     def fail(request, timeout):
         assert request.get_header("User-agent") == "claude-code/2.1.7"
         raise urllib.error.HTTPError(request.full_url, 401, "secret-test-value", {}, None)

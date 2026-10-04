@@ -59,6 +59,7 @@ RUN chmod 0755 /usr/local/sbin/sn-entrypoint /usr/local/sbin/sn-init-firewall \
 
 ENV SN_AGENT_UID=${AGENT_UID} \
     SN_AGENT_GID=${AGENT_GID} \
+    CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION} \
     DISABLE_AUTOUPDATER=1 \
     DISABLE_TELEMETRY=1 \
     DISABLE_ERROR_REPORTING=1 \

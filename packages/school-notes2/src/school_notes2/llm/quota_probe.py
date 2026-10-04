@@ -18,8 +18,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def claude():
     data = json.loads((Path.home() / ".claude/.credentials.json").read_text())
     token = data["claudeAiOauth"]["accessToken"]
-    version = subprocess.check_output(["claude", "--version"], text=True, timeout=5,
-                                      stderr=subprocess.DEVNULL).split()[0]
+    version = os.environ.get("CLAUDE_CODE_VERSION") or "unknown"
     request = urllib.request.Request("https://api.anthropic.com/api/oauth/usage", headers={
         "Authorization": "Bearer " + token, "anthropic-beta": "oauth-2025-04-20",
         "User-Agent": "claude-code/" + version})

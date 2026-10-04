@@ -115,6 +115,15 @@ def test_containerfile_pins_base_and_versions():
 
 def test_preflight_env_allowlist_matches_launcher():
     text = (DIR / "sn-preflight").read_text()
-    for key in ("SN_RUN_ID", "SN_ALLOWED_DOMAINS", "SN_MODEL_PROBE", "SN_NO_NETWORK"):
+    for key in ("SN_RUN_ID", "SN_ALLOWED_DOMAINS", "SN_MODEL_PROBE", "SN_NO_NETWORK", "CLAUDE_CODE_VERSION"):
         assert f" {key} " in text
     assert "SSH_AUTH_SOCK" in text and "example.com" in text
+
+
+def test_build_time_claude_version_survives_clean_environment():
+    text = (DIR / "Containerfile").read_text().split("ENV SN_AGENT_UID=", 1)[1]
+    assert "CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION}" in text
+    script = (DIR / "entrypoint.sh").read_text().split("keep=(", 1)[1].split("\ncd /work", 1)[0]
+    proc = subprocess.run(["bash", "-c", 'keep=(' + script + '\nenv -i "${keep[@]}" /usr/bin/env'],
+                          env={"CLAUDE_CODE_VERSION": "2.1.7"}, capture_output=True, text=True, check=True)
+    assert "CLAUDE_CODE_VERSION=2.1.7" in proc.stdout.splitlines()
