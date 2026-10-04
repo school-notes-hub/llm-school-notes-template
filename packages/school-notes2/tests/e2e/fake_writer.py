@@ -13,7 +13,8 @@ note = "wiki/proba/2026-10-02-teszt-jegyzet.md"
 (work / note).write_text(
     "---\ntitle: Teszt óra (órai jegyzet)\ndescription: Füzetjegyzet a teszt óráról.\n"
     "tags: [proba]\nlessons:\n  - {date: '2026-10-02', title: Teszt óra, topics: [elso.md]}\n"
-    "---\n\n# Teszt óra\n\nA füzet két oldala.\n" + ("[rossz](nincs-ilyen.md)\n" if mode == "badlink" else ""),
+    "---\n\n# Mit tanultunk ezen az órán\n\n"
+    "* [Első](elso.md#elso)\n* [Második](elso.md#masodik)\n* [Példa](elso.md#pelda)\n" + ("[rossz](nincs-ilyen.md)\n" if mode == "badlink" else ""),
     encoding="utf-8")
 log = work / "wiki/log.md"
 log.write_text(log.read_text(encoding="utf-8") + "\n## 2026-10-03\n\n* **Update**: Teszt óra feldolgozva.\n",

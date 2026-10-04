@@ -11,9 +11,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+import yaml
+
 from ..state import safefs
 from ..sources import cards
-from . import frontmatter, markers
+from . import decisions, frontmatter, markers
 from .machine import machine_keys
 
 ALWAYS = ("wiki/",)
@@ -43,6 +45,7 @@ class GuardInput:
     interactive: bool = False
     conflict_files: frozenset[str] = frozenset()
     git_file: bytes | None = None                 # expected bytes of <worktree>/.git
+    pending_write: dict | None = None             # interrupted tool replacement: previous hash
 
 
 def _sha(data: bytes) -> str:
@@ -93,18 +96,24 @@ def check_change(change: Change, g: GuardInput) -> list[Violation]:
     kind = _file_kind(g.worktree, path)
     if kind:
         return [Violation(path, f"{kind} in the worktree", True)]
-    if path in g.conflict_files:
-        return []        # 6.7: the owner resolved this file in the session, whatever it holds
     try:
         data = safefs.read_bytes(g.worktree, path)
     except safefs.UnsafePath:                  # swapped for a link after the check
         return [Violation(path, "symlink in the worktree", True)]
+    if not g.interactive and path.startswith("wiki/") and path.endswith(".md"):
+        try:
+            if decisions.snapshot(g.base_content(path)) != decisions.snapshot(data):
+                return [Violation(path, "cron may not add, remove or change `decisions` (byte comparison)", False)]
+        except (ValueError, UnicodeError, yaml.YAMLError):
+            return [Violation(path, "cannot compare decisions: invalid frontmatter", False)]
+    if path in g.conflict_files:
+        return []        # 6.7: the owner resolved this file in the session, whatever it holds
     if path == "tools/subjects.json" and g.interactive:
         base = g.base_content(path)
         if base is not None and cards.only_cards_changed(base, data):
             return []
     if path in g.tool_files:
-        if _sha(data) != g.tool_files[path]:
+        if _sha(data) != g.tool_files[path] and not _pending(path, _sha(data), True, g):
             return [Violation(path, "a file the tool wrote was changed afterwards", True)]
         return []
     if not _allowed(path, g):
@@ -129,7 +138,15 @@ def check_parts(path: str, data: bytes, g: GuardInput) -> list[Violation]:
         return []
     if g.tool_parts.get(path) == _sha(parts.encode()):
         return []
+    if _pending(path, _sha(parts.encode()), False, g):
+        return []
     return [Violation(path, "a machine field or a generated block was edited", False)]
+
+
+def _pending(path: str, sha: str, whole: bool, g: GuardInput) -> bool:
+    pending = g.pending_write or {}
+    return pending.get("path") == path and pending.get("whole") == whole \
+        and pending.get("before") == sha
 
 
 def _without_machine(text: str) -> str:

@@ -2,6 +2,7 @@
 check, generation. Steps 5–6 also run after a rebase (G4) and for the MCP `check`."""
 
 import hashlib
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -67,6 +68,7 @@ def guard_step(ctx: Ctx, task: Task) -> None:
         tool_files=task.get("tool_writes", {}), tool_parts=task.get("tool_parts", {}),
         interactive=task.mode == "interactive",
         conflict_files=frozenset(task.get("conflict_files", [])),
+        pending_write=task.get("learning_pending"),
         git_file=task.get("dot_git", "").encode("utf-8") or None))
     owner = [v for v in found if v.owner]
     if owner:
@@ -168,6 +170,8 @@ def check_changed(ctx: Ctx, task: Task) -> None:
 def generate_all(ctx: Ctx, task: Task) -> None:
     """Step 6: indexes, public.json and the review index."""
     repo = ctx.notes_path
+    from . import learning
+    learning.refresh(ctx, task)
     indexes = generate.write_indexes(repo)
     # Recorded at once: if a later step stops the run, the next check must still know that
     # these generated blocks are the tool's own writes.
@@ -260,7 +264,9 @@ def _llm_hash(rel: str, data: bytes) -> str:
 
 def _llm_part(text: str) -> str:
     """The text without generated blocks and machine frontmatter keys."""
-    text = markers.empty_all(text)
+    # Adding a tool block is not an author edit either. Strip its insertion separators,
+    # preserving whitespace everywhere else (including the author's code examples).
+    text = re.sub(r"\n?" + markers.BLOCK.pattern + r"\n{0,2}", "", text, flags=re.S | re.M)
     try:
         meta = frontmatter.split(text).meta
     except Exception:  # noqa: BLE001 - unreadable frontmatter: compare the whole text

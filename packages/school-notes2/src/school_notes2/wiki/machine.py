@@ -21,7 +21,8 @@ LESSONS_LEGEND = ("A legújabb óra van legfelül. A `?` dátum azt jelenti, hog
 
 def machine_keys(meta: dict) -> tuple[str, ...]:
     """Keys only the tool may write on a page of this kind (the path guard cuts these)."""
-    return LESSON_KEYS if meta.get("type") == "lesson-notes" else ("generated",)
+    keys = LESSON_KEYS if meta.get("type") == "lesson-notes" else ("generated",)
+    return keys + ("draft_tracking",)
 
 
 def _folder(path: str) -> str:

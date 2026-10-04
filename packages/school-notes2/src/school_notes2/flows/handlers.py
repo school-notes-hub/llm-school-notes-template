@@ -43,7 +43,7 @@ def build(ctx: Ctx, task_dir=None, *, fetch=None, finish=None) -> Handlers:
 
 def check(ctx: Ctx, task) -> dict:
     """The writer's own check at the end of its work: guard, result.json, changed files.
-    Read-only apart from the unambiguous auto-fixes; writes check.json for the writer."""
+    Applies unambiguous auto-fixes and refreshes tool-rendered learning metadata."""
     problems: list[dict] = []
     try:
         steps.guard_step(ctx, task)
@@ -61,6 +61,12 @@ def check(ctx: Ctx, task) -> dict:
             problems += check_result(ctx.notes_path, result, fetch, listed,
                                      ctx.cfg.limits.review_closures_per_run, whole_run=False)
     problems += wiki_check.check_files(ctx.notes_path, steps.changed_paths(ctx, task))
+    if not wiki_check.errors(problems):
+        from . import learning
+        try:
+            learning.refresh(ctx, task)
+        except steps.CheckFailed as exc:
+            problems += exc.items
     problems += public_problems(ctx.notes_path)
     steps.write_check_items(ctx, problems)
     errors = wiki_check.errors(problems)

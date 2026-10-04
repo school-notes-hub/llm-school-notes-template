@@ -13,6 +13,18 @@ FENCE = re.compile(r"\A---\n(?:(.*?)\n)?---\n", re.S)     # also an empty `---\n
 TOP_KEY = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*):")
 
 
+class Loader(yaml.SafeLoader):
+    """Keep YAML 1.2 words such as the decision key `on` as strings."""
+
+
+Loader.yaml_implicit_resolvers = {
+    key: [(tag, pattern) for tag, pattern in values if tag != "tag:yaml.org,2002:bool"]
+    for key, values in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+Loader.add_implicit_resolver("tag:yaml.org,2002:bool",
+                             re.compile(r"^(?:true|false|True|False|TRUE|FALSE)$"), list("tTfF"))
+
+
 @dataclass
 class Page:
     meta: dict
@@ -26,7 +38,7 @@ def split(text: str) -> Page:
     if not match:
         return Page({}, "", text, False)
     raw = match.group(1) or ""
-    meta = yaml.safe_load(raw) or {}
+    meta = yaml.load(raw, Loader=Loader) or {}
     if not isinstance(meta, dict):
         raise ValueError("frontmatter is not a mapping")
     return Page(meta, raw, text[match.end():], True)

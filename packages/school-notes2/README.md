@@ -52,6 +52,36 @@ contracts; their remaining flow integration is staged separately. `fix.txt` is l
 but this unit does not introduce a fix run or the new reviewer state machine. The current
 nightly prompt uses the existing output contract, with additive private `owner_notes`.
 
+## Lesson logs, questions and drafts
+
+`wiki/lesson_log.py` checks the lesson-log heading and its 3–8 learning points, each
+linked to a listed topic section. `lessons[].materials` is an optional list of public
+names including their kind (`A polisz (prezentáció)`); it never comes from a filename.
+The tool renders the fixed 📎 line in `lesson-sources`, after the header. Teaching
+coverage, the meaning of the linked section and public suitability remain writer/reviewer checks.
+
+`wiki/decisions.py` checks question anchors and the `decisions` frontmatter records
+(`id`, `claim`, `answer`, `by`, `on`), including sorted, unique decision IDs and their
+exclusion from open questions. Cron compares the raw decision YAML against the base
+before auto-fixes; alias-resolved values are compared too. Interactive answers may
+replace questions with decisions. The private `docs/review/dontesek.md` is generated
+in page-path/ID order. Frontmatter and comment anchors never enter the site or print
+payload. Reviewer `relates_to` routing belongs to the later reviewer integration.
+
+`status` accepts `draft`, `stable`, `deprecated`; absence means stable. The protected
+`draft_tracking: {since: YYYY-MM-DD, lessons: [...]}` field starts when the tool first
+observes a draft. Lesson identities are log path plus list position, independent of
+lesson dates and filenames' date prefixes. An additional linked lesson resets the
+clock; prose edits, date corrections and repeat checks do not. After more than 14
+days, `check` warns even on an unchanged draft page. Leaving draft clears tracking
+and its generated `pending` notice. Legacy drafts start tracking on first observation;
+their original start cannot be inferred from the last edit timestamp.
+
+MCP `check` and finish/rebase generation refresh these outputs. `flows/learning.py`
+records each impending replacement before writing and pins the observation date in
+the existing task state, so interrupted generation resumes without restarting the
+clock or rejecting the tool's own writes. No new phase or LLM call is introduced.
+
 ## Development
 
 ```

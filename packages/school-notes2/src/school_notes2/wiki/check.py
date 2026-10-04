@@ -7,10 +7,11 @@ writer, warnings do not.
 
 import json
 import re
+from datetime import date
 from pathlib import Path
 
 from ..state import safefs
-from . import frontmatter, markers
+from . import decisions, drafts, frontmatter, lesson_log, markers
 from .pages import CODE_FENCE, links, resolve, sha256
 
 SIZE_WARN = 40 * 1024
@@ -232,8 +233,13 @@ def check_lessons(repo: Path, rel: str, meta: dict) -> list[dict]:
         if not isinstance(lesson, dict) or not str(lesson.get("title", "")).strip():
             out.append(item(rel, None, f"lesson {n}: `title` missing"))
             continue
-        if lesson.get("date") and not ISO.match(str(lesson["date"])):
+        if lesson.get("date") is not None and not decisions.valid_date(lesson["date"]):
             out.append(item(rel, None, f"lesson {n}: `date` must be YYYY-MM-DD"))
+        out += [item(rel, None, f"lesson {n}: {message}")
+                for message in lesson_log.material_problems(lesson)]
+        if not isinstance(lesson.get("topics", []), list):
+            out.append(item(rel, None, f"lesson {n}: `topics` must be a list"))
+            continue
         for topic in lesson.get("topics") or []:
             if not _topic_exists(repo, folder, str(topic).split("#", 1)[0]):
                 out.append(item(rel, None, f"lesson {n}: topic page {topic!r} does not exist"))
@@ -272,7 +278,7 @@ def check_renders(repo: Path) -> list[dict]:
     return out
 
 
-def check_files(repo: Path, paths: list[str]) -> list[dict]:
+def check_files(repo: Path, paths: list[str], *, today: date | None = None) -> list[dict]:
     """Check the run's changed markdown files and every render.json.
 
     Only files the writer may change are judged: wiki pages get every rule, `references/`
@@ -296,8 +302,31 @@ def check_files(repo: Path, paths: list[str]) -> list[dict]:
             out.append(item(rel, 1, f"frontmatter is not valid YAML: {exc}"))
             continue
         out += check_meta(repo, rel, page.meta)
+        out += check_learning(repo, rel, page)
         out += check_links(repo, rel, text)
+    if not errors(out):
+        out += [item(rel, None, message, "warning")
+                for rel, message in drafts.warnings(repo, today or date.today())]
     return out + check_renders(repo)
+
+
+def check_learning(repo: Path, rel: str, page: frontmatter.Page) -> list[dict]:
+    out = [item(rel, None, message) for message in
+           decisions.decision_problems(page.meta) + drafts.problems(page.meta)]
+    offset = len(page.raw_meta.splitlines()) + 2 if page.has_fm else 0
+    out += [item(rel, line + offset, message)
+            for line, message in decisions.question_problems(page.body, page.meta)]
+    if "status" in page.meta and page.meta["status"] not in ("draft", "stable", "deprecated"):
+        out.append(item(rel, None, "status must be draft, stable or deprecated"))
+    visible = markers.BLOCK.sub("", CODE_FENCE.sub("", page.body))
+    if re.search(r"^\s*(?:<sub>)?📎", visible, re.M):
+        out.append(item(rel, None, "the tool renders the source pointer; supply lessons[].materials"))
+    if lesson_log.is_lesson(rel, page.meta) and isinstance(page.meta.get("lessons"), list):
+        out += [item(rel, None, message)
+                for message in lesson_log.form_problems(repo, rel, page.body, page.meta)]
+    elif lesson_log.BLOCK in markers.names(page.body):
+        out.append(item(rel, None, "source pointer belongs only on a lesson log"))
+    return out
 
 
 def errors(items: list[dict]) -> list[dict]:

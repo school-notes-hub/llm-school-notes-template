@@ -56,6 +56,10 @@ In state A the writer also draws; visual-module routing is unchanged. Every figu
 
 Every engine of `tools/visual_tools.py` works in the container: Python with matplotlib and numpy (plots, measured data, constructions), Graphviz (graphs, trees, flowcharts), PlantUML (process, state and sequence diagrams), POV-Ray (3D scenes, also animations rendered to MP4 with a static poster) and FreeCAD (exact technical drawings, parts, sections). Mermaid works directly in the Markdown; illustrations come from the image tools above. Choose the engine that best supports understanding of the figure, following [technical visuals](technical-visuals.md); render with `uv run tools/visual_tools.py render …` into `wiki/assets/`.
 
+## Generated learning fields
+
+The tool maintains the `lesson-sources` generated block on lesson logs and the `pending` draft notice. Give source names only in `lessons[].materials`; never write the 📎 line or these blocks yourself. `draft_tracking` is machine frontmatter: the tool records when a draft or an additional linked lesson was first observed. Editing prose does not reset its 14-day warning. Decisions remain writer-managed only in an interactive owner session; cron compares their YAML bytes with the run's base. The tool generates the private `docs/review/dontesek.md` overview from them.
+
 ## Stable order
 
 The order of existing chapter, lesson and topic lists never changes between runs. Within a topic page, the section order is didactic and may change to build prerequisites before use; preserve anchors and links. A new item goes to its fixed place: chapters in the syllabus/notebook order, lessons by date, topics in the order the lesson treats them, list items where the existing order puts them. Changing the chapter, lesson or topic order is done only on the owner's request in a session. The tool's `check` refuses a cron run that re-orders existing `chapters`, `lessons`, `topics` or a page's `order`.

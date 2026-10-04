@@ -45,6 +45,12 @@ okf_version: "0.2"
 """
 
 
+LESSON_BODY = ("\n# Mit tanultunk ezen az órán\n\n"
+               "* [Első fogalom](elso.md#elso-fogalom)\n"
+               "* [Második fogalom](elso.md#masodik-fogalom)\n"
+               "* [Alkalmazás](elso.md#alkalmazas)\n")
+
+
 def page(meta: str, body: str = "\n# Cím\n") -> str:
     return f"---\n{meta}\n---\n{body}"
 
@@ -72,7 +78,7 @@ def repo(tmp_path) -> Path:
     write(r, "wiki/proba/2026-09-10-elso-jegyzet.md", page(
         "type: lesson-notes\ntitle: Első óra\ndescription: Jegyzet.\nlessons:\n"
         "  - {date: '2026-09-03', title: Bevezetés, topics: [elso.md]}\n"
-        "  - {date_note: 'legkésőbb 2026-09-10', title: Folytatás, topics: [elso.md, masodik.md#resz]}"))
+        "  - {date_note: 'legkésőbb 2026-09-10', title: Folytatás, topics: [elso.md, masodik.md#resz]}", LESSON_BODY))
     write(r, "wiki/proba/2026-09-20-dolgozat.md", page(
         "type: review\ntitle: Dolgozatra\ndescription: Ismétlés."))
     write(r, "wiki/assets/abra.svg", "<svg/>")
