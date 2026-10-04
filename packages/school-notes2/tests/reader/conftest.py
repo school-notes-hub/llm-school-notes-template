@@ -14,6 +14,7 @@ def setup(tmp_path, log, monkeypatch):
     page = "wiki/m/topic.md"
     safefs.write_text(repo, page, "---\ntitle: Téma\ntype: topic\n---\n# Téma\n\nA test lefelé gyorsul.\n")
     safefs.write_json(repo, "tools/subjects.json", {"subjects": {"m": {}}})
+    safefs.write_text(repo, "wiki/index.md", "---\ntitle: Kezdőlap\n---\n# Kezdőlap\n")
     before = {page: "---\ntitle: Téma\ntype: topic\n---\n# Téma\n\nRégi mondat.\n"}
     def git(*args, **kw):
         rel = args[1].split(":", 1)[1]

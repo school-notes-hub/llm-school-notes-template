@@ -229,12 +229,28 @@ def test_final_notices_leave_public_json_current(setup, monkeypatch):
     from school_notes2.flows import steps
     from school_notes2.wiki import public
     ctx, task, page = setup
-    safefs.write_text(ctx.notes_path, "wiki/index.md", "---\ntitle: Kezdőlap\n---\n# Kezdőlap\n")
     steps.write_public(ctx, task)
     def refresh(repo, pages):
         safefs.write_text(repo, page, safefs.read_text(repo, page) + "\n" + notices.PAGE + "\n")
         return [page]
     monkeypatch.setattr(review_phases.notices, "refresh", refresh)
+    task.update(review_complete=True)
+    review_phases.final_keys(ctx, task)
+    repo = ctx.notes_path
+    rights = public.either(public.render_rights(repo), public.media_receipt_rights(repo))
+    assert public.write(repo, rights) is False
+    assert task.get("tool_writes")["publication/public.json"]
+
+
+def test_final_keys_repairs_public_json_after_an_interrupted_notice(setup, monkeypatch):
+    """The notice is already on the page (an earlier final_keys stopped before public.json):
+    refresh writes nothing now, yet public.json must become current."""
+    from school_notes2.flows import steps
+    from school_notes2.wiki import public
+    ctx, task, page = setup
+    steps.write_public(ctx, task)
+    safefs.write_text(ctx.notes_path, page, safefs.read_text(ctx.notes_path, page) + "\n" + notices.PAGE + "\n")
+    monkeypatch.setattr(review_phases.notices, "refresh", lambda repo, pages: [])
     task.update(review_complete=True)
     review_phases.final_keys(ctx, task)
     repo = ctx.notes_path
