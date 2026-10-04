@@ -204,6 +204,7 @@ def test_per_call_validation_and_mcp_hide_other_subject_errors(tmp_path, monkeyp
     monkeypatch.setattr(steps, "check_items", lambda *a: errors)
     monkeypatch.setattr("school_notes2.flows.learning.refresh", lambda *a: None)
     monkeypatch.setattr(handlers, "public_problems", lambda *a: [])
+    monkeypatch.setattr("school_notes2.flows.generation_receipts.rights", lambda *a: lambda _: None)
     assert handlers.check(ctx, task)["ok"]
     errors.append(check.item("wiki/b/topic.md", None, "own subject"))
     with pytest.raises(steps.CheckFailed) as failed:

@@ -22,7 +22,7 @@ from ..wiki import frontmatter, generate, guard, machine, markers, public
 from ..wiki import order as wiki_order
 from ..wiki.check_result import check_result
 from . import fetch as fetch_flow
-from . import checks, writer
+from . import checks, journal, writer
 from .context import Ctx
 
 TOOL_WHOLE_FILES = ("tools/subjects.json", "publication/public.json", "docs/review/index.md")
@@ -152,7 +152,7 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
         raise CheckFailed(reordered)
     result = merged_result(ctx, task)
     repo = ctx.notes_path
-    fetch = fetch_flow.fetch_json(task, len(task.get("ranges")), grade=ctx.student.grade,
+    fetch = fetch_flow.fetch_json(task, len(task.get("ranges")), grade=ctx.student.grade, repo=ctx.notes_path,
                                   whole_run=True)
     listed = fetch["open_review_items"]
     problems = check_result(repo, result, fetch, {(i["file"], i["item_id"]) for i in listed},
@@ -174,6 +174,8 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
     _record_writes(task, repo, whole=outcome.written + evidence, parts=[])
     from . import licensing
     licensing.refresh(ctx, task, result, fetch["pages"])
+    from . import generation_receipts
+    generation_receipts.refresh(ctx, task)
     generate_all(ctx, task)
     return Prepared(result, result["status"] == "question", outcome.new_owner)
 
@@ -217,6 +219,8 @@ def generate_all(ctx: Ctx, task: Task) -> None:
     repo = ctx.notes_path
     from . import learning
     learning.refresh(ctx, task)
+    from ..figures import licenses
+    licenses.preflight(repo)
     indexes = generate.write_indexes(repo)
     # Recorded at once: if a later step stops the run, the next check must still know that
     # these generated blocks are the tool's own writes.
@@ -226,7 +230,7 @@ def generate_all(ctx: Ctx, task: Task) -> None:
                                                 public.media_receipt_rights(repo)))
         text = public.dumps(value)
         if not safefs.is_file(repo, "publication/public.json") or safefs.read_text(repo, "publication/public.json") != text:
-            learning._write(ctx, task, "publication/public.json", text, whole=True)
+            journal.write(ctx, task, "publication/public.json", text, whole=True)
     except public.PublicError as exc:
         problems = [wiki_check.item(p, None, exc.reason) for p in exc.paths]
         checks.tool_errors(ctx, task, problems)

@@ -219,7 +219,7 @@ def new_subject(repo, subject: str, drive_name: str) -> list[str]:
     return [path] if path else []
 
 
-def fetch_json(task: Task, k: int, *, grade: int, whole_run: bool = False) -> dict:
+def fetch_json(task: Task, k: int, *, grade: int, whole_run: bool = False, repo=None) -> dict:
     """The fetch.json of range k (1-based), validated (4.4). `grade` is the learner's
     configured school year: with PROFILE.md it places the subject for the writer (4.3)."""
     first, last = task.get("ranges")[k - 1]
@@ -249,6 +249,9 @@ def fetch_json(task: Task, k: int, *, grade: int, whole_run: bool = False) -> di
         data["conflict_files"] = task.get("conflict_files")
     if task.get("offline"):
         data["offline"] = True
+    if repo is not None:
+        from . import licensing
+        data["approved_figure_requests"] = licensing.for_fetch(repo, data)
     validate("fetch", data)
     return data
 

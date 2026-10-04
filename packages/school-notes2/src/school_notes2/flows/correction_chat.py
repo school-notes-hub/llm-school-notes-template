@@ -38,14 +38,14 @@ def resume_inputs(ctx, task):
     if child is None or not child.get("interactive_ready"):
         return False
     safefs.write_json(ctx.notes_path, ".school-notes/fetch.json",
-                      fetch.fetch_json(child, 1, grade=ctx.student.grade))
+                      fetch.fetch_json(child, 1, grade=ctx.student.grade, repo=ctx.notes_path))
     writer.write_changes(ctx, child)
     return True
 
 
 def restore_inputs(ctx, task):
     safefs.write_json(ctx.notes_path, ".school-notes/fetch.json", fetch.fetch_json(
-        task, min(task.get("writing_k", 1), len(task.get("ranges"))), grade=ctx.student.grade))
+        task, min(task.get("writing_k", 1), len(task.get("ranges"))), grade=ctx.student.grade, repo=ctx.notes_path))
     root = inspection.folder(task) / "correction"
     path = ".school-notes/result.json"
     if safefs.is_file(root, "before/" + path):

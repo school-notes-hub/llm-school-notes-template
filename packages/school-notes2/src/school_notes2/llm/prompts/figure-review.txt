@@ -39,6 +39,7 @@ Checklista:
 6. Van-e rajta forrásutalás vagy igazolatlan tény?
 7. Bannernél: a témát mutatja-e, érthető-e első ránézésre?
 8. Nem másolat-e?
+9. Tanári képnél: valószínűleg a tanár saját műve-e (vízjel, kiadói tördelés, fotó)? Kétség esetén `repair`; a külön engedélyt a kérelemlista útján kell tisztázni.
 
 Ha a tool a bemenet `licensed` mezőjében igazolt `public-with-credit` engedélyt ad, a képet licencelt ábraként ellenőrizd: a másolás ténye önmagában nem hiba. A helyességet, tanulási célt, olvashatóságot és a látható kredit meglétét ugyanúgy vizsgáld. Az engedély nem ábraítélet.
 

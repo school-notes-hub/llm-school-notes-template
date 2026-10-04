@@ -70,7 +70,7 @@ def test_queue_prepare_is_tool_only_and_completion_is_resumable(tmp_path, log, m
     assert task.get("skip_writer") and queue.PATH in task.get("tool_writes")
     task.update(queue_only=False, repair_topic=topic)
     task.set_phase("finishing")
-    from school_notes2.flows import learning
+    from school_notes2.flows import journal
     real = safefs.write_text
     def crash(root, rel, text, **kw):
         real(root, rel, text, **kw)
@@ -82,7 +82,7 @@ def test_queue_prepare_is_tool_only_and_completion_is_resumable(tmp_path, log, m
     task = phase.load(task.dir)
     assert task.get("learning_pending")["path"] == queue.PATH
     monkeypatch.setattr(safefs, "write_text", real)
-    learning._settle_pending(ctx, task)
+    journal.settle(ctx, task)
     repair.complete(ctx, task)
     assert queue.load(ctx.notes_path)["items"][0]["status"] == "done"
 

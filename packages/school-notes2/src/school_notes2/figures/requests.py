@@ -37,7 +37,7 @@ def original_hash(repo, source, pages=()):
         if material in originals:
             found.add(originals[material].split("#", 1)[0])
     if len(found) != 1 or not re.fullmatch(r"[a-f0-9]{64}", next(iter(found), "")):
-        raise ValueError(f"no unique original material hash for {source}")
+        return None
     return found.pop()
 
 
@@ -59,11 +59,8 @@ def collect(repo, incoming, pages=()):
                                "original_sha256": original_hash(repo, request["source"], pages)}
     found = {}
     for page in sorted(wiki_pages(repo)):
-        text = safefs.read_text(repo, page)
-        blank = lambda m: re.sub(r"[^\n]", " ", m[0])
-        visible = INLINE_CODE.sub(blank, CODE_FENCE.sub(blank, text))
-        for match in MARKER.finditer(visible):
-            found.setdefault(match[1], []).append(page)
+        for fid in marker_ids(safefs.read_text(repo, page)):
+            found.setdefault(fid, []).append(page)
     for fid, locations in sorted(found.items()):
         if fid not in existing or locations != [existing[fid]["page"]]:
             raise ValueError(f"figure-request {fid} needs exactly one matching request and page")
@@ -77,7 +74,16 @@ def collect(repo, incoming, pages=()):
     return value
 
 
+def marker_ids(text):
+    blank = lambda m: re.sub(r"[^\n]", " ", m[0])
+    return MARKER.findall(INLINE_CODE.sub(blank, CODE_FENCE.sub(blank, text)))
+
+
 def active(repo):
     return [r for r in load(repo) if safefs.is_file(repo, r["page"]) and
-            MARKER.search(safefs.read_text(repo, r["page"])) and
-            f"<!-- figure-request: {r['id']} -->" in safefs.read_text(repo, r["page"])]
+            r["id"] in marker_ids(safefs.read_text(repo, r["page"]))]
+
+
+def approved(repo):
+    from . import licenses
+    return [r for r in active(repo) if licenses.permission(repo, r) is not None]

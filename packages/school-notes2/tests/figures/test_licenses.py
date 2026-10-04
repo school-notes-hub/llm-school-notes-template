@@ -84,8 +84,7 @@ def test_material_hash_comes_from_original_document_not_extracted_image(repo):
     safefs.write_bytes(repo, "sources/pkg/figures/a.png", b"image")
     assert requests.original_hash(repo, "sources/pkg/figures/a.png", [
         {"path": "sources/pkg/document.md", "original_sha256": "b" * 64}]) == "b" * 64
-    with pytest.raises(ValueError, match="original material hash"):
-        requests.original_hash(repo, "sources/pkg/figures/a.png")
+    assert requests.original_hash(repo, "sources/pkg/figures/a.png") is None
 
 
 def test_orphan_duplicate_and_reused_request_ids_are_rejected(repo, make_figure):
@@ -145,3 +144,49 @@ def test_reviewer_sees_permission_and_credit_before_acceptance(repo, make_figure
     assert item["licensed"]["credit"] in item["embedding"]["caption"]
     assert "granted_by" not in item["licensed"]
     assert safefs.is_file(folder, item["source_crop"])
+
+
+def test_hashless_legacy_request_needs_specific_content_bound_permission(repo, make_figure):
+    brief, value, request = requested(repo, make_figure)
+    request["original_sha256"] = None
+    safefs.write_json(repo, requests.PATH, [request])
+    grant(repo, sha256=request["content_sha256"])
+    assert licenses.permission(repo, request) is None
+    grant(repo, sha256="b" * 64, request_id=request["id"])
+    assert licenses.permission(repo, request) is None
+    grant(repo, sha256=request["content_sha256"], request_id=request["id"])
+    assert licenses.permission(repo, request)
+    safefs.unlink(repo, request["source"])
+    assert licenses.permission(repo, request) is None
+
+
+@pytest.mark.parametrize("fence", ["```md", "~~~md"])
+def test_request_examples_do_not_become_active_or_pending(repo, make_figure, fence):
+    brief, value, request = requested(repo, make_figure)
+    text = safefs.read_text(repo, brief["page"])
+    marker = f"<!-- figure-request: {request['id']} -->"
+    safefs.write_text(repo, brief["page"], text.replace(marker, f"{fence}\n{marker}\n{fence[:3]}"))
+    assert requests.active(repo) == []
+    assert requests.collect(repo, []) == [request]
+    notices.refresh(repo, [brief["page"]])
+    assert notices.FIGURE not in safefs.read_text(repo, brief["page"])
+
+
+@pytest.mark.parametrize("change", ["withdraw", "credit", "missing-source"])
+def test_changed_permission_is_owner_work_before_public_build(repo, make_figure, change):
+    from school_notes2.state.errors import NeedsOwner
+    brief, value, request = requested(repo, make_figure)
+    grant(repo)
+    candidate = commissions.candidate(repo, brief)
+    insert.insert(repo, brief, receipt(repo, brief, candidate), at="date")
+    licenses.preflight(repo)
+    if change == "withdraw":
+        grant(repo, scope="none")
+    elif change == "credit":
+        grant(repo, credit="Changed credit")
+    else:
+        safefs.unlink(repo, request["source"])
+    with pytest.raises(NeedsOwner, match="permission changed or withdrawn"):
+        licenses.preflight(repo)
+    known = {candidate["asset"]: {"sha256": public.sha256(repo, candidate["asset"]), "rights": "authored"}}
+    assert public.asset_entry(repo, candidate["asset"], known, lambda _: ("generated", "fake")) is None

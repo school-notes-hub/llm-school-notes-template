@@ -24,6 +24,8 @@ def finish(ctx: Ctx, task: Task, *, notify_owner_items) -> str | dict:
     """Run a notes task from `finishing` (or a later Git phase) to `done`.
 
     Raises steps.CheckFailed (the writer must fix check.json), NeedsOwner, Transient."""
+    from ..figures import licenses
+    licenses.preflight(ctx.notes_path)
     try:
         return _finish(ctx, task, notify_owner_items)
     except git_finish.EditedDuringFinish:

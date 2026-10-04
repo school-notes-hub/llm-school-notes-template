@@ -11,6 +11,7 @@ from ..figures import requests as figure_requests, licenses
 from ..log import TZ
 from ..review import files as review_files
 from ..sources import cards
+from ..state.errors import NeedsOwner
 from ..state import phase
 from ..state import safefs
 from ..state.files import read_json
@@ -36,8 +37,7 @@ def summary(ctx: Ctx) -> dict:
         "round": round_state,
         "quota": read_json(ctx.cfg.state_dir / "quota.json", {}),
         "timeouts": read_json(ctx.cfg.state_dir / ctx.name / "timeouts.json", {}),
-        "figure_requests": [r for r in figure_requests.active(ctx.notes_path)
-                            if licenses.permission(ctx.notes_path, r) is None],
+        **_permissions(ctx.notes_path),
         "lock": _lock(ctx),
         "open": [_task(t) for t in tasks if t.open],
         "needs_owner": [{"kind": t.kind, "run_id": t.run_id, **t.data["needs_owner"]}
@@ -52,6 +52,8 @@ def summary(ctx: Ctx) -> dict:
         "cards": _cards(ctx.notes_path),
         "source_ref_counts": next((t.get("source_ref_counts", {}) for t in reversed(tasks)
                                    if t.kind == "notes"), {}),
+        "public_footnote_counts": next((t.get("public_footnote_counts", {}) for t in reversed(tasks)
+                                        if t.kind == "notes"), {}),
         "references_without_map": _unmapped(ctx.notes_path),
         "pack_mb": _pack_mb(ctx.cfg.bare(ctx.name)),
         "log": str(ctx.cfg.log_path),
@@ -168,7 +170,9 @@ def _pack_mb(bare: Path) -> float:
 def render(data: dict) -> str:
     """The console form of `summary`."""
     lines = [f"== {data['learner']}"]
-    for key, label in (("vm_lock", "VM-zár"), ("round", "kör"), ("quota", "heti keret"), ("timeouts", "T-125"), ("figure_requests", "licenckérelmek")):
+    for key, label in (("vm_lock", "VM-zár"), ("round", "kör"), ("quota", "heti keret"), ("timeouts", "T-125"), ("figure_requests", "licenckérelmek"),
+                       ("approved_figure_requests", "engedélyezve, beillesztésre vár"),
+                       ("license_error", "licencadat javítandó")):
         if data.get(key):
             lines.append(label + ": " + json.dumps(data[key], ensure_ascii=False, sort_keys=True))
     lock = data["lock"]
@@ -209,3 +213,15 @@ def render(data: dict) -> str:
         lines.append(f"térkép nélkül, felvétel szükséges: {ref}")
     lines.append(f"pack: {data['pack_mb']} MiB; napló: {data['log']}")
     return "\n".join(lines)
+
+
+def _permissions(repo):
+    try:
+        licenses.preflight(repo)
+        active = figure_requests.active(repo)
+        approved = figure_requests.approved(repo)
+        return {"figure_requests": [r for r in active if r not in approved],
+                "approved_figure_requests": approved}
+    except (ValueError, OSError, safefs.UnsafePath, NeedsOwner) as exc:
+        todo = getattr(exc, "todo", "correct docs/licenses.json")
+        return {"figure_requests": [], "approved_figure_requests": [], "license_error": f"{exc}; {todo}"}

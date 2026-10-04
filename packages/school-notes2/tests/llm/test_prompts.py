@@ -139,3 +139,10 @@ def test_reader_gets_the_complete_owner_yardstick():
                     if line.startswith('A tulajdonosi mérce'))
     assert reviewer in prompt('reader-1')
     assert STRUCTURE in prompt('reader-1')
+
+
+def test_figure_review_considers_teacher_ownership_and_request_route():
+    text = prompt('figure-review')
+    assert 'valószínűleg a tanár saját műve-e (vízjel, kiadói tördelés, fotó)' in text
+    assert 'Kétség esetén `repair`; a külön engedélyt a kérelemlista útján kell tisztázni.' in text
+    assert '`approved_figure_requests`' in prompt('writer')

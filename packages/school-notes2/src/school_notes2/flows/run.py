@@ -108,6 +108,8 @@ def _new_task(ctx: Ctx) -> Task | None:
 
 def advance(ctx: Ctx, task: Task) -> None:
     """Drive a cron notes task from its recorded phase to `done` (8.2)."""
+    from ..figures import licenses
+    licenses.preflight(ctx.notes_path)
     if task.phase == "waiting_quota":
         task.set_phase(task.get("quota_phase"))
     if task.get("mode") == "repair":

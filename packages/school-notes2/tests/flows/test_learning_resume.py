@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from school_notes2.flows import learning
+from school_notes2.flows import learning, journal
 from school_notes2.state import phase, safefs
 from school_notes2.wiki import decisions, drafts, frontmatter, guard, markers
 from tests.wiki.conftest import repo, write
@@ -110,7 +110,7 @@ def test_abandoned_pending_replacement_restores_recorded_hash(repo, tmp_path, mo
         patch.setattr(safefs, "write_text", fail)
         with pytest.raises(RuntimeError, match="before replacement"):
             new = (repo / rel).read_text().replace("Füzet", "Másik") if not whole else "new overview"
-            learning._write(ctx, task, rel, new, whole=whole)
+            journal.write(ctx, task, rel, new, whole=whole)
     task = phase.load(task.dir)
     assert task.get(key)[rel] != before
     # The input already matches the last completed refresh: no replacement is needed.

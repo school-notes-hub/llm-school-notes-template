@@ -1,10 +1,34 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import { openSync, closeSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { exportSite } from '../lib/export.mjs';
-import { sha256 } from '../lib/paths.mjs';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+function publicConfig(repo, learner) {
+  const python = process.env.SCHOOL_NOTES_PYTHON || fileURLToPath(new URL('../../school-notes2/.venv/bin/python', import.meta.url));
+  const code = `import json, sys
+from pathlib import Path
+from school_notes2.wiki import public
+repo = Path(sys.argv[1])
+print(public.dumps(public.build(repo, public.render_rights(repo), existing={
+    "title": "Jegyzetek", "mode": "public", "site": "https://example.test", "base": "/" + sys.argv[2] + "/"})))`;
+  const output = path.join(repo, 'public.json');
+  const fd = openSync(output, 'w');
+  try { execFileSync(python, ['-c', code, repo, learner], {stdio:['ignore', fd, 'inherit']}); }
+  finally { closeSync(fd); }
+  return JSON.parse(readFileSync(output, 'utf8'));
+}
+
+async function subject(repo) {
+  await fs.mkdir(path.join(repo, 'wiki/tananyag'), {recursive:true});
+  await fs.writeFile(path.join(repo, 'wiki/index.md'), '# Jegyzetek\n');
+  await fs.writeFile(path.join(repo, 'wiki/tananyag/index.md'),
+    '---\nchapters: [{id: alapok, title: Alapok}]\n---\n# Tananyag\n');
+}
 
 for (const learner of ['learner-a', 'learner-b']) {
   test(`${learner}: decisions and question anchors stay out of public and print exports`, async () => {
@@ -12,6 +36,8 @@ for (const learner of ['learner-a', 'learner-b']) {
     const repo = path.join(tmp, 'repo');
     const body = `---
 type: topic
+chapter: alapok
+order: 1
 title: Tananyag
 decisions:
   - id: private-decision-canary
@@ -30,7 +56,7 @@ draft_tracking: {since: '2026-09-29', lessons: [PRIVATE_LESSON_CANARY]}
 
 Nyilvános tananyag.[^private-note][^web]
 
-[^private-note]: PRIVATE_FOOTNOTE_CANARY, 3. dia. [Forrás](../sources/private.png)
+[^private-note]: PRIVATE_FOOTNOTE_CANARY, 3. dia. [Forrás](../../sources/private.png)
 [^web]: [Nyilvános hivatkozás](https://example.test/reference)
 
 # Nyitott kérdések
@@ -43,6 +69,9 @@ Nyilvános tananyag.[^private-note][^web]
 <!-- image: private-image-canary -->
 `;
     const log = `---
+type: lesson-notes
+chapter: alapok
+order: 2
 title: Az óra
 lessons:
   - {date: 2026-09-29, topics: [tema.md], materials: ['A polisz (prezentáció)']}
@@ -54,35 +83,31 @@ lessons:
 🔖 Tankönyv: 2. lecke, 13–15. oldal
 `;
     try {
-      await fs.mkdir(path.join(repo, 'wiki'), { recursive: true });
+      await subject(repo);
       await fs.mkdir(path.join(repo, 'docs/review'), { recursive: true });
       await fs.mkdir(path.join(repo, 'sources'), { recursive: true });
       await fs.writeFile(path.join(repo, 'sources/private.png'), 'PRIVATE_SOURCE_CANARY');
       await fs.writeFile(path.join(repo, 'wiki/log.md'), 'PRIVATE_LOG_CANARY');
-      await fs.writeFile(path.join(repo, 'wiki/tema.md'), body);
-      await fs.writeFile(path.join(repo, 'wiki/ora.md'), log);
+      await fs.writeFile(path.join(repo, 'wiki/tananyag/tema.md'), body);
+      await fs.writeFile(path.join(repo, 'wiki/tananyag/ora.md'), log);
       await fs.writeFile(path.join(repo, 'docs/review/dontesek.md'), 'PRIVATE_OVERVIEW_CANARY');
-      const config = {
-        title: 'Jegyzetek', mode: 'public', site: 'https://example.com', base: `/${learner}/`,
-        pages: [{ path: 'wiki/tema.md', sha256: sha256(body) }, { path: 'wiki/ora.md', sha256: sha256(log) }],
-        collections: [{ id: 'tananyag', title: 'Tananyag', pages: ['wiki/tema.md', 'wiki/ora.md'], pdf: true }]
-      };
+      const config = publicConfig(repo, learner);
       const out = path.join(tmp, 'build');
       const { payload } = await exportSite({ repo, config, output: out, printEngine: 'test-engine' });
-      const print = JSON.stringify(payload.collections[0].chapters);
+      const print = JSON.stringify(payload.collections.map(c => c.chapters));
       for (const text of [JSON.stringify(config), JSON.stringify(payload), print,
                          await fs.readFile(path.join(out, 'payload.json'), 'utf8')]) {
         assert.doesNotMatch(text, /canary|decisions|draft_tracking|<!--|dontesek/i);
       }
-      assert.match(payload.pages[0].html, /Melyik jelölést használjuk/);
+      assert.match(payload.pages.find(p => p.path === 'wiki/tananyag/tema.md').html, /Melyik jelölést használjuk/);
       assert.match(print, /Nyilvános hivatkozás/);
       assert.match(print, /Melyik jelölést használjuk/);
       assert.match(print, /⏳ Ez a téma az órán folytatódik/);
-      assert.match(payload.pages[1].html, /📎 Füzet: 2026\. 09\. 29\./);
+      assert.match(payload.pages.find(p => p.path === 'wiki/tananyag/ora.md').html, /📎 Füzet: 2026\. 09\. 29\./);
       assert.match(print, /A polisz \(prezentáció\)/);
       assert.match(print, /🔖 Tankönyv: 2\. lecke/);
       assert.deepEqual(await fs.readdir(path.join(out, 'public')), ['media']);
-      assert.equal(await fs.readFile(path.join(repo, 'wiki/tema.md'), 'utf8'), body);
+      assert.equal(await fs.readFile(path.join(repo, 'wiki/tananyag/tema.md'), 'utf8'), body);
     } finally { await fs.rm(tmp, { recursive: true, force: true }); }
   });
 }
@@ -96,6 +121,9 @@ for (const learner of ['learner-a', 'learner-b']) {
       const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'study-public-build-'));
       const repo = path.join(tmp, 'repo');
       const source = `---
+type: topic
+chapter: alapok
+order: 1
 title: Tananyag
 decisions:
   - {id: private-decision, claim: PRIVATE_CLAIM_CANARY, answer: PRIVATE_ANSWER_CANARY, by: family, on: 2026-10-04}
@@ -104,7 +132,7 @@ decisions:
 
 A mértékegység megadja a mérés alapját.[^private]
 
-[^private]: PRIVATE_FOOTNOTE_CANARY. [Forrás](../sources/private.png)
+[^private]: PRIVATE_FOOTNOTE_CANARY. [Forrás](../../sources/private.png)
 
 <!-- q: private-question-canary -->
 <!-- figure: private-figure-canary -->
@@ -113,13 +141,12 @@ A mértékegység megadja a mérés alapját.[^private]
 `;
       try {
         for (const dir of ['wiki', 'sources', 'docs/review']) await fs.mkdir(path.join(repo, dir), {recursive:true});
-        await fs.writeFile(path.join(repo, 'wiki/index.md'), source);
+        await subject(repo);
+        await fs.writeFile(path.join(repo, 'wiki/tananyag/tema.md'), source);
         await fs.writeFile(path.join(repo, 'wiki/log.md'), 'PRIVATE_LOG_CANARY');
         await fs.writeFile(path.join(repo, 'sources/private.png'), 'PRIVATE_SOURCE_CANARY');
         await fs.writeFile(path.join(repo, 'docs/review/report.md'), 'PRIVATE_REVIEW_CANARY');
-        const config = { title:'Jegyzetek', mode:'public', site:'https://example.test', base:`/${learner}/`,
-          pages:[{path:'wiki/index.md', sha256:sha256(source)}],
-          collections:[{id:'tananyag',title:'Tananyag',pages:['wiki/index.md'],pdf:true}] };
+        const config = publicConfig(repo, learner);
         const configPath = path.join(tmp, 'public.json');
         await fs.writeFile(configPath, JSON.stringify(config));
         const out = path.join(tmp, 'build');

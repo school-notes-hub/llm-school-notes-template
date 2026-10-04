@@ -4,7 +4,6 @@ No new phase: each deterministic write is recorded BEFORE replacement so a crash
 between writes (or before replacement) can resume through the normal path guard.
 """
 
-import hashlib
 from datetime import date
 
 import yaml
@@ -12,9 +11,9 @@ import yaml
 from ..state import safefs
 from ..state.phase import Task
 from ..state.errors import NeedsOwner
-from ..wiki import banners, decisions, drafts, frontmatter, guard, lesson_log
-from ..wiki.pages import read_page, wiki_pages
-from . import checks, steps
+from ..wiki import banners, decisions, drafts, frontmatter, lesson_log
+from ..wiki.pages import read_page, resolve, wiki_pages
+from . import checks, journal, steps
 from .context import Ctx
 
 
@@ -32,24 +31,53 @@ def validate(ctx: Ctx, task: Task) -> None:
         problems += [steps.wiki_check.item(rel, None, m) for m in
                      _metadata_problems(rel, safefs.read_text(ctx.notes_path, rel), ctx.notes_path)]
     if problems:
-        checks.tool_errors(ctx, task, problems)
-        changed = steps.llm_snapshot(ctx, task)
-        wt, base = ctx.worktree("notes"), steps.base_of(task)
-        previous = {}
-        for rel in sorted({p["file"] for p in problems} & changed.keys()):
-            old = wt.run("show", f"{base}:{rel}", check=False)
-            previous[rel] = _metadata_problems(rel, old.stdout.decode("utf-8", "replace"), ctx.notes_path) \
-                if old.returncode == 0 else []
-        outside = [p for p in problems if p["file"] not in changed or
-                   p["message"] in previous.get(p["file"], [])]
-        if outside:
-            raise NeedsOwner("invalid metadata predating this run: " + "; ".join(
-                f"{p['file']}: {p['message']}" for p in outside),
-                todo="repair the listed pages in `school-notes chat`", details={"items": outside})
-        raise steps.CheckFailed(problems)
+        _classify(ctx, task, problems)
 
 
-def _metadata_problems(rel: str, text: str, repo=None) -> list[str]:
+def _classify(ctx, task, problems):
+    changed = steps.llm_snapshot(ctx, task)
+    base = steps.base_reader(ctx, task)
+    def read_old(repo, rel):
+        text = base(rel)
+        if text is None:
+            raise FileNotFoundError(rel)
+        return frontmatter.split(text.decode("utf-8", "replace"))
+    outside, routed = [], []
+    for problem in problems:
+        rel = problem["file"]
+        old = base(rel)
+        previous = _metadata_problems(rel, old.decode("utf-8", "replace"), ctx.notes_path, read_old) if old else []
+        if problem["message"] not in previous:
+            dependency = _banner_dependency(ctx.notes_path, rel, problem["message"])
+            if dependency in changed:
+                problem = {**problem, "file": dependency, "message": f"{rel}: {problem['message']}"}
+            elif rel not in changed:
+                outside.append(problem)
+        else:
+            outside.append(problem)
+        routed.append(problem)
+    checks.tool_errors(ctx, task, routed)
+    if outside:
+        raise NeedsOwner("invalid metadata predating this run: " + "; ".join(
+            f"{p['file']}: {p['message']}" for p in outside),
+            todo="repair the listed pages in `school-notes chat`", details={"items": outside})
+    raise steps.CheckFailed(routed)
+
+
+def _banner_dependency(repo, rel, message):
+    try:
+        meta = read_page(repo, rel).meta
+    except (ValueError, OSError):
+        return None
+    try:
+        banners.body(repo, rel, meta)
+    except (ValueError, OSError) as exc:
+        if str(exc) == message and isinstance(meta.get("banner_from"), str):
+            return resolve(rel, meta["banner_from"])
+    return None
+
+
+def _metadata_problems(rel: str, text: str, repo=None, banner_reader=read_page) -> list[str]:
     try:
         meta = frontmatter.split(text).meta
     except (ValueError, yaml.YAMLError):
@@ -62,7 +90,7 @@ def _metadata_problems(rel: str, text: str, repo=None) -> list[str]:
             messages.append(str(exc))
     if repo is not None and not messages:
         try:
-            banners.body(repo, rel, meta)
+            banners.body(repo, rel, meta, read=banner_reader)
         except (ValueError, OSError) as exc:
             messages.append(str(exc))
     return messages
@@ -72,7 +100,7 @@ def refresh(ctx: Ctx, task: Task, *, today: date | None = None) -> None:
     repo = ctx.notes_path
     today = observation_date(task, today)
     validate(ctx, task)
-    _settle_pending(ctx, task)
+    journal.settle(ctx, task)
     linked = drafts.lesson_keys(repo)
     for rel in sorted(wiki_pages(repo)):
         old = safefs.read_text(repo, rel)
@@ -82,44 +110,7 @@ def refresh(ctx: Ctx, task: Task, *, today: date | None = None) -> None:
         if lesson_log.is_lesson(rel, meta):
             new = lesson_log.after_header(new, lesson_log.BLOCK, lesson_log.source_line(meta))
         if new != old:
-            _write(ctx, task, rel, new, whole=False)
+            journal.write(ctx, task, rel, new, whole=False)
     overview = decisions.overview(repo)
     if not safefs.exists(repo, decisions.OVERVIEW) or safefs.read_text(repo, decisions.OVERVIEW) != overview:
-        _write(ctx, task, decisions.OVERVIEW, overview, whole=True)
-
-
-def _settle_pending(ctx: Ctx, task: Task) -> None:
-    pending = task.get("learning_pending")
-    if not pending:
-        return
-    rel, whole = pending["path"], pending["whole"]
-    key = "tool_writes" if whole else "tool_parts"
-    recorded = dict(task.get(key, {}))
-    text = safefs.read_text(ctx.notes_path, rel) if safefs.exists(ctx.notes_path, rel) else None
-    actual = None if text is None else (
-        hashlib.sha256(text.encode()).hexdigest() if whole else guard.parts_hash(text))
-    if actual == pending["before"]:
-        if actual is None:
-            recorded.pop(rel, None)
-        else:
-            recorded[rel] = actual
-    elif actual != recorded.get(rel):
-        raise NeedsOwner(f"interrupted tool write was edited: {rel}",
-                         todo="inspect the worktree in `school-notes chat`")
-    hashes = dict(task.get("tool_hashes", {}))
-    if text is not None and actual != pending["before"]:
-        hashes[rel] = hashlib.sha256(text.encode()).hexdigest()
-    task.update(**{key: recorded}, tool_hashes=hashes, learning_pending=None)
-
-
-def _write(ctx: Ctx, task: Task, rel: str, text: str, *, whole: bool) -> None:
-    key = "tool_writes" if whole else "tool_parts"
-    recorded = dict(task.get(key, {}))
-    recorded[rel] = hashlib.sha256(text.encode()).hexdigest() if whole else guard.parts_hash(text)
-    old = safefs.read_text(ctx.notes_path, rel) if safefs.exists(ctx.notes_path, rel) else None
-    before = None if old is None else (
-        hashlib.sha256(old.encode()).hexdigest() if whole else guard.parts_hash(old))
-    task.update(**{key: recorded}, learning_pending={"path": rel, "whole": whole, "before": before})
-    safefs.write_text(ctx.notes_path, rel, text)
-    steps.record_tool_files(task, ctx.notes_path, [rel])
-    task.update(learning_pending=None)
+        journal.write(ctx, task, decisions.OVERVIEW, overview, whole=True)

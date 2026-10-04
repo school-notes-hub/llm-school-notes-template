@@ -113,8 +113,8 @@ def complete(ctx, task):
     for item in data["items"]:
         if item["page"] == task.get("repair_topic"):
             item["status"] = "done"
-            from . import learning
-            learning._write(ctx, task, queue.PATH, json.dumps(data, ensure_ascii=False, indent=2) + "\n", whole=True)
+            from . import journal
+            journal.write(ctx, task, queue.PATH, json.dumps(data, ensure_ascii=False, indent=2) + "\n", whole=True)
             return
 
 

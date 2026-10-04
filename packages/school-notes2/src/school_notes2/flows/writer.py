@@ -17,9 +17,11 @@ from .session import mcp
 
 def write_inputs(ctx: Ctx, task: Task, k: int) -> None:
     """fetch.json and changes.json for range k; the old result.json is removed (5.3)."""
+    from ..figures import licenses
+    licenses.preflight(ctx.notes_path)
     root, workdir = ctx.notes_path, workbranch.WORKDIR
     safefs.write_json(root, f"{workdir}/fetch.json",
-                      fetch_flow.fetch_json(task, k, grade=ctx.student.grade))
+                      fetch_flow.fetch_json(task, k, grade=ctx.student.grade, repo=ctx.notes_path))
     write_changes(ctx, task)
     call_scope.write_check(ctx, task, k)
     safefs.unlink(root, f"{workdir}/result.json")
@@ -135,7 +137,7 @@ def _check_call(ctx, task, k, result):
     validate("result", result)
     if result["status"] == "question":
         return
-    fetch = fetch_flow.fetch_json(task, k, grade=ctx.student.grade)
+    fetch = fetch_flow.fetch_json(task, k, grade=ctx.student.grade, repo=ctx.notes_path)
     listed = {(i["file"], i["item_id"]) for i in fetch["open_review_items"]}
     problems = check_result(ctx.notes_path, result, fetch, listed,
                             ctx.cfg.limits.review_closures_per_run, whole_run=False,

@@ -65,6 +65,8 @@ def build(repo, previous=None) -> dict:
     book = inventory(repo)
     previous = previous if previous is not None else load(repo)
     old = {i["page"]: i for i in previous.get("items", [])}
+    from ..figures import requests
+    approved = {r["page"] for r in requests.approved(repo)}
     items = []
     for rel, page in book.items():
         before = old.get(rel, {})
@@ -75,7 +77,8 @@ def build(repo, previous=None) -> dict:
         links = related(rel, book)
         matches = len(source_refs.scan(rel, safefs.read_text(repo, rel), full=True))
         items.append({"page": rel, "kind": page.meta.get("type", "concept"),
-                      "status": before.get("status", "pending"), "priority": priority,
+                      "status": "pending" if rel in approved and before.get("status") == "done" else before.get("status", "pending"),
+                      "priority": priority,
                       "matches": matches, "urgent": before.get("urgent", False),
                       "last_lesson": max([_date(page)] + [_date(book[p]) for p in links if p in book]),
                       "depends_on": dependencies(rel, book)})

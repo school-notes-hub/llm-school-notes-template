@@ -136,6 +136,11 @@ def _preview(settings: ImageSettings, job: dict, result: dict) -> dict:
     plan_id = job["id"].removeprefix(f"{settings.learner}-")
     preview = call(settings, command, ["--job", str(plans.job_path(settings, plan_id))],
                    job["target"])
+    from ..state.files import write_json
+    ledger = settings.ledger()
+    attempt = next(a for a in ledger["jobs"][job["id"]]["attempts"] if a["number"] == result["number"])
+    attempt["preview_sha256"] = preview["sha256"]
+    write_json(settings.state_dir / "ledger.json", ledger)
     folder = Path(preview["path"]).parent
     stem = f"{plan_id}-{result['number']}"
     image = f".school-notes/images/{stem}.png"

@@ -17,8 +17,10 @@ def _validator(name: str):
     text = resources.files(__package__).joinpath(f"{name}.json").read_text(encoding="utf-8")
     schema = json.loads(text)
     jsonschema.Draft202012Validator.check_schema(schema)
-    card = json.loads(resources.files(__package__).joinpath("subject-card.json").read_text("utf-8"))
-    registry = Registry().with_resource("urn:school-notes:subject-card", Resource.from_contents(card))
+    registry = Registry()
+    for dependency in ("subject-card", "figure-requests"):
+        value = json.loads(resources.files(__package__).joinpath(f"{dependency}.json").read_text("utf-8"))
+        registry = registry.with_resource(f"urn:school-notes:{dependency}", Resource.from_contents(value))
     return jsonschema.Draft202012Validator(schema, registry=registry)
 
 

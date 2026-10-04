@@ -87,3 +87,5 @@ Kimenet és befejezés
 A `.school-notes/result.json` a futás szerződése: `status: done | question`, `questions`, `notes`, `new_subjects`, `review_closure`, `checks`, `coverage`, `figures`, `notebook_drawings`, `figure_requests`, `warnings`, `owner_notes`. A pontos mezőket a run-modul adja meg. Az utolsó saját `check` minden figyelmeztetéséről dönts a `warnings[{id, action: rewritten | kept, reason}]` mezőben. A harmadik ellenőrzés után fennmaradó találatot nem üldözöd új körben: a lektor elé kerül. Valódi blokkoló gondnál `status: question`; a nem blokkoló bizonytalanság az oldal nyitott kérdése. Befejezés: sémahelyes eredmény és nulla gépi hiba; korlát vagy blokkoló kérdés esetén a tényleges állapotot jelentsd, ne állítsd késznek. Interaktív futásban a végén MCP `finish` is kell.
 
 Ha `truncated`, a teljes lista a `check.json`-ban van.
+
+A `fetch.json` `approved_figure_requests` listája az engedélyezett, beillesztésre váró kérelmeket adja. Az érintett oldalon készíts a kérelem azonosítójával normál ábramegbízást és jelöltet; a kérelem jelölője maradjon az ábraellenőrzésig.

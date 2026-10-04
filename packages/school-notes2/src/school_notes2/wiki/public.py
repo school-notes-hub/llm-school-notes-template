@@ -103,15 +103,17 @@ def linked_targets(repo: Path, pages: list[str]) -> tuple[set[str], set[str]]:
 def asset_entry(repo: Path, rel: str, known: dict, rights: RightsLookup) -> dict | None:
     entry = {"path": rel, "sha256": sha256(repo, rel)}
     old = known.get(rel)
+    from ..figures import licenses
+    if list(licenses.records(repo, rel)):
+        found = licenses.rights(repo, rel)
+        return {**entry, "rights": found[0], "rightsEvidence": found[1]} if found else None
     if old and old.get("sha256") == entry["sha256"] and old.get("rights") in (
-            "authored", "generated", "public-domain", "standard"):
+            "authored", "generated", "public-domain", "standard", "licensed"):
         entry["rights"] = old["rights"]
         if old.get("rightsEvidence"):
             entry["rightsEvidence"] = old["rightsEvidence"]
         return entry
-    from ..figures.licenses import rights as licensed_rights
-    licensed = licensed_rights(repo, rel)
-    found = licensed if old and old.get("rights") == "licensed" else licensed or rights(rel)
+    found = licenses.rights(repo, rel) or rights(rel)
     if found is None:
         return None
     entry["rights"], entry["rightsEvidence"] = found

@@ -139,7 +139,13 @@ def apply(ctx, task, root, saved, edits=None):
         correction_chat.restore_inputs(ctx, task)
     result = saved["result"]
     state = saved.get("tool_state", {})
-    task.update(**state)
+    if task.get("correction_state_applied") != str(root):
+        task.update(**state, correction_state_applied=str(root))
+    from . import licensing
+    licensing.refresh(ctx, task, result, task.get("pages", []))
+    if result.get("figures"):
+        from . import generation_receipts
+        generation_receipts.refresh(ctx, task)
     outcome = files.apply_closure(ctx.notes_path, f"{task.run_id}-fix-a{task.get('attempt', 1)}", result.get("review_closure", []),
                                   task.get("correction_items", []), ctx.cfg.limits.owner_after_open)
     steps.record_tool_files(task, ctx.notes_path, outcome.written)
@@ -162,7 +168,7 @@ def validated(ctx, child, root, items, result):
         raise steps.CheckFailed(problems)
     from . import fetch
     from ..wiki.check_result import check_result
-    supplied = fetch.fetch_json(child, 1, grade=ctx.student.grade, whole_run=True)
+    supplied = fetch.fetch_json(child, 1, grade=ctx.student.grade, repo=ctx.notes_path, whole_run=True)
     problems = check_result(ctx.notes_path, result, supplied,
                             {(i["file"], i["item_id"]) for i in items}, len(items),
                             base_content=steps.base_reader(ctx, child))

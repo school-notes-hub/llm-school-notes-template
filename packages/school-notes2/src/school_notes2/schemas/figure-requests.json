@@ -60,7 +60,7 @@
         "pattern": "^[a-f0-9]{64}$"
       },
       "original_sha256": {
-        "type": "string",
+        "type": ["string", "null"],
         "pattern": "^[a-f0-9]{64}$"
       }
     }

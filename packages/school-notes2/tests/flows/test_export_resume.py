@@ -62,15 +62,15 @@ def test_only_owner_session_can_edit_licenses(repo):
 
 @pytest.mark.parametrize("crash", ["before", "after"])
 def test_generated_rights_receipt_crash_resume(repo, tmp_path, monkeypatch, crash):
-    from school_notes2.flows import handlers
+    from school_notes2.flows import generation_receipts
     from school_notes2.wiki import public
     asset = "wiki/assets/fresh.webp"
     safefs.write_bytes(repo, asset, b"generated")
     digest = public.sha256(repo, asset)
-    ctx = SimpleNamespace(notes_path=repo, image_settings=lambda: None, log=None)
+    settings = SimpleNamespace(learner="sample", ledger=lambda: {"jobs": {"sample-fresh": {
+        "learner": "sample", "attempts": [{"state": "generated", "sha256": "a" * 64, "preview_sha256": digest}]}}})
+    ctx = SimpleNamespace(notes_path=repo, image_settings=lambda: settings, log=None)
     task = phase.create(tmp_path / "tasks", "sample", "notes", "interactive", "prepared")
-    monkeypatch.setattr(handlers.image_generate, "generate", lambda *a, **kw: {
-        "state": "generated", "number": 1, "sha256": "a" * 64, "preview_sha256": digest})
     real = safefs.write_text
     def interrupted(root, path, data, **kw):
         if crash == "after":
@@ -79,8 +79,8 @@ def test_generated_rights_receipt_crash_resume(repo, tmp_path, monkeypatch, cras
     with monkeypatch.context() as patch:
         patch.setattr(safefs, "write_text", interrupted)
         with pytest.raises(RuntimeError, match="power loss"):
-            handlers.generate(ctx, task, "fresh", None)
-    handlers.generate(ctx, phase.load(task.dir), "fresh", None)
+            generation_receipts.refresh(ctx, task)
+    generation_receipts.refresh(ctx, phase.load(task.dir))
     assert public.media_receipt_rights(repo)(asset)[0] == "generated"
     safefs.write_bytes(repo, asset, b"changed")
     assert public.media_receipt_rights(repo)(asset) is None

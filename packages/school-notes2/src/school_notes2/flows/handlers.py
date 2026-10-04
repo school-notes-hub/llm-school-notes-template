@@ -40,6 +40,8 @@ def build(ctx: Ctx, task_dir=None, *, fetch=None, finish=None) -> Handlers:
 def check(ctx: Ctx, task) -> dict:
     """The writer's own check at the end of its work: guard, result.json, changed files.
     Applies unambiguous auto-fixes and refreshes tool-rendered learning metadata."""
+    from ..figures import licenses
+    licenses.preflight(ctx.notes_path)
     if not checks.take(task):
         return dict(checks.LIMIT)
     problems: list[dict] = []
@@ -63,7 +65,7 @@ def check(ctx: Ctx, task) -> dict:
             problems += [wiki_check.item(".school-notes/result.json", None, e) for e in invalid]
         else:
             fetch = fetch_flow.fetch_json(task, task.get("writing_k", len(task.get("ranges"))),
-                                         grade=ctx.student.grade)
+                                         grade=ctx.student.grade, repo=ctx.notes_path)
             listed = {(i["file"], i["item_id"]) for i in fetch["open_review_items"]}
             problems += check_result(ctx.notes_path, result, fetch, listed,
                                      ctx.cfg.limits.review_closures_per_run, whole_run=False,
@@ -74,7 +76,8 @@ def check(ctx: Ctx, task) -> dict:
         except steps.CheckFailed as exc:
             problems += exc.items
     if metadata_valid:
-        problems += public_problems(ctx.notes_path)
+        from . import generation_receipts
+        problems += public_problems(ctx.notes_path, generation_receipts.rights(ctx))
     problems = checks.identify(call_scope.current(ctx, task, problems), ctx.notes_path)
     steps.write_check_items(ctx, problems)
     checks.tool_errors(ctx, task, problems)
@@ -82,11 +85,11 @@ def check(ctx: Ctx, task) -> dict:
     return checks.response(problems)
 
 
-def public_problems(repo) -> list[dict]:
+def public_problems(repo, generated=lambda _: None) -> list[dict]:
     """What finish's public.json step would refuse (a new image with no rights record, a copy
     of a source photo), reported now, so the writer fixes it in the same call."""
     try:
-        public.build(repo, public.either(public.render_rights(repo), public.media_receipt_rights(repo)))
+        public.build(repo, public.either(public.render_rights(repo), public.media_receipt_rights(repo), generated))
     except public.PublicError as exc:
         return [wiki_check.item(p, None, exc.reason) for p in exc.paths]
     return []
@@ -95,12 +98,4 @@ def public_problems(repo) -> list[dict]:
 def generate(ctx, task, plan_id, note):
     if task.get("mode") == "repair" or task.get("paid_disabled"):
         return {"state": "disabled", "message": "Repair uses free local figures; paid generation is disabled."}
-    result = image_generate.generate(ctx.image_settings(), plan_id, note, log=ctx.log)
-    if result.get("state") == "generated" and result.get("preview_sha256"):
-        from . import learning
-        from ..wiki.public import dumps
-        learning._settle_pending(ctx, task)
-        path = f"docs/evidence/image-generation/{plan_id}-{result['number']}.json"
-        learning._write(ctx, task, path, dumps({"rights": "generated",
-                        "outputs": sorted({result["sha256"], result["preview_sha256"]})}), whole=True)
-    return result
+    return image_generate.generate(ctx.image_settings(), plan_id, note, log=ctx.log)

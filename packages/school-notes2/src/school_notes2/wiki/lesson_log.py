@@ -55,11 +55,11 @@ def source_line(meta: dict) -> str:
                 materials.append(name)
     line = "📎 Füzet: " + ", ".join(dates)
     if materials:
-        line += " · Tanári anyag: " + "; ".join(_plain(name) for name in materials)
+        line += " · Tanári anyag: " + "; ".join(plain(name) for name in materials)
     return line + "\n"
 
 
-def _plain(text: str) -> str:
+def plain(text: str) -> str:
     # Names are plain text, never Markdown/HTML supplied by metadata.
     return re.sub(r"([\\`*_{}\[\]<>&])", lambda m: "&#" + str(ord(m[1])) + ";", text)
 

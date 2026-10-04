@@ -9,7 +9,7 @@ from .pages import CODE_FENCE, LINK, relative, resolve, read_page
 BLOCK = "lesson-banner"
 
 
-def target(repo: Path, page: str, meta: dict) -> str | None:
+def target(repo: Path, page: str, meta: dict, *, read=read_page) -> str | None:
     value = meta.get("banner_from")
     if value is None:
         return None
@@ -18,13 +18,13 @@ def target(repo: Path, page: str, meta: dict) -> str | None:
     dest = resolve(page, value)
     topics = {resolve(page, str(t).split("#", 1)[0]) for lesson in meta.get("lessons", [])
               for t in lesson.get("topics", [])}
-    if not dest or dest not in topics or read_page(repo, dest).meta.get("type") != "topic":
+    if not dest or dest not in topics or read(repo, dest).meta.get("type") != "topic":
         raise ValueError("banner_from must name a listed topic page")
     return dest
 
 
-def banner(repo: Path, page: str) -> str:
-    return leading(read_page(repo, page).body)
+def banner(repo: Path, page: str, *, read=read_page) -> str:
+    return leading(read(repo, page).body)
 
 
 def leading(text: str) -> str:
@@ -39,11 +39,11 @@ def leading(text: str) -> str:
     return ""
 
 
-def body(repo: Path, page: str, meta: dict) -> str:
-    source = target(repo, page, meta)
+def body(repo: Path, page: str, meta: dict, *, read=read_page) -> str:
+    source = target(repo, page, meta, read=read)
     if not source:
         return ""
-    image = banner(repo, source)
+    image = banner(repo, source, read=read)
     def relocate(match):
         dest = resolve(source, match["target"].strip("<>"))
         if not dest or not dest.startswith("wiki/assets/"):

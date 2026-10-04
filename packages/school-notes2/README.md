@@ -469,8 +469,8 @@ T-144 owner gate and cron installation are outside this repository change.
 
 `wiki/rights.py` validates output hashes for `render.json` and generation receipts;
 `public.py` only inherits rights for unchanged bytes. Generation records under
-`docs/evidence/image-generation/` are written by the host and cannot collide with
-accepted figure identities. A licensed image always revalidates its grant.
+`docs/evidence/image-generation/` are copied from the host ledger in the main content flow and cannot collide with
+accepted figure identities. A request-based licensed image always revalidates its grant; hash-matching legacy licensed rights survive without a request record.
 `figures/requests.py` and `figures/licenses.py` own the private request/license
 contracts; `flows/licensing.py` files requests through the existing tool-write
 journal before inspection. Source image hashes are distinct from the uploaded
@@ -488,5 +488,7 @@ PROFILE's explicit Student first name; the uninitialized template stays untouche
 No new phase, model call or publishing switch is introduced.
 
 Run the JS export tests with `node test/learning-export.test.mjs` in `packages/study-site`.
+They use the sibling `school-notes2/.venv/bin/python` (or `SCHOOL_NOTES_PYTHON`) to
+feed the real `public.build` manifest into the renderer.
 Set `STUDY_BROWSER` to the installed Chromium executable for both synthetic learners'
 actual HTML/PDF/site-file negative tests; without it those two browser builds skip.

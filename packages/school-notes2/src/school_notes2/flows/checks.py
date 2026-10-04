@@ -75,7 +75,7 @@ def accounting(task, result: dict) -> list[dict]:
 def source_warnings(ctx, task, paths: list[str]) -> list[dict]:
     from .steps import base_of
     from ..wiki import footnotes
-    out, counts = [], {}
+    out, counts, footnote_counts = [], {}, {}
     wt = ctx.worktree("notes")
     for rel in sorted(set(paths)):
         if not rel.startswith("wiki/") or not rel.endswith((".md", ".svg")) or not safefs.is_file(ctx.notes_path, rel):
@@ -87,14 +87,16 @@ def source_warnings(ctx, task, paths: list[str]) -> list[dict]:
             before = Path(task.get("correction_before"))
             previous = safefs.read_text(before, rel) if safefs.is_file(before, rel) else ""
         if rel != "wiki/log.md":
-            counts[rel] = 0
+            counts[rel] = footnote_counts[rel] = 0
         out += source_refs.scan(rel, text, previous,
                                 full=task.get("mode") == "repair")
         out += footnotes.scan(rel, text, previous, full=task.get("mode") == "repair")
-    counts.update(Counter(i["file"] for i in out))
+    counts.update(Counter(i["file"] for i in out if i.get("kind") != "public_footnote"))
+    footnote_counts.update(Counter(i["file"] for i in out if i.get("kind") == "public_footnote"))
     counts = dict(sorted(counts.items()))
-    task.update(source_ref_counts=counts)
+    task.update(source_ref_counts=counts, public_footnote_counts=dict(sorted(footnote_counts.items())))
     ctx.log.event("check.source_refs", counts=counts)
+    ctx.log.event("check.public_footnotes", counts=dict(sorted(footnote_counts.items())))
     return verdicts.pending(ctx.notes_path, out)
 
 
