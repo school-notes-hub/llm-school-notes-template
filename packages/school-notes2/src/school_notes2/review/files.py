@@ -110,13 +110,13 @@ def _with_frontmatter(body: str, reviewer: str, frm: str, to: str, items: dict) 
 
 
 def write_review(repo: Path, date: str, review: dict, reviewer: str, frm: str, to: str, *,
-                 path: Path | None = None) -> Path:
+                 path: Path | None = None, known: dict | None = None) -> Path:
     """A new review file from a validated review.json; returns its path."""
     ids = [f["id"] for f in review["findings"]]
     if len(set(ids)) != len(ids):
         raise ValueError("review.json: duplicate finding ids")
     path = path or next_path(repo, date)
-    known = relations.inventory(repo)
+    known = relations.inventory(repo) if known is None else known
     active, pending, items, records = [], [], {}, {}
     for f in sorted(review["findings"], key=lambda f: _num(f["id"])):
         status, unlocated = relations.route(f, known)

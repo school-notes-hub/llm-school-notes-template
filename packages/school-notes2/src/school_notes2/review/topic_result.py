@@ -2,7 +2,7 @@
 
 import re
 
-from ..reader import notices, verdicts
+from ..reader import notices, report, verdicts
 from ..reader.units import page_key
 from ..state import safefs
 from ..wiki import frontmatter, public
@@ -50,7 +50,7 @@ def assemble(task, repo, work):
         if receipt["status"] == "reviewed":
             value = receipt["review"]
             fix_touched = unit["mode"] == "targeted" or any(topics.is_fix(repo, c) for c in unit["commits"])
-            own = [chain(repo, task.get("H"), f, fix_touched=fix_touched) for f in value["findings"]]
+            own = list(value["findings"])
             # Generate list findings without changing the pinned worktree's verdict store.
             by_id = {h["id"]: h for h in entry["input"]["hits"]}
             for hit in value["hits"]:
@@ -59,8 +59,10 @@ def assemble(task, repo, work):
                     lines = topics.text(repo, task.get("H"), row["file"]).splitlines()
                     f = {"file": row["file"], "quote": lines[row["line"] - 1], "problem": hit["reason"],
                          "category": "forráskötött", "relates_to": None, "hit_id": row["id"]}
-                    own.append(chain(repo, task.get("H"), f, fix_touched=fix_touched))
-            own += [chain(repo, task.get("H"), f, fix_touched=fix_touched) for f in entry.get("figure_findings", [])]
+                    own.append(f)
+            own += entry.get("figure_findings", [])
+            own, notes, _ = report.prepare(work, own, notes)
+            own = [chain(repo, task.get("H"), f, fix_touched=fix_touched) for f in own]
             for f in sorted(own, key=lambda f: (f["file"], f.get("line") or 0, f["problem"], f.get("quote", ""))):
                 f = {**f, "id": f"R{len(findings) + 1}", "topic": unit["topic"]}
                 findings.append(f)

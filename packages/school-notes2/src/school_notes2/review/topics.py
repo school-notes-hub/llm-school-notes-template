@@ -11,6 +11,7 @@ from ..reader import units
 from ..state import safefs
 from ..schemas import validate
 from ..wiki import frontmatter
+from ..wiki.pages import resolve, wiki_pages
 from . import nightly, relations
 
 STATE = "docs/review/nightly-state.json"
@@ -62,33 +63,48 @@ def closure_changes(repo, base, head):
     return found
 
 
+def asset_pages(work):
+    """Render companions share the embedding pages of the published output."""
+    related = relations.related_pages(work)
+    result = {path: set(pages) for path, pages in related.items()}
+    for receipt in sorted(safefs.glob(work, "wiki/assets", "wiki/assets/**/render.json")):
+        folder = receipt.rsplit("/", 1)[0]
+        companions = set(safefs.glob(work, folder, folder + "/*"))
+        try:
+            value = safefs.read_json(work, receipt, {})
+        except (OSError, ValueError):
+            value = {}
+        if isinstance(value, dict):
+            source, outputs = value.get("source"), value.get("outputs", {})
+            if isinstance(source, str):
+                companions.add(resolve("x", source))
+            if isinstance(outputs, dict):
+                companions.update(resolve(receipt, name) for name in outputs)
+        companions = {p for p in companions if p and p.startswith("wiki/assets/")}
+        pages = set().union(*(related.get(p, set()) for p in sorted(companions)))
+        for path in sorted(companions):
+            result.setdefault(path, set()).update(pages)
+    return result
+
+
 def affected(repo, work, base, head):
     changed = author_changes(repo, base, head)
-    related = relations.related_pages(work)
-    pages = set()
-    for path in changed:
-        if path.endswith(".md") and not path.startswith("wiki/assets/"):
-            pages.add(path)
-        elif path in related:
-            # A shared image belongs to its first primary topic, by path.
-            pages.add(min(related[path], key=lambda p: (commissions.topic(work, p), p)))
-        else:
-            pages.add(path)
+    related, published = asset_pages(work), set(wiki_pages(work))
     closures = closure_changes(repo, base, head)
-    for item in closures.values():
-        path = item.get("file", "")
-        if path in related:
-            pages.add(min(related[path], key=lambda p: (commissions.topic(work, p), p)))
-        elif path:
+    pages, assets = set(), {}
+    for path in sorted(set(changed) | {item.get("file", "") for item in closures.values()}):
+        if path in published:
             pages.add(path)
+        elif not path.endswith(".md") and related.get(path):
+            # A shared image belongs to its first primary topic, by path.
+            page = min(related[path], key=lambda p: (commissions.topic(work, p), p))
+            pages.add(page)
+            assets[path] = page
     grouped = units.collect(work, sorted(pages))
-    covered = {p for u in grouped for p in u["pages"]}
-    for path in sorted(pages - covered):
-        if safefs.is_file(work, path):
-            grouped.append({"topic": path, "pages": [path], "context": [],
-                            "keys": {path: units.page_key(work, path)} if path.endswith(".md") else {}})
     for unit in grouped:
         unit["changed"] = sorted(pages & set(unit["pages"]))
+        unit["context"] = sorted(set(unit["context"]) | {
+            path for path, page in assets.items() if page in unit["pages"]})
     return sorted(grouped, key=lambda u: u["topic"])
 
 
@@ -128,7 +144,14 @@ def plan(repo, work, base, head, state):
 def patch(repo, unit, head):
     out = []
     for path in sorted(set(unit["pages"] + unit["context"])):
-        old, new = text(repo, unit["base"], path), text(repo, head, path)
+        blobs = [repo.run("show", f"{commit}:{path}", check=False).stdout
+                 for commit in (unit["base"], head)]
+        if blobs[0] == blobs[1]:
+            continue
+        if any(nightly._text(data, path) is None for data in blobs):
+            out.append(f"Binary file {path}\n")
+            continue
+        old, new = (data.decode("utf-8", "replace") for data in blobs)
         if path.endswith(".md"):
             old, new = part(old), part(new)
         out.extend(difflib.unified_diff(old.splitlines(True), new.splitlines(True),

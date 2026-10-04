@@ -117,7 +117,7 @@ def close(task: phase.Task, repo: Git, wt: Git, ident: Identity, t: Timeouts = T
     """Write the report, index and evidence; commit R; push main=R, claude-reviewed=M."""
     review = load_review(task)
     base, head, end = task.get("base"), task.get("H"), task.get("T")
-    if task.get("topic_review") and not task.get("topic_results"):
+    if task.get("topic_review") and not task.get("topic_results") and not task.get("all_topics_done"):
         from . import topic_result, topics
         if public.dumps(topic_result.state(task)) == topics.text(repo, head, topics.STATE):
             return _finish(task, repo, head, base)
@@ -129,7 +129,8 @@ def close(task: phase.Task, repo: Git, wt: Git, ident: Identity, t: Timeouts = T
             repo.log.event("review.dropped_responses", items=dropped)
         replied = [relations.reply(worktree, r["key"], r["verdict"], r["answer"])
                    for r in responses]
-        report = files.write_review(worktree, ident.date, review, ident.reviewer, base, end)
+        known = relations.inventory(worktree)
+        report = files.write_review(worktree, ident.date, review, ident.reviewer, base, end, known=known)
         rel = report.relative_to(worktree).as_posix()
         owners = [{"file": rel, "item_id": key, "reason": "review finding requires an owner decision"}
                   for key, status in (files.read_items(worktree, report) or {}).items() if status == files.OWNER]
@@ -140,10 +141,13 @@ def close(task: phase.Task, repo: Git, wt: Git, ident: Identity, t: Timeouts = T
             owners += closure_owners
             notes = [" ".join(n.split()) for n in notes if n not in review.get("owner_notes", [])]
             if notes:
-                safefs.write_text(worktree, rel, safefs.read_text(worktree, rel)
-                                  + "\n## Tulajdonosi észrevételek\n\n" + "".join(f"* {n}\n" for n in notes))
-                safefs.write_json(task.dir, "review.json", {**review, "owner_notes":
-                    list(dict.fromkeys(review.get("owner_notes", []) + notes))})
+                merged = {**review, "owner_notes":
+                          list(dict.fromkeys(review.get("owner_notes", []) + notes))}
+                safefs.write_json(task.dir, "review.json", merged)
+                # Notices need the report before export; adding notes must not reroute
+                # findings against the closure states just changed by apply.
+                files.write_review(worktree, ident.date, merged, ident.reviewer, base, end,
+                                   path=report, known=known)
         task.update(notify_owner_items=owners)
         written = replied + extra + [report.relative_to(worktree).as_posix(),
                    index.update(worktree).relative_to(worktree).as_posix()]
