@@ -225,6 +225,15 @@ def generate_all(ctx: Ctx, task: Task) -> None:
     # Recorded at once: if a later step stops the run, the next check must still know that
     # these generated blocks are the tool's own writes.
     _record_writes(task, repo, whole=[], parts=indexes)
+    write_public(ctx, task)
+    review_index.update(repo)
+    _record_writes(task, repo, whole=list(TOOL_WHOLE_FILES), parts=indexes)
+
+
+def write_public(ctx: Ctx, task: Task) -> None:
+    """publication/public.json from the pages as they are now; every later page write
+    (e.g. the final ⏳ notices) must call it again, or the site build sees a stale hash."""
+    repo = ctx.notes_path
     try:
         value = public.build(repo, public.either(public.render_rights(repo),
                                                 public.media_receipt_rights(repo)))
@@ -235,8 +244,6 @@ def generate_all(ctx: Ctx, task: Task) -> None:
         problems = [wiki_check.item(p, None, exc.reason) for p in exc.paths]
         checks.tool_errors(ctx, task, problems)
         raise CheckFailed(problems)
-    review_index.update(repo)
-    _record_writes(task, repo, whole=list(TOOL_WHOLE_FILES), parts=indexes)
 
 
 def write_check_items(ctx: Ctx, items: list[dict]) -> None:

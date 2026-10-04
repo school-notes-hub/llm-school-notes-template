@@ -97,6 +97,10 @@ def final_keys(ctx, task):
     pages = {r["file"] for r in stale}
     pages.update(_notice_pages(ctx, task))
     written = notices.refresh(ctx.notes_path, sorted(pages)) if task.get("review_complete") else []
+    # Notices may change pages after step 6 (also in an earlier, interrupted call):
+    # public.json must describe the pages as they are. Idempotent: no write without a change.
+    steps.write_public(ctx, task)
+    written = written + ["publication/public.json"]
     steps.record_tool_files(task, ctx.notes_path, written +
                            ([verdicts.PATH] if safefs.is_file(ctx.notes_path, verdicts.PATH) else []))
     ctx.log.event("review.final_keys", invalidated=len(stale))
