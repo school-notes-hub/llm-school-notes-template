@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Callable
 
 from ..state import safefs
+from ..sources import cards
 from . import frontmatter, markers
 from .machine import machine_keys
 
@@ -98,6 +99,10 @@ def check_change(change: Change, g: GuardInput) -> list[Violation]:
         data = safefs.read_bytes(g.worktree, path)
     except safefs.UnsafePath:                  # swapped for a link after the check
         return [Violation(path, "symlink in the worktree", True)]
+    if path == "tools/subjects.json" and g.interactive:
+        base = g.base_content(path)
+        if base is not None and cards.only_cards_changed(base, data):
+            return []
     if path in g.tool_files:
         if _sha(data) != g.tool_files[path]:
             return [Violation(path, "a file the tool wrote was changed afterwards", True)]

@@ -5,6 +5,7 @@ from functools import cache
 from importlib import resources
 
 import jsonschema
+from referencing import Registry, Resource
 
 
 class SchemaError(ValueError):
@@ -16,7 +17,9 @@ def _validator(name: str):
     text = resources.files(__package__).joinpath(f"{name}.json").read_text(encoding="utf-8")
     schema = json.loads(text)
     jsonschema.Draft202012Validator.check_schema(schema)
-    return jsonschema.Draft202012Validator(schema)
+    card = json.loads(resources.files(__package__).joinpath("subject-card.json").read_text("utf-8"))
+    registry = Registry().with_resource("urn:school-notes:subject-card", Resource.from_contents(card))
+    return jsonschema.Draft202012Validator(schema, registry=registry)
 
 
 def errors(name: str, value) -> list[str]:

@@ -90,3 +90,25 @@ def test_conflict_files_may_be_edited(repo):
     changes = [("tools/subjects.json", "modified")]
     assert run(repo, base, changes)
     assert run(repo, base, changes, conflict_files=frozenset({"tools/subjects.json"})) == []
+
+
+def test_subject_cards_only_in_owner_session(repo):
+    import json
+    from tests.sources.test_cards import CARD
+    base = snapshot(repo)
+    rel = "tools/subjects.json"
+    data = json.loads((repo / rel).read_text())
+    data["subjects"]["proba"]["card"] = CARD
+    (repo / rel).write_text(json.dumps(data))
+    assert run(repo, base, [(rel, "modified")])
+    assert run(repo, base, [(rel, "modified")], interactive=True) == []
+    # A prior tool hash does not forbid a subsequent valid owner edit.
+    assert run(repo, base, [(rel, "modified")], interactive=True,
+               tool_files={rel: hashlib.sha256(base[rel]).hexdigest()}) == []
+    data["subjects"]["proba"]["card"] = {**CARD, "role": " "}
+    (repo / rel).write_text(json.dumps(data))
+    assert run(repo, base, [(rel, "modified")], interactive=True)
+    data["subjects"]["proba"]["card"] = CARD
+    data["subjects"]["proba"]["name"] = "Más tárgy"
+    (repo / rel).write_text(json.dumps(data))
+    assert run(repo, base, [(rel, "modified")], interactive=True)

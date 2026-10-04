@@ -11,14 +11,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..state import safefs
-from . import markers
+from . import catch_up, markers
 from ..sources.order import natural_key
 from .pages import md_files, read_page, read_text
 from .pages import subjects as subject_slugs
 
 ISO = re.compile(r"\d{4}-\d{2}-\d{2}")
 TABLE_HEAD = "| Dátum | Óra | Jegyzet | Témakörök |\n|---|---|---|---|\n"
-SUBJECT_BLOCKS = ("chapters", "lessons", "review", "notes")
+SUBJECT_BLOCKS = ("catch-up", "chapters", "lessons", "review", "notes")
 
 
 @dataclass
@@ -143,7 +143,7 @@ def lessons_block(subject: Subject) -> str:
     for page, lesson in lessons(subject):
         topics = ", ".join(topic_link(subject, t) for t in lesson.get("topics") or [])
         anchor = f"#{lesson['anchor']}" if lesson.get("anchor") else ""
-        rows.append(f"| {lesson_date(lesson)} | {lesson.get('title', '')} | "
+        rows.append(f"| {catch_up.mark(page.meta)}{lesson_date(lesson)} | {lesson.get('title', '')} | "
                     f"[jegyzet]({page.file}{anchor}) | {topics} |")
     return TABLE_HEAD + "".join(r + "\n" for r in rows)
 
@@ -177,7 +177,7 @@ def subject_index(repo: Path, slug: str) -> str:
     for name in markers.names(text):
         if name in bodies:
             text = markers.replace(text, name, bodies[name])
-    return text
+    return catch_up.update(text, by_date_desc(subject.by_type("lesson-notes")))
 
 
 def subject_order(repo: Path) -> list[str]:

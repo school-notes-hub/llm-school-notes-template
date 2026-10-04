@@ -8,15 +8,15 @@ Use the localized strings in [PROFILE.md](../PROFILE.md) and the content rules i
 |---|---|
 | 💡 | Explanation of the taught content |
 | ➕ | An addition beyond the supplied lesson |
-| ⚠️ | A correction, with the original source claim and reason preserved |
+| ⚠️ | A correction, with the reason; the original source claim is quoted in the footnote |
 | 📗 | Textbook-only or background material, as specified by the label |
 | 🤖 | Machine authorship; combine with the relevant role icon, never a quality or verification badge |
 
-Use the role icon, one space, the author with `🤖` attached directly, then one space and the role: `💡 Drax🤖 magyarázata`, `➕ Drax🤖 kiegészítése`, `⚠️ Drax🤖 javítása`. These names are examples, not defaults. Preserve the actual author (such as Codex, Opus, Drax or a documented combination); a formatting pass does not transfer authorship. If evidence cannot establish the author, use the localized generic machine label, not an invented name. Do not attribute text to an image-generation model. Pure notebook or teacher material to learn needs no redundant notebook label. Preserve citations everywhere, including mixed-source passages.
+Use the semantic icon and the uniform, model-free machine role: `💡 🤖 gépi magyarázat`, `➕ 🤖 gépi kiegészítés`, `⚠️ 🤖 gépi javítás`. One label follows a continuous passage of the same kind, at a change of content kind, not every paragraph. Exact model and authorship stay in evidence; the correction label stays permanently. Pure notebook or teacher material to learn needs no redundant source label. Preserve citations everywhere, including mixed-source passages.
 
 ## Compact textbook label
 
-Use exactly the localized textbook label from PROFILE, in Hungarian `📗 A tankönyv alapján`. Do not append boilerplate such as `(a füzetben nincs)` or `saját megfogalmazás`, or turn the label into an editorial explanation. The root legend explains the source category once. Put precise book/page locations in citations or the existing textbook metadata line, not inside the label. Independently necessary explanation/correction labels retain their actual authorship and scope. Keep pedagogically relevant source limitations in the teaching prose. This compact wording does not relax independent wording, citation, no-copy or source-verification requirements; apply it consistently to topic pages, recaps, glossary cells, captions and answers.
+Use exactly the localized textbook label from PROFILE, in Hungarian `📗 A tankönyv alapján`. Do not append boilerplate such as `(a füzetben nincs)` or `saját megfogalmazás`, or turn the label into an editorial explanation. The root legend explains the source category once. Put precise book/page locations in citations or the existing textbook metadata line, not inside the label. Independently necessary explanation/correction labels retain their scope; exact authorship stays in evidence. Keep pedagogically relevant limits in subject terms in the teaching prose; source observations belong in private footnotes/evidence. This compact wording does not relax independent wording, citation, no-copy or source-verification requirements; apply it consistently to topic pages, recaps, glossary cells, captions and answers.
 
 ## Context before the learner needs it
 
@@ -26,22 +26,22 @@ Use the subject's established terminology consistently; explain it without repla
 
 Use precise referents: "the length of the moment arm" rather than an unexplained "dimension"; "the date of this event" rather than a bare "date". Do not leave a reader wondering whether missing information is a deliberate puzzle. Distinguish:
 
-* **Source omission:** say which source lacks which detail. If context resolves it, give the basis immediately and distinguish the completion from what is actually written. If it cannot be resolved, explain the consequence for this task; raise a numbered open question only if a material uncertainty remains.
-* **Unreadable or incomplete capture:** say that the photograph/crop does not show the detail clearly. This does not establish that the notebook or original document omitted it.
+* **Source omission:** state the missing quantity in subject terms and give the supported completion and basis, or the consequence of what remains unknown. Put the source location in a footnote.
+* **Unreadable or incomplete capture:** record the photograph/crop limitation privately; teach only what is supported, and ask a public-safe open question when necessary. A cropped detail is not proof that the original omitted it.
 * **Exercise unknown:** name what the learner must determine and the available information. Do not call an intentionally unknown result a source defect.
 * **Chosen simplification or optional omission:** explain the relevant modeling limit or scope, without attributing an unverified intention to the source author.
 
-For example, replace "The value is missing; see below" with "The notebook leaves the force magnitude blank in the data row, but uses 80 N for that force in the calculation. We use that stated value here." Replace an unexplained "There is no unit" with "The notebook does not give a unit for these position coordinates. They locate the force in the sketch; this calculation uses the force magnitude and angle, so no position unit is needed." These are example patterns, not facts to copy into a lesson. A parenthetical such as "(the notebook also leaves this blank)" can identify the source of a gap, but is insufficient if the learner still cannot tell what the gap changes.
+For example: "A feladat nem adja meg az erő nagyságát; a számolásban 80 N szerepel, ezzel számolunk.[^f]" This is an example, not a fact to copy into a lesson. State any remaining limit in subject terms, and keep the exact source observation in the footnote.
 
-Keep source-omission commentary beside the relevant diagram, not printed on it. Retain necessary symbols, intentionally unknown quantities and uncertainty indicators that carry subject meaning. Do not silently insert an inferred value into a faithful source reconstruction. An interpreted/completed diagram must be identified as such in adjacent prose. Keep the source summary faithful; the topic page teaches the supported completion with the appropriate existing label. Do not hide a limitation that affects learning in an HTML comment. Technical extraction and generation notes that do not affect learning stay in comments/evidence.
+Keep necessary subject-matter limits beside the relevant diagram, not printed on it. Retain symbols, intentionally unknown quantities and uncertainty indicators that carry subject meaning. Redraw a notebook drawing as the same drawing in the same role, correct; only meaning-bearing layout is binding. Correct unambiguous errors with the lasting correction label, and ask about genuinely uncertain elements. There is no "notebook reconstruction" label or reference to the notebook in the figure. Exact source wording and the change record stay in private footnotes/evidence; the topic page teaches the supported result.
 
-**Reading-order check:** read the finished passage as a learner who has the stated prerequisites but has not seen the source or the editing conversation. At each new statement, symbol, visual or result, check: can I name what this refers to, understand why it appears, follow the reasoning so far, and distinguish given facts, derived results and remaining unknowns? Can I understand the main point without following a link merely to obtain a missing prerequisite? Repair the first confusing point where it occurs, not only in a later FAQ. This is a semantic review, not a keyword lint or a claim that every reader has understood the page. Apply it to teaching prose, summaries, captions, diagrams and expanded answers, including editorial clarification beside a literal transcription. Report an imprecise term, ambiguous referent, missing condition, unsupported source completion or prerequisite introduced too late when it could change understanding. For each finding give **exact location and quoted passage → ambiguity or missing bridge → likely learner misunderstanding → smallest supported correction**. Distinguish a confirmed error, unresolved source reading and optional improvement; an explicitly stated valid convention is not an error merely because another convention is familiar. Check the source/evidence before alleging an omission. Apply *Reading handwritten sources* in [Wiki workflows](wiki-workflows.md) as well: use the whole relevant topic, calculations, units, diagrams, parallel source passages and disciplinary knowledge to resolve a suspected typo. An unambiguous supported resolution is a labeled correction/completion; several plausible readings remain an uncertainty, not a fabricated certainty. This applies to the first notebook in a new subject as well as ongoing corrections and reviews. Do not mechanically replace every short expression once its meaning is unambiguous.
+**Reading-order check:** read the finished passage as a learner who has the stated prerequisites but has not seen the source or the editing conversation. At each new statement, symbol, visual or result, check: can I name what this refers to, understand why it appears, follow the reasoning so far, and distinguish given facts, derived results and remaining unknowns? Can I understand the main point without following a link merely to obtain a missing prerequisite? Repair the first confusing point where it occurs, not only in a later FAQ. This is a semantic review, not a keyword lint or a claim that every reader has understood the page. Apply it to teaching prose, summaries, captions, diagrams and expanded answers, including the subject-matter clarification of an uncertain reading. Report an imprecise term, ambiguous referent, missing condition, unsupported source completion or prerequisite introduced too late when it could change understanding. For each finding give **exact location and quoted passage → ambiguity or missing bridge → likely learner misunderstanding → smallest supported correction**. Distinguish a confirmed error, unresolved source reading and optional improvement; an explicitly stated valid convention is not an error merely because another convention is familiar. Check the source/evidence before alleging an omission. Apply *Reading handwritten sources* in [Wiki workflows](wiki-workflows.md) as well: use the whole relevant topic, calculations, units, diagrams, parallel source passages and disciplinary knowledge to resolve a suspected typo. An unambiguous supported resolution is a labeled correction/completion; several plausible readings remain an uncertainty, not a fabricated certainty. This applies to the first notebook in a new subject as well as ongoing corrections and reviews. Do not mechanically replace every short expression once its meaning is unambiguous.
 
 ## A block and its small footer
 
 ```markdown
 > [!TIP]
-> Az állatok is kommunikálnak. A kutya a farkcsóválással jelez.<br /><sub>💡 Drax🤖 magyarázata</sub>
+> Az állatok is kommunikálnak. A kutya a farkcsóválással jelez.<br /><sub>💡 🤖 gépi magyarázat</sub>
 
 <br />
 
@@ -49,7 +49,7 @@ Keep source-omission commentary beside the relevant diagram, not printed on it. 
 > A tankönyv megértése alapján, saját szavakkal készített, pontos forráshellyel jelölt kiegészítés.<br /><sub>📗 A tankönyv alapján</sub>
 ```
 
-Keep GitHub's generated TIP/NOTE/WARNING heading; do not repeat it with a large manual heading. The role and author appear once, in the small footer after the content. A multiline list or table gets one footer after the block, separated by a quoted blank line where Markdown needs it. For a simple paragraph, keep the `<br /><sub>...</sub>` suffix on the same Markdown source line as the text; a separate quoted line can produce a second break in GitHub. Do not introduce an empty paragraph between a simple sentence and its label. Never collapse different source categories into one footer that falsely applies to the whole block. Split passages when needed. A list item, recap bullet or table cell can end with its own `<br /><sub>...</sub>` label.
+Keep GitHub's generated TIP/NOTE/WARNING heading; do not repeat it with a large manual heading. The model-free role appears once, in the small footer after the content. A multiline list or table gets one footer after the block, separated by a quoted blank line where Markdown needs it. For a simple paragraph, keep the `<br /><sub>...</sub>` suffix on the same Markdown source line as the text; a separate quoted line can produce a second break in GitHub. Do not introduce an empty paragraph between a simple sentence and its label. Never collapse different source categories into one footer that falsely applies to the whole block. Split passages when needed. A list item, recap bullet or table cell can end with its own `<br /><sub>...</sub>` label.
 
 ## Metadata and breathing room
 
@@ -72,9 +72,9 @@ Use one standalone `<br />` between substantial sections or adjacent callout blo
 
 Az egyszerű, forráshű válasz itt áll, robotcímke nélkül.
 
-A válaszhoz szükséges külön magyarázat.<br /><sub>💡 Drax🤖 magyarázata</sub>
+A válaszhoz szükséges külön magyarázat.<br /><sub>💡 🤖 gépi magyarázat</sub>
 
-A forrásban szereplő hiba helyesbítése, az indokával és hivatkozásával.<br /><sub>⚠️ Drax🤖 javítása</sub>
+A forrásban szereplő hiba helyesbítése, az indokával és hivatkozásával.<br /><sub>⚠️ 🤖 gépi javítás</sub>
 
 <br /><br />
 
@@ -101,11 +101,12 @@ The questions remain compact when closed. The `<dl><dd>` wrapper indents only th
 
 ## Numbered open questions
 
-Always number unresolved questions consecutively in Markdown, even if there is only one. Give each a concrete title and enough context to understand the uncertainty without searching the page. Keep the problem, relevant alternatives, their explanation and the recommendation/next step within that same numbered item. Scale detail to need: omit artificial alternatives and unnecessary subheadings, but never omit the context or what would resolve the question. Do not turn an established correction into a choice between equally valid answers. Use explicit `1.`, `2.`, `3.` markers in the file and indent continuation paragraphs by three spaces. This section is separate from self-tests; it records unresolved issues, not quiz answers.
+Always number unresolved questions consecutively in Markdown, even if there is only one. Give each a concrete title and enough context to understand the uncertainty without searching the page. Keep the problem, relevant alternatives, their explanation and the recommendation/next step within that same numbered item. Scale detail to need: omit artificial alternatives and unnecessary subheadings, but never omit the context or what would resolve the question. Do not turn an established correction into a choice between equally valid answers. Use explicit `1.`, `2.`, `3.` markers in the file and indent continuation paragraphs by three spaces. This section is separate from self-tests; it records unresolved issues, not quiz answers. Apply the stable anchors and decisions workflow. Each kind of question occurs at most once per page; omit the section when empty. Questions name only content already readable in the public note, and say what to do until answered. A source reference needed to ask is permitted here; source locations go in private footnotes.
 
 ```markdown
 # Nyitott kérdések
 
+<!-- q: pelda-kerdes -->
 1. **A konkrét tisztázandó kérdés?**
 
    **Kontextus:** melyik témáról, állításról vagy feladatról van szó.
@@ -116,17 +117,18 @@ Always number unresolved questions consecutively in Markdown, even if there is o
 
    **Javaslat:** az indokolt következő lépés; milyen válasz vagy bizonyíték oldaná fel a kérdést.
 
+<!-- q: pelda-masik -->
 2. **Egy másik, önálló kérdés?** A szükséges kontextus, bizonytalanság és következő lépés röviden is elférhet egy bekezdésben.
 ```
 
 ## Explanatory images and exports
 
-Distinguish **what the content is based on** from **who generated the image**. An agent arranging textbook or teacher facts visually has not thereby added a new explanation. Do not label every generated image with "Codex's explanation" or the equivalent. Keep the maker, image model and prompt in comments/evidence. A visible role/author label is for a substantive agent-added explanation, addition or correction, attached only to that contribution. This applies equally to prose and images.
+Distinguish **what the content is based on** from **who generated the image**. An agent arranging textbook or teacher facts visually has not thereby added a new explanation. Do not label every generated image with "Codex's explanation" or the equivalent. Keep the maker, image model and prompt in comments/evidence. A visible model-free role label is for a substantive agent-added explanation, addition or correction, attached only to that contribution. This applies equally to prose and images.
 
-Source labels must have a clear scope. Attach a paragraph's small label to that paragraph; a NOTE block can enclose a longer reference-only explanation. For a source-based image, name the relevant content in a short caption when needed: for example, identify the two clauses being compared and which reference supports each. For a mixed-source image, identify the textbook-only part rather than tagging the whole image as textbook-only. Do not leave a generic source label floating between prose and an image, and do not use a machine label to replace factual attribution. References and prose retain the teaching meaning. Teacher photos keep their class-material attribution. Decorative banners need no maker credit; exact model, prompt, cost, hashes and observations stay in comments/evidence. A caption-only correction does not authorize regeneration.
+Source labels must have a clear scope. Attach a paragraph's small label to that paragraph; a NOTE block can enclose a longer reference-only explanation. For a source-based image, name the relevant content in a short caption when needed: for example, identify the two clauses being compared and which reference supports each. For a mixed-source image, identify the textbook-only part rather than tagging the whole image as textbook-only. Do not leave a generic source label floating between prose and an image, and do not use a machine label to replace factual attribution. References and prose retain the teaching meaning. Licensed teacher images keep their visible credit; source-only photos remain private. Decorative banners need no maker credit; exact model, prompt, cost, hashes and observations stay in comments/evidence. A caption-only correction does not authorize regeneration.
 
 Keep the teaching content and source markers as ordinary text so non-GitHub viewers and future PDF rendering retain their meaning. An export may style the small labels consistently, but cannot remove their meaning or use color alone to distinguish provenance. This document defines Markdown layout, not an implemented PDF pipeline.
 
 ## Authorized whole-subject maintenance
 
-An explicit request to update a complete subject (in the owner's `school-notes chat` session) applies these rules to its topic pages, source summaries, chapter summaries and subject index. Inventory the scope, examine the source/evidence and relevant bounded curriculum passages, then apply semantic corrections and formatting together. Propagate a correction to summaries, quizzes and affected captions. Preserve faithful source transcription and all precision-dependent teaching diagrams. Select banners and optional visuals by the existing visual workflow. Finish with source coverage, reading-order review, the MCP `check` and `finish`. Do not treat a formatting-only request as authorization for unrelated ingestion or a paid visual batch.
+An explicit request to update a complete subject (in the owner's `school-notes chat` session) applies these rules to its topic pages, lesson logs, chapter summaries and subject index. Inventory the scope, examine the source/evidence and relevant bounded curriculum passages, then apply semantic corrections and formatting together. Propagate a correction to summaries, quizzes and affected captions. Preserve source evidence privately and redraw required teaching diagrams as the same drawing, correct, with labeled corrections. Select banners and optional visuals by the existing visual workflow. Finish with source coverage, reading-order review, the MCP `check` and `finish`. Do not treat a formatting-only request as authorization for unrelated ingestion or a paid visual batch.

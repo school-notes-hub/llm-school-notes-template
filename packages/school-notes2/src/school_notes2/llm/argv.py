@@ -24,11 +24,11 @@ OUTPUT_INSTRUCTION = {
     "file": ("A választ a `/out/review.json` fájlba írd egyetlen JSON-objektumként: "
              "`verdict` (ok | changes), `findings` [{id: R1…, file, line, problem, suggestion}], "
              "`figures` [{file, page, verdict, checks, observed, description}], "
-             "`family_questions` [szöveg]."),
+             "`family_questions` [], `owner_notes` [szöveg]."),
     "stdout": ("A válaszod végén írd ki a review-t egyetlen JSON-objektumként: "
                "`verdict` (ok | changes), `findings` [{id: R1…, file, line, problem, suggestion}], "
                "`figures` [{file, page, verdict, checks, observed, description}], "
-               "`family_questions` [szöveg]."),
+               "`family_questions` [], `owner_notes` [szöveg]."),
 }
 
 
@@ -55,7 +55,9 @@ def api_domain(harness: Harness, allowed: tuple[str, ...]) -> str:
 
 def prompt(role_name: str, output_mode: str = "file") -> str:
     """The fixed prompt of a role, byte-identical on every call (K12)."""
-    name = "writer" if role_name == "writer" else "reviewer"
+    if role_name not in (*ROLES, "fix"):
+        raise ValueError(f"unknown prompt {role_name!r}")
+    name = role_name
     text = resources.files(__package__).joinpath("prompts", f"{name}.txt").read_text("utf-8")
     return text.replace("{output_instruction}", OUTPUT_INSTRUCTION[output_mode])
 

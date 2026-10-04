@@ -14,3 +14,14 @@ def test_merge_unions_pages_and_keeps_last_closure():
     assert merged["notes"] == [{"file": "wiki/m/2026-10-01-a-jegyzet.md", "pages": [1, 2, 31]}]
     assert merged["review_closure"][0]["status"] == "fixed"
     assert len(merged["checks"]) == 1
+
+
+def test_owner_notes_survive_range_merge():
+    from school_notes2.schemas import validate
+    results = [{"status": "done", "owner_notes": ["Kihagyott lépés és indoka."]},
+               {"status": "done", "owner_notes": ["Jobb javaslat."]}]
+    for result in results:
+        validate("result", result)
+    merged = merge(results)
+    validate("result", merged)
+    assert merged["owner_notes"] == ["Kihagyott lépés és indoka.", "Jobb javaslat."]

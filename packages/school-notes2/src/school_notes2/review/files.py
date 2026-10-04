@@ -89,6 +89,8 @@ def render_body(date: str, review: dict, frm: str, to: str) -> str:
             out += [f"**Leírás:** {fig['description']}", ""]
     if review.get("family_questions"):
         out += ["## Családi kérdések", ""] + [f"* {q}" for q in review["family_questions"]] + [""]
+    if review.get("owner_notes"):
+        out += ["## Tulajdonosi észrevételek", ""] + [f"* {n}" for n in review["owner_notes"]] + [""]
     return "\n".join(out)
 
 

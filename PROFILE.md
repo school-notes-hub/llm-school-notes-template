@@ -19,7 +19,7 @@ Updates are optional and happen only when the user asks (see *Template updates* 
 * **Student**: `<first name>` - the wiki is titled after the student's first name (e.g. "Anna's notes"), which is the only personal name the wiki may contain.
 * **Grade and school year**: `<grade>` in `<school year>`.
 * **Wiki language**: `<language>` (see the *Language* rule in [Wiki structure](instructions/wiki-structure.md) and the *Wording* table below).
-* **Audience**: `<who reads the wiki>` - by default the student, the family, and classmates the student shares it with. The personal-data audience test is applied against this readership, and every explanation is written at the level of its youngest main reader (see *Plain language*).
+* **Audience**: `<who reads the wiki>` - by default the student, the family, classmates the student shares it with, and anyone on the public site. None of them sees the notebook, teacher material or textbook. The personal-data audience test is applied against this readership, and every explanation is written at the level of its youngest main reader (see *Plain language*).
 * **Notebook recognition**: `<which notebook belongs to which subject, as the user confirms it, e.g. "the plain spiral notebook is Science">`.
 * **Standing authorizations**: the defaults in *Standing authorizations* below, as confirmed (or narrowed) by the user at bootstrap.
 
@@ -43,7 +43,7 @@ Every reader-facing string the rules prescribe lives here, in the wiki language 
 | back link | `[⬅️ Back to the home page](../index.md)` | `[⬅️ Vissza a kezdőlapra](../index.md)` |
 | subjects (root index) | `# 📚 Subjects` | `# 📚 Tantárgyak` |
 | legend (root index) | `# 🔎 Legend` | `# 🔎 Jelmagyarázat` |
-| catch-up | `# 🤒 To catch up` | `# 🤒 Pótolandó` |
+| catch-up | `# 📝 To catch up` | `# 📝 Pótolandó` |
 | homework | `# 📌 Homework` - columns `Deadline \| Task \| Status`, values `open` / `✅ done` | `# 📌 Házi feladat` - oszlopok `Határidő \| Feladat \| Állapot`, értékek `nyitott` / `✅ kész` |
 | chapter | `# 📘 Grade <grade>: <chapter>` | `# 📘 <grade>. évfolyam: <chapter>` |
 | lessons | `# 🗓️ Lessons` | `# 🗓️ Órák` |
@@ -58,21 +58,21 @@ Every reader-facing string the rules prescribe lives here, in the wiki language 
 | terms | `# 📖 Terms` | `# 📖 Fogalmak` |
 | test yourself | `# 🧠 Test yourself` | `# 🧠 Kérdezd ki magad` |
 | test yourself intro | `*Our own questions (not from the notebook) - try to answer from memory first, then open the answer.*` | `*Saját kérdések (nem a füzetből) - előbb próbáld fejből, aztán nyisd le a választ.*` |
-| explanation label | `💡 <author>🤖 explanation` | `💡 <szerző>🤖 magyarázata` |
-| addition label | `➕ <author>🤖 addition` | `➕ <szerző>🤖 kiegészítése` |
+| explanation label | `💡 🤖 machine explanation` | `💡 🤖 gépi magyarázat` |
+| addition label | `➕ 🤖 machine addition` | `➕ 🤖 gépi kiegészítés` |
 | textbook label | `📗 Based on the textbook` | `📗 A tankönyv alapján` |
 | background label | `📗 From background material` | `📗 Háttéranyagból` |
 | teacher-material words | *to learn* / *background* | `tanulni` / `olvasnivaló` |
 | lesson line | `🗓️ Lesson: <date>` | `🗓️ Óra: <dátum>` |
-| correction label | `⚠️ <author>🤖 correction` | `⚠️ <szerző>🤖 javítása` |
-| unknown-author label | `<role icon> 🤖 <role>` | `<szerepikon> 🤖 <szerep>` |
+| correction label | `⚠️ 🤖 machine correction` | `⚠️ 🤖 gépi javítás` |
+| unknown-author label | `<role icon> 🤖 machine <role>` | `<szerepikon> 🤖 gépi <szerep>` |
 | machine-authorship legend | `🤖 marks a machine-authored explanation, addition or correction. It is not a verification mark.` | `A 🤖 gépi magyarázatot, kiegészítést vagy javítást jelöl. Nem hitelesítési jel.` |
-| catch-up notice | `🤒 **Catch-up material** - this page was made from a classmate's notebook because you were absent. Copy it into your own notebook (or learn it), and say when you are done.` | `🤒 **Pótolandó anyag** - ez az oldal egy osztálytárs füzetéből készült, mert hiányoztál. Írd be a saját füzetedbe (vagy tanuld meg), és szólj, ha megvan.` |
+| catch-up notice | `**Catch-up material** – copy this into your notebook too (or learn it), and say when you are done.` | `**Pótolandó anyag** – írd be ezt a füzetedbe is (vagy tanuld meg), és szólj, ha megvan.` |
 | synthesis notice | `*This page was put together by the LLM (not from the notebook).*` | `*Ezt az oldalt az LLM állította össze (nem a füzetből).*` |
 | in words | `in words:` | `szövegesen:` |
 | conventional headings | `# Open questions`, `# Examples`, `# Schema`, `# Computation` | `# Nyitott kérdések`, `# Példák`, `# Séma`, `# Számítás` |
 
-The banner labels (page kinds, "catch-up notes", the "Header" alt-text prefix) live in `tools/subjects.json` and are translated there at bootstrap.
+The banner labels (page kinds and the "Header" alt-text prefix) live in `tools/subjects.json` and are translated there at bootstrap.
 
 # Local decisions
 

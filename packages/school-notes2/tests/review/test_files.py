@@ -130,3 +130,11 @@ def test_timeout_report(tmp_path):
     m = meta(path)
     assert m["status"] == "closed" and m["items"] == {} and m["range"]["to"] == "c" * 40
     assert "Nem átnézve: időtúllépés" in path.read_text(encoding="utf-8")
+
+
+def test_owner_notes_are_kept_in_private_report(tmp_path):
+    report = {"verdict": "ok", "findings": [], "owner_notes": ["Kihagyott lépés; indok; jobb javaslat."]}
+    path = files.write_review(tmp_path, "2026-10-04", report, "reviewer", "a", "b")
+    text = path.read_text()
+    assert "## Tulajdonosi észrevételek" in text
+    assert report["owner_notes"][0] in text

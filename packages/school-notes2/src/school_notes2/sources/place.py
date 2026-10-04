@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..state import safefs
+from . import cards
 from .duplicates import Known, original_key
 from .naming import slug, unique_dir, unique_name
 from .order import ordered
@@ -52,6 +53,9 @@ def place_package(repo: Path, pkg: Downloaded, start_seq: int, known: Known,
     folder = unique_dir(repo / "sources" / pkg.subject, slug(pkg.drive_folder), repo)
     entry = {"drive_folder": pkg.drive_folder, "subject": pkg.subject, "role": pkg.role,
              "new_subject": pkg.new_subject, "preconverted": pkg.preconverted, "files": []}
+    card = cards.load(repo, pkg.subject)
+    if card is not None:
+        entry["card"] = card
     if pkg.description:
         entry["drive_description"] = pkg.description
     placed = Placed(entry)

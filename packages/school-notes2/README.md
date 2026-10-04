@@ -37,6 +37,21 @@ It does every mechanical step; the LLM runs in a container and asks for mechanic
 | `ops/` | `install.sh <tag>`, crontab, logrotate and configuration examples |
 | `schemas/` | the schema of every JSON contract |
 
+## Subject cards
+
+A subject entry in the learner's `tools/subjects.json` may contain `card` with nonempty
+`role` and `style` strings and an ordered `conventions` array (empty if no local convention
+is confirmed). `schemas/subject-card.json` is shared by configuration loading and the
+`fetch.json` contract. See [the empty-template example](../../examples/subject-card.json).
+Preparation snapshots cards in the durable package data; resume does not reload changed
+configuration. Missing cards stay absent, including newly discovered subjects. The owner's
+session may edit valid cards of existing subjects; cron cannot edit them or other settings.
+
+The source-grounded repair rules and writer/fix prompts describe the target step-1/2
+contracts; their remaining flow integration is staged separately. `fix.txt` is loadable,
+but this unit does not introduce a fix run or the new reviewer state machine. The current
+nightly prompt uses the existing output contract, with additive private `owner_notes`.
+
 ## Development
 
 ```

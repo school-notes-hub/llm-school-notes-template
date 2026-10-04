@@ -15,6 +15,7 @@
       "properties": {
         "drive_folder": {"type": "string"},
         "subject": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+        "card": {"$ref": "urn:school-notes:subject-card"},
         "role": {"enum": ["fuzet", "tanari"]},
         "drive_description": {"type": "string"},
         "new_subject": {"type": "boolean"},

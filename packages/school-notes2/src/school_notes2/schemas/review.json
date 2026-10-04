@@ -5,6 +5,7 @@
   "required": ["verdict", "findings"],
   "additionalProperties": false,
   "properties": {
+    "owner_notes": {"type": "array", "items": {"type": "string", "pattern": "\\S"}},
     "verdict": {"enum": ["ok", "changes"]},
     "findings": {"type": "array", "items": {"type": "object", "additionalProperties": false,
       "required": ["id", "file", "problem"],

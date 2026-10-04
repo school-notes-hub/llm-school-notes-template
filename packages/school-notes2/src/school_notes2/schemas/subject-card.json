@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Subject teacher card (source-grounded notes plan 4.3)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["role", "conventions", "style"],
+  "properties": {
+    "role": {"type": "string", "pattern": "\\S"},
+    "conventions": {"type": "array", "items": {"type": "string", "pattern": "\\S"}, "uniqueItems": true},
+    "style": {"type": "string", "pattern": "\\S"}
+  }
+}
