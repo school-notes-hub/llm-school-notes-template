@@ -47,3 +47,6 @@ visual-tools.local.json
 wiki/assets/**/stdout.log
 wiki/assets/**/stderr.log
 wiki/assets/**/freecad-user.cfg
+
+# Disposable test files when sandboxed runs cannot use system temp.
+.test-tmp/

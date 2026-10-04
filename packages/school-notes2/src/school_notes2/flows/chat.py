@@ -109,7 +109,9 @@ def _launch(ctx: Ctx, task: phase.Task, harness_name: str | None) -> None:
     k = min(task.get("writing_k", 1), n)
     if task.phase == "prepared":
         task.set_phase("writing", writing_k=k)
-    writer.write_inputs(ctx, task, k)
+    from . import correction_chat
+    if not correction_chat.resume_inputs(ctx, task):
+        writer.write_inputs(ctx, task, k)
     h = handlers.build(ctx, None, fetch=lambda: session_fetch(ctx),
                        finish=lambda: session_finish(ctx))
     print(f"Munkamappa: {ctx.notes_path}  (futás: {task.run_id})", file=sys.stderr)
@@ -192,9 +194,12 @@ def session_fetch(ctx: Ctx) -> dict:
             repair.prepare(ctx, task)
         else:
             fetch_flow.advance(ctx, task, lambda: _drive_or_none(ctx))
-    writer.write_inputs(ctx, task, min(task.get("writing_k", 1), len(task.get("ranges"))))
-    return {"run_id": task.run_id, "phase": task.phase, "pages": len(task.get("pages", [])),
-            "open_review_items": len(task.get("open_review_items", []))}
+    from . import correction_chat
+    if not correction_chat.resume_inputs(ctx, task):
+        writer.write_inputs(ctx, task, min(task.get("writing_k", 1), len(task.get("ranges"))))
+    supplied = correction_chat.active(task) or task
+    return {"run_id": task.run_id, "phase": task.phase, "pages": len(supplied.get("pages", [])),
+            "open_review_items": len(supplied.get("open_review_items", []))}
 
 
 def session_finish(ctx: Ctx) -> dict:
@@ -220,12 +225,14 @@ def session_finish(ctx: Ctx) -> dict:
             ctx, task, items))
     except steps.CheckFailed as exc:
         steps.write_check_items(ctx, exc.items)
-        task.set_phase("writing")
+        task.set_phase("writing", review_complete=False, attempt=task.get("attempt", 1) + 1)
         return {"state": "check_failed", **checks.response(exc.items)}
     except finish_flow.git_finish.EditedDuringFinish:
         return {"state": "edited", "message": "files changed during finish; call finish again"}
     except Transient as exc:
         task.record_error("transient", str(exc))
         return {"state": "transient_error", "message": str(exc)}
+    if isinstance(state, dict):
+        return {**state, "run_id": task.run_id}
     return {"state": state, "run_id": task.run_id, "published": task.get("published"),
             "owner_notes": redact(writer.merge(writer.results(task, required=False))["owner_notes"])}

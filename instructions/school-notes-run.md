@@ -47,7 +47,7 @@ Read `AGENTS.md`, `PROFILE.md` and the rules the rule map requires for ingest, i
 
 ## MCP tools
 
-`check` (call it at the end; it also reports files you may not touch), `image_generate(plan_id, repair_note?)`, `wait(job_id)`, `status`; in the owner's session also `fetch` and `finish`. Long operations return a job id: call `wait` until the job is done. In a session started with `fetch.json` `mode: interactive`, call `finish` at the end and report its outcome. There is no Git in the container and no web access: a fact that needs an outside source becomes an open question.
+`check` (call it at the end; it also reports files you may not touch), `image_generate(plan_id, repair_note?)`, `wait(job_id)`, `status`; in the owner's session also `fetch` and `finish`. Long operations return a job id: call `wait` until the job is done. In a session started with `fetch.json` `mode: interactive`, call `finish` at the end and report its outcome. If it returns `state: review_items`, the run is still in its one correction pass: follow the returned fix prompt, handle only the assigned items from the refreshed `fetch.json`, write their `review_closure` in a new `result.json`, run `check`, then call `finish` again. The existing session does this work; no second writer is started. There is no Git in the container and no web access: a fact that needs an outside source becomes an open question.
 
 ## Subject cards and figure handoff
 

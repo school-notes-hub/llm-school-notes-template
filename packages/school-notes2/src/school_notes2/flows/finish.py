@@ -18,7 +18,7 @@ LOG_LINE = re.compile(r"^\s*[*-]\s+(?:\*\*[^*]+\*\*:\s*)?(.*)$")
 LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 
 
-def finish(ctx: Ctx, task: Task, *, notify_owner_items) -> str:
+def finish(ctx: Ctx, task: Task, *, notify_owner_items) -> str | dict:
     """Run a notes task from `finishing` (or a later Git phase) to `done`.
 
     Raises steps.CheckFailed (the writer must fix check.json), NeedsOwner, Transient."""
@@ -36,8 +36,14 @@ def finish(ctx: Ctx, task: Task, *, notify_owner_items) -> str:
         task.set_phase("figures", inspection_result=prepared.result,
                        attempt=task.get("attempt", 1), max_agents=task.get("max_agents", ctx.cfg.limits.max_agents))
     if task.phase in (*review_phases.PHASES, "waiting_quota"):
-        review_phases.advance(ctx, task, notify_owner_items)
+        handoff = review_phases.advance(ctx, task, notify_owner_items)
+        if handoff is not None:
+            return handoff
+        # P4 repairs and P6 insertions are authorized changes, already checked.
+        # Compare subsequent session edits with this finalized tree.
+        start = _snapshot(ctx, task)
     elif task.get("rebase") == "conflict":
+        steps.guard_step(ctx, task)
         steps.regenerate(ctx, task)
     from . import repair, report
     if task.phase == "finishing":

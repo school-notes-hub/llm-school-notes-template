@@ -484,7 +484,7 @@ class PublicR1Tests(Base):
     def test_SN12_actual_repeat_run_zero_duplicate_status_upload(self):
         self.config.update(drive_tool='unused')
         self.config['learners']['student'].update(status_id='status',drive_config_dir=str(self.root),drive_evidence='unused')
-        with patch('school_notes.cli.load',return_value=self.config),patch('school_notes.cli.DriveAPI',return_value=self.drive),patch('school_notes.pipeline.Renderer',FakeRenderer),patch('school_notes.pipeline.Agent',side_effect=lambda c,s,l,w:FakeAgents(s,l)),patch('sys.stdout',new=io.StringIO()):
+        with patch('school_notes.cli.load',return_value=self.config),patch('school_notes.cli.DriveAPI',return_value=self.drive),patch('school_notes.pipeline.Renderer',FakeRenderer),patch('school_notes.pipeline.Agent',side_effect=lambda c,s,l,w,**kw:FakeAgents(s,l)),patch('sys.stdout',new=io.StringIO()):
             self.assertEqual(0,main(['--config','unused','run-once']))
             count=len(self.drive.writes)
             self.assertEqual(0,main(['--config','unused','run-once']))

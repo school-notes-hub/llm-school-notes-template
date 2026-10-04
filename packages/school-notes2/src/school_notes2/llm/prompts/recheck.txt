@@ -13,4 +13,5 @@ Rossz: indoklás nélkül fenntartod a vitát. Jó: `keep` és egy rövid, szakm
 
 Checklista: minden kiosztott tételt elszámoltál; minden új találatról döntöttél; nincs oldalítélet és nincs harmadik kör.
 Kimenet: `items[{key, verdict: ok|not-ok|accept|keep, answer}]`, `hits[{hit_id, verdict: hiba|megengedett|téves, reason}]`, `owner_notes[]`. A key a teljes review-fájl#R<n> kulcs. Minden kiosztott azonosító pontosan egyszer szerepeljen. Bizonytalanságodat az answer/reason mezőben indokold.
+Ha az `/in/format-error.json` létezik, az előző kimenet gépi hibáját is javítsd. Nincs korlátlan újrapróbálkozás.
 {output_instruction}

@@ -14,7 +14,7 @@ def advance(ctx, task, notify):
     if task.phase == "waiting_quota":
         task.set_phase(task.get("quota_phase"))
     try:
-        _advance(ctx, task, notify)
+        return _advance(ctx, task, notify)
     except WaitingQuota:
         task.set_phase("waiting_quota", quota_phase=task.phase)
         raise
@@ -29,7 +29,9 @@ def _advance(ctx, task, notify):
         task.set_phase("correcting" if correction.all_items(ctx, task) and task.get("mode") != "fix"
                        else "review_ready")
     if task.phase == "correcting":
-        correction.run(ctx, task)
+        handoff = correction.run(ctx, task)
+        if handoff is not None:
+            return handoff
         task.set_phase("rechecking" if correction.needs_recheck(ctx, task) and not task.get("correction_rolled_back")
                        else "review_ready")
     if task.phase == "rechecking":

@@ -27,7 +27,8 @@ def build(ctx: Ctx, task_dir=None, *, fetch=None, finish=None) -> Handlers:
         found = phase.open_task(ctx.task_root(), ctx.name, "notes")
         if found is None:
             raise NeedsOwner("there is no open run in this session", todo="call fetch first")
-        return found
+        from .correction_chat import active
+        return active(found) or found
 
     return Handlers(
         check=lambda: check(ctx, task()),

@@ -7,7 +7,7 @@ from ..sources import calls
 from ..state import phase, safefs
 from ..state.errors import BadWork, Transient, WaitingQuota
 from ..wiki import frontmatter
-from . import handlers, inspection, steps, writer
+from . import checks, handlers, inspection, steps, writer
 
 PREFIXES = ("wiki", "docs", "publication", "tools", ".school-notes")
 
@@ -18,10 +18,13 @@ def all_items(ctx, task):
         return []
     text = safefs.read_text(ctx.notes_path, path)
     items = frontmatter.split(text).meta.get("items", {})
+    pages = {p for u in task.get("inspection_units", []) for p in u["pages"]}
     selected = [{"file": path, "item_id": key, "status": status,
                  "round": relations.details(text, key)["round"],
                  "chain": relations.details(text, key)["chain"], "key": path + "#" + key}
-                for key, status in items.items() if status == "open" and relations.details(text, key)["chain"] == 0]
+                for key, status in items.items() if status == "open" and relations.details(text, key)["chain"] == 0
+                and (not relations.details(text, key).get("unlocated")
+                     or relations.details(text, key).get("file") in pages)]
     return selected
 
 
@@ -63,9 +66,12 @@ def child_task(ctx, task, root, items):
     grouping = calls.assignments(ctx.notes_path, [], [], items, [], review_limit=len(items))
     child.data["data"].update(mode="fix", packages=[], pages=[], calls=grouping,
                                ranges=calls.ranges(grouping), writing_k=1, open_review_items=items,
-                               pending_images=[], skip_writer=False, effective_result=None,
+                               pending_images=[], pending_figures=[], skip_writer=False, effective_result=None,
                                correction_parent=task.run_id, correction_before=str(root / "before"),
                                paid_disabled=task.get("mode") == "repair")
+    if task.mode == "interactive":
+        child.data["mode"] = "interactive"
+        child.data["data"].update(calls=[], ranges=[[0, 0]], writer_check={"count": 0, "warnings": []})
     child.dir.mkdir(parents=True, exist_ok=True)
     child.save()
     return child
@@ -84,21 +90,29 @@ def run(ctx, task):
             snapshot(ctx.notes_path, root)
             child = child_task(ctx, task, root, items)
             try:
-                outcome = writer.run_ranges(ctx, child, handlers.build(ctx, child.dir))
-                if outcome == "question":
-                    raise BadWork("fix pass asked a blocking question")
-                result = writer.merge(writer.results(child))
-                _scope(ctx, root, items)
-                # Validate/check first; persist before applying any closure.
-                steps.guard_step(ctx, child)
-                steps.check_changed(ctx, child, result=result)
-                saved = {"status": "done", "result": result, "warnings": child.get("check_warnings", []),
-                         "tool_state": {k: child.get(k, {}) for k in ("tool_writes", "tool_parts", "tool_hashes")}}
+                if task.mode == "interactive":
+                    from . import correction_chat
+                    result = correction_chat.result(ctx, child)
+                    if result is None:
+                        return correction_chat.handoff(ctx, items)
+                else:
+                    outcome = writer.run_ranges(ctx, child, handlers.build(ctx, child.dir))
+                    if outcome == "question":
+                        raise BadWork("fix pass asked a blocking question")
+                    result = writer.merge(writer.results(child))
+                saved = validated(ctx, child, root, items, result)
             except WaitingQuota:
                 raise
             except (BadWork, Transient) as exc:
                 saved = {"status": "rollback", "reason": str(exc)}
         safefs.write_json(root, "receipt.json", saved)
+    apply(ctx, task, root, saved)
+
+
+def apply(ctx, task, root, saved):
+    if task.mode == "interactive":
+        from . import correction_chat
+        correction_chat.restore_inputs(ctx, task)
     if saved["status"] == "rollback":
         restore(ctx.notes_path, root)
         task.update(correction_result={"status": "done"}, correction_rolled_back=True)
@@ -118,6 +132,27 @@ def run(ctx, task):
     task.update(correction_result=result, correction_rolled_back=False,
                 correction_warnings=saved.get("warnings", []),
                 inspection_figures=[figures[k] for k in sorted(figures)])
+
+
+def validated(ctx, child, root, items, result):
+    """Both writers enter the same result, scope, path and content gates."""
+    _scope(ctx, root, items)
+    problems = checks.accounting(child, result)
+    if problems:
+        raise steps.CheckFailed(problems)
+    from . import fetch
+    from ..wiki.check_result import check_result
+    supplied = fetch.fetch_json(child, 1, grade=ctx.student.grade, whole_run=True)
+    problems = check_result(ctx.notes_path, result, supplied,
+                            {(i["file"], i["item_id"]) for i in items}, len(items))
+    if problems:
+        raise steps.CheckFailed(problems)
+    steps.guard_step(ctx, child)
+    steps.check_changed(ctx, child, result=result)
+    if result["status"] != "done":
+        raise BadWork("fix pass asked a blocking question")
+    return {"status": "done", "result": result, "warnings": child.get("check_warnings", []),
+            "tool_state": {k: child.get(k, {}) for k in ("tool_writes", "tool_parts", "tool_hashes")}}
 
 
 def _scope(ctx, root, items):

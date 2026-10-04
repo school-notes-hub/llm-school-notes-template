@@ -58,7 +58,8 @@ def prepare(repo: Path, view: Path, unit: dict, folder: Path, old_text) -> dict:
         for qid in ids.get("questions", []):
             match = re.search(r"<!-- q: " + re.escape(qid) + r" -->\s*([^\n]+)", text)
             questions.append({"id": qid, "text": match[1] if match else ""})
-        pages.append({"file": page, "text": text, "questions": questions,
+        pages.append({"file": page, "role": "assigned" if page in unit["pages"] else "context",
+                      "text": text, "questions": questions,
                       "decisions": frontmatter.split(text).meta.get("decisions", []),
                       "items": ids.get("items", {}),
                       "diff": "".join(difflib.unified_diff(old_text(page).splitlines(True),

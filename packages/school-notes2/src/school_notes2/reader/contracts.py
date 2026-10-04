@@ -13,6 +13,7 @@ def check(value, stage, assigned, known=None):
     validate(stage, value)
     if stage == "reader-1":
         pages = [p["file"] for p in assigned["pages"]]
+        value["pages"] = [p for p in value["pages"] if p["file"] in pages]
         exact(value["pages"], pages, "file")
         if any(p["verdict"] == "changes" and not any(f["file"] == p["file"] for f in value["findings"])
                for p in value["pages"]):
@@ -21,8 +22,6 @@ def check(value, stage, assigned, known=None):
         if len(ids) != len(set(ids)):
             raise ValueError("duplicate finding id")
         for f in value["findings"]:
-            if f["file"] not in pages:
-                raise ValueError("finding outside assigned pages")
             decisions = (known or {}).get("pages", {}).get(f["file"], {}).get("decisions", [])
             if f["relates_to"] in decisions and not f.get("new_evidence", "").strip():
                 raise ValueError("decision-related finding requires new_evidence")

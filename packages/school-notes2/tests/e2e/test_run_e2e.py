@@ -89,7 +89,7 @@ def world(tmp_path, local_origin, monkeypatch):
     (bin_dir / "podman").write_text(f"#!/bin/sh\nexec {sys.executable} {HERE / 'fake_podman.py'} \"$@\"\n")
     (bin_dir / "podman").chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_dir}:/usr/bin:/bin")
-    runtime = Path(tempfile.mkdtemp(prefix="sn-rt-", dir="/tmp"))
+    runtime = Path(tempfile.mkdtemp(prefix="sn-rt-"))
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(runtime))
     monkeypatch.setattr(fetch_flow, "drive_client", lambda ctx: DriveClient(drive))
     monkeypatch.setattr(prereq, "podman", lambda: None)

@@ -13,4 +13,5 @@ Rossz: az első lelet ismétlése új tételként. Jó: `covered_by: F-1`, ha ug
 
 Checklista: minden kiosztott találatról döntöttél; a környezetét is elolvastad; csak létező F-azonosítóra hivatkozol.
 Kimenet: `hits[{hit_id, verdict: hiba|megengedett|téves, covered_by: F-azonosító|null, reason}]`, `owner_notes[]`. Minden kiosztott találat pontosan egyszer szerepeljen, üres indok nélkül. Bizonytalanságot az indokban nevezz meg.
+Ha az `/in/format-error.json` létezik, az előző kimenet gépi hibáját is javítsd. Nincs korlátlan újrapróbálkozás.
 {output_instruction}

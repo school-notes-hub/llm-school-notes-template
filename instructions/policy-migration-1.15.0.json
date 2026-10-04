@@ -137,7 +137,7 @@
       "heading": "Printable study notes",
       "destination": "instructions/printable-study-notes.md",
       "source_sha256": "80d22c45177d409047b347d3bd030f73dbb3d0c5c3ec16715e6684d5dc8831f5",
-      "migrated_sha256": "80d22c45177d409047b347d3bd030f73dbb3d0c5c3ec16715e6684d5dc8831f5",
+      "migrated_sha256": "ced6d8ffef428ae0af519aa3fdb669405574f9829a4e2327390db66d08372f73",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below."
     }
   ],

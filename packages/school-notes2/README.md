@@ -346,9 +346,14 @@ the existing subject writer with `fix.txt`, the remaining closure capacity and a
 saved pre-fix tree. Failed fixes restore that tree; a completed or rolled-back P4
 can enter P6 directly when there is nothing to recheck. P5 judges only the closed
 items, new hits and changed figures. It never starts another correction pass.
-Open, disputed and owner items retain their chain and round metadata. A busy
-writer home (including an open interactive session) cannot launch a second
-writer: the P4 fallback leaves its items open for the next eligible run.
+Open, disputed and owner items retain their chain and round metadata.
+
+In chat, the first `finish` returns `state: review_items`, the assigned items and
+`fix.txt`; P4 stays `correcting`. The existing session writes its fix and closure
+result, and the next `finish` applies the same result, scope, path and content gates
+before P5. The saved handoff and check budget survive restart/fetch without erasing
+the result. No second writer container is launched. A busy writer home in cron
+still leaves the items open through the existing rollback fallback.
 
 Reader keys omit machine content and insertion markers. Figure keys keep the 2a
 contract. G4/G5 recompute keys on the final tree, remove stale verdict records and
@@ -385,3 +390,13 @@ Set `CHROMIUM_EXECUTABLE` to the installed Chromium path if needed (default:
 `/usr/bin/chromium`). They require a host on which Chromium can launch; they are
 not silently skipped in a restricted sandbox. Python tests use a fake `node`
 executable to verify argument, output and failure handling without Chromium.
+
+Unit 2b review repairs: chat check failures start a new attempt with mandatory
+content checks; the commit race snapshot follows review finalization and figure
+insertion. Conflict resolution runs the path guard before regeneration. Reader
+inputs label assigned/context pages; extra page verdicts are ignored, while findings
+outside the assignment remain open and unlocated for a later run. Format retries
+explicitly read their error file. P1 validates pending commissions too; P2 isolates
+invalid pending commissions as failed. Unchanged page and figure keys reuse their
+receipts across attempts. Regression tests cover chat handoff, rollback, receipt
+interruption, figure insertion, G4/G5 retries and pending-figure damage.

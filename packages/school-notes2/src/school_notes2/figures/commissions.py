@@ -130,6 +130,14 @@ def order(repo: Path, brief: dict) -> tuple:
     return topic(repo, page), rank, page, matches[0][1] if matches else 0, brief["id"]
 
 
+def assignments(result: dict, pending: list[dict]) -> list[dict]:
+    listed = list(result.get("figures", []))
+    ids = {a["id"] for a in listed}
+    listed += [{k: entry["commission"][k] for k in ("id", "page", "kind")}
+               for entry in pending if entry["commission"]["id"] not in ids]
+    return sorted(listed, key=lambda a: a["id"])
+
+
 def check(repo: Path, assignments: list[dict], drawings: list[dict] = ()) -> list[dict]:
     from ..wiki.check import item
     out = []

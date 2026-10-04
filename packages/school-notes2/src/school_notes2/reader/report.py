@@ -13,7 +13,7 @@ def locate(repo, finding):
     pattern = r"\s+".join(re.escape(word) for word in quote.split())
     match = re.search(pattern, text) if quote else None
     return {**finding, "line": text[:match.start()].count("\n") + 1 if match else None,
-            "unlocated": not bool(match)}
+            "unlocated": finding.get("unlocated", False) or not bool(match)}
 
 
 def list_findings(repo, hits, output):

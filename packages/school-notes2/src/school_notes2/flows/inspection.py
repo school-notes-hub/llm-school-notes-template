@@ -28,19 +28,37 @@ def role(ctx, task):
 
 def prepare(ctx, task):
     result = task.get("inspection_result")
-    assigned = {a["id"]: a for a in result.get("figures", [])}
-    for entry in task.get("pending_figures", []):
-        brief = entry["commission"]
-        assigned.setdefault(brief["id"], {k: brief[k] for k in ("id", "page", "kind")})
-    briefs = commissions.validate_assignments(ctx.notes_path, list(assigned.values()))
-    states = [{"brief": brief, "candidate": candidate_state(ctx, task, brief)} for brief in briefs]
+    waiting = {e["commission"]["id"]: e["commission"] for e in task.get("pending_figures", [])}
+    states = []
+    for assignment in commissions.assignments(result, task.get("pending_figures", [])):
+        try:
+            brief = commissions.validate_assignments(ctx.notes_path, [assignment])[0]
+        except (ValueError, OSError) as exc:
+            if assignment["id"] not in waiting:
+                raise steps.CheckFailed(commissions.check(ctx.notes_path, [assignment])) from exc
+            brief = waiting[assignment["id"]]
+            candidate = {"state": "failed", "reason": str(exc)}
+            safefs.write_json(ctx.notes_path, f".school-notes/figures/{brief['id']}/figure.json", candidate)
+        else:
+            candidate = candidate_state(ctx, task, brief)
+        states.append({"brief": brief, "candidate": candidate})
+    briefs = [s["brief"] for s in states]
     changed = sorted(steps.llm_snapshot(ctx, task))
     grouped = units.collect(ctx.notes_path, changed, result.get("review_closure", []), briefs)
     # Retry only changed keys. A unit containing an invalid page is read as a whole.
     grouped = [u for u in grouped if any(verdicts.valid(ctx.notes_path, p) is None for p in u["pages"])
-               or any(b["page"] in u["pages"] for b in briefs)]
+               or any(s["brief"]["page"] in u["pages"] and figure_changed(ctx, task, s) for s in states)]
     task.update(inspection_figures=states, inspection_units=grouped)
 
+
+def figure_changed(ctx, task, state):
+    if state["candidate"]["state"] != "candidate":
+        return False
+    brief = state["brief"]
+    key = context.verdict_key(ctx.notes_path, brief, state["candidate"])
+    previous = task.get("inspection_receipts", {}).get(brief["id"], {})
+    return not any(v["id"] == brief["id"] and v["key"] == key
+                   for v in previous.get("review", {}).get("figures", []))
 
 
 def candidate_state(ctx, task, brief):
@@ -110,7 +128,8 @@ def _reader(ctx, task, view, unit):
     if first["status"] == "reviewed":
         review = first["review"]
         safefs.write_json(repo, f".school-notes/reader/{root.name}/pass1.json", review)
-        findings = [{**f, "origin": "reader"} for f in review["findings"]]
+        findings = [{**f, "origin": "reader", "unlocated": f["file"] not in unit["pages"]}
+                    for f in review["findings"]]
         notes += review["owner_notes"]
         pages = [{**p, "key": unit["keys"][p["file"]], "model": first["model"]} for p in review["pages"]]
     hits = [h for h in task.get("check_warnings", []) if h["file"] in unit["pages"]]
