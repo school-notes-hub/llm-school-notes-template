@@ -2,6 +2,11 @@
 
 Newest first. Each entry says what changed in the shared files and what an existing wiki must do when it applies the update (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)). A wiki records the version it is on in `PROFILE.md`.
 
+## 1.18.1 - 2026-10-04
+
+- Math and formulas (Wiki structure): the school-notes tool compiles every formula with MathJax when it builds the site before the push and returns a formula error as a check item; the writer installs and runs no renderer during a run, and a missing local renderer is not a blocker (a v1 rule had stopped a repair run on the VM).
+- Migration (controller-owned): synchronize the changed instruction through Template updates; no learner content changes.
+
 ## 1.18.0 - 2026-10-04
 
 ### Closure and export
