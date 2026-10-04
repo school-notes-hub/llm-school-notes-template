@@ -34,8 +34,7 @@ def build(ctx: Ctx, task_dir=None, *, fetch=None, finish=None) -> Handlers:
 
     return Handlers(
         check=lambda: check(ctx, task()),
-        image_generate=lambda plan_id, note: image_generate.generate(
-            ctx.image_settings(), plan_id, note, log=ctx.log),
+        image_generate=lambda plan_id, note: generate(ctx, task(), plan_id, note),
         image_accept=lambda plan_id, review: accept(ctx, task(), plan_id, review),
         status=lambda: status_flow.summary(ctx),
         fetch=fetch, finish=finish)
@@ -111,3 +110,9 @@ def accept(ctx: Ctx, task, plan_id: str, review: dict) -> dict:
     written = [w["path"] for w in answer.get("tool_writes", [])] + evidence
     steps.record_tool_files(task, ctx.notes_path, written)
     return answer
+
+
+def generate(ctx, task, plan_id, note):
+    if task.get("mode") == "repair":
+        return {"state": "disabled", "message": "Repair uses free local figures; paid generation is disabled."}
+    return image_generate.generate(ctx.image_settings(), plan_id, note, log=ctx.log)

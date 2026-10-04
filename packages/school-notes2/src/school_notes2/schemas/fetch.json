@@ -8,7 +8,7 @@
   "properties": {
     "student": {"type": "string"},
     "run_id": {"type": "string"},
-    "mode": {"enum": ["cron", "interactive"]},
+    "mode": {"enum": ["cron", "interactive", "repair"]},
     "packages": {"type": "array", "items": {
       "type": "object", "additionalProperties": false,
       "required": ["drive_folder", "subject", "role", "new_subject", "preconverted", "files"],
@@ -52,6 +52,14 @@
       "properties": {"plan_id": {"type": "string", "pattern": "^[a-z0-9-]{1,64}$"},
                      "page": {"type": "string"}}}},
     "conflict_files": {"type": "array", "items": {"type": "string"}},
+    "subject": {"type": "string"},
+    "card": {"$ref": "urn:school-notes:subject-card"},
+    "repair_targets": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["page", "kind", "sources", "related"],
+      "properties": {"page": {"type": "string"}, "kind": {"type": "string"},
+        "sources": {"type": "array", "items": {"type": "string"}},
+        "related": {"type": "array", "items": {"type": "string"}}}}},
     "offline": {"type": "boolean"}
   }
 }

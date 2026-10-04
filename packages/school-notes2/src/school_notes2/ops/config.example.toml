@@ -38,7 +38,7 @@ publish = false
 harness = "codex"
 model = "gpt-6-astra"
 effort = "high"
-timeout_s = 5400
+timeout_s = 7200
 nested_sandbox = false   # bwrap cannot mount /proc in the container (VM check 2026-10-03)
 
 [roles.reviewer]

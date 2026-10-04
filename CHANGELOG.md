@@ -4,6 +4,13 @@ Newest first. Each entry says what changed in the shared files and what an exist
 
 ## 1.17.0 - 2026-10-04
 
+### Subject calls and repair (unit 1d)
+
+- Call the writer sequentially per subject, using pinned role cards and stable source IDs. Only one oversized package gets D36 ranges. Validate each call before saving its resumable result; use complete run data for merged checks and metadata. The default writer timeout and example are 7200 s; explicit configured overrides remain effective.
+- Add `repair --topic` and `repair --queue`, dependency-aware page passes, deterministic queue ordering and SVG inventory. A topic pass preserves linked logs' and summaries' prose; log shortening requires item coverage. Repairs use no Drive or paid generation. `--no-push` holds the committed branch until explicit finish or discard; cron cannot release it. Two failed attempts archive the work and hand the item to the owner while the queue proceeds.
+- Deliver private writer `owner_notes` through the task completion report, finish response and existing once-per-run notification path. The step-3 e-mail format and step-2 independent figure/reader phases remain staged; repair uses the shared current chain.
+- Migration (controller-owned): synchronize this changelog and the run module as part of the shared 1.17.0 set; deploy code, prompt and schema together. Set the VM writer timeout separately. Existing runs without subject assignments keep their saved ranges. Queue creation and priority edits require the explicit host `repair --queue` command. No learner content, deployment or publication is changed by this template work.
+
 ### Review corrections (unit 2)
 
 - Report content, order and publication findings in the same check when metadata is valid. Existing metadata defects remain owner work even when the writer edits the page. Collapse consecutive identical lesson dates in the source pointer. Restore the required question and drawing clauses in the scoped fix prompt. Refresh the preparation base during downloads and pin it only before moving sources, preserving it across interruptions.

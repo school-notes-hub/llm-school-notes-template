@@ -8,6 +8,8 @@ It does every mechanical step; the LLM runs in a container and asks for mechanic
 | Command | What it does | Code |
 |---|---|---|
 | `school-notes run <learner>` | hourly: Drive → sources → writer (container) → `finish` (check, generation, commit, rebase, build, push, release) | `flows/run.py`, `flows/fetch.py`, `flows/writer.py`, `flows/finish.py`, `flows/steps.py` |
+| `school-notes repair <learner> --topic wiki/<subject>/<page>.md [--no-push]` | existing-page repair with the writer and finish chain, without Drive or paid generation | `flows/repair.py`, `repair/` |
+| `school-notes repair <learner> --queue [--no-push]` | build/reorder the private repair queue and SVG inventory, without an LLM | `repair/queue.py` |
 | `school-notes nightly <learner>` | nightly: review of `claude-reviewed..main`, report commit, atomic push | `flows/nightly.py`, `review/` |
 | `school-notes chat <learner> [codex\|claude]` | the owner's session in the same container; `fetch`/`finish` through MCP | `flows/chat.py`, `flows/handlers.py`, `flows/session.py` |
 | `school-notes status [<learner>]` | local state; `--clear <learner> notes\|review\|publish --continue\|--discard` | `flows/status.py`, `flows/clear.py` |
@@ -56,8 +58,9 @@ The source-grounded repair rules and writer/fix prompts describe the target step
 contracts; their remaining flow integration is staged separately. `fix.txt` is loadable,
 but this unit does not introduce a fix run or the new reviewer state machine. The current
 nightly prompt uses the existing output contract, with additive private `owner_notes`.
-Writer `owner_notes` are also emitted as `writer.owner_notes` JSONL log events, with
-token-like secrets redacted. The additive figure lists and `coverage` survive range merging; their remaining
+Writer `owner_notes` are emitted as `writer.owner_notes` JSONL log events and, at completion,
+in the private task `report.json`, the finish response and an existing once-per-run e-mail
+notice, with token-like secrets redacted. The new full e-mail layout remains step 3. The additive figure lists and `coverage` survive range merging; their remaining
 consumers are staged separately. Warning decisions are validated per writer invocation. `coverage` records
 `source`, `unit` and either a `target` topic-section link or an omission `reason`,
 without creating an image evidence record. `question`/`settled` closures now validate the reference on the item's page and close it.
@@ -156,6 +159,57 @@ checks this before installation; the tool does not invent a historical justifica
 whole-file hashes plus provenance: stamping machine fields cannot turn a changed author
 page into tool-owned output. Exact tool-only output errors are program errors, never strikes
 against the writer. Author text is checked before stamping as well as afterwards.
+
+
+## Subject calls and one-time repair (unit 1d)
+
+Cron persists the writer assignments in `phase.json`: subjects follow `tools/subjects.json`,
+new subjects follow by path; each call receives only its own packages, pages, card and
+located review/image assignments. Original page sequence IDs survive noncontiguous subject
+groups. Whole-run validation and machine metadata use the complete input. D16 still selects
+whole packages up to `sources.pages_per_call` (30 by default); D36 splits only a single
+oversized package, sequentially. Each call is checked before its result checkpoint is saved;
+restart after saving reuses it. Existing saved runs without assignments keep their old ranges.
+The writer timeout defaults to **7200 s** when omitted; explicit configuration still wins.
+
+`repair --topic` accepts an existing content-page path. It uses the current local
+`origin/main` snapshot, no Drive scan or move, and the same writer/check/finish chain.
+`fetch.json` has `mode: repair`, a pinned subject/card and `repair_targets` with related
+pages and complete local source files. The writer prompt's repair section preserves existing
+content, lesson metadata and anchors. A topic pass can adjust only links in related lesson
+logs and summaries. The separate lesson-log pass requires item coverage and evidence checks;
+semantic completeness remains a writer/reviewer responsibility. Paid generation is disabled.
+The independent reader/figure phases will join this chain in step 2, without a separate
+repair implementation. This unit does not launch the later figure-agent trial.
+
+`--no-push` stops at **committed**, before fetch, build, push or publication. The
+`notes/<run_id>` branch and task stay open. Repeating the command keeps the hold; cron also
+leaves it alone. Inspect that worktree/commit on the VM, then explicitly run
+`school-notes finish <learner>` to resume the normal finish chain, or
+`school-notes status --clear <learner> notes --discard` to archive/discard it. `finish`
+may publish only under the existing learner configuration; the trial never changes it.
+`status --continue` alone does not release the no-push hold.
+
+Create the queue first with `repair <learner> --queue`. Edit only the `priority` fields
+in `docs/repair-queue.json`, then repeat `--queue` to reorder. Lower nonnegative numbers
+run first; null is unprioritized. This command accepts those uncommitted queue edits and
+rejects unrelated dirty files. It creates a normal tool-only notes commit (or holds it
+with `--no-push`). The queue has `items` and `figures`: page state is `pending`, `done` or
+`owner`; figure state starts as `pending` (awaiting inspection), later `keep`, `context`
+or `remake`. The tool does not judge diagrams. SVG hashes invalidate old judgements.
+Sorting follows plan 11.2: urgent pages, owner priority, descending pattern-hit count,
+descending actual lesson date, path. Filenames never supply lesson dates. Dependent lesson
+logs, chapter summaries and review pages wait for every referenced topic to be `done`.
+The scheduler reads the queue in its stored order after new packages and existing pending
+image work; the separate daily `fix` entry condition is staged with the later fix flow.
+Runs change status without rebuilding or reordering the queue. A direct topic repair
+without a queue is allowed, but does not create one or complete absent entries.
+
+Two bad repair attempts hand the topic to an owner review item: the failed work is archived
+as a local Git bundle, then a tool-only continuation commits the queue's `owner` state and
+notifies once. The next runnable entry can proceed. Dependencies of an owner-blocked topic
+remain blocked. Preparation, per-call result saving, queue replacement and the committed
+hold all have interruption/resume tests. No new phase or model is introduced.
 
 ## Development
 

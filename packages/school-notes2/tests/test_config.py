@@ -36,3 +36,21 @@ def test_unknown_keys_are_refused():
 def test_unknown_learner():
     with pytest.raises(config.ConfigError):
         config.parse(BASE).student("nobody")
+
+
+def test_writer_timeout_defaults_to_two_hours_but_explicit_override_survives():
+    import copy
+    data = copy.deepcopy(BASE)
+    del data["roles"]["writer"]["timeout_s"]
+    assert config.parse(data).role("writer")[0].timeout_s == 7200
+    assert config.parse(BASE).role("writer")[0].timeout_s == 5400
+
+
+def test_repair_cli_requires_exactly_one_target_mode():
+    from school_notes2.cli import _parser
+    args = _parser().parse_args(["repair", "barna", "--topic", "wiki/m/a.md", "--no-push"])
+    assert args.topic == "wiki/m/a.md" and args.no_push and not args.queue
+    assert _parser().parse_args(["repair", "benedek", "--queue"]).queue
+    for argv in (["repair", "barna"], ["repair", "barna", "--queue", "--topic", "a"]):
+        with pytest.raises(SystemExit):
+            _parser().parse_args(argv)

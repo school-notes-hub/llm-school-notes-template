@@ -173,7 +173,7 @@ def _role(name: str, t: dict, harnesses: dict) -> Role:
     if t["effort"] not in ("low", "medium", "high"):
         raise ConfigError(f"[roles.{name}] effort must be at most high")
     return Role(harness=t["harness"], model=t["model"], effort=t["effort"],
-                timeout_s=int(t["timeout_s"]), nested_sandbox=bool(t.get("nested_sandbox", False)))
+                timeout_s=int(t.get("timeout_s", 7200) if name == "writer" else t["timeout_s"]), nested_sandbox=bool(t.get("nested_sandbox", False)))
 
 
 def default_harnesses() -> dict:

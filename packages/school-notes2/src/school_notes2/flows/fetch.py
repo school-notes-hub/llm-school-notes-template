@@ -19,8 +19,8 @@ from ..images import plans as image_plans
 from ..log import today
 from ..review import files as review_files
 from ..schemas import validate
-from ..sources import cards
-from ..sources.batch import select_batch, split_ranges
+from ..sources import calls, cards
+from ..sources.batch import select_batch
 from ..sources.duplicates import known_hashes
 from ..sources.naming import subject_key
 from ..sources.place import Downloaded, Settings, place_package
@@ -129,9 +129,12 @@ def prepare(ctx: Ctx, task: Task, *, new_subject_index) -> None:
     fresh = [p for p in pages if not p["duplicate_of"]]
     task.update(tool_writes={}, tool_parts={})
     steps.record_tool_files(task, ctx.notes_path, written)
+    reviews = review_files.open_items(ctx.notes_path, task.mode)
+    assigned = calls.assignments(ctx.notes_path, packages, pages, reviews, found["pending"],
+                                 ctx.cfg.sources.pages_per_call)
     task.set_phase("prepared", base=base, packages=packages, pages=pages,
-                   ranges=split_ranges(len(pages), ctx.cfg.sources.pages_per_call) or [[0, 0]],
-                   open_review_items=review_files.open_items(ctx.notes_path, task.mode),
+                   calls=assigned, ranges=calls.ranges(assigned) or [[0, 0]],
+                   open_review_items=reviews,
                    pending_images=found["pending"],
                    skip_writer=bool(pages) and not fresh and not found["pending"],
                    dot_git=safefs.read_text(ctx.notes_path, ".git"))
@@ -210,7 +213,7 @@ def new_subject(repo, subject: str, drive_name: str) -> list[str]:
     return [path] if path else []
 
 
-def fetch_json(task: Task, k: int) -> dict:
+def fetch_json(task: Task, k: int, *, whole_run: bool = False) -> dict:
     """The fetch.json of range k (1-based), validated (4.4)."""
     first, last = task.get("ranges")[k - 1]
     data = {"student": task.data["student"], "run_id": task.run_id, "mode": task.mode,
@@ -218,6 +221,17 @@ def fetch_json(task: Task, k: int) -> dict:
             "range": {"from": first, "to": last, "k": k, "n": len(task.get("ranges"))},
             "open_review_items": task.get("open_review_items", []),
             "pending_images": task.get("pending_images", [])}
+    if task.get("calls") and not whole_run and (task.mode != "interactive" or task.get("mode") == "repair"):
+        call = task.get("calls")[k - 1]
+        data.update(subject=call["subject"],
+                    packages=[data["packages"][n] for n in call["packages"]],
+                    pages=[p for p in data["pages"] if p["seq"] in call["seqs"]],
+                    open_review_items=call["open_review_items"],
+                    pending_images=call["pending_images"])
+        if "card" in call:
+            data["card"] = call["card"]
+    if task.get("mode") == "repair":
+        data.update(mode="repair", repair_targets=task.get("repair_targets", []))
     if task.get("conflict_files"):
         data["conflict_files"] = task.get("conflict_files")
     if task.get("offline"):

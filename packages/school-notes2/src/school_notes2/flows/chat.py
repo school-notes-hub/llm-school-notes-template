@@ -7,6 +7,7 @@ cron with the interactive template. The LLM starts `fetch`/`finish` itself throu
 import sys
 
 from ..llm import launch
+from ..mcp.redact import redact
 from ..schemas import errors as schema_errors
 from ..state import phase
 from ..state.errors import NeedsOwner, SnError, Transient
@@ -99,7 +100,11 @@ def _drive_or_none(ctx: Ctx):
 def _launch(ctx: Ctx, task: phase.Task, harness_name: str | None) -> None:
     role, harness = _role_for(ctx, harness_name)
     if task.phase in ("downloading", "downloaded", "moved"):
-        fetch_flow.advance(ctx, task, lambda: _drive_or_none(ctx))
+        if task.get("mode") == "repair":
+            from . import repair
+            repair.prepare(ctx, task)
+        else:
+            fetch_flow.advance(ctx, task, lambda: _drive_or_none(ctx))
     n = len(task.get("ranges"))
     k = min(task.get("writing_k", 1), n)
     if task.phase == "prepared":
@@ -175,7 +180,11 @@ def session_fetch(ctx: Ctx) -> dict:
         task = interactive_fetch(ctx)
         checks.begin(task)
     elif task.phase in ("downloading", "downloaded", "moved"):
-        fetch_flow.advance(ctx, task, lambda: _drive_or_none(ctx))
+        if task.get("mode") == "repair":
+            from . import repair
+            repair.prepare(ctx, task)
+        else:
+            fetch_flow.advance(ctx, task, lambda: _drive_or_none(ctx))
     writer.write_inputs(ctx, task, min(task.get("writing_k", 1), len(task.get("ranges"))))
     return {"run_id": task.run_id, "phase": task.phase, "pages": len(task.get("pages", [])),
             "open_review_items": len(task.get("open_review_items", []))}
@@ -197,6 +206,8 @@ def session_finish(ctx: Ctx) -> dict:
             task = phase.load(task.dir)
             if task.get("writing_k") <= len(task.get("ranges")):
                 return {"state": "saved", "message": "the remaining ranges continue in cron"}
+        if task.get("no_push"):
+            task.update(no_push=False)
         state = finish_flow.finish(ctx, task, notify_owner_items=lambda items: run_flow.owner_items(
             ctx, task, items))
     except steps.CheckFailed as exc:
@@ -208,4 +219,5 @@ def session_finish(ctx: Ctx) -> dict:
     except Transient as exc:
         task.record_error("transient", str(exc))
         return {"state": "transient_error", "message": str(exc)}
-    return {"state": state, "run_id": task.run_id, "published": task.get("published")}
+    return {"state": state, "run_id": task.run_id, "published": task.get("published"),
+            "owner_notes": redact(writer.merge(writer.results(task, required=False))["owner_notes"])}

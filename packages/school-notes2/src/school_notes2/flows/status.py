@@ -50,7 +50,7 @@ def _lock(ctx: Ctx) -> dict:
 
 
 def _task(t: phase.Task) -> dict:
-    return {"kind": t.kind, "mode": t.mode, "run_id": t.run_id, "phase": t.phase,
+    return {"kind": t.kind, "mode": t.get("mode", t.mode), "no_push": bool(t.get("no_push")), "run_id": t.run_id, "phase": t.phase,
             "age_h": _age_h(t.data["created"]), "packages": len(t.get("packages", [])),
             "retries": t.data["retries"], "llm_failures": t.data["llm_failures"],
             "source_ref_counts": t.get("source_ref_counts", {}),
@@ -143,6 +143,8 @@ def render(data: dict) -> str:
         lines.append(f"nyitott {t['kind']} ({t['mode']}): {t['run_id']} fázis={t['phase']} "
                      f"kor={t['age_h']} h csomag={t['packages']} retries={t['retries']} "
                      f"llm_failures={t['llm_failures']}")
+        if t.get("no_push"):
+            lines.append("próba: commit után megállt; folytatás: school-notes finish, vagy status --discard")
     for n in data["needs_owner"]:
         lines.append(f"TULAJDONOSRA VÁR ({n['kind']} {n['run_id']}): {n['reason']} → {n['todo']}")
     if data["worktree_dirty_outside_run"]:

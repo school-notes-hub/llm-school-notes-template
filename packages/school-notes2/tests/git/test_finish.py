@@ -368,3 +368,34 @@ def test_review_merge_does_not_hide_conflicting_status_or_prose():
     assert merge([base.encode(), b"---\nitems: [\n---\n", fixed.encode()]) is None
     assert merge([s.encode() for s in (base, fixed, disagree)]) is None
     assert merge([s.encode() for s in (base, fixed.replace("Tárgy.", "Átírva."), disagree)]) is None
+
+
+@pytest.mark.parametrize("crash", [False, True])
+def test_no_push_stops_after_commit_and_only_explicit_release_continues(env, monkeypatch, crash):
+    task = env.start_run()
+    task.update(no_push=True)
+    (env.path / "wiki/a.md").write_text("trial\n")
+    hooks = env.hooks()
+    hooks.message = fixed_message(task)
+    real = finish.g1_commit
+    def interrupted(*args):
+        real(*args)
+        raise RuntimeError("committed before reply")
+    if crash:
+        monkeypatch.setattr(finish, "g1_commit", interrupted)
+        with pytest.raises(RuntimeError):
+            finish.run(task, env.wt, hooks, T, {})
+        monkeypatch.setattr(finish, "g1_commit", real)
+    task = phase.load(task.dir)
+    with monkeypatch.context() as patch:
+        def no_remote(*args, **kwargs):
+            pytest.fail("trial must not fetch, build, push or publish")
+        patch.setattr(finish, "_publish_round", no_remote)
+        assert finish.run(task, env.wt, hooks, T, {}) == "committed"
+    assert f"Run-Id: {task.run_id}" not in env.origin_log()
+    assert repos.has_ref(env.wt, f"refs/heads/notes/{task.run_id}")
+    commit = task.get("commit")
+    task.update(no_push=False)
+    assert finish.run(task, env.wt, hooks, T, {}) == "done"
+    assert task.get("commit") == commit
+    assert env.origin_log().count(f"Run-Id: {task.run_id}") == 1

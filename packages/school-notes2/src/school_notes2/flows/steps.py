@@ -145,7 +145,7 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
         raise CheckFailed(reordered)
     result = merged_result(ctx, task)
     repo = ctx.notes_path
-    fetch = fetch_flow.fetch_json(task, len(task.get("ranges")))
+    fetch = fetch_flow.fetch_json(task, len(task.get("ranges")), whole_run=True)
     listed = fetch["open_review_items"]
     problems = check_result(repo, result, fetch, {(i["file"], i["item_id"]) for i in listed},
                             ctx.cfg.limits.review_closures_per_run)
@@ -180,7 +180,11 @@ def check_items(ctx: Ctx, task: Task) -> list[dict]:
     today = learning.observation_date(task)
     learning.validate(ctx, task)
     paths = sorted(llm_snapshot(ctx, task))
-    items = wiki_check.check_files(ctx.notes_path, paths, today=today)
+    from ..repair import check as repair_check
+    items = repair_check.problems(ctx, task, paths)
+    inherited = repair_check.inherited_learning_problems(ctx, task, paths)
+    items += [i for i in wiki_check.check_files(ctx.notes_path, paths, today=today)
+              if (i["file"], i["message"]) not in inherited]
     checks.tool_errors(ctx, task, items)
     return checks.identify(items + checks.source_warnings(ctx, task, changed_paths(ctx, task)), ctx.notes_path)
 

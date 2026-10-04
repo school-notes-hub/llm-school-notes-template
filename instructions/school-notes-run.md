@@ -8,7 +8,7 @@ The tool does everything that can be computed: Drive download and filing into `s
 
 ## Run files (`.school-notes/`, never committed)
 
-* `fetch.json`: the run: `packages` (Drive folder, subject, role `fuzet`/`tanari`, new subject, and the subject `card` snapshot: `role`, `conventions`, `style`), `pages` in their fixed order (`seq`, the stored `sources/...` path, `duplicate_of`), the `range` of pages this call covers, the `open_review_items` to fix, the `pending_images` to produce, and `conflict_files` while resolving a conflict.
+* `fetch.json`: the run: `packages` (Drive folder, subject, role `fuzet`/`tanari`, new subject, and the subject `card` snapshot: `role`, `conventions`, `style`), `pages` in their fixed order (`seq`, the stored `sources/...` path, `duplicate_of`), the `range` of pages this call covers, the `open_review_items` to fix, the `pending_images` to produce, and `conflict_files` while resolving a conflict. Cron calls cover one subject (with its pinned `subject` and `card`); only a single oversized package is split into consecutive ranges. In `mode: repair`, `repair_targets` names the existing page, its related pages and full local source paths; there are no new packages or source pages.
 * `changes.json`: files already changed in this run; continue from there, do not redo them.
 * `check.json`: problems the tool found; inspect the changed page independently with the checklist before judging this list.
 * `result.json`: your output (schema below), written at the end of the work.
@@ -34,7 +34,8 @@ Read `AGENTS.md`, `PROFILE.md` and the rules the rule map requires for ingest, i
  "checks": [{"page": "wiki/...", "image": 3, "locator": "page, figure, exercise", "observed": "...", "decision": "changed | confirmed | unresolved", "note": "..."}]}
 ```
 
-* `notes`: every non-duplicate page of the range belongs to a lesson-notes page; you name the page `<date>-<topic>-jegyzet.md`. The tool writes its machine fields from this.
+* `owner_notes`: private explanations of harmful steps omitted, their reasons and better proposals. The tool includes these in the completion report and owner notification.
+* `notes`: in repair mode leave this list empty; source metadata already exists and stays intact. Otherwise every non-duplicate page of the range belongs to a lesson-notes page; you name the page `<date>-<topic>-jegyzet.md`. The tool writes its machine fields from this.
 * `question`: only for a blocking problem (not a notebook, a textbook page, unreadable, a subject other than the Drive folder's). A non-blocking uncertainty goes under the page's open questions.
 * `review_closure`: at most 20 closed items per run. Never edit a review file. Only fix when you agree; `disagree` requires a nonempty reason. One reviewer response may follow; in `round: 2` close only as `fixed` or `question`. `question` requires the public-safe open-question anchor (`question_id`); `settled` points to an existing question or decision. Questions concern the material, not the reviewers' dispute.
 * `coverage`: the private source-unit → teaching-section ledger, separate from image observations. Each entry has `source` (repository path), `unit` (the definition, exercise, drawing or other source unit) and exactly one of `target` (`wiki/...md#section`) or `reason` (why it has no learning value). Use source reading order, then target path as a tie-breaker. In fix mode record only units affected by the assigned repair.
@@ -65,3 +66,16 @@ The tool maintains the `lesson-sources` generated block on lesson logs and the `
 ## Stable order
 
 The order of existing chapter, lesson and topic lists never changes between runs. Within a topic page, the section order is didactic and may change to build prerequisites before use; preserve anchors and links. A new item goes to its fixed place: chapters in the syllabus/notebook order, lessons by date, topics in the order the lesson treats them, list items where the existing order puts them. Changing the chapter, lesson or topic order is done only on the owner's request in a session. The tool's `check` refuses a cron run that re-orders existing `chapters`, `lessons`, `topics` or a page's `order`.
+
+## One-time repair
+
+In `mode: repair`, work only on the assigned existing page and its related pages. Preserve
+all correct claims, explanations, examples and correction labels, existing `lessons`,
+`date_note`, `topics` and anchors. A topic-page pass changes only link destinations in
+related lesson logs and summaries; their prose is rewritten in a separate pass after all
+related topics are done. Before shortening a lesson log, map each teaching item to its
+place on the topic page in `coverage[]` and record the coverage check in `checks`.
+Never infer lesson dates from filenames. Keep chapter, lesson and topic order; sections
+within the assigned topic may follow a better teaching sequence. The full target page
+gets the Reader check. No Drive fetch or paid image generation happens in repair.
+The host tool manages the queue and the `--no-push` hold; never edit the queue yourself.

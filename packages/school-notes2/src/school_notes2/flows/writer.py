@@ -38,9 +38,17 @@ def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
     k = task.get("writing_k", 1)
     while k <= n:
         task.set_phase("writing", writing_k=k)
-        write_inputs(ctx, task, k)
-        result = _call(ctx, task, k, role, harness, handlers)
-        write_json(task.dir / f"result-{k}.json", result)
+        result = read_json(task.dir / f"result-{k}.json")
+        if result is None or result["status"] == "question":
+            write_inputs(ctx, task, k)
+            result = _call(ctx, task, k, role, harness, handlers)
+            from . import steps
+            try:
+                _check_call(ctx, task, k, result)
+            except steps.CheckFailed as exc:
+                steps.write_check_items(ctx, exc.items)
+                raise
+            write_json(task.dir / f"result-{k}.json", result)
         if result["status"] == "question":
             task.update(question=result.get("questions", []))
             return "question"
@@ -111,3 +119,23 @@ def merge(results_: list[dict]) -> dict:
     warnings = {w["id"]: w for w in merged["warnings"]}
     merged["warnings"] = [warnings[k] for k in sorted(warnings)]
     return merged
+
+
+def _check_call(ctx, task, k, result):
+    from . import steps
+    from ..wiki.check_result import check_result
+    validate("result", result)
+    if result["status"] == "question":
+        return
+    steps.guard_step(ctx, task)
+    reordered = steps.order_step(ctx, task)
+    if reordered:
+        raise steps.CheckFailed(reordered)
+    fetch = fetch_flow.fetch_json(task, k)
+    listed = {(i["file"], i["item_id"]) for i in fetch["open_review_items"]}
+    problems = check_result(ctx.notes_path, result, fetch, listed,
+                            ctx.cfg.limits.review_closures_per_run, whole_run=False)
+    if problems:
+        steps.write_check_items(ctx, problems)
+        raise steps.CheckFailed(problems)
+    steps.check_changed(ctx, task, result=result)

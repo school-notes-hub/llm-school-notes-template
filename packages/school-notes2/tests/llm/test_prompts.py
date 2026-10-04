@@ -97,3 +97,10 @@ def test_fix_restores_required_question_and_drawing_clauses():
     assert commission in text
     assert text.count('Rossz:') == 2 and text.count('Jó:') == 2
     assert 'A kiosztott ábrajavításon belül:' in text
+
+
+def test_repair_uses_writer_with_verbatim_preservation_clause():
+    text = prompt('writer')
+    assert 'Minden helyes állítást, magyarázatot, példát és ⚠️ javítást őrizz meg. Ezek jelölése marad. Csak a formát változtasd: a forrást leíró mondatból tárgyi állítás legyen. Ami már javítva van, azt ne javítsd újra.' in text
+    assert '`mode: repair`' in text and '`repair_targets`' in text
+    assert 'a szövegük külön menetben készül' in text

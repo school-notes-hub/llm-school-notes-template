@@ -28,6 +28,12 @@ def _parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
     for name in ("run", "nightly", "setup", "fetch", "finish"):
         sub.add_parser(name).add_argument("learner")
+    repair = sub.add_parser("repair")
+    repair.add_argument("learner")
+    selection = repair.add_mutually_exclusive_group(required=True)
+    selection.add_argument("--topic")
+    selection.add_argument("--queue", action="store_true")
+    repair.add_argument("--no-push", action="store_true")
     login = sub.add_parser("login")
     login.add_argument("learner")
     login.add_argument("role", choices=("writer", "reviewer"))
@@ -64,6 +70,9 @@ def main(argv: list[str] | None = None) -> int:
 
 def _dispatch(ctx, args) -> int:
     from .flows import chat, nightly, run, setup
+    if args.command == "repair":
+        from .flows import repair
+        return repair.repair(ctx, topic=args.topic, build_queue=args.queue, no_push=args.no_push)
     if args.command == "run":
         return run.run(ctx)
     if args.command == "nightly":

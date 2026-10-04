@@ -35,6 +35,9 @@ def finish(ctx: Ctx, task: Task, *, notify_owner_items) -> str:
                              details={"questions": prepared.result.get("questions", [])})
     elif task.get("rebase") == "conflict":
         steps.content_steps(ctx, task)          # 6.7: the owner resolved it; check again
+    from . import repair, report
+    if task.phase == "finishing":
+        repair.complete(ctx, task)
     hooks = git_finish.Hooks(
         regenerate=lambda: steps.regenerate(ctx, task),
         build=lambda commit: _build(ctx, task, commit),
@@ -46,7 +49,10 @@ def finish(ctx: Ctx, task: Task, *, notify_owner_items) -> str:
         extra_paths=("references",) if task.mode == "interactive" else ())
     t = git_finish.Timeouts(ctx.cfg.timeouts.fetch_s, ctx.cfg.timeouts.push_s,
                             ctx.cfg.timeouts.ls_remote_s)
-    return git_finish.run(task, wt, hooks, t, start if start is not None else hooks.snapshot())
+    state = git_finish.run(task, wt, hooks, t, start if start is not None else hooks.snapshot())
+    if state in ("done", "committed"):
+        report.completion(ctx, task)
+    return state
 
 
 def _snapshot(ctx: Ctx, task: Task) -> dict:

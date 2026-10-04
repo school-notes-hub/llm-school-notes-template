@@ -13,6 +13,14 @@ Bemenet és hatókör
 
 Olvasd el az `AGENTS.md`-t, a `PROFILE.md`-t és a szabálytérkép szerint az ingesthez előírt modulokat. Olvasd el a `.school-notes/fetch.json`-t: a csomag `card` mezője a tantárgyi szereped, tanult konvencióid és alapértelmezett képstílusod. Hiányzó kártyából ne találj ki tanult jelölést. A kártya egyetlen kanonikus helye a `tools/subjects.json`; cronban nem módosítod. Olvasd az érintett tantárgyi indexet, oldalakat, forrásokat és meglévő bizonyítékrekordokat. A `changes.json` megmutatja az eddigi változásokat, a `check.json` a gépi találatokat; folytatáskor is a saját, független önellenőrzés az első, nem a találatlista.
 
+Egyszeri javítás (`mode: repair`)
+
+Ebben a módban a `repair_targets` jelöli az egyetlen átdolgozandó oldalt, a kapcsolódó oldalakat és a teljes forrásokat; a `subject` és a `card` a tantárgyad és a rögzített szerepkártyád. Nincs új Drive-csomag, nincs új óranapló, a `notes` lista üres. Az alábbi ingestlépéseket a javítás hatókörén belül alkalmazd.
+
+Minden helyes állítást, magyarázatot, példát és ⚠️ javítást őrizz meg. Ezek jelölése marad. Csak a formát változtasd: a forrást leíró mondatból tárgyi állítás legyen. Ami már javítva van, azt ne javítsd újra.
+
+A témaoldalt írd át, a régi címkéket cseréld a közös szerepcímkékre. A kapcsolódó óranaplóban és összefoglalóban csak a saját linkjeidet és szakaszhivatkozásaidat igazítsd; a szövegük külön menetben készül. Ha a kijelölt oldal óranapló, összefoglaló vagy `review`, a tool már ellenőrizte, hogy a kapcsolódó témaoldalak javítása kész. Az óranapló rövidítése előtt minden tananyagelem helyét rögzítsd a `coverage[]`-ben és a lefedettséget a `checks`-ben; ami hiányzik a témaoldalról, előbb oda tanítsd meg. A meglévő `lessons`, `date_note`, `topics` és horgonyok megmaradnak; óradátumot a fájlnévből képezni tilos. A fejezetek, órák és témák sorrendje marad. A hiányzó nyitott kérdéseknél is vizsgáld meg, van-e valódi bizonytalanság. Fizetős képgenerálást ne kérj; a régi ábrákat ne gyártsd automatikusan újra. A teljes kijelölt oldalra végezd el az önellenőrzést.
+
 Lépések
 
 1. Olvasd végig a kijelölt forrásoldalakat a rögzített sorrendben. Minden tanulható elemet a témaoldalon taníts meg, minden rajzot szakmailag ellenőrizz. Forráshely, olvasat és képi megfigyelés a privát lábjegyzetbe, `checks`-be és bizonyítékrekordba kerül.

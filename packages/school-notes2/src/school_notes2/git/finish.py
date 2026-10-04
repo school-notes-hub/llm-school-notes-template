@@ -14,7 +14,7 @@ from .workbranch import branch_name
 
 MAX_PUSH_ROUNDS = 3
 COMMIT_PATHS = ("wiki", "sources", "docs/review", "docs/evidence", "publication",
-                "tools/subjects.json")
+                "tools/subjects.json", "docs/repair-queue.json")
 
 
 class EditedDuringFinish(Exception):
@@ -58,6 +58,8 @@ def run(task: Task, wt: Git, hooks: Hooks, t: Timeouts, start_snapshot: dict) ->
     if task.phase in ("finishing", "writing", "prepared"):
         if not g1_commit(task, wt, hooks, start_snapshot):
             return _finish_without_commit(task, wt)
+    if task.get("no_push") and task.phase == "committed":
+        return "committed"  # Owner inspects the branch; only explicit finish releases it.
     if task.get("regen_pending"):
         _regenerate_and_amend(task, wt, hooks)
     phase = task.phase

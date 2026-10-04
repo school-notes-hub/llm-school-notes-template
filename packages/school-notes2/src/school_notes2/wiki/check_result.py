@@ -20,6 +20,8 @@ def check_result(repo: Path, result: dict, fetch: dict, open_items: set[tuple[st
     only the pages of fetch.json's `range` (the writer's MCP check of one range)."""
     out = []
     out += check_coverage(repo, result, fetch, whole_run)
+    if fetch.get("mode") == "repair" and result.get("notes"):
+        out.append(item(RESULT, None, "repair has no new source pages: notes must be empty"))
     new = {p["subject"] for p in fetch["packages"] if p.get("new_subject")}
     for s in result.get("new_subjects") or []:
         if s["subject"] not in new:
@@ -37,6 +39,8 @@ def check_result(repo: Path, result: dict, fetch: dict, open_items: set[tuple[st
         elif (c["file"], c["item_id"]) not in open_items:
             out.append(item(RESULT, None, f"review_closure: {c['file']} {c['item_id']} is not open"))
     out += check_checks(repo, result, fetch)
+    from ..repair import check as repair_check
+    out += repair_check.coverage(result, fetch)
     return out
 
 

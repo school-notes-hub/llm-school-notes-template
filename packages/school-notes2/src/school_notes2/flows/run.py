@@ -30,6 +30,8 @@ def run(ctx: Ctx) -> int:
         _settle_images(ctx)
         task = phase.open_task(ctx.task_root(), ctx.name, "notes")
         if not _may_run(ctx, task):
+            if task is not None and task.get("no_push"):
+                return 0
             publish.catch_up(ctx)        # 8.3: the kinds are independent
             return 0
         _prerequisites(ctx, task)
@@ -44,6 +46,9 @@ def run(ctx: Ctx) -> int:
         image_notices(ctx)
         return 0
     except Exception as exc:  # noqa: BLE001 - every error has one documented outcome (8.1)
+        from ..repair import failure
+        if failure.handle(ctx, task, exc):
+            return 1
         policy.on_error(exc, task=task, student=ctx.name, step="run", log=ctx.log,
                         mailer=ctx.mailer)
         return 1
@@ -58,6 +63,9 @@ def ctx_bind(ctx: Ctx, task: Task) -> Task:
 
 def _may_run(ctx: Ctx, task: Task | None) -> bool:
     """5.1/1–2: needs-owner, an open interactive run, or stray edits keep cron away."""
+    if task is not None and task.get("no_push"):
+        ctx.log.event("run.skip", "no_push", target=task.run_id)
+        return False
     if task is not None and task.data.get("needs_owner"):
         ctx.log.event("run.skip", "needs_owner", target=task.run_id)
         return False
@@ -92,12 +100,19 @@ def _new_task(ctx: Ctx) -> Task | None:
     task = fetch_flow.start(ctx, "cron", drive, allow_image_only=allow)
     if task is not None and task.get("image_only"):
         image_pending.record_image_only_run(state, today)
+    if task is None:
+        from . import repair
+        task = repair.next_task(ctx)
     return task
 
 
 def advance(ctx: Ctx, task: Task) -> None:
     """Drive a cron notes task from its recorded phase to `done` (8.2)."""
-    fetch_flow.advance(ctx, task, lambda: fetch_flow.drive_client(ctx))
+    if task.get("mode") == "repair":
+        from . import repair
+        repair.prepare(ctx, task)
+    else:
+        fetch_flow.advance(ctx, task, lambda: fetch_flow.drive_client(ctx))
     if task.phase in ("prepared", "writing") and not task.get("skip_writer"):
         if writer.run_ranges(ctx, task, handlers.build(ctx, task.dir)) == "question":
             raise NeedsOwner("the writer asked a blocking question",
@@ -107,7 +122,13 @@ def advance(ctx: Ctx, task: Task) -> None:
         finish_flow.finish(ctx, task, notify_owner_items=lambda items: owner_items(ctx, task, items))
     except steps.CheckFailed as exc:
         steps.write_check_items(ctx, exc.items)
-        task.set_phase("writing", writing_k=len(task.get("ranges")))
+        k = len(task.get("ranges"))
+        for n, call in enumerate(task.get("calls", []), 1):
+            if any(i["file"].startswith(f"wiki/{call['subject']}/") for i in exc.items):
+                k = n
+                break
+        (task.dir / f"result-{k}.json").unlink(missing_ok=True)
+        task.set_phase("writing", writing_k=k)
         raise
 
 
