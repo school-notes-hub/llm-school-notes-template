@@ -43,11 +43,14 @@ def _finish(ctx, task, notify_owner_items):
                              todo="answer it in `school-notes chat`",
                              details={"questions": prepared.result.get("questions", [])})
         task.set_phase("figures", inspection_result=prepared.result,
+                       correction_rolled_back=False, correction_rollback_reason=None,
+                       correction_rollback_items=[], correction_rejected_patch=None,
                        attempt=task.get("attempt", 1), max_agents=task.get("max_agents", ctx.cfg.limits.max_agents))
     if task.phase in (*review_phases.PHASES, "waiting_quota"):
+        reviewing = (task.get("quota_phase") if task.phase == "waiting_quota" else task.phase) in ("figures", "inspecting")
         handoff = review_phases.advance(ctx, task, notify_owner_items, edits)
         if handoff is not None:
-            if start != _snapshot(ctx, task, start):
+            if reviewing and start != _snapshot(ctx, task, start):
                 raise git_finish.EditedDuringFinish("files changed before correction handoff")
             return handoff
     elif task.get("rebase") == "conflict":
@@ -75,7 +78,10 @@ def _finish(ctx, task, notify_owner_items):
     for page, before, after in (edits or {}).get("replacements", []):
         if start.get(page) != before:
             raise git_finish.EditedDuringFinish("files changed before figure replacement")
-        start[page] = after
+        if after is None:
+            start.pop(page, None)
+        else:
+            start[page] = after
     state = git_finish.run(task, wt, hooks, t, start)
     if state in ("done", "committed"):
         report.completion(ctx, task)

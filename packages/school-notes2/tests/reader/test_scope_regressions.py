@@ -7,7 +7,7 @@ import pytest
 
 from school_notes2.figures import pending
 from school_notes2.flows import correction, inspection, review_phases
-from school_notes2.reader import calls, notices, report, units, verdicts
+from school_notes2.reader import calls, contracts, notices, report, units, verdicts
 from school_notes2.review import relations
 from school_notes2.state import phase, safefs
 from school_notes2.wiki.check_result import check_result
@@ -36,7 +36,9 @@ def test_unassigned_unknown_path_does_not_fail_or_recur(setup, monkeypatch, path
     assert task.phase == "finishing" and task.data["needs_owner"] is None
 
 
-def test_context_finding_has_section_notice_and_separate_assignment_flag(setup, monkeypatch):
+@pytest.mark.parametrize("status", ["open", "owner"])
+def test_context_finding_has_section_notice_and_separate_assignment_flag(setup, monkeypatch, status):
+    from school_notes2.wiki import frontmatter
     ctx, task, page = setup
     other = "wiki/m/summary.md"
     safefs.write_text(ctx.notes_path, other, "---\ntype: summary\n---\n# Összefoglaló\n\n[Topic](topic.md)\n\nHibás állítás.\n")
@@ -52,9 +54,20 @@ def test_context_finding_has_section_notice_and_separate_assignment_flag(setup, 
     # Another unit has reviewed this page; the unrelated context finding stays local.
     verdicts.record(ctx.notes_path, pass1(other)["pages"], {other: units.page_key(ctx.notes_path, other)},
                     "model/high", task.data["created"])
-    notices.refresh(ctx.notes_path, [other])
+    if status == "owner":
+        path = task.get("inspection_report")
+        original = safefs.read_text(ctx.notes_path, path)
+        parsed = frontmatter.split(original)
+        parsed.meta["items"]["R1"] = "owner"
+        safefs.write_text(ctx.notes_path, path, frontmatter.set_keys(original, {"items": parsed.meta["items"]}))
+    task.set_phase("review_ready")
+    review_phases.advance(ctx, task, lambda _: None)
     text = safefs.read_text(ctx.notes_path, other)
     assert notices.SECTION in text and notices.PAGE not in text
+    assert task.phase == "finishing"
+    review_phases.finalize(ctx, phase.load(task.dir))
+    review_phases.final_keys(ctx, phase.load(task.dir))
+    assert safefs.read_text(ctx.notes_path, other) == text
     # The same fields survive supplements on a later attempt, not just report creation.
     report.append(ctx.notes_path, task.get("inspection_report"), [
         {**finding(other), "origin": "reader", "outside_assignment": True,
@@ -130,3 +143,81 @@ def test_inherited_broken_notebook_drawing_is_not_a_p1_accounting_error(setup):
               "notebook_drawings": [{"figure": "f", "source": candidate["asset"], "crop": "whole"}]}
     fetch = {"packages": [], "pages": [], "pending_figures": [entry]}
     assert not check_result(ctx.notes_path, result, fetch, set(), base_content=base.get)
+
+
+@pytest.mark.parametrize("path", ["/work/m/topic.md", "m/topic.md"])
+def test_prompt_path_finding_is_canonical_without_retry(setup, monkeypatch, path):
+    ctx, task, page = setup
+    invoked = []
+    def invoke(*args, **kwargs):
+        invoked.append(1)
+        return SimpleNamespace(output=pass1(page, [finding(path)]))
+    monkeypatch.setattr(calls.launch, "run_headless", invoke)
+    inspection.prepare(ctx, task)
+    inspection.inspect(ctx, task)
+    inspection.inspect(ctx, phase.load(task.dir))
+    assert invoked == [1] and task.get("reader_owner_notes") == []
+    record = next(iter(relations.inventory(ctx.notes_path)["items"].values()))
+    assert record["file"] == page and not record["outside_assignment"] and not record["unlocated"]
+    assert len(correction.assigned(ctx, task)) == 1
+
+
+def test_ignored_paths_are_named_in_format_retry(setup):
+    ctx, task, page = setup
+    folder = task.dir / "reader"
+    seen = []
+    paths = ["wiki/m/missing.md", "../wiki/m/topic.md"]
+    def invoke(*args, **kwargs):
+        seen.append(1)
+        if len(seen) == 1:
+            return SimpleNamespace(output=pass1(page, [{**finding(p), "id": f"F-{n}"}
+                                                       for n, p in enumerate(paths, 1)]))
+        error = safefs.read_json(folder, "in/format-error.json")["error"]
+        assert "changes page verdict needs a finding" in error
+        assert ", ".join(sorted(paths)) in error
+        return SimpleNamespace(output=pass1(page, [finding(page)]))
+    result = calls.run(ctx.notes_path, ctx.notes_path, folder, "reader-1", {"pages": [{"file": page}]},
+                       inspection.role(ctx, task), log=ctx.log, invoke=invoke)
+    assert result["status"] == "reviewed" and len(seen) == 2
+
+
+@pytest.mark.parametrize("path", ["/work/m/topic.md", "m/topic.md"])
+def test_context_path_recovered_after_crash_uses_internal_allowlist(setup, path):
+    ctx, task, page = setup
+    other = "wiki/m/assigned.md"
+    folder = task.dir / "reader"
+    folder.mkdir()
+    safefs.write_json(folder, "state.json", {"status": "ready", "attempts": ["running"]})
+    safefs.write_json(folder, "out/review.json", {**pass1(other), "findings": [finding(path)]})
+    def forbidden(*args, **kwargs):
+        pytest.fail("completed call repeated")
+    result = calls.run(ctx.notes_path, ctx.notes_path, folder, "reader-1", {"pages": [{"file": other}]},
+                       inspection.role(ctx, task), log=ctx.log, invoke=forbidden,
+                       allowed_paths={page, other})
+    assert result["review"]["findings"] == [finding(page)]
+    assert result["review"]["owner_notes"] == []
+
+
+@pytest.mark.parametrize("path", ["/work/m/../m/topic.md", "./m/topic.md", "/wiki/m/topic.md", "topic.md"])
+def test_other_path_spellings_remain_owner_notes(setup, path):
+    _, _, page = setup
+    result = contracts.check({**pass1(page), "findings": [finding(path)]}, "reader-1",
+                             {"pages": [{"file": page}]})
+    assert result["findings"] == [] and path in result["owner_notes"][0]
+
+
+def test_malformed_base_yaml_is_inherited_damage(setup, monkeypatch):
+    ctx, task, page = setup
+    brief, _ = figure(ctx, task, page)
+    entry = pending.record(ctx.notes_path, brief, "previous", [])
+    task.update(pending_figures=[entry], inspection_result={"status": "done"})
+    base = {p: safefs.read_bytes(ctx.notes_path, p) for p in safefs.walk_files(ctx.notes_path)}
+    base[page] = base[page].replace(b"title: ", b"title: [")
+    assert not pending.valid_at(brief, base.get)
+    safefs.unlink(ctx.notes_path, ".school-notes/figures/f/figure.json")
+    fetch = {"packages": [], "pages": [], "pending_figures": [entry]}
+    assert check_result(ctx.notes_path, {"status": "done"}, fetch, set(), base_content=base.get) == []
+    install_reader(monkeypatch, page)
+    review_phases.advance(ctx, task, lambda _: None)
+    assert task.phase == "finishing"
+    assert task.get("inspection_figures")[0]["candidate"]["state"] == "failed"

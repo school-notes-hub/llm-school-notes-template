@@ -111,11 +111,14 @@ def run(ctx, task, edits=None):
                     safefs.write_json(root, "receipt.json", saved)
                     apply(ctx, task, root, saved, edits)
                     raise
+            except steps.CheckFailed as exc:
+                saved = {"status": "rollback", "reason": str(exc), "items": exc.items[:10]}
             except (BadWork, Transient) as exc:
                 saved = {"status": "rollback", "reason": str(exc)}
         if saved["status"] == "rollback" and task.mode == "interactive":
             from .correction_backup import rejected
             rejected(ctx.notes_path, root, PREFIXES, ctx.log)
+            saved["rejected_patch"] = (root / "rejected.patch").relative_to(task.dir).as_posix()
         safefs.write_json(root, "receipt.json", saved)
     apply(ctx, task, root, saved, edits)
 
@@ -127,7 +130,8 @@ def apply(ctx, task, root, saved, edits=None):
         if edits is not None:
             edits["restores"].append((before, steps.llm_snapshot(ctx, task)))
         task.update(correction_result={"status": "done"}, correction_rolled_back=True,
-                    correction_rollback_reason=saved["reason"])
+                    correction_rollback_reason=saved["reason"], correction_rollback_items=saved.get("items", []),
+                    correction_rejected_patch=saved.get("rejected_patch"))
         return
     if task.mode == "interactive":
         from . import correction_chat

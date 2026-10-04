@@ -124,7 +124,8 @@ def inspect(ctx, task):
 def _reader(ctx, task, view, unit):
     repo, root = ctx.notes_path, folder(task) / "reader" / units.slug(unit["topic"])
     assigned = inputs.prepare(repo, view, unit, root / "pass1/in", lambda p: old_text(ctx, task, p))
-    first = calls.run(repo, view, root / "pass1", "reader-1", assigned, role(ctx, task), log=ctx.log)
+    first = calls.run(repo, view, root / "pass1", "reader-1", assigned, role(ctx, task), log=ctx.log,
+                      allowed_paths=set(unit["pages"]) | set(unit.get("context", [])))
     findings, notes, pages, coverage = [], [], [], {"errors": 0, "covered": 0}
     if first["status"] == "reviewed":
         review = first["review"]

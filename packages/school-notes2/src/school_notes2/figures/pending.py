@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import yaml
+
 from ..schemas import validate
 from ..state import safefs
 
@@ -102,6 +104,6 @@ def valid_at(brief: dict, read) -> bool:
             if data is None:
                 return False
             png(data, crop=source["crop"])
-    except (ValueError, OSError):
+    except (ValueError, OSError, yaml.YAMLError):
         return False
     return True

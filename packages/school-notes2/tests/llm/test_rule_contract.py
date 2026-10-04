@@ -38,6 +38,14 @@ def test_example_reviewer_timeout_is_ninety_minutes():
     assert data["roles"]["reviewer"]["timeout_s"] == 5400
 
 
+def test_pending_figure_retry_uses_worktree_relative_paths():
+    text = (ROOT / "instructions/school-notes-run.md").read_text()
+    paragraph = next(p for p in text.split("\n\n") if p.startswith("For each `fetch.json.pending_figures`"))
+    assert "restored commission at `.school-notes/figures/<id>.json`" in paragraph
+    assert "write `.school-notes/figures/<id>/figure.json`" in paragraph
+    assert "`figures/<id>/figure.json`" not in paragraph
+
+
 def test_wording_migration_belongs_to_profile_release():
     import json
     version = json.loads((ROOT / "shared-files.json").read_text())["version"]

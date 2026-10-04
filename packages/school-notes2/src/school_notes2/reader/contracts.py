@@ -9,11 +9,16 @@ def exact(values, wanted, field):
         raise ValueError(f"{field}: exactly one verdict per assigned identifier required")
 
 
-def check(value, stage, assigned, known=None):
+def check(value, stage, assigned, known=None, *, allowed_paths=()):
     validate(stage, value)
     if stage == "reader-1":
         pages = [p["file"] for p in assigned["pages"]]
-        allowed = set(pages) | set(assigned.get("context", []))
+        allowed = set(pages) | set(allowed_paths)
+        for finding in value["findings"]:
+            path = finding["file"]
+            canonical = "wiki/" + (path[6:] if path.startswith("/work/") else path)
+            if path not in allowed and canonical in allowed:
+                finding["file"] = canonical
         ignored = sorted((f for f in value["findings"] if f["file"] not in allowed),
                          key=lambda f: (f["file"], f["id"]))
         value["owner_notes"] += [f"Kihagyott lelet ({f['id']}, {f['file']}): "
@@ -24,7 +29,8 @@ def check(value, stage, assigned, known=None):
         exact(value["pages"], pages, "file")
         if any(p["verdict"] == "changes" and not any(f["file"] == p["file"] for f in value["findings"])
                for p in value["pages"]):
-            raise ValueError("changes page verdict needs a finding")
+            paths = ", ".join(sorted({f["file"] for f in ignored}))
+            raise ValueError("changes page verdict needs a finding" + (f"; ignored paths: {paths}" if paths else ""))
         ids = [f["id"] for f in value["findings"]]
         if len(ids) != len(set(ids)):
             raise ValueError("duplicate finding id")

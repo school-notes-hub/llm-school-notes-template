@@ -62,12 +62,17 @@ def test_context_verdict_is_ignored_but_finding_survives_one_call(setup, monkeyp
     unit = units.collect(ctx.notes_path, [page])[0]
     folder = task.dir / "input"
     inputs.prepare(ctx.notes_path, view, unit, folder, lambda _: "")
+    assert safefs.read_json(folder, "assigned.json") == {"pages": [{"file": page, "key": unit["keys"][page]}]}
     assert [(p["file"], p["role"]) for p in safefs.read_json(folder, "pages.json")] == [
         (page, "assigned"), (other, "context")]
     invoked = []
     def invoke(role, **kwargs):
         from types import SimpleNamespace
         invoked.append(1)
+        supplied = safefs.read_json(role.mounts.in_dir, "assigned.json")
+        assert supplied == {"pages": [{"file": page, "key": unit["keys"][page]}]}
+        assert {p["file"] for p in safefs.read_json(role.mounts.in_dir, "pages.json")
+                if p["role"] == "context"} == {other}
         extra = {**finding(other), "quote": "Összefoglaló"}
         return SimpleNamespace(output={"pages": pass1(page)["pages"] + pass1(other, [extra])["pages"],
                                        "findings": [extra], "owner_notes": []})

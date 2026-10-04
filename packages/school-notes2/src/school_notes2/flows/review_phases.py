@@ -52,11 +52,12 @@ def finalize(ctx, task, edits=None):
         receipt = task.get("inspection_receipts", {}).get(brief["id"], {})
         verdict = next((v for v in receipt.get("review", {}).get("figures", []) if v["id"] == brief["id"]), {})
         if verdict.get("verdict") == "accept" and state["candidate"]["state"] == "candidate":
+            replacing = edits is not None and brief.get("replaces")
             try:
-                before = steps._llm_hash(brief["page"], safefs.read_bytes(repo, brief["page"]))
+                before = steps.llm_snapshot(ctx, task).get(brief["page"]) if replacing else None
                 written += insert.insert(repo, brief, receipt, at=task.data["created"])
-                if edits is not None and brief.get("replaces"):
-                    after = steps._llm_hash(brief["page"], safefs.read_bytes(repo, brief["page"]))
+                if replacing:
+                    after = steps.llm_snapshot(ctx, task).get(brief["page"])
                     edits["replacements"].append((brief["page"], before, after))
                 continue
             except (OSError, ValueError) as exc:
@@ -76,16 +77,25 @@ def finalize(ctx, task, edits=None):
     if owners:
         path = task.get("inspection_report")
         written.append(report.append(repo, path, owners, [], "figures"))
-    written += notices.refresh(repo, [p for u in task.get("inspection_units", []) for p in u["pages"]])
+    written += notices.refresh(repo, _notice_pages(ctx, task))
     steps.record_tool_files(task, repo, written)
     steps.generate_all(ctx, task)
+
+
+def _notice_pages(ctx, task):
+    pages = {p for u in task.get("inspection_units", []) for p in u["pages"]}
+    path = task.get("inspection_report")
+    if path:
+        pages.update(i["file"] for key, i in relations.inventory(ctx.notes_path)["items"].items()
+                     if key.startswith(path + "#") and i["status"] in ("open", "owner") and i.get("file"))
+    return sorted(pages)
 
 
 def final_keys(ctx, task):
     """G4 regeneration and final G5 check: invalidate only, never call a reviewer."""
     stale = verdicts.invalidate(ctx.notes_path)
     pages = {r["file"] for r in stale}
-    pages.update(p for u in task.get("inspection_units", []) for p in u["pages"])
+    pages.update(_notice_pages(ctx, task))
     written = notices.refresh(ctx.notes_path, sorted(pages)) if task.get("review_complete") else []
     steps.record_tool_files(task, ctx.notes_path, written +
                            ([verdicts.PATH] if safefs.is_file(ctx.notes_path, verdicts.PATH) else []))

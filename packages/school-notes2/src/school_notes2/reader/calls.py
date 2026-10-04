@@ -11,7 +11,7 @@ from . import contracts
 TIMEOUTS = {"reader-1": 1800, "reader-2": 600, "recheck": 1200}
 
 
-def run(repo, view, folder, stage, assigned, configured, *, log, invoke=None):
+def run(repo, view, folder, stage, assigned, configured, *, log, invoke=None, allowed_paths=()):
     invoke = invoke or launch.run_headless
     folder.mkdir(parents=True, exist_ok=True)
     known = relations.inventory(repo)
@@ -27,7 +27,8 @@ def run(repo, view, folder, stage, assigned, configured, *, log, invoke=None):
     while state["status"] != "missing":
         if state["attempts"] and state["attempts"][-1] == "running":
             try:
-                value = contracts.check(safefs.read_json(folder, "out/review.json"), stage, assigned, known)
+                value = contracts.check(safefs.read_json(folder, "out/review.json"), stage, assigned, known,
+                                        allowed_paths=allowed_paths)
             except (ValueError, OSError):
                 _fail(folder, state, "crash", "interrupted call without valid output")
                 continue
@@ -38,7 +39,7 @@ def run(repo, view, folder, stage, assigned, configured, *, log, invoke=None):
         safefs.write_json(folder, "state.json", state)
         try:
             outcome = invoke(replace(role, attempt=len(state["attempts"])), log=log, snapshot=lambda: launch.tree_fingerprint(folder / "out"))
-            value = contracts.check(outcome.output, stage, assigned, known)
+            value = contracts.check(outcome.output, stage, assigned, known, allowed_paths=allowed_paths)
         except WaitingQuota:
             state["attempts"].pop()
             safefs.write_json(folder, "state.json", state)

@@ -245,6 +245,8 @@ def session_finish(ctx: Ctx) -> dict:
     if isinstance(state, dict):
         return {**state, "run_id": task.run_id}
     return {"state": state, "run_id": task.run_id, "published": task.get("published"),
-            **({"correction_rolled_back": True, "reason": task.get("correction_rollback_reason")}
+            **({"correction_rolled_back": True, "reason": task.get("correction_rollback_reason"),
+                "items": task.get("correction_rollback_items", []),
+                "rejected_patch": task.get("correction_rejected_patch")}
                if task.get("correction_rolled_back") else {}),
             "owner_notes": redact(writer.merge(writer.results(task, required=False))["owner_notes"])}
