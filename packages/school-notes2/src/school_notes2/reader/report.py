@@ -2,7 +2,7 @@
 
 import re
 
-from ..review import files, relations, warnings
+from ..review import files, generated, relations, warnings
 from ..state import safefs
 from ..wiki import frontmatter
 
@@ -40,6 +40,7 @@ def list_findings(repo, hits, output):
 def write(repo, path, findings, notes, model, base, at):
     if safefs.is_file(repo, path):
         return path
+    findings, notes = generated.partition(repo, findings, notes)
     located = [locate(repo, f) for f in findings]
     ordered = sorted(located, key=lambda f: (f["file"], f.get("line") or 0, f.get("origin", ""),
                                              f.get("quote", ""), f["problem"], f.get("id", "")))
@@ -72,6 +73,7 @@ def append(repo, path, findings, notes, label):
     labels = page.meta.get("supplements", [])
     if label in labels:
         return path
+    findings, notes = generated.partition(repo, findings, notes)
     known = relations.inventory(repo)
     items, details = dict(page.meta["items"]), dict(page.meta.get("item_details", {}))
     number = max((int(k[1:]) for k in items), default=0)

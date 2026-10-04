@@ -322,6 +322,10 @@ def _llm_hash(rel: str, data: bytes) -> str:
 def _llm_part(text: str) -> str:
     """The text without generated blocks and machine frontmatter keys."""
     from ..figures.commissions import MARKER
+    # Notices have their own insertion separators, including beside/inside old blocks.
+    # Remove them first so adding a notice cannot change the author's whitespace key.
+    text = markers.remove(text, {name for _, _, name in markers.spans(text)
+                                 if name == "pending" or name.startswith(("pending-section-", "pending-figure-"))})
     text = markers.BLOCK.sub(lambda m: f"<!-- figure: {m['name'][7:]} -->"
                              if m["name"].startswith("figure-") else m[0], text)
     text = MARKER.sub(lambda m: f"<!-- figure: {m[1]} -->", text)

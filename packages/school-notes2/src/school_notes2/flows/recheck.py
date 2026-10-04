@@ -2,7 +2,7 @@
 
 from ..figures import inputs as figure_inputs
 from ..reader import calls, inputs, report, units, verdicts
-from ..review import relations
+from ..review import generated, relations
 from ..state import safefs
 from ..wiki import source_refs
 from . import correction, inspection, steps
@@ -74,8 +74,9 @@ def _apply(ctx, task, saved):
             elif item["verdict"] == "not-ok":
                 written.append(report.reopen(ctx.notes_path, item["key"], item["answer"]))
         new = report.list_findings(ctx.notes_path, entry["hits"], review["hits"])
+        new, feedback = generated.partition(ctx.notes_path, new, [])
         findings += [{**f, "origin": "recheck"} for f in new]
-        notes += review["owner_notes"]
+        notes += review["owner_notes"] + feedback
         # A targeted result only carries forward an existing full reader verdict.
         for original in task.get("reader_pages", []):
             page = original["file"]

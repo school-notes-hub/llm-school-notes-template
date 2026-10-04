@@ -70,9 +70,18 @@ def after_header(text: str, name: str, body: str) -> str:
         return markers.replace(text, name, body)
     if not body:
         return text
+    cut = header_end(text)
+    return text[:cut] + "\n" + markers.wrap(name, body) + "\n" + text[cut:]
+
+
+def header_end(text: str) -> int:
+    """After the leading banner, its description and any enclosing generated block."""
     page = frontmatter.split(text)
+    # Hide multiline comments without changing offsets; retain pending image markers.
+    visible = COMMENT.sub(lambda m: m[0] if re.match(r"<!-- (?:image|figure):", m[0])
+                          else re.sub(r"[^\n]", " ", m[0]), page.body)
     offset, title_end = 0, 0
-    for line in page.body.splitlines(keepends=True):
+    for line in visible.splitlines(keepends=True):
         offset += len(line)
         if re.match(r"\s*(?:!\[|<img\b|<!-- (?:image|figure):)", line):
             break
@@ -84,7 +93,13 @@ def after_header(text: str, name: str, body: str) -> str:
     else:
         offset = title_end
     cut = len(text) - len(page.body) + offset
-    return text[:cut] + "\n" + markers.wrap(name, body) + "\n" + text[cut:]
+    description = re.match(r"\s*<!-- image-description\b.*?-->(?:\n|$)", text[cut:], re.S)
+    if description:
+        cut += description.end()
+    for start, end, _ in markers.spans(text):
+        if start < cut <= end:
+            cut = end + int(text[end:end + 1] == "\n")
+    return cut
 
 
 def form_problems(repo: Path, rel: str, body: str, meta: dict) -> list[str]:
