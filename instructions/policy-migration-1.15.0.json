@@ -121,9 +121,9 @@
       "heading": "Workflows",
       "destination": "instructions/wiki-workflows.md",
       "source_sha256": "4002b650b71d3afec1c296105ed32cc47d22be691ef1ca640204d1a696c97abc",
-      "migrated_sha256": "4eb27662a3b884430f7f13c9666b9cc9b96bea0accb6549d7b0fa3e56ea73059",
+      "migrated_sha256": "72ff9c9b196b3c0b169db37a26f2ea6c622006b58215feaf029c51cff5ccd4b8",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
-      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: public-safe anchored questions/decisions; private readings and coverage; independent reader check before machine list"
+      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: public-safe anchored questions/decisions; private readings and coverage; independent reader check before machine list; 1.18.2: in a tool run the build checks formulas; MCP check checks delimiters only"
     },
     {
       "heading": "Choosing and replacing authored visuals",

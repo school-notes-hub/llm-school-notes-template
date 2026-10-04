@@ -30,7 +30,7 @@ def problems(ctx, task, paths):
         old, new = frontmatter.split(before).meta, frontmatter.split(after).meta
         for key in ("lessons", "date_note", "topics"):
             if _protected(key, old.get(key)) != _protected(key, new.get(key)):
-                out.append(item(rel, None, f"repair: preserve existing {key}"))
+                out.append(item(rel, None, f"repair: preserve existing {key}" + (" (only materials may change)" if key == "lessons" else "")))
         anchors = re.findall(r'<!--\s*q:\s*[^>]+-->|<a\s+[^>]*(?:id|name)=[^>]+>\s*</a>', before)
         if any(a not in after for a in anchors):
             out.append(item(rel, None, "repair: preserve existing anchors"))

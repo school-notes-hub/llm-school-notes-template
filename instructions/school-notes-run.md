@@ -84,8 +84,8 @@ The order of existing chapter, lesson and topic lists never changes between runs
 ## One-time repair
 
 In `mode: repair`, work only on the assigned existing page and its related pages. Preserve
-all correct claims, explanations, examples and correction labels, existing `lessons`,
-`date_note`, `topics` and anchors. A topic-page pass changes only link destinations in
+all correct claims, explanations, examples and correction labels, existing `lessons`
+(you may add or correct `lessons[].materials`), `date_note`, `topics` and anchors. A topic-page pass changes only link destinations in
 related lesson logs and summaries; their prose is rewritten in a separate pass after all
 related topics are done. Before shortening a lesson log, map each teaching item to its
 place on the topic page in `coverage[]` and record the coverage check in `checks`.

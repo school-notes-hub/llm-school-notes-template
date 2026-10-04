@@ -2,6 +2,12 @@
 
 Newest first. Each entry says what changed in the shared files and what an existing wiki must do when it applies the update (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)). A wiki records the version it is on in `PROFILE.md`.
 
+## 1.18.2 - 2026-10-04
+
+- Inside a school-notes run the tool builds and checks the pages; the writer runs no renderer (Task execution step 5 and the runtime-blocker sentence, Install, Wiki workflows self-check: MCP `check` checks formula delimiters, the build compiles the formulas).
+- One-time repair (run module): the writer may add or correct `lessons[].materials` of an existing lesson log (plan 7.3); every other lesson field stays protected.
+- Migration (controller-owned): synchronize the changed instructions through Template updates; no learner content changes.
+
 ## 1.18.1 - 2026-10-04
 
 - Math and formulas (Wiki structure): the school-notes tool compiles every formula with MathJax when it builds the site before the push and returns a formula error as a check item; the writer installs and runs no renderer during a run, and a missing local renderer is not a blocker (a v1 rule had stopped a repair run on the VM).

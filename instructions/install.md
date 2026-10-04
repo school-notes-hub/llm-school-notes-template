@@ -58,4 +58,4 @@ Follow [repository-local setup](install-learning-images.md). All executable code
 
 ## Optional page-check runtime
 
-For agents maintaining Markdown pages, install the locked repository-local Node dependencies and select an available Chromium browser using [page-check setup](page-check.md). Record Node/browser versions and paths in the private inventory. No global skills or Hermes code changes are needed. Ordinary note work runs the prepared checker and does not repeat installation.
+For agents maintaining Markdown pages, install the locked repository-local Node dependencies and select an available Chromium browser using [page-check setup](page-check.md). Record Node/browser versions and paths in the private inventory. No global skills or Hermes code changes are needed. Outside a school-notes tool run, ordinary note work may run the prepared checker and does not repeat installation; inside a run the tool builds and checks the pages.
