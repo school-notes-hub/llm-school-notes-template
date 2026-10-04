@@ -81,3 +81,83 @@ def test_preloaded_subject_prepares_and_resumes(tmp_path, monkeypatch, student):
     entry = json.loads((repo / "tools/subjects.json").read_text())["subjects"]["statika"]
     assert entry["name"] == "Statika" and entry["card"] == CARD and entry["emoji"] == "📐"
     assert fetch.fetch_json(phase.load(task.dir), 1) == data
+
+
+@pytest.mark.parametrize("student", ["benedek", "barna"])
+@pytest.mark.parametrize("interrupted_phase", ["downloading", "downloaded"])
+def test_download_resume_refreshes_base_before_move(tmp_path, monkeypatch, student, interrupted_phase):
+    from school_notes2.state.errors import Transient
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subjects(repo)
+    ctx = context(repo, monkeypatch)
+    ctx.student = SimpleNamespace(drive_root="root")
+    ctx.log = SimpleNamespace(event=lambda *a, **k: None)
+    task = phase.create(tmp_path / "tasks", student, "notes", "cron", "downloading")
+    def interrupted(*args):
+        if interrupted_phase == "downloaded":
+            task.set_phase("downloaded", selected=[])
+        raise Transient("download interrupted")
+    monkeypatch.setattr(fetch, "download", interrupted)
+    with pytest.raises(Transient):
+        fetch.advance(ctx, task, lambda: object())
+    assert phase.load(task.dir).get("preparation_base") is None
+    monkeypatch.setattr(fetch, "_base", lambda *a: "b" * 40)
+    subjects(repo, {**CARD, "role": " "})
+    with pytest.raises(Prerequisite):
+        fetch.advance(ctx, phase.load(task.dir), lambda: pytest.fail("invalid fresh card"))
+    subjects(repo)
+    monkeypatch.setattr(fetch, "download", lambda c, t, d: t.set_phase("downloaded", selected=[]))
+    task = phase.load(task.dir)
+    fetch.advance(ctx, task, lambda: object())
+    assert task.phase == "prepared"
+    assert task.get("base") == "b" * 40
+    assert task.get("preparation_started")
+
+
+@pytest.mark.parametrize("student", ["benedek", "barna"])
+@pytest.mark.parametrize("when", ["before", "after"])
+def test_move_crash_keeps_base_even_while_phase_is_downloaded(tmp_path, monkeypatch, student, when):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subjects(repo)
+    ctx = context(repo, monkeypatch)
+    ctx.student = SimpleNamespace(drive_root="root")
+    ctx.log = SimpleNamespace(event=lambda *a, **k: None)
+    task = phase.create(tmp_path / "tasks", student, "notes", "cron", "downloaded")
+    task.update(selected=[{"package": {"id": "pkg", "name": "Óra", "listed": []}}])
+    moved = set()
+    def interrupted(*args):
+        assert phase.load(task.dir).get("preparation_base") == "a" * 40
+        if when == "after":
+            moved.add("pkg")
+        raise RuntimeError("power loss")
+    monkeypatch.setattr(fetch, "move_to_processed", interrupted)
+    with pytest.raises(RuntimeError, match="power loss"):
+        fetch.advance(ctx, task, lambda: object())
+    task = phase.load(task.dir)
+    assert task.phase == "downloaded" and task.get("preparation_started")
+    monkeypatch.setattr(fetch, "_base", lambda *a: pytest.fail("move already pinned the base"))
+    def move(*args):
+        moved.add("pkg")
+        return "moved"
+    monkeypatch.setattr(fetch, "move_to_processed", move)
+    def prepare(c, t, **kwargs):
+        assert fetch._validated_base(c, t) == "a" * 40
+        t.set_phase("prepared")
+    monkeypatch.setattr(fetch, "prepare", prepare)
+    fetch.advance(ctx, task, lambda: object())
+    assert task.phase == "prepared" and moved == {"pkg"}
+
+
+@pytest.mark.parametrize("student", ["benedek", "barna"])
+def test_legacy_download_base_is_not_reused_by_offline_prepare(tmp_path, monkeypatch, student):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subjects(repo)
+    ctx = context(repo, monkeypatch)
+    task = phase.create(tmp_path / "tasks", student, "notes", "interactive", "downloaded")
+    task.update(preparation_base="old-download-base", selected=[])
+    fetch.advance(ctx, task, lambda: None)
+    assert task.phase == "prepared"
+    assert task.get("base") == "a" * 40

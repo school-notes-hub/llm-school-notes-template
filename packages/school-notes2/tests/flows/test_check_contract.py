@@ -26,6 +26,23 @@ def test_response_errors_first_counts_and_complete_file(learning_run, monkeypatc
     assert len(checks.accounting(task, {"status": "done"})) == 60
 
 
+def test_content_order_and_public_errors_in_one_check(learning_run):
+    from school_notes2.wiki import frontmatter
+    ctx, task = learning_run
+    task.data["mode"] = "cron"
+    path = ctx.notes_path / TOPIC
+    text = frontmatter.set_keys(path.read_text(), {"order": 20})
+    path.write_text(text + "\n[Hiányzó](missing.md)\n![Ábra](../assets/proba/new.svg)\n")
+    safefs.write_text(ctx.notes_path, "wiki/assets/proba/new.svg", "<svg/>\n")
+    answer = handlers.check(ctx, task)
+    messages = [i["message"] for i in answer["problems"]]
+    assert any("link target does not exist" in m for m in messages)
+    assert any("`order` of an existing page changed" in m for m in messages)
+    assert any("new images with no render.json" in m for m in messages)
+    assert safefs.read_json(ctx.notes_path, answer["full_list"]) == answer["problems"]
+    assert task.get("writer_check")["count"] == 1
+
+
 def test_three_checks_across_reload_and_failed_check(learning_run, monkeypatch):
     ctx, task = learning_run
     checks.begin(task)

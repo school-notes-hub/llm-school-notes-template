@@ -58,11 +58,13 @@ def check(ctx: Ctx, task, *, budget_dir=None) -> dict:
     except steps.CheckFailed as exc:
         problems += exc.items
     from . import learning
+    metadata_valid = True
     try:
         problems += steps.check_items(ctx, task)
     except steps.CheckFailed as exc:
+        metadata_valid = False
         problems += exc.items
-    if not wiki_check.errors(problems):
+    if metadata_valid:
         problems += steps.order_step(ctx, task)
     result = safefs.read_json(ctx.notes_path, f"{workbranch.WORKDIR}/result.json")
     if result is not None:
@@ -79,7 +81,7 @@ def check(ctx: Ctx, task, *, budget_dir=None) -> dict:
             learning.refresh(ctx, task)
         except steps.CheckFailed as exc:
             problems += exc.items
-    if not wiki_check.errors(problems):
+    if metadata_valid:
         problems += public_problems(ctx.notes_path)
     problems = checks.identify(problems)
     steps.write_check_items(ctx, problems)

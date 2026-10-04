@@ -76,6 +76,13 @@ def guard_step(ctx: Ctx, task: Task) -> None:
         raise NeedsOwner("path guard: " + "; ".join(f"{v.path}: {v.message}" for v in owner[:5]),
                          todo="inspect the worktree in `school-notes chat`")
     if found:
+        # A legacy YAML error can also prevent the guard's machine-field comparison.
+        # Classify it before sending an unrepairable violation back to the writer.
+        from . import learning
+        try:
+            learning.validate(ctx, task)
+        except CheckFailed:
+            pass  # New metadata defects are reported by the content check itself.
         raise CheckFailed([wiki_check.item(v.path, None, v.message) for v in found])
 
 

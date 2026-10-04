@@ -78,3 +78,16 @@ def test_prompts_use_role_names(role):
         assert 'a jegyzetnek ezt kell elérnie; te ezt méred' in text
     else:
         assert '- Kérdés a forrásról.\n' in text
+
+
+def test_fix_restores_required_question_and_drawing_clauses():
+    text, writer = prompt('fix'), prompt('writer')
+    owner_question = next(line for line in writer.splitlines() if line.startswith('A tulajdonos szabálya:'))
+    assert owner_question in text
+    assert 'Javítsd a füzetedben is: 1 kg = 1000 g.' in text
+    drawing = next(line for line in writer.splitlines() if line.startswith('Füzetrajz:'))
+    assert drawing in text
+    commission = next(line for line in writer.splitlines() if line.startswith('A `.school-notes/figures/'))
+    assert commission in text
+    assert text.count('Rossz:') == 2 and text.count('Jó:') == 2
+    assert 'A kiosztott ábrajavításon belül:' in text

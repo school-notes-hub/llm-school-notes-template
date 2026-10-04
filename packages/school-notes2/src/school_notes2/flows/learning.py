@@ -7,11 +7,13 @@ between writes (or before replacement) can resume through the normal path guard.
 import hashlib
 from datetime import date
 
+import yaml
+
 from ..state import safefs
 from ..state.phase import Task
 from ..state.errors import NeedsOwner
-from ..wiki import decisions, drafts, guard, lesson_log
-from ..wiki.pages import PageError, read_page, wiki_pages
+from ..wiki import decisions, drafts, frontmatter, guard, lesson_log
+from ..wiki.pages import read_page, wiki_pages
 from . import checks, steps
 from .context import Ctx
 
@@ -27,26 +29,38 @@ def validate(ctx: Ctx, task: Task) -> None:
     """Inspect metadata page by page before any whole-wiki consumer or tool write."""
     problems = []
     for rel in sorted(wiki_pages(ctx.notes_path)):
-        try:
-            meta = read_page(ctx.notes_path, rel).meta
-            messages = drafts.problems(meta) + decisions.decision_problems(meta)
-            if lesson_log.is_lesson(rel, meta):
-                try:
-                    lesson_log.source_line(meta)
-                except ValueError as exc:
-                    messages.append(str(exc))
-            problems += [steps.wiki_check.item(rel, None, m) for m in messages]
-        except PageError as exc:
-            problems += [steps.wiki_check.item(rel, None, m) for m in exc.problems]
+        problems += [steps.wiki_check.item(rel, None, m) for m in
+                     _metadata_problems(rel, safefs.read_text(ctx.notes_path, rel))]
     if problems:
         checks.tool_errors(ctx, task, problems)
         changed = steps.llm_snapshot(ctx, task)
-        outside = [p for p in problems if p["file"] not in changed]
+        wt, base = ctx.worktree("notes"), steps.base_of(task)
+        previous = {}
+        for rel in sorted({p["file"] for p in problems} & changed.keys()):
+            old = wt.run("show", f"{base}:{rel}", check=False)
+            previous[rel] = _metadata_problems(rel, old.stdout.decode("utf-8", "replace")) \
+                if old.returncode == 0 else []
+        outside = [p for p in problems if p["file"] not in changed or
+                   p["message"] in previous.get(p["file"], [])]
         if outside:
-            raise NeedsOwner("invalid metadata outside this run: " + "; ".join(
+            raise NeedsOwner("invalid metadata predating this run: " + "; ".join(
                 f"{p['file']}: {p['message']}" for p in outside),
                 todo="repair the listed pages in `school-notes chat`", details={"items": outside})
         raise steps.CheckFailed(problems)
+
+
+def _metadata_problems(rel: str, text: str) -> list[str]:
+    try:
+        meta = frontmatter.split(text).meta
+    except (ValueError, yaml.YAMLError):
+        return ["frontmatter is not valid YAML or not a mapping"]
+    messages = drafts.problems(meta) + decisions.decision_problems(meta)
+    if lesson_log.is_lesson(rel, meta):
+        try:
+            lesson_log.source_line(meta)
+        except ValueError as exc:
+            messages.append(str(exc))
+    return messages
 
 
 def refresh(ctx: Ctx, task: Task, *, today: date | None = None) -> None:

@@ -15,6 +15,20 @@ DECISION = {"id": "elso-datum", "claim": "Az óra napja.", "answer": "Szeptember
 QUESTIONS = "\n# Nyitott kérdések\n\n<!-- q: elso-jel -->\n1. Melyik jelölést használjuk?\n"
 
 
+@pytest.mark.parametrize("dates,expected", [
+    ([None] * 4, "dátum nélküli óra"),
+    (["2026-09-01"] * 3, "2026. 09. 01."),
+    ([None, None, "2026-09-01", "2026-09-01", None, None],
+     "dátum nélküli óra, 2026. 09. 01., dátum nélküli óra"),
+    (["2026-09-01", "2026-09-02", "2026-09-01"],
+     "2026. 09. 01., 2026. 09. 02., 2026. 09. 01."),
+])
+def test_source_line_collapses_only_consecutive_dates(dates, expected):
+    meta = {"lessons": [{"date": value} for value in dates]}
+    meta["lessons"][-1]["materials"] = ["Mérés (prezentáció)"]
+    assert lesson_log.source_line(meta) == f"📎 Füzet: {expected} · Tanári anyag: Mérés (prezentáció)\n"
+
+
 def test_yaml_on_is_a_key_and_real_booleans_still_work():
     meta = frontmatter.split("---\non: 2026-09-29\nflag: true\nother: false\n---\n").meta
     assert meta == {"on": date(2026, 9, 29), "flag": True, "other": False}

@@ -148,17 +148,20 @@ def _base(ctx: Ctx, task: Task, wt) -> str:
     return repos.rev(wt, "refs/remotes/origin/main")
 
 
-def _validated_base(ctx: Ctx, task: Task) -> str:
-    """Pin the checked base before moving sources; resume prepares that exact commit."""
+def _validated_base(ctx: Ctx, task: Task, *, pin: bool = True) -> str:
+    """Refresh during download; pin before the first move and keep it across resume."""
     base = task.get("preparation_base")
-    if base:
+    if base and (task.get("preparation_started") or task.phase == "moved"):
         return base
     wt = ctx.worktree("notes")
     base = _base(ctx, task, wt)
     config = wt.run("show", f"{base}:tools/subjects.json", check=False)
     if config.returncode == 0:
         cards.preflight(config.stdout)
-    task.update(preparation_base=base)
+    if pin:
+        task.update(preparation_base=base, preparation_started=True)
+    elif task.get("preparation_base"):
+        task.update(preparation_base=None)  # Old tasks pinned too early, before download.
     return base
 
 
@@ -188,7 +191,7 @@ def advance(ctx: Ctx, task: Task, drive_factory) -> None:
     """`downloading` … `prepared` from the recorded phase (8.2); shared by cron and chat.
     `drive_factory()` returns the Drive client, or None when a session works offline."""
     if task.phase in ("downloading", "downloaded"):
-        _validated_base(ctx, task)
+        _validated_base(ctx, task, pin=False)
         drive = drive_factory()
         if drive is None:
             task.set_phase("moved", selected=[])        # offline session: no new packages

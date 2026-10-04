@@ -49,7 +49,8 @@ session may edit valid cards of existing subjects or preload an entry containing
 `name` and `card`; cron cannot edit them or other settings. A missing subject index
 triggers creation with the first package, even for a preloaded card. The tool fills
 missing display metadata without overwriting existing values. Card validation precedes
-Drive movement and pins the preparation commit, also across an interrupted preparation.
+Drive movement. Download retries validate against a fresh base; the first move pins
+the preparation commit before its external action, also across an interrupted move.
 
 The source-grounded repair rules and writer/fix prompts describe the target step-1/2
 contracts; their remaining flow integration is staged separately. `fix.txt` is loadable,
@@ -73,7 +74,8 @@ needs corresponding renderer localization, including the lesson-source line.
 `wiki/lesson_log.py` checks the lesson-log heading and its 3–8 learning points, each
 linked to a listed topic section. `lessons[].materials` is an optional list of public
 names including their kind (`A polisz (prezentáció)`); it never comes from a filename.
-The tool renders the fixed 📎 line in `lesson-sources`, after the header. Teaching
+The tool renders the fixed 📎 line in `lesson-sources`, after the header, collapsing
+consecutive identical dates (including undated lessons). Teaching
 coverage, the meaning of the linked section and public suitability remain writer/reviewer checks.
 
 `wiki/decisions.py` checks question anchors and the `decisions` frontmatter records
@@ -101,8 +103,10 @@ their original start cannot be inferred from the last edit timestamp.
 
 MCP `check` and finish/rebase generation refresh these outputs. Content checks compare
 the author-written part with the run base; tool blocks and machine fields alone do
-not subject legacy pages to the new lesson-log or question form. Invalid metadata on
-unchanged pages requires owner intervention instead of returning to the writer. `flows/learning.py`
+not subject legacy pages to the new lesson-log or question form. Metadata errors that
+already exist in the base require owner intervention even on author-edited pages;
+new errors return to the writer. Content errors do not hide independent order or
+publication findings from the same check. `flows/learning.py`
 records each impending replacement before writing and pins the observation date in
 the existing task state, so interrupted generation resumes without restarting the
 clock or rejecting the tool's own writes. No new phase or LLM call is introduced.

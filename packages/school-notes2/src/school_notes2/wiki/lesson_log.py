@@ -44,7 +44,9 @@ def source_line(meta: dict) -> str:
         value = lesson.get("date")
         if value is not None and not valid_date(value):
             raise ValueError("lesson date must be a real YYYY-MM-DD date")
-        dates.append(str(value).replace("-", ". ") + "." if value else "dátum nélküli óra")
+        label = str(value).replace("-", ". ") + "." if value else "dátum nélküli óra"
+        if not dates or dates[-1] != label:
+            dates.append(label)
         problems = material_problems(lesson)
         if problems:
             raise ValueError("; ".join(problems))

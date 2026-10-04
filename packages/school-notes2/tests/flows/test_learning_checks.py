@@ -112,8 +112,10 @@ def test_legacy_log_author_edit_still_requires_new_form(learning_run):
 
 @pytest.mark.parametrize("invalid", ["yaml", "decisions", "date", "materials", "draft_tracking"])
 @pytest.mark.parametrize("entrypoint", [handlers.check, steps.content_steps, steps.regenerate])
-def test_old_metadata_errors_need_owner(learning_run, invalid, entrypoint):
+@pytest.mark.parametrize("edit_prose", [False, True])
+def test_old_metadata_errors_need_owner(learning_run, invalid, entrypoint, edit_prose):
     ctx, task = learning_run
+    task.data["mode"] = "cron"
     # Emulate metadata already present in the base, not a writer change.
     wt = ctx.worktree("notes")
     text = (ctx.notes_path / NOTE).read_text()
@@ -129,10 +131,13 @@ def test_old_metadata_errors_need_owner(learning_run, invalid, entrypoint):
     wt.run("add", "wiki")
     wt.run("commit", "-qm", "legacy metadata")
     task.update(base=wt.out("rev-parse", "HEAD").strip())
+    if edit_prose:
+        (ctx.notes_path / NOTE).write_text(text + "\nÚj magyarázat.\n")
     with pytest.raises(NeedsOwner) as failure:
         entrypoint(ctx, task)
     assert NOTE in str(failure.value)
     assert "PRIVATE_VALUE" not in str(failure.value)
+    assert task.data["llm_failures"] == 0
 
 
 def test_new_metadata_errors_return_to_writer(learning_run):
@@ -169,3 +174,35 @@ def test_draft_warning_date_is_pinned_and_status_is_repo_wide(learning_run, monk
     task.update(learning_date="2026-09-16")
     found = handlers.check(ctx, task)
     assert [(p["file"], p["severity"]) for p in found["problems"]] == [(TOPIC, "warning")]
+
+
+def test_new_error_on_previously_invalid_page_returns_to_writer(learning_run):
+    ctx, task = learning_run
+    note = ctx.notes_path / NOTE
+    original = note.read_text()
+    lessons = frontmatter.split(original).meta["lessons"]
+    lessons[0]["date"] = "broken"
+    note.write_text(frontmatter.set_keys(original, {"lessons": lessons}))
+    wt = ctx.worktree("notes")
+    wt.run("add", "wiki")
+    wt.run("commit", "-qm", "legacy invalid date")
+    task.update(base=wt.out("rev-parse", "HEAD").strip())
+    lessons[0]["date"] = "2026-09-01"
+    lessons[0]["materials"] = "broken"
+    note.write_text(frontmatter.set_keys(original, {"lessons": lessons}) + "\nÚj magyarázat.\n")
+    answer = handlers.check(ctx, task)
+    assert not answer["ok"]
+    assert any("materials" in p["message"] for p in answer["problems"])
+
+
+def test_existing_yaml_error_with_interactive_prose_edit_needs_owner(learning_run):
+    ctx, task = learning_run
+    note = ctx.notes_path / NOTE
+    note.write_text("---\nprivate: [PRIVATE_VALUE\n---\n")
+    wt = ctx.worktree("notes")
+    wt.run("add", "wiki")
+    wt.run("commit", "-qm", "legacy invalid YAML")
+    task.update(base=wt.out("rev-parse", "HEAD").strip())
+    note.write_text(note.read_text() + "\nÚj magyarázat.\n")
+    with pytest.raises(NeedsOwner):
+        steps.content_steps(ctx, task)

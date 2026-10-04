@@ -27,12 +27,26 @@ def test_reference_closure_and_same_run_resume(tmp_path, report, status, field, 
     listed = files.open_items(tmp_path, "cron")
     closure = {"file": rel, "item_id": "R1", "status": status, field: key}
     assert not relations.closure_problems(tmp_path, closure)
-    files.apply_closure(tmp_path, "run", [closure], listed)
+    # Even at the escalation threshold a reference closure does not stay open.
+    for n in range(4):
+        files.apply_closure(tmp_path, f"earlier-{n}", [], listed)
+    assert files.open_counts(path.read_text()) == {"R1": 4}
+    outcome = files.apply_closure(tmp_path, "run", [closure], listed)
     before = path.read_bytes()
     files.apply_closure(tmp_path, "run", [closure], listed)
     assert path.read_bytes() == before
     assert frontmatter.split(path.read_text()).meta["items"]["R1"] == status
     assert key in path.read_text()
+    assert not outcome.new_owner
+    assert files.open_counts(path.read_text()) == {"R1": 4}
+    assert not files.open_items(tmp_path, "cron")
+    own_section = path.read_text().split("## Végrehajtva (run)")[1]
+    assert "nem érintett" not in own_section
+    assert files.WORDS[status] in own_section and key in own_section
+    for n in range(6):
+        outcome = files.apply_closure(tmp_path, f"later-{n}", [], files.open_items(tmp_path, "cron"))
+        assert not outcome.new_owner
+    assert path.read_bytes() == before
 
 
 @pytest.mark.parametrize("closure", [

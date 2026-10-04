@@ -36,3 +36,16 @@ def test_example_reviewer_timeout_is_ninety_minutes():
     path = ROOT / "packages/school-notes2/src/school_notes2/ops/config.example.toml"
     data = tomllib.loads(path.read_text())
     assert data["roles"]["reviewer"]["timeout_s"] == 5400
+
+
+def test_wording_migration_belongs_to_profile_release():
+    import json
+    version = json.loads((ROOT / "shared-files.json").read_text())["version"]
+    assert version == "1.17.0"
+    assert f"**Template version**: `{version}`" in (ROOT / "PROFILE.md").read_text()
+    changelog = (ROOT / "CHANGELOG.md").read_text()
+    release = changelog.split(f"## {version} - ", 1)[1].split("\n## ", 1)[0]
+    for key in ("lesson-log heading", "lesson-log source line", "undated source lesson",
+                "notebook correction request"):
+        assert f"`{key}`" in release
+    assert "Unreleased" not in changelog.split("## 1.16.2", 1)[0]
