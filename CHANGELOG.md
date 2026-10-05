@@ -2,6 +2,13 @@
 
 Newest first. Each entry says what changed in the shared files and what an existing wiki must do when it applies the update (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)). A wiki records the version it is on in `PROFILE.md`.
 
+## 1.19.0 - 2026-10-05
+
+- Banner and infographic are always generated images: an image plan, `image_generate` and an independent figure reviewer (Visual policy, Media workflows, run module). Every topic page, chapter summary and subject index has a banner; a lesson log takes its topic's banner through `banner_from`. An infographic goes where an overview teaches more than the text, at most one per topic page. Banner text is at most two lines, the smallest letter at least 3.5% of the image width. Notebook drawings, teacher drawings and exact teaching figures stay drawn.
+- Pending figures (run module): a fix run and the in-run correction round get the pending figures as assigned work outside the closure limit; each needs a new candidate or a reasoned `failed`.
+- After a correction only the corrected items and the changed lines are checked again; a finding on an untouched line goes to `owner_notes`.
+- Migration (controller-owned): synchronize the changed instructions through Template updates; the tool's one-time pending-figure migration runs separately; no learner content changes.
+
 ## 1.18.2 - 2026-10-04
 
 - Inside a school-notes run the tool builds and checks the pages; the writer runs no renderer (Task execution step 5 and the runtime-blocker sentence, Install, Wiki workflows self-check: MCP `check` checks formula delimiters, the build compiles the formulas).
