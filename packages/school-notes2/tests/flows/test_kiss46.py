@@ -214,3 +214,36 @@ def test_machine_findings_are_recorded_before_each_write(call, monkeypatch):
     monkeypatch.setattr(safefs, "write_text", spy)
     machine_findings.record(ctx, task, [item(PAGE, 7, "unbalanced $$ display-math delimiter")])
     assert seen and all(seen)
+
+
+def test_a_transient_interruption_is_no_try(call):
+    """Fix-49/5 (REJT-18): two transient interruptions in a row neither count as failed tries
+    nor stop the run for the owner; the next round starts the call again."""
+    from school_notes2.state.errors import Transient
+    ctx, task, rel = call
+    task.update(calls=[], mode="run")         # a non-isolated call: two failures would stop the run
+    for _ in range(2):
+        def interrupted():
+            edit(ctx)
+            raise Transient("the harness exited without a change")
+        with pytest.raises(Transient):
+            run_call(ctx, task, interrupted)
+        state = safefs.read_json(task.dir / "call-1", "call.json")
+        assert state["failures"] == 0 and state["running"] and state["transient"]
+    def done():
+        return {"status": "done", "review_closure": []}
+    assert run_call(ctx, task, done) == {"status": "done", "review_closure": []}
+    state = safefs.read_json(task.dir / "call-1", "call.json")
+    assert state["failures"] == 0 and state["done"] and "transient" not in state
+    assert "Új, kész mondat." in safefs.read_text(ctx.notes_path, PAGE)
+
+
+def test_a_transient_interruption_with_output_recovers_it(call):
+    from school_notes2.state.errors import Transient
+    ctx, task, rel = call
+    def interrupted():
+        raise Transient("lost connection after writing")
+    with pytest.raises(Transient):
+        run_call(ctx, task, interrupted)
+    result = {"status": "done", "review_closure": [{"file": rel, "item_id": "R1", "status": "fixed"}]}
+    assert run_call(ctx, task, lambda: pytest.fail("valid output is reused"), lambda: result) == result

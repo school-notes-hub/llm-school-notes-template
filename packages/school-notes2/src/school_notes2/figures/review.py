@@ -111,7 +111,8 @@ def _resume(repo, briefs, name, run, folder, assigned, state, log, invoke):
             outcome = invoke(replace(run, attempt=len(state["attempts"])), log=log, snapshot=lambda: launch.tree_fingerprint(folder / "out"))
             output = outcome.output
             validate_output(output, assigned, repo, briefs)
-        except WaitingQuota:
+        except (WaitingQuota, launch.Suspended):
+            # Not an attempt: the call waits for the quota or for the owner (T-125).
             state["attempts"].pop()
             safefs.write_json(folder, "state.json", state)
             raise

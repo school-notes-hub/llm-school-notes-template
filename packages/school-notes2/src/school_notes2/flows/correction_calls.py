@@ -12,7 +12,7 @@ import shutil
 
 from ..llm import launch
 from ..state import safefs
-from ..state.errors import BadWork, WaitingQuota
+from ..state.errors import BadWork, Transient, WaitingQuota
 from . import steps
 
 PREFIXES = ("wiki", "docs", "publication", "tools", ".school-notes")
@@ -55,20 +55,27 @@ def run(ctx, task, k, invoke, recover):
     candidate = None
     if state["running"]:  # Interrupted (crash, kill, transient): reuse valid output first.
         state["running"] = False
+        # A transient error (e.g. the provider's outage) is not the writer's failure: without
+        # usable output the call simply starts again, no try is counted (fix-49, REJT-18).
+        transient = state.pop("transient", False)
         try:
             candidate = recover()
         except steps.CheckFailed as exc:
-            state = _failed(ctx, root, state, exc.items, unusable=_unusable(exc.items))
-            if not state["unusable"]:
-                safefs.write_json(root, "candidate-kept.json", True)
+            if not transient:
+                state = _failed(ctx, root, state, exc.items, unusable=_unusable(exc.items))
+                if not state["unusable"]:
+                    safefs.write_json(root, "candidate-kept.json", True)
         except (BadWork, ValueError) as exc:
-            items = [_result_error(exc)] + _file_problems(ctx, task)
-            state = _failed(ctx, root, state, items, unusable=_unusable(items))
+            if not transient:
+                items = [_result_error(exc)] + _file_problems(ctx, task)
+                state = _failed(ctx, root, state, items, unusable=_unusable(items))
         else:
-            if candidate is None:
-                state = _failed(ctx, root, state, [], unusable=False)
-            else:
+            if candidate is not None:
                 return _done(root, state, _answered(ctx, task, k, candidate))
+            if not transient:
+                state = _failed(ctx, root, state, [], unusable=False)
+        if transient:
+            ctx.log.event("writer.call_resumed", reason="transient", call=k)
     while state["failures"] < LIMIT:
         safefs.write_json(root, "call.json", {**state, "running": True})
         try:
@@ -91,6 +98,11 @@ def run(ctx, task, k, invoke, recover):
             safefs.write_json(root, "call.json", state)
         except WaitingQuota:
             safefs.write_json(root, "call.json", {**state, "running": False})
+            raise
+        except Transient:
+            # The run stops for the transient policy; the next round recovers this call's
+            # output or starts it again, without counting a try.
+            safefs.write_json(root, "call.json", {**state, "running": True, "transient": True})
             raise
         else:
             return _done(root, state, _answered(ctx, task, k, result))

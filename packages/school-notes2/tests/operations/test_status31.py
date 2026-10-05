@@ -39,9 +39,10 @@ def test_hungarian_running_idle_today_queues_and_budget(cfg, monkeypatch, learne
         lock.release()
     task.set_phase("done", ended_at=now.isoformat(), active_seconds=120 + 14 * 60)
     text = status_text.overview(ctx, now)
-    assert "szabad, következő kör 10:00" in text
+    assert "szabad, a következő kört a cron indítja" in text and "10:00" not in text
     assert "09:12–09:26 14 p kész" in text
-    assert len(text.splitlines()) == 8
+    assert len(text.splitlines()) == 9
+    assert f"school-notes status --reopen {learner} <…>; újranyitható: docs/review/a.md#R2." in text
     assert "Automatikus feldolgozás:" in text
     assert "Tanulásra kész: nem" in text
     assert "Tulajdonosi döntésre vár: 1 review-tétel." in text

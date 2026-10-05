@@ -46,7 +46,8 @@ def test_round_pending_matches_actual_order_including_nightly(cfg, monkeypatch):
     names = list(cfg.students)
     assert [p for _, p in seen] == [names, names[1:], names[2:], [], [], []]
     for name in names:
-        assert "szabad, következő kör" in status_text.overview(context.make(cfg, name, console=False))
+        assert "szabad, a következő kört a cron indítja (az utolsó kör vége: " in status_text.overview(
+            context.make(cfg, name, console=False))
 
 
 @pytest.mark.parametrize("held, kind, state", [(False, "round", "running"),

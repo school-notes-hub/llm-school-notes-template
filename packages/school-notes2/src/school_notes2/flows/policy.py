@@ -47,10 +47,14 @@ def on_error(exc: BaseException, *, task: Task | None, student: str, step: str, 
             task.set_phase("waiting_quota", quota_phase=task.phase)
         return kind
     if kind == "timeout":
-        if getattr(exc, "details", {}).get("count", 0) >= 2 or getattr(exc, "details", {}).get("suspended"):
+        details = getattr(exc, "details", {})
+        if details.get("count", 0) >= 2 or details.get("suspended"):
+            role = details.get("role", "writer")
             task.mark_needs_owner("Két egymás utáni időtúllépés; a munka megállt.",
-                                  f"Állítsd be az időkorlátot; school-notes status --clear {student} writer --continue",
+                                  f"Állítsd be az időkorlátot; school-notes status --clear {student} {role} --continue",
                                   "timeout")
+            task.data["needs_owner"]["role"] = role   # only this role's clear lifts the stop
+            task.save()
         return kind
     if isinstance(exc, Transient):
         if transient_retry.failed(task):

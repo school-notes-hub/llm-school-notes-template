@@ -199,8 +199,15 @@ def render(data: dict) -> str:
             data["publish_held"].get("reason"), "build-hiba")
         lines.append(f"kiadás visszatartva ({reason}): {data['publish_held'].get('source', '')[:12]}")
     if data.get("unchecked"):
-        lines.append("ellenőrizetlen oldal (a következő futás újraellenőrzi, addig nincs kiadás): "
-                     + ", ".join(sorted(data["unchecked"])))
+        from .unchecked import LIMIT
+        waiting = sorted(p for p, e in data["unchecked"].items() if e.get("tries", 0) < LIMIT)
+        owner = sorted(p for p, e in data["unchecked"].items() if e.get("tries", 0) >= LIMIT)
+        if waiting:
+            lines.append("ellenőrizetlen oldal (a következő futás újraellenőrzi, addig nincs kiadás): "
+                         + ", ".join(waiting))
+        if owner:
+            lines.append(f"ellenőrizetlen oldal, {LIMIT} sikertelen újraellenőrzés után rád vár (school-notes "
+                         f"status --clear {data['learner']} unchecked --continue): " + ", ".join(owner))
     lock = data["lock"]
     lines.append(f"zár: {'foglalt – ' + str(lock.get('kind')) + ' óta ' + str(lock.get('since')) if lock['held'] else 'szabad'}")
     for t in data["open"]:

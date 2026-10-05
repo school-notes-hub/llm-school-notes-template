@@ -72,7 +72,7 @@ def test_failed_recheck_holds_the_release_and_the_next_run_rechecks_against_its_
     record = finish._build(ctx, task, "c1")
     assert record == {"commit": "c1", "held": True, "reason": "unchecked"}
     assert read_json(ctx.cfg.state_dir / "benedek" / "publish-held.json") == {"source": "c1", "reason": "unchecked"}
-    assert incidents == [("publish_held", "unchecked", "publish-held")]
+    assert [i for i in incidents if i[0] != "resolved"] == [("publish_held", "unchecked", "publish-held")]
     assert unchecked.startable(ctx)  # the next hour starts a run for it
 
     # The next run: its own base already holds the change; the carried base (b1) is used.

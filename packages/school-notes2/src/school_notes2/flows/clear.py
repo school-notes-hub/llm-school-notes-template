@@ -17,6 +17,12 @@ from .operation import entry
 @entry("clear")
 def clear(ctx: Ctx, kind: str, action: str) -> str:
     from ..llm import timeouts
+    if kind == "unchecked":
+        if action != "continue":
+            return "Ellenőrizetlen oldal csak --continue paranccsal oldható fel."
+        from . import unchecked
+        pages = unchecked.reset(ctx)
+        return f"ellenőrizetlen oldalak: a következő kör újraellenőrzi ({len(pages)} oldal várt rád)"
     if kind in timeouts.ROLES:
         if action != "continue":
             return "Időtúllépési szerep csak --continue paranccsal oldható fel."
@@ -26,7 +32,10 @@ def clear(ctx: Ctx, kind: str, action: str) -> str:
             write_json(ctx.cfg.state_dir / ctx.name / "nightly-cleared.json", {"at": now_iso()})
         task_kind = "review" if kind == "reviewer" else "notes"
         task = phase.open_task(ctx.task_root(), ctx.name, task_kind)
-        if kind in ("writer", "reviewer") and task is not None and (task.data.get("needs_owner") or {}).get("class") == "timeout":
+        # A writer's or a checking role's suspension stopped the notes run (fix-49), the
+        # reviewer's the night: the run continues from its phase.
+        stop = (task.data.get("needs_owner") or {}) if task is not None else {}
+        if stop.get("class") == "timeout" and stop.get("role", "reviewer" if kind == "reviewer" else "writer") == kind:
             incidents.resolve(ctx, "task:" + task.run_id)
             task.clear_needs_owner()
             task.update(blocked_topics=[], timeout_day=None)

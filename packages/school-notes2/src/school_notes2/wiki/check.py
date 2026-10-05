@@ -76,7 +76,18 @@ def check_text(rel: str, text: str) -> list[dict]:
     except markers.MarkerError as exc:
         out.append(item(rel, None, str(exc), kind=BLOCKING))
     out += check_formulas(rel, text)
+    out += check_ids(rel, text)
     return out
+
+
+def check_ids(rel: str, text: str) -> list[dict]:
+    """An id the page already has (a heading's, or another link target's) fails the release's
+    browser check; the renderer's own slug rule finds it while the writer can still fix it."""
+    from . import heading_ids
+    return [item(rel, line, f'the link target <a id="{value}"></a> repeats the id of {what}; '
+                            "the published page would have this id twice: remove this anchor "
+                            "(the heading already gives the same link target) or rename it")
+            for line, value, what in heading_ids.duplicates(text)]
 
 
 def check_formulas(rel: str, text: str) -> list[dict]:

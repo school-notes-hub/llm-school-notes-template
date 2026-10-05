@@ -36,6 +36,10 @@ HELD = {"unchecked": "egy változás független ellenőrzése nem futott le; a k
 
 
 def wording(name, kind, step, *, task=None, exc=None, role=None):
+    if kind == "unchecked_limit":
+        return ("a kiadás visszatartva: egy változás független ellenőrzése háromszor sem futott le, ezért "
+                "ezt az ellenőrzést magától nem próbálja újra; teendőd: nézd meg az okát (school-notes "
+                f"status {name} --details), majd school-notes status --clear {name} unchecked --continue")
     if kind == "publish_held":
         return "a kiadás visszatartva: " + HELD.get(step, HELD["build"]).format(name=name)
     prefix = "a telepítés ellenőrzést igényel: " if step == "install" else "a futás megállt: "

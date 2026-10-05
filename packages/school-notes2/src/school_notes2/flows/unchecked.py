@@ -3,7 +3,9 @@
 A failed call never lets a change out unchecked: the page is recorded with the commit its
 check measures from, the release is held (the notes commit is still pushed), and the next run
 of any kind rechecks the page against that commit. A page leaves the list when a recheck ran.
-After `LIMIT` failed rechecks no run is started for these pages alone; the owner was told."""
+A run for these pages alone starts at most once a round (fix-49). After `LIMIT` failed rechecks
+no such run starts any more: the owner gets one mail (`unchecked-limit`) and lifts it with
+`school-notes status --clear <learner> unchecked --continue`."""
 
 from ..log import now_iso
 from ..state.files import read_json, write_json
@@ -47,8 +49,38 @@ def update(ctx, task, failed: dict[str, str], checked: set[str]) -> None:
         ctx.log.event("inspection.unchecked", "warning", pages=sorted(failed))
     if set(state) - set(new):
         ctx.log.event("inspection.rechecked", pages=sorted(set(state) - set(new)))
+    notify(ctx)
 
 
 def startable(ctx) -> bool:
     """A run for carried pages alone starts only while a recheck may still succeed."""
     return any(e.get("tries", 0) < LIMIT for e in load(ctx).values())
+
+
+def exhausted(ctx) -> list[str]:
+    return sorted(p for p, e in load(ctx).items() if e.get("tries", 0) >= LIMIT)
+
+
+def notify(ctx) -> None:
+    """One mail while a page waits for the owner after `LIMIT` failed rechecks; over when it
+    was rechecked or the owner reset the tries."""
+    from ..notify import incidents
+    if exhausted(ctx):
+        incidents.record(ctx, "unchecked_limit", "unchecked", scope=SCOPE)
+    else:
+        incidents.resolve(ctx, SCOPE)
+
+
+SCOPE = "unchecked-limit"
+
+
+def reset(ctx) -> list[str]:
+    """The owner's `--clear <learner> unchecked --continue`: every page gets its tries back."""
+    state = load(ctx)
+    pages = exhausted(ctx)
+    if state:
+        write_json(path(ctx), {p: {k: v for k, v in e.items() if k != "run_id"} | {"tries": 0}
+                               for p, e in sorted(state.items())})
+    ctx.log.event("owner.unchecked_reset", pages=pages)
+    notify(ctx)
+    return pages

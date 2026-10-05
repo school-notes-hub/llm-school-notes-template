@@ -160,6 +160,34 @@ def test_tool_bytes_are_restored_mechanically_never_an_error(learning_run):
     steps.guard_step(ctx, task)  # a removed tool block is the writer's choice
 
 
+def test_a_whole_figure_block_may_be_removed_by_the_writer(learning_run):
+    """Fix-49/7 (Benedek R2): an accepted figure that now stands on the topic page may be
+    removed from an older lesson log as a whole block; nothing puts it back, nothing fails.
+    Its content stays the tool's: an edited figure block comes back."""
+    from school_notes2.figures import insert
+    ctx, task = learning_run
+    cron(task)
+    asset = ctx.notes_path / "wiki/assets/m/abra.png"
+    asset.parent.mkdir(parents=True, exist_ok=True)
+    asset.write_bytes(b"png")
+    block = markers.wrap("figure-abra", "![Ábra](<../assets/m/abra.png>)\n\n<!-- image-description\nasset: x\n-->")
+    text = (ctx.notes_path / NOTE).read_text() + "\n" + block
+    (ctx.notes_path / NOTE).write_text(text)
+    write_json(ctx.notes_path / "docs/review/verdicts.json", [{"role": "figure-review", "file": NOTE, "id": "abra",
+                                                               "key": "k", "commission": {}, "candidate": {}}])
+    commit(ctx, task)
+    (ctx.notes_path / NOTE).write_text(text.replace("![Ábra]", "![Átírt ábra]"))
+    protected.restore(ctx, task)
+    assert (ctx.notes_path / NOTE).read_text() == text           # the content is the tool's
+    (ctx.notes_path / NOTE).write_text(markers.remove(text, {"figure-abra"}) + "\nSzerzői mondat.\n")
+    steps.guard_step(ctx, task)
+    assert protected.restore(ctx, task) == []
+    result = (ctx.notes_path / NOTE).read_text()
+    assert "figure-abra" not in result and "abra.png" not in result and "Szerzői mondat." in result
+    assert not errors(ctx, task)
+    assert insert.removed(ctx.notes_path, {"file": NOTE, "id": "abra"})
+
+
 def test_deleted_page_is_allowed_and_its_links_are_checked(learning_run):
     """#13: the writer may delete or rename; a link left to the old page is an error."""
     ctx, task = learning_run

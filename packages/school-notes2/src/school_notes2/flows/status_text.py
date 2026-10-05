@@ -1,6 +1,6 @@
 """One local, Hungarian operational view for the CLI and the controller's snapshot."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 
 from ..figures import pending as figures
@@ -59,7 +59,16 @@ def collect(ctx, now=None):
             "owner_items": sum(i["status"] == "owner" for i in items), "figures": len(pending),
             "questions": questions(ctx) if ctx.notes_path.is_dir() else [],
             "drive": drive_count(drive, tasks), "budget": remaining(ctx),
-            "round_pending": round_pending(ctx)}
+            "round_pending": round_pending(ctx), "reopen": _reopen(ctx),
+            "reopenable": sorted(i["key"] for i in items if i["status"] == "owner") + sorted(
+                "figure:" + e["commission"]["id"] for e in pending
+                if e["owner_required"] and not figures.generated(ctx.notes_path, e["commission"])),
+            "last_round": read_json(ctx.cfg.state_dir / "round.json", {}).get("finished")}
+
+
+def _reopen(ctx):
+    from .reopen import load
+    return [target for value in load(ctx) for target in value["items"] + ["figure:" + f for f in value["figures"]]]
 
 
 def task_error(task):
@@ -148,8 +157,9 @@ def render(data):
     elif data.get("round_pending"):
         state = "szabad, a most futó körben következik"
     else:
-        next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0)
-        state = f"szabad, következő kör {next_hour:%H:%M}"
+        # The tool does not know the crontab: it names no time for the next round.
+        last = data.get("last_round")
+        state = "szabad, a következő kört a cron indítja" + (f" (az utolsó kör vége: {clock(last)})" if last else "")
     lines = [f"{name}: {state}."]
     lines += ["  " + line for line in data.get("completion", [])]
     runs = []
@@ -167,6 +177,11 @@ def render(data):
     lines.append(f"  Sorok: {data['items']} nyitott tétel, {data['figures']} függő ábra, {data['drive']} Drive-csomag.")
     lines.append(f"  Tulajdonosi döntésre vár: {data.get('owner_items', 0)} review-tétel.")
     lines += [f"    A jegyzetíró kérdése ({', '.join(keys)}): {text}" for keys, text in data.get("questions", [])]
+    if data.get("reopenable"):
+        lines.append(f"    Ha az akadály megszűnt: school-notes status --reopen {data['name']} <…>; "
+                     f"újranyitható: {', '.join(data['reopenable'])}.")
+    if data.get("reopen"):
+        lines.append(f"  Újranyitásra vár (a következő javító futás végzi): {', '.join(data['reopen'])}.")
     lines.append(f"  Képkeret: {data['budget']}.")
     return "\n".join(lines)
 

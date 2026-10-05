@@ -5,6 +5,9 @@ from dataclasses import replace
 from ..state.errors import WaitingQuota
 
 
+CHECKING = ("reader-1", "recheck", "figure-review")
+
+
 def headless(run, invoke):
     from ..flows.operation import CURRENT
     from . import quota, timeouts
@@ -20,6 +23,8 @@ def headless(run, invoke):
             run = replace(run, role=configured.for_stage(run.role_name), harness=ctx.cfg.harnesses[configured.harness])
         if timeouts.blocked(ctx, run):
             timeouts.stopped(ctx, run)
+            if run.role_name in CHECKING:
+                raise _suspended(run)
             raise TimedOut("A szerep tulajdonosi döntésre vár.", details={"suspended": True})
         quota.check(ctx, run, manual, cache)
     try:
@@ -31,10 +36,21 @@ def headless(run, invoke):
     except TimedOut as exc:
         if current:
             exc.details["count"] = timeouts.record(ctx, run)
+            if exc.details["count"] >= 2 and run.role_name in CHECKING:
+                raise _suspended(run) from exc
         raise
     if current:
         timeouts.success(ctx, run)
     return outcome
+
+
+def _suspended(run):
+    from . import timeouts
+    from .launch import Suspended
+    role = timeouts.role_name(run.role_name)
+    return Suspended(f"two timeouts in a row: the {role} role is suspended",
+                     todo=f"raise its time limit, then school-notes status --clear {run.learner} {role} --continue",
+                     details={"suspended": True, "role": role})
 
 
 def interactive(kwargs, invoke):

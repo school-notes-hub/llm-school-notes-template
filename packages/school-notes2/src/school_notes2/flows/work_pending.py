@@ -46,8 +46,9 @@ def completion(ctx, *, tasks=None, held=False):
     tasks = tasks if tasks is not None else phase.all_tasks(ctx.task_root(), ctx.name)
     items = files.open_items(ctx.notes_path, "interactive") if ctx.notes_path.is_dir() else []
     figures = pending.load(ctx.notes_path) if ctx.notes_path.is_dir() else []
-    missing = missing_images(ctx.notes_path) if ctx.notes_path.is_dir() else set()
-    missing.update(e["commission"]["id"] for e in figures)
+    markers, broken = missing_parts(ctx.notes_path) if ctx.notes_path.is_dir() else (set(), set())
+    queued = {e["commission"]["id"] for e in figures}
+    missing = markers | queued | broken
     opened = [t for t in tasks if t.open]
     n, m, k = sum(i["status"] == "open" for i in items), sum(i["status"] == "owner" for i in items), len(missing)
     eligible, waiting = assignments(ctx) if ctx.notes_path.is_dir() else ([], [])
@@ -63,11 +64,23 @@ def completion(ctx, *, tasks=None, held=False):
         automatic = "vár (félretett munka vagy migrációs kapu)"
     else:
         automatic = "lezárult"
+    # "Hiányzó kép" is wider than the status's "függő ábra" (the pending queue): it also
+    # counts a figure place no pending figure belongs to and a broken image link.
+    parts = [(len(queued), "függő ábra"), (len(markers - queued), "ábrahely, amely nincs a függő ábrák között"),
+             (len(broken), "törött képlink")]
+    detail = "; ".join(f"{count} {label}" for count, label in parts if count)
     return [f"Automatikus feldolgozás: {automatic}",
-            f"Tanulásra kész: {'igen' if n == m == k == 0 else 'nem'} – {n} nyitott tétel, {m} tulajdonosi tétel, {k} hiányzó kép"]
+            f"Tanulásra kész: {'igen' if n == m == k == 0 else 'nem'} – {n} nyitott tétel, {m} tulajdonosi tétel, {k} hiányzó kép"
+            + (f" ({detail})" if detail else "")]
 
 
 def missing_images(repo):
+    markers, broken = missing_parts(repo)
+    return markers | broken
+
+
+def missing_parts(repo):
+    """(figure places without an accepted figure, image links to a missing file)."""
     from ..figures import commissions, context
     from ..wiki.pages import wiki_pages, links, resolve
     missing = set(commissions.markers(repo))
@@ -83,8 +96,9 @@ def missing_images(repo):
                 missing.remove(fid)
         except (ValueError, OSError, KeyError):
             pass
+    broken = set()
     for page in sorted(wiki_pages(repo)):
         for link in links(safefs.read_text(repo, page)):
             if link.image and (target := resolve(page, link.target)) and not safefs.is_file(repo, target):
-                missing.add(target)
-    return missing
+                broken.add(target)
+    return missing, broken

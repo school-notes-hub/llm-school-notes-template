@@ -107,7 +107,9 @@ def completed(ctx, task, report, duration, *, finishing=False):
     report.update(időtartam_s=round(duration, 3), időpont=now_iso(), fázis=task.phase)
     report = redact(report)
     write_json(task.dir / "report.json", report)
-    if choice == "completion":
+    if choice == "completion" and not task.get("recheck_only"):
+        # A run for carried pages alone mails nothing: its release is the outcome, and the
+        # third failed recheck has its own mail (`unchecked-limit`).
         mode = MODES.get(task.get("mode") or ("chat" if task.mode == "interactive" else "run"), MODES["run"])
         pending.send(ctx, Notice(ctx.name, f"completion:{task.run_id}:{notice_key}", task.run_id, "finish",
                                  subject(ctx.name, mode, receipt, task), sentence(ctx.name, mode, task, receipt), ""))
@@ -190,13 +192,13 @@ def ended(ctx, kind, started, before, *, successful=True):
         incidents.completed(ctx, task)
     if task.kind == "review":
         review = read_json(task.dir / "review.json", {})
+        # The diff review has no topics: the 2.5.x topic fields (blocked, skipped, marker
+        # reason) were never filled any more and are gone (fix-49, m7).
         report = {"időpont": now_iso(), "időtartam_s": task.get("active_seconds"), "tartomány": [task.get("base"), task.get("T")],
-                  "fázis": task.phase, "blokkolt": task.get("blocked_topics", []),
+                  "fázis": task.phase,
                   "időtúllépések": read_json(ctx.cfg.state_dir / ctx.name / "timeouts.json", {}).get("reviewer", {}),
                   "új tételek": len(review.get("findings", [])), "owner_notes": review.get("owner_notes", []),
                   "jelölő": task.get("M", task.get("base")),
-                  "jelölő oka": "minden témakör kész" if task.get("all_topics_done") else "hiányzó vagy blokkolt témakör",
-                  "témakörök": review.get("topics", []), "kihagyott": task.get("skipped_topics", []),
                   "keretállapot": read_json(ctx.cfg.state_dir / "quota.json", {}), "tokenek": _metrics(task)}
         write_json(task.dir / "report.json", redact(report))
         receipt = terminal(task)

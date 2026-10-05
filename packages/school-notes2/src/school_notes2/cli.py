@@ -49,6 +49,8 @@ def _parser() -> argparse.ArgumentParser:
     status.add_argument("--json", action="store_true")
     status.add_argument("--details", action="store_true")
     status.add_argument("--clear", nargs=2, metavar=("LEARNER", "KIND"))
+    status.add_argument("--reopen", nargs="+", metavar="LEARNER TARGET",
+                        help="docs/review/<file>.md#R<n> or figure:<id>, waiting for the owner")
     action = status.add_mutually_exclusive_group()
     action.add_argument("--continue", dest="action", action="store_const", const="continue")
     action.add_argument("--discard", dest="action", action="store_const", const="discard")
@@ -149,14 +151,24 @@ def _status(cfg, args, context) -> int:
     from .flows import clear, status
     if args.clear:
         learner, kind = args.clear
-        if kind not in ("notes", "review", "publish", "writer", "reader", "figure-review", "figure", "reviewer") or not args.action:
-            raise SystemExit("usage: status --clear <learner> notes|review|publish|writer|reader|figure-review|figure|reviewer "
-                             "--continue|--discard")
+        if kind not in ("notes", "review", "publish", "writer", "reader", "figure-review", "figure", "reviewer",
+                        "unchecked") or not args.action:
+            raise SystemExit("usage: status --clear <learner> notes|review|publish|writer|reader|figure-review|figure|reviewer"
+                             "|unchecked --continue|--discard")
         result = clear.clear(context.make(cfg, learner), kind, args.action)
         if isinstance(result, int):
             return result
         print(result)
         return 0
+    if args.reopen:
+        if len(args.reopen) < 2:
+            raise SystemExit("usage: status --reopen <learner> <docs/review/<file>.md#R<n> | figure:<id>>...")
+        from .flows import reopen
+        result = reopen.request(context.make(cfg, args.reopen[0]), args.reopen[1:])
+        if isinstance(result, int):
+            return result
+        print(result)
+        return 1 if result.startswith("Nem rögzítettem") else 0
     learners = [args.learner] if args.learner else list(cfg.students)
     if not args.json and not args.details:
         from .flows import status_text

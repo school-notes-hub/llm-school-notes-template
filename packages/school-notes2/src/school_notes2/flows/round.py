@@ -89,7 +89,8 @@ def _cycle(cfg, contexts, started):
                     tasks = phase.all_tasks(ctx.task_root(), ctx.name)
                     ctx.round_failed = bool(result or any(t.kind == "notes" and t.open and t.data.get("needs_owner") for t in tasks))
                     progressed |= result in (None, 0) and any(t.kind == "notes" and t.phase == "done" and t.run_id not in before
-                                      and not t.get("set_aside") and not t.get("no_progress") and not t.data.get("closed") for t in tasks)
+                                      and not t.get("set_aside") and not t.get("no_progress") and not t.data.get("closed")
+                                      and not t.get("recheck_only") for t in tasks)
             except Exception as exc:
                 if kind == "run":
                     ctx.round_failed = True

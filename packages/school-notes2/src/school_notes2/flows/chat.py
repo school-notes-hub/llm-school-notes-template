@@ -217,7 +217,7 @@ def session_finish(ctx: Ctx) -> dict:
             task.update(no_push=False)
         state = finish_flow.finish(ctx, task, notify_owner_items=lambda items: run_flow.owner_items(
             ctx, task, items))
-    except (WaitingQuota, launch.TimedOut) as exc:
+    except (WaitingQuota, launch.TimedOut, launch.Suspended) as exc:
         policy.on_error(exc, task=task, student=ctx.name, step="finish", log=ctx.log,
                         mailer=ctx.mailer, interactive=True)
         return {"state": exc.kind, "message": str(exc), "phase": task.phase}

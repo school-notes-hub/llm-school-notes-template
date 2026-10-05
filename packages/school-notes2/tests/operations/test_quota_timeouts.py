@@ -116,9 +116,38 @@ def test_reader_streak_shared_between_passes_isolated_from_learner_and_writer(wo
     other = context.make(ctx.cfg, "first", console=False)
     assert not timeouts.blocked(other, reader)
     monkeypatch.setattr(launch, "_admitted", lambda *a, **kw: pytest.fail("suspended role launched"))
-    with operation.scope(ctx), pytest.raises(launch.TimedOut):
+    with operation.scope(ctx), pytest.raises(launch.Suspended):
         launch.run_headless(reader, log=ctx.log, snapshot=lambda: None)
     assert timeouts.counter(ctx, reader)["count"] == 2
+
+
+@pytest.mark.parametrize("stage,role,word", [("reader-1", "reader", "olvasó-lektor"),
+                                             ("recheck", "reader", "olvasó-lektor"),
+                                             ("figure-review", "figure-review", "ábraellenőr")])
+def test_suspended_checking_role_stops_the_run_with_one_mail(world, monkeypatch, stage, role, word):
+    """Fix-49/2 (REJT-16): the second timeout of a checking role stops the run for the owner,
+    like the writer's; the run does not go on with every page unchecked."""
+    ctx, task, call, notices = world
+    check = replace(call, role_name=stage)
+    def fail(*a, **kw):
+        raise launch.TimedOut("timeout")
+    monkeypatch.setattr(launch, "_admitted", fail)
+    with operation.scope(ctx), pytest.raises(launch.TimedOut):
+        launch.run_headless(check, log=ctx.log, snapshot=lambda: None)
+    with operation.scope(ctx), pytest.raises(launch.Suspended) as caught:
+        launch.run_headless(check, log=ctx.log, snapshot=lambda: None)
+    assert not isinstance(caught.value, launch.TimedOut)   # the check calls do not catch it
+    policy.on_error(caught.value, task=task, student=ctx.name, step="run", log=ctx.log, mailer=ctx.mailer)
+    task = phase.load(task.dir)
+    assert task.data["needs_owner"]["class"] == "timeout"
+    assert f"status --clear {ctx.name} {role} --continue" in task.data["needs_owner"]["todo"]
+    monkeypatch.setattr(launch, "_admitted", lambda *a, **kw: pytest.fail("suspended role launched"))
+    with operation.scope(ctx), pytest.raises(launch.Suspended):
+        launch.run_headless(check, log=ctx.log, snapshot=lambda: None)
+    assert len(notices) == 1 and f"időtúllépés ({word})" in notices[0].get_content()
+    assert f"status --clear {ctx.name} {role} --continue" in notices[0].get_content()
+    clear.clear(ctx, role, "continue")
+    assert not phase.load(task.dir).data["needs_owner"] and not timeouts.blocked(ctx, check)
 
 
 @pytest.mark.parametrize("data,expected", [

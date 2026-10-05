@@ -13,9 +13,9 @@
       "heading": "Wiki structure",
       "destination": "instructions/wiki-structure.md",
       "source_sha256": "91416c932747a9e5a95b2c27ba7babf2ac8229afd251016b069bc5c142cb0b98",
-      "migrated_sha256": "4a668e77fb3c6b9bced9b72167feebda22b8db73ba0fe9d1e608abb41ec3bb78",
+      "migrated_sha256": "5704aa36b91ae5ca47494e79997e122a26b49a4f14cc081a003e4180388b132b",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
-      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.16.2: the public view leaves out links and citations of private files and the grade prefix; 1.17.0: lesson-log body and source pointer; topic-only banner, banner reuse/style and private footnotes; 1.17.0 (neutral template): undated-lesson range placeholders, banner yardstick is the youngest main reader in PROFILE Audience; 1.18.0: public footnote layering, export never carries decisions/markers/log, image rights tied to output SHA-256; 1.18.1: the tool compiles formulas at build, the writer runs no renderer; 1.19.2: a multi-lesson log may use the plural heading"
+      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.16.2: the public view leaves out links and citations of private files and the grade prefix; 1.17.0: lesson-log body and source pointer; topic-only banner, banner reuse/style and private footnotes; 1.17.0 (neutral template): undated-lesson range placeholders, banner yardstick is the youngest main reader in PROFILE Audience; 1.18.0: public footnote layering, export never carries decisions/markers/log, image rights tied to output SHA-256; 1.18.1: the tool compiles formulas at build, the writer runs no renderer; 1.19.2: a multi-lesson log may use the plural heading; 2.6.1 (fix-49): a lesson anchor id never repeats an id the page already has"
     },
     {
       "heading": "Principles",
@@ -121,9 +121,9 @@
       "heading": "Workflows",
       "destination": "instructions/wiki-workflows.md",
       "source_sha256": "4002b650b71d3afec1c296105ed32cc47d22be691ef1ca640204d1a696c97abc",
-      "migrated_sha256": "b4918a8d9844974fb62091a1f4d027b35dc18c615b3858a3d354235c2fc988e3",
+      "migrated_sha256": "72f8e1cf73b7e2a98a6f7646ee142dc7c334676dd9a9441be2b3d048e25e3a01",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
-      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: public-safe anchored questions/decisions; private readings and coverage; independent reader check before machine list; 1.18.2: in a tool run the build checks formulas; MCP check checks delimiters only; 1.19.0: banner and infographic are generated images; pending figures and the recheck scope in a correction; 2.5.1 (fix-45): fix-mode checks cover every own change, including necessary edits on other pages"
+      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: public-safe anchored questions/decisions; private readings and coverage; independent reader check before machine list; 1.18.2: in a tool run the build checks formulas; MCP check checks delimiters only; 1.19.0: banner and infographic are generated images; pending figures and the recheck scope in a correction; 2.5.1 (fix-45): fix-mode checks cover every own change, including necessary edits on other pages; 2.6.1 (fix-49): the nightly reviewer reads the wiki diff of every commit and decides; a writer question in a fix call is an owner item; the 24-hour no-progress brake; the owner reopens what waits for him"
     },
     {
       "heading": "Choosing and replacing authored visuals",

@@ -129,6 +129,14 @@ class TimedOut(SnError):
     kind = "timeout"
 
 
+class Suspended(SnError):
+    """T-125 suspended a checking role (reader, recheck, figure review). Not a TimedOut: the
+    check calls catch a timeout and go on, but without the checks a run could only hold its
+    release (every page unchecked). The run stops for the owner, like the writer's (fix-49)."""
+
+    kind = "timeout"
+
+
 def classify(rc: int, timed_out: bool, changed: bool, produced: bool,
              output: dict | None, problems: list[str]) -> Exception | None:
     """Map one role call to the 8.1 classes; None means success."""

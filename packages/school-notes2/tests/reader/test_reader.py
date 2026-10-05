@@ -79,6 +79,21 @@ def test_quota_wait_does_not_consume_retry(setup):
     assert safefs.read_json(folder, "state.json")["attempts"] == []
 
 
+def test_suspended_role_is_not_an_attempt(setup):
+    """Fix-49/2: a suspended reader stops the run; after the owner's --continue the same call
+    starts afresh (no crash attempt counted for the stop)."""
+    ctx, task, page = setup
+    folder = task.dir / "reader"
+    folder.mkdir()
+    def suspended(*a, **kw):
+        raise launch.Suspended("suspended", details={"suspended": True, "role": "reader"})
+    with pytest.raises(launch.Suspended):
+        calls.run(ctx.notes_path, ctx.notes_path, folder, "reader-1", {"pages": [{"file": page}]},
+                  inspection.role(ctx, task), log=ctx.log, invoke=suspended)
+    assert safefs.read_json(folder, "state.json")["attempts"] == []
+    assert safefs.read_json(folder, "receipt.json") is None
+
+
 def test_exact_coverage_and_no_family_questions(setup):
     _, _, page = setup
     with pytest.raises(ValueError):

@@ -254,4 +254,5 @@ def test_partial_night_private_report_keeps_actual_marker(world, monkeypatch, co
     operational_report.ended(ctx, "nightly", 0, {task.run_id: True})
     data = read_json(task.dir / "report.json")
     assert len(notices) == 1 and "{" not in notices[0].get_content()
-    assert data["jelölő"] == "old-marker" and "hiányzó" in data["jelölő oka"]
+    assert data["jelölő"] == "old-marker"
+    assert not {"jelölő oka", "blokkolt", "témakörök", "kihagyott"} & set(data)

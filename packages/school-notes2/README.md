@@ -12,7 +12,7 @@ It does every mechanical step; the LLM runs in a container and asks for mechanic
 | `school-notes repair <learner> --queue [--no-push]` | build/reorder the private repair queue and SVG inventory, without an LLM | `repair/queue.py` |
 | `school-notes nightly <learner>` | nightly: review of `claude-reviewed..main`, report commit, atomic push | `flows/nightly.py`, `review/` |
 | `school-notes chat <learner> [codex\|claude]` | the owner's session in the same container; `fetch`/`finish` through MCP | `flows/chat.py`, `flows/handlers.py`, `flows/session.py` |
-| `school-notes status [<learner>]` | short Hungarian local state (`--details` keeps the full view); `--clear <learner> notes\|review\|publish --continue\|--discard` | `flows/status.py`, `flows/clear.py` |
+| `school-notes status [<learner>]` | short Hungarian local state (`--details` keeps the full view); `--clear <learner> notes\|review\|publish --continue\|--discard`; `--clear <learner> unchecked --continue` after three failed rechecks; `--reopen <learner> docs/review/<file>.md#R<n> figure:<id>` reopens what waits for the owner (the next fix run applies it) | `flows/status.py`, `flows/clear.py`, `flows/reopen.py` |
 | `school-notes setup <learner>` | bare clones and the three durable worktrees, once | `flows/setup.py` |
 | `school-notes fetch\|finish <learner>` | the MCP operations, from the host shell | `cli.py` |
 | `school-notes verify-tasks` | the installer checks that this release can read every open task | `cli.py` |
@@ -476,9 +476,10 @@ reads persisted observations and the last known value without probing.
 
 T-125 counters are separate from bad-work strikes, persist per learner/role, and
 reset on a successful role call. Reader passes/recheck share the reader counter;
-fix calls share the writer counter. A second timeout suspends that role. Writer
-work awaits owner action, while missing reader/figure verdicts use the existing
-pending fallback. Clear after adjusting the configured role timeout with
+fix calls share the writer counter. A second timeout suspends that role and stops
+the run for the owner – also for the reader, recheck and figure-review roles
+(2.6.1: a run without its checks could only hold its release). One mail names the
+role. Clear after adjusting the configured role timeout with
 `status --clear <learner> writer|reader|figure-review|figure|reviewer --continue`.
 Explicit `[roles.reader]` and `[roles.figure-review]` override the corresponding
 role's model/harness/timeout; absent these, the existing fixed stage defaults apply.

@@ -5,7 +5,7 @@ from ..figures import pending, migration_gate
 from ..review import files
 from ..sources import calls
 from ..state import phase, safefs
-from . import correction_figures, fix_progress, steps
+from . import correction_figures, fix_progress, reopen, steps
 
 
 def next_task(ctx):
@@ -22,9 +22,14 @@ def next_task(ctx):
     items, waiting = fix_progress.available(ctx, items, waiting)
     waiting = fix_progress.runnable_images(ctx, waiting)
     from . import unchecked
-    if not owners and not items and not waiting and not unchecked.startable(ctx):
+    recheck_only = not owners and not items and not waiting and not reopen.pending(ctx)
+    if recheck_only and (getattr(ctx, "recheck_started", False) or not unchecked.startable(ctx)):
         return None  # A pending bookkeeping migration alone never starts a run (R5).
     task = phase.create(ctx.task_root(), ctx.name, "notes", "cron", "moved")
+    if recheck_only:
+        # Only carried pages: one such run per round, and it is no progress of the round.
+        ctx.recheck_started = True
+        task.update(recheck_only=True)
     task.update(mode="fix", base=base, preparation_base=base, open_review_items=items,
                 max_agents=ctx.cfg.limits.max_agents, attempt=1, pending_figures=waiting, figure_owners=owners,
                 fix_work=fix_progress.keys(items, waiting))
@@ -38,6 +43,9 @@ def prepare(ctx, task):
     workbranch.reset_workdir(ctx.notes_path)
     from . import learning
     learning.migrate(ctx, task)
+    # The owner's reopened items and figures (`status --reopen`) join this run's work.
+    written, figures = reopen.apply(ctx, task)
+    steps.record_tool_files(task, ctx.notes_path, written)
     # Reopened legacy items join this first repair run, after the journaled migration.
     reviews = [i for i in files.open_items(ctx.notes_path, "cron") if not migration_gate.concerns(ctx.notes_path, i)]
     reviews, _ = fix_progress.available(ctx, reviews, [])
@@ -45,6 +53,11 @@ def prepare(ctx, task):
     written = correction_figures.persist_owners(ctx, task.get("figure_owners", []))
     steps.record_tool_files(task, ctx.notes_path, written)
     waiting = task.get("pending_figures", [])
+    known = {e["commission"]["id"] for e in waiting}
+    waiting = sorted(waiting + [e for e in pending.load(ctx.notes_path)
+                                if e["commission"]["id"] in figures and e["commission"]["id"] not in known],
+                     key=pending.assignment_order)
+    task.update(pending_figures=waiting)
     correction_figures.start(ctx.notes_path, waiting)
     grouping = calls.fix_assignments(ctx.notes_path, reviews, waiting)
     task.update(fix_work=fix_progress.keys(reviews, waiting), assigned_work=[])

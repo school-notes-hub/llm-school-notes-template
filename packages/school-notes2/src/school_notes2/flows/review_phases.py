@@ -98,11 +98,16 @@ def record_figures(ctx, task):
             continue
         previous = next((e for e in pending.load(ctx.notes_path) if e["commission"]["id"] == brief["id"]), {})
         exhausted = correction_figures.mark_exhausted(ctx, {"commission": brief})
+        attempted = state["attempted"] if "attempted" in state else correction_figures.attempted(ctx, task, brief)
+        # A drawn candidate the figure reviewer did not judge (timeout, failed calls) got no
+        # independent verdict: the run is no try of the figure (fix-49, REJT-17). A generated
+        # image keeps its own brake: `review_pending` and the free rechecks.
+        unjudged = (state["candidate"]["state"] == "candidate" and receipt.get("status") != "reviewed"
+                    and not pending.generated(ctx.notes_path, brief))
         entry = pending.record(ctx.notes_path, brief, task.run_id,
             correction_figures.defects(state, receipt, previous.get("defects", [])),
             owner_required=exhausted, review_pending=correction_figures.awaiting(ctx, brief),
-            attempted=state["attempted"] if "attempted" in state else correction_figures.attempted(ctx, task, brief),
-            log=getattr(ctx, "log", None))
+            attempted=attempted and not unjudged, log=getattr(ctx, "log", None))
         written += [pending.PATH, migration_gate.MARK]
         if entry["owner_required"] and entry["runs"] >= 3 and not exhausted and getattr(ctx, "mailer", None):
             from ..notify import Notice, pending as owner_notices

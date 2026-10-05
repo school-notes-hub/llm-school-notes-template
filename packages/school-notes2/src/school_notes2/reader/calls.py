@@ -38,7 +38,8 @@ def run(repo, view, folder, stage, assigned, configured, *, log, invoke=None, al
         try:
             outcome = invoke(replace(role, attempt=len(state["attempts"])), log=log, snapshot=lambda: launch.tree_fingerprint(folder / "out"))
             value = contracts.check(outcome.output, stage, assigned, known, allowed_paths=allowed_paths)
-        except WaitingQuota:
+        except (WaitingQuota, launch.Suspended):
+            # Not an attempt: the call waits for the quota or for the owner (T-125).
             state["attempts"].pop()
             safefs.write_json(folder, "state.json", state)
             raise
