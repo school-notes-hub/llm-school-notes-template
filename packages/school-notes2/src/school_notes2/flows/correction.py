@@ -144,6 +144,10 @@ def execute(ctx, task, root, edits):
             saved = {"status": "rollback", "reason": str(exc)}
             saved["timeout"] = True
         except steps.CheckFailed as exc:
+            from . import correction_calls, fix_scope
+            if correction_calls.isolated(child) and fix_scope.related_errors(ctx, root, exc.items, require_all=False):
+                call_scope.retry(ctx, child, exc.items)
+                raise
             checks.record_failure(ctx, task, exc, "correction.check")
             saved = {"status": "rollback", "reason": str(exc), "items": exc.items[:10]}
         except (BadWork, Transient) as exc:

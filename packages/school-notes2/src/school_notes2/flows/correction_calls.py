@@ -7,6 +7,10 @@ from ..state import safefs
 from . import correction, steps
 
 
+def isolated(task):
+    return task.get("mode") == "fix" and task.mode != "interactive" and bool(task.get("calls"))
+
+
 def run(ctx, task, k, invoke):
     root = task.dir / f"call-{k}"
     correction.snapshot(ctx.notes_path, root)
@@ -20,7 +24,11 @@ def run(ctx, task, k, invoke):
             if failure["count"] >= 2:
                 return failed_result(task, k)
         try:
-            return invoke()
+            result = invoke()
+            from . import fix_scope
+            fix_scope.recover(ctx, task)
+            fix_scope.check_dependencies(ctx, task)
+            return result
         except steps.CheckFailed as exc:
             steps.checks.record_failure(ctx, task, exc, "correction.call")
             safefs.write_json(root, "failure.json", {

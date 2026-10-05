@@ -33,6 +33,7 @@ class Link:
     text: str
     target: str     # as written, without the #anchor
     line: int
+    fragment: str = ""
 
 
 # Every access is relative to the repo root through safefs: the worktree is the container's
@@ -86,9 +87,9 @@ def links(text: str) -> list[Link]:
     body = INLINE_CODE.sub(_blank, body)
     found = []
     for m in LINK.finditer(body):
-        target = m.group("target").strip("<>").split("#", 1)[0]
+        target, _, fragment = m.group("target").strip("<>").partition("#")
         found.append(Link(bool(m.group("img")), m.group("text"), target,
-                          body.count("\n", 0, m.start()) + 1))
+                          body.count("\n", 0, m.start()) + 1, fragment))
     for m in HTML_IMG.finditer(body):
         found.append(Link(True, "", m.group("target").split("#", 1)[0],
                           body.count("\n", 0, m.start()) + 1))

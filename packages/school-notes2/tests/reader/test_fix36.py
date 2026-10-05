@@ -33,7 +33,7 @@ def gates(monkeypatch):
 
 @pytest.mark.parametrize("learner", ["benedek", "barna"])
 @pytest.mark.parametrize("mode", ["p4", "fix"])
-@pytest.mark.parametrize("target", ["new.md", "other.md", "./other.md#uj-resz"])
+@pytest.mark.parametrize("target", ["new.md", "other.md#hianyzo", "./other.md#uj-resz"])
 def test_three_scope_failures_become_owner_once(setup, monkeypatch, learner, mode, target):
     ctx, _, page = setup
     ctx.name = learner

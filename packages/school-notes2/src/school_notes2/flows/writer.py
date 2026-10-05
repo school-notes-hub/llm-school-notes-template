@@ -43,6 +43,7 @@ def write_changes(ctx: Ctx, task: Task) -> None:
 
 def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
     """Call the writer for each remaining range; returns 'done' or 'question'."""
+    from . import correction_calls
     role, harness = ctx.cfg.role("writer")
     if task.get("max_agents") is None:
         task.update(max_agents=ctx.cfg.limits.max_agents)
@@ -55,8 +56,7 @@ def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
         task.set_phase("writing", writing_k=k)
         result = read_json(task.dir / f"result-{k}.json")
         if result is None or result["status"] == "question":
-            if task.get("mode") == "fix" and task.mode != "interactive" and task.get("calls"):
-                from . import correction_calls
+            if correction_calls.isolated(task):
                 result = correction_calls.run(ctx, task, k, lambda: _range(ctx, task, k, role, harness, handlers))
             else:
                 result = _range(ctx, task, k, role, harness, handlers)
@@ -64,11 +64,11 @@ def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
             infographics.remember(task, result, ctx.notes_path)
             write_json(task.dir / f"result-{k}.json", result)
         if result["status"] == "done":
-            from . import correction_calls
             correction_calls.cleanup(task, k)
         from . import fix_scope
         fix_scope.recover(ctx, task)
-        fix_scope.check_dependencies(ctx, task)
+        if not correction_calls.isolated(task):
+            fix_scope.check_dependencies(ctx, task)
         if result["status"] == "question":
             task.update(question=result.get("questions", []))
             return "question"
@@ -78,7 +78,7 @@ def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
 
 
 def _range(ctx, task, k, role, harness, handlers):
-    from . import steps, fix_scope, writer_identity
+    from . import correction_calls, steps, fix_scope, writer_identity
     result = _fix_resume(ctx, task, k) if task.get("mode") == "fix" else None
     if result is None:
         write_inputs(ctx, task, k)
@@ -87,7 +87,8 @@ def _range(ctx, task, k, role, harness, handlers):
     fix_scope.recover(ctx, task)
     try:
         _check_call(ctx, task, k, result)
-        fix_scope.check_dependencies(ctx, task)
+        if not correction_calls.isolated(task):
+            fix_scope.check_dependencies(ctx, task)
     except steps.CheckFailed as exc:
         steps.write_check_items(ctx, exc.items)
         raise

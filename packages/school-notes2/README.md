@@ -610,7 +610,11 @@ A source-free `fix` run follows new Drive packages and precedes the one-time rep
 queue on each hourly round, with no daily cap. It assigns every open error in deterministic
 page groups of at most 30 items per writer call. All assignable pending figures go to the
 first call, before text repairs; paid generation still obeys its existing budget. Saved
-call results survive restart. A common targeted recheck (P5) and one finish chain follow
+call results survive restart. Scope restoration rejects only links whose target page or
+section is missing afterwards, using the site's renderer for section IDs. In split fix
+and P4 writers this check runs inside each call's bounded retry; a failed call cannot
+roll back earlier calls. A dependency found at P4's final gate returns to the affected
+call without restoring the whole phase. A common targeted recheck (P5) and one finish chain follow
 all writer calls; up to three correction/recheck rounds run immediately. A zero-progress
 run records only actually assigned work keys and the release under `state/<learner>/set-aside.json`; new work
 and a new release can run. The stop sends one tool-error incident, appears in status, and the completion mail says that no progress was made. Completed tasks are never archived by this brake.

@@ -1,6 +1,7 @@
 """Journal scope repairs before changing files, for P4 and source-free fix runs."""
 
 from pathlib import Path
+from urllib.parse import unquote
 
 from ..state import safefs
 from ..review import files
@@ -52,8 +53,9 @@ def owner_notes(ctx, task, root):
 
 
 def rollback(ctx, task, exc):
+    from .correction_calls import isolated
     root = task.dir / "fix-before"
-    if task.mode == "interactive" or task.get("mode") != "fix" or not related_errors(ctx, root, exc.items):
+    if isolated(task) or task.mode == "interactive" or task.get("mode") != "fix" or not related_errors(ctx, root, exc.items):
         return False
     steps.checks.record_failure(ctx, task, exc, "fix.scope_rollback")
     safefs.write_json(root, "rollback.json", {"reason": str(exc)})
@@ -62,6 +64,9 @@ def rollback(ctx, task, exc):
 
 
 def resume(ctx, task):
+    from .correction_calls import isolated
+    if isolated(task):
+        return
     root = task.dir / "fix-before"
     saved = safefs.read_json(root, "rollback.json")
     if not saved or task.get("fix_scope_rolled_back"):
@@ -94,9 +99,9 @@ def refresh_records(ctx, task, paths):
 
 
 def dependencies(ctx, root):
-    """Changed lines may not rely on content that the scope gate has undone."""
+    """Only broken links depend on content that the scope gate has undone."""
     from ..review import scope
-    from ..wiki import pages
+    from ..wiki import anchors, pages
     paths = set(safefs.read_json(root, "scope-restores.json", []))
     if not paths:
         return []
@@ -113,7 +118,13 @@ def dependencies(ctx, root):
             target = pages.resolve(page, link.target)
             if link.line in changed and target in paths:
                 found.append((page, link, target))
-    return sorted(found, key=lambda entry: (entry[0], entry[1].line, entry[2], entry[1].target, entry[1].text))
+    existing = {target for _, _, target in found if safefs.is_file(ctx.notes_path, target)}
+    ids = anchors.collect(ctx.notes_path, [target for _, link, target in found
+                                         if target in existing and link.fragment and target.endswith(".md")])
+    broken = [(page, link, target) for page, link, target in found
+              if target not in existing or (target in ids and link.fragment
+                                           and unquote(link.fragment) not in ids[target])]
+    return sorted(broken, key=lambda e: (e[0], e[1].line, e[2], e[1].target, e[1].fragment, e[1].text))
 
 
 def dependency_items(ctx, root):
@@ -130,7 +141,7 @@ def check_dependencies(ctx, task):
         raise steps.CheckFailed(problems)
 
 
-def related_errors(ctx, root, problems):
+def related_errors(ctx, root, problems, *, require_all=True):
     # Match concrete link errors, never just the presence of a restoration receipt
     # or an error on the same page: unrelated defects remain bad writer work.
     from ..wiki.check import item
@@ -139,4 +150,5 @@ def related_errors(ctx, root, problems):
         if not safefs.is_file(ctx.notes_path, target):
             related.append(item(page, link.line, f"link target does not exist: {link.target!r}"))
     keys = {(i["file"], i.get("line"), i["message"]) for i in related}
-    return bool(problems) and all((i.get("file"), i.get("line"), i.get("message")) in keys for i in problems)
+    matches = [(i.get("file"), i.get("line"), i.get("message")) in keys for i in problems]
+    return bool(matches) and (all(matches) if require_all else any(matches))
