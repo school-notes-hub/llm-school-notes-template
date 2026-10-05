@@ -95,7 +95,7 @@ def run(ctx, task, k, invoke, recover):
         else:
             if result.get("status") == "question" and isolated(task):
                 ctx.log.event("writer.call_question", call=k, questions=result.get("questions", []))
-                return _done(root, state, failed_result(task, k, "A jegyzetíró kérdést tett fel; a tétel nyitva maradt."))
+                return _done(root, state, asked_result(task, k, result.get("questions", [])))
             return _done(root, state, result)
     candidate = safefs.read_json(root, "candidate.json") if safefs.is_file(root, "candidate-kept.json") else None
     if candidate is not None and not state.get("unusable"):
@@ -168,6 +168,17 @@ def failed_result(task, k, note):
     return {"status": "done", "review_closure": [
         {"file": i["file"], "item_id": i["item_id"], "status": "open", "note": note}
         for i in call.get("open_review_items", [])]}
+
+
+def asked_result(task, k, questions):
+    """The writer asked instead of fixing: the call's items wait for the owner with the
+    question (`asked_items`, applied by the closure step), so no later run asks it again."""
+    text = " ".join(" ".join(str(q.get("text", "")).split()) for q in questions).strip() or "–"
+    result = failed_result(task, k, f"A jegyzetíró kérdést tett fel: {text}")
+    asked = dict(task.get("asked_items", {}))
+    asked.update({c["file"] + "#" + c["item_id"]: text for c in result["review_closure"]})
+    task.update(asked_items=dict(sorted(asked.items())))
+    return result
 
 
 def successful_fetch(ctx, task, supplied):

@@ -139,13 +139,25 @@ def topic_link(subject: Subject, topic: str) -> str:
 
 
 def lessons_block(subject: Subject) -> str:
-    rows = []
+    rows, states = [], set()
     for page, lesson in lessons(subject):
         topics = ", ".join(topic_link(subject, t) for t in lesson.get("topics") or [])
         anchor = f"#{lesson['anchor']}" if lesson.get("anchor") else ""
+        states.add(page.meta.get("catch_up"))
         rows.append(f"| {catch_up.mark(page.meta)}{lesson_date(lesson)} | {lesson.get('title', '')} | "
                     f"[jegyzet]({page.file}{anchor}) | {topics} |")
-    return TABLE_HEAD + "".join(r + "\n" for r in rows)
+    key = catch_up.legend(states)
+    return (f"{key}\n\n" if key else "") + TABLE_HEAD + "".join(r + "\n" for r in rows)
+
+
+def catch_up_description(subject: Subject, page: SubjectPage) -> str:
+    """`Dátum: …. Témakörök: ….` from the page's `lessons`, as in the lessons table."""
+    lessons_ = [lesson for lesson in page.meta.get("lessons") or [] if isinstance(lesson, dict)]
+    dates = [lesson_date(lesson) for lesson in lessons_]
+    topics = list(dict.fromkeys(t for lesson in lessons_ for t in lesson.get("topics") or []))
+    parts = ([f"Dátum: {', '.join(dates)}."] if dates else []) + \
+        ([f"Témakörök: {', '.join(topic_link(subject, t) for t in topics)}."] if topics else [])
+    return " ".join(parts)
 
 
 def by_date_desc(pages: list[SubjectPage]) -> list[SubjectPage]:
@@ -190,7 +202,8 @@ def subject_index(repo: Path, slug: str) -> str:
     for name in markers.names(text):
         if name in bodies:
             text = markers.replace(text, name, bodies[name])
-    return catch_up.update(text, by_date_desc(subject.by_type("lesson-notes")))
+    return catch_up.update(text, by_date_desc(subject.by_type("lesson-notes")),
+                           lambda page: catch_up_description(subject, page))
 
 
 def subject_order(repo: Path) -> list[str]:

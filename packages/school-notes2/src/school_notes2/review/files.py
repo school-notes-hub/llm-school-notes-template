@@ -33,7 +33,7 @@ class ClosureError(ValueError):
 @dataclass
 class ClosureOutcome:
     written: list[str] = field(default_factory=list)       # repo paths the tool changed
-    new_owner: list[dict] = field(default_factory=list)    # [{file, item_id}] e-mail once
+    new_owner: list[dict] = field(default_factory=list)    # [{file, item_id, question?}] notice once
 
 
 def compute_status(items: dict) -> str:
@@ -238,10 +238,18 @@ def _without_own_section(body: str, items: dict, run_id: str) -> tuple[str, dict
     return (body[:heading.start()].rstrip("\n") + "\n" + body[end:]).rstrip("\n") + "\n", restored
 
 
+def statuses_before(repo: Path, rel: str, run_id: str) -> dict:
+    """The items of a review file as they were before this run's own section (a repeated
+    finish of the same run replaces that section)."""
+    page = read_report(repo, repo / rel)
+    items = page.meta.get("items") if page else None
+    return _without_own_section(page.body, dict(items), run_id)[1] if isinstance(items, dict) else {}
+
+
 def _apply_one(repo: Path, path: Path, run_id: str, closures: dict, listed: list[str],
-               owner_after: int, automatic: bool) -> list[str]:
-    """Update one file; returns its newly-owner items. Repeating it for the same run
-    replaces that run's section (the closures may have changed since)."""
+               owner_after: int, automatic: bool) -> list[dict]:
+    """Update one file; returns its newly-owner items ({item_id, question?}). Repeating it
+    for the same run replaces that run's section (the closures may have changed since)."""
     text = _read(repo, path)
     page = fm.split(text)
     body, items = _without_own_section(page.body, dict(page.meta["items"]), run_id)
@@ -255,7 +263,7 @@ def _apply_one(repo: Path, path: Path, run_id: str, closures: dict, listed: list
             raise ClosureError(f"{path.name}: {item_id} is not open ({items[item_id]})")
     touched = sorted(set(closures) | set(listed), key=_num)
     before = {i: items[i] for i in touched if i in items}
-    entries = []
+    entries, asked = [], []
     details = dict(page.meta.get("item_details", {}))
     for item_id in touched:
         c = closures.get(item_id)
@@ -273,10 +281,16 @@ def _apply_one(repo: Path, path: Path, run_id: str, closures: dict, listed: list
             items[item_id] = status
             record.pop("recheck", None)
             details[item_id] = record
+        if c and c.get("owner_question") and items[item_id] in (OPEN, OWNER):
+            # The writer asked instead of fixing (an isolated fix call): the owner answers.
+            record["owner_question"] = c["owner_question"]
+            asked.append(item_id)
     body = body.rstrip("\n") + "\n\n" + _done_section(run_id, entries, before)
-    new_owner = [i for i, s in items.items() if s == OPEN and attempts.failed_status(details.get(i, {})) == OWNER]
-    for item_id in new_owner:
-        items[item_id] = OWNER
+    new_owner = [{"item_id": i} for i, s in items.items()
+                 if s == OPEN and i not in asked and attempts.failed_status(details.get(i, {})) == OWNER]
+    new_owner += [{"item_id": i, "question": True} for i in asked if items[i] == OPEN]
+    for entry in new_owner:
+        items[entry["item_id"]] = OWNER
     new_text = fm.set_keys(f"---\n{page.raw_meta}\n---\n{body}",
                            {"items": items, "item_details": details, "status": compute_status(items)})
     if new_text != text:
@@ -302,5 +316,5 @@ def apply_closure(repo: Path, run_id: str, closures: list[dict], listed: list[di
         owners = _apply_one(repo, path, run_id, by_file.get(rel, {}), listed_by_file.get(rel, []),
                             owner_after, automatic)
         outcome.written.append(rel)
-        outcome.new_owner += [{"file": rel, "item_id": i} for i in owners]
+        outcome.new_owner += [{"file": rel, **entry} for entry in owners]
     return outcome

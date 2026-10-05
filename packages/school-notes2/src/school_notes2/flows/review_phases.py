@@ -24,12 +24,13 @@ def advance(ctx, task, notify, edits=None):
 
 def resume_legacy_round(task):
     """A 2.5.x task stopped in an in-run correction round: those rounds no longer exist. The
-    kept files go through the content steps once more (closures, lesson notes, stamps, evidence,
-    check; `writing_k` is past the last range, so no writer starts) and every change of the run
-    is rechecked once against the base."""
+    kept files go through the content steps once more (lesson notes, stamps, evidence, check;
+    `writing_k` is past the last range, so no writer starts) and every change of the run is
+    rechecked once against the base. The run's closures were applied by 2.5.x already, under
+    its round identities, and rechecked there: they are not applied again."""
     legacy = ("correcting", "rechecking")
     if task.phase in legacy or task.phase == "waiting_quota" and task.get("quota_phase") in legacy:
-        task.set_phase("writing", review_complete=False, recheck_all=True)
+        task.set_phase("writing", review_complete=False, recheck_all=True, closures_applied=True)
 
 
 def _advance(ctx, task, notify, edits):

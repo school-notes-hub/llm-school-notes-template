@@ -34,6 +34,7 @@ class Hooks:
     empty_blocks: Callable[[str], str]      # empty generated blocks (6.7)
     rerecord: Callable[[list[str]], None] = lambda paths: None   # Git merged tool files
     final_keys: Callable[[], None] = lambda: None
+    held: Callable[[dict], None] = lambda record: None   # G5 held: the hold names the final commit
     extra_paths: tuple[str, ...] = field(default_factory=tuple)   # interactive: references
 
 
@@ -251,6 +252,7 @@ def g5_build(task: Task, wt: Git, hooks: Hooks) -> None:
             wt.run("commit", "--no-verify", "--amend", "--no-edit", timeout=LOCAL_TIMEOUT_S)
         task.update(commit=head(wt))
         record = {**record, "commit": head(wt)}
+        hooks.held(record)
     task.set_phase("built", build=record)
 
 

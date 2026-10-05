@@ -75,16 +75,26 @@ def test_catch_up_list_and_lesson_marks_are_neutral_and_stable(repo):
     generate.write_indexes(repo)
     index = repo / "wiki/proba/index.md"
     text = index.read_text()
+    # Fix-48: one sentence says what to do; each line gives the lesson dates and topics from
+    # the page's own `lessons` fields, exactly as the lessons table shows them.
     assert markers.read(text, "catch-up") == (
-        "# 📝 Pótolandó\n\n* [Első óra](2026-09-10-elso-jegyzet.md)\n")
+        "# 📝 Pótolandó\n\n"
+        "Ezeknek az óráknak az anyagát pótolnod kell: írd be a füzetedbe (vagy tanuld meg), és szólj, ha megvan.\n\n"
+        "* [Első óra](2026-09-10-elso-jegyzet.md) - Dátum: 2026-09-03, ? (legkésőbb 2026-09-10). "
+        "Témakörök: [Első](elso.md), [Második](masodik.md#resz).\n")
     assert text.index("../index.md") < text.index("# 📝 Pótolandó") < text.index("# 📘")
+    assert markers.read(text, "lessons").startswith(
+        "A 📝 jel pótolandó órát mutat: az anyagát írd be a füzetedbe (vagy tanuld meg), és szólj, ha megvan.\n\n"
+        "| Dátum | Óra |")
     assert "| 📝 2026-09-03 |" in text and "| 📝 ? (legkésőbb" in text
-    assert "🤒" not in text and "classmate" not in text
+    # Neutral by rule (plan 7.13, the learner AGENTS.md): no illness icon, no absence statement.
+    assert "🤒" not in text and "classmate" not in text and "hiányoz" not in text
     assert generate.write_indexes(repo) == []
     path.write_text(frontmatter.set_keys(path.read_text(), {"catch_up": "done"}))
     generate.write_indexes(repo)
     text = index.read_text()
     assert markers.read(text, "catch-up") == ""
+    assert markers.read(text, "lessons").startswith("A ✅ jel a már pótolt órát mutatja.\n\n| Dátum |")
     assert "| ✅ 2026-09-03 |" in text and "# 📝 Pótolandó" not in text
     assert generate.write_indexes(repo) == []
 

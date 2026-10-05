@@ -64,7 +64,7 @@ class Task:
     def set_phase(self, phase: str, **fields) -> None:
         """Record the phase BEFORE the external action it names (8.2)."""
         self.data["phase"] = phase
-        self.data["data"].update(fields)
+        self.data["data"].update(fields, progress_at=now_iso())
         self.save()
 
     def update(self, **fields) -> None:

@@ -145,6 +145,7 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
         raise NeedsOwner("unusable content remains after the writer's calls; the work is kept",
                          todo="fix the listed problems in `school-notes chat`", details={"items": stop[:20]})
     result, dropped = usable(ctx, task, result, fetch, listed)
+    result = with_questions(task, result)
     from ..reader import new_pages
     by, at = _writer_label(ctx), now_iso()
     parts = machine.write_lesson_notes(repo, result.get("notes", []), fetch,
@@ -153,9 +154,15 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
     machine.add_subjects(repo, result.get("new_subjects", []), _drive_names(task))
     _record_writes(task, repo, whole=[], parts=parts)
     new_pages.record(ctx, task)  # Lesson type is supplied by machine.write_lesson_notes.
-    outcome = review_files.apply_closure(repo, task.run_id, result.get("review_closure", []),
-                                         listed, ctx.cfg.limits.owner_after_open,
-                                         automatic=task.mode == "cron" and task.get("mode") == "fix")
+    if task.get("closures_applied"):
+        # A resumed 2.5.x correction round: these closures and their attempts were applied
+        # then, under the round's identity; applying them again would count twice.
+        outcome = review_files.ClosureOutcome()
+        ctx.log.event("finish.closures_kept", closures=len(result.get("review_closure", [])))
+    else:
+        outcome = review_files.apply_closure(repo, task.run_id, result.get("review_closure", []),
+                                             listed, ctx.cfg.limits.owner_after_open,
+                                             automatic=task.mode == "cron" and task.get("mode") == "fix")
     evidence = records.append(repo, records.from_writer(result.get("checks", [])),
                               run_id=task.run_id, checker=by, at=at, fetch_pages=fetch["pages"])
     _record_writes(task, repo, whole=outcome.written + evidence, parts=[])
@@ -175,7 +182,9 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
 def usable(ctx: Ctx, task: Task, result: dict, fetch: dict, listed: list[dict]) -> tuple[dict, list[str]]:
     """Keep every valid part of the result; an invalid or unproven part is left out.
 
-    An invalid closure leaves its item open. A `fixed` closure whose page text did not change
+    An invalid closure leaves its item open. A closure of an item that is no longer open or
+    owner (before this run's own section) is left out: it was decided already, e.g. by a
+    2.5.x correction round of this run. A `fixed` closure whose page text did not change
     (R6) leaves it open too, but counts as a repair attempt, so the attempt brake takes the
     item to the owner instead of parking it forever. Invalid evidence checks and new-subject
     entries are dropped and logged."""
@@ -184,12 +193,21 @@ def usable(ctx: Ctx, task: Task, result: dict, fetch: dict, listed: list[dict]) 
     known = inventory(repo)["items"]
     open_keys = {(i["file"], i["item_id"]) for i in listed}
     read = base_reader(ctx, task)
+    run_id = task.run_id if task is not None else ""
+    before: dict[str, dict] = {}
     closures = []
     for c in result.get("review_closure", []):
         key = (c["file"], c["item_id"])
         problems = closure_problems(repo, c) if safefs.is_file(repo, c["file"]) else ["missing report"]
         if key not in open_keys or problems:
             dropped.append(f"review_closure {c['file']}#{c['item_id']}: " + "; ".join(problems or ["not assigned"]))
+            continue
+        if c["file"] not in before:
+            before[c["file"]] = review_files.statuses_before(repo, c["file"], run_id)
+        status = before[c["file"]].get(c["item_id"])
+        if status not in ("open", "owner"):
+            dropped.append(f"review_closure {c['file']}#{c['item_id']}: "
+                           + (f"already {status}; left as is" if status else "no such item"))
             continue
         page = known.get(c["file"] + "#" + c["item_id"], {}).get("file")
         if c["status"] == "fixed" and page and safefs.is_file(repo, page) and read(page) == safefs.read_bytes(repo, page):
@@ -209,6 +227,15 @@ def usable(ctx: Ctx, task: Task, result: dict, fetch: dict, listed: list[dict]) 
     if dropped:
         ctx.log.event("finish.result_dropped", "warning", items=dropped)
     return {**result, "review_closure": closures, "checks": checks_, "new_subjects": subjects}, dropped
+
+
+def with_questions(task: Task, result: dict) -> dict:
+    """An item whose isolated fix call asked a question (`correction_calls.asked_result`)
+    goes to the owner with that question when its closure is applied."""
+    asked = task.get("asked_items") or {}
+    return {**result, "review_closure": [
+        {**c, "owner_question": asked[c["file"] + "#" + c["item_id"]]} if c["file"] + "#" + c["item_id"] in asked
+        else c for c in result.get("review_closure", [])]}
 
 
 def regenerate(ctx: Ctx, task: Task) -> None:

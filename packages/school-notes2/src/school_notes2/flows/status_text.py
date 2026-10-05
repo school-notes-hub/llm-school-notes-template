@@ -44,6 +44,7 @@ def collect(ctx, now=None):
     last = read_json(ctx.cfg.state_dir / ctx.name / "last-error.json", {})
     if last and "operation:" + last["step"] not in known:
         errors.append(last)
+    errors += [e for e in map(task_error, opened) if e and "task:" + e["run_id"] not in known]
     today = [t for t in tasks if any(stamp[:10] == now.date().isoformat() for stamp in (
         t.get("ended_at") or "", t.get("resumed_at") or t.data["created"],
         (t.data.get("needs_owner") or {}).get("at", ""))) or t == current and held]
@@ -56,8 +57,30 @@ def collect(ctx, now=None):
             "current": current, "today": today, "errors": sorted(errors, key=lambda e: (e["at"], e["message"])),
             "items": sum(i["status"] == "open" for i in items),
             "owner_items": sum(i["status"] == "owner" for i in items), "figures": len(pending),
+            "questions": questions(ctx) if ctx.notes_path.is_dir() else [],
             "drive": drive_count(drive, tasks), "budget": remaining(ctx),
             "round_pending": round_pending(ctx)}
+
+
+def task_error(task):
+    """An open task's last error that came after its last progress (a phase step), unless
+    the task already stopped for the owner (that has its own line)."""
+    error = task.data.get("last_error")
+    progress = task.get("progress_at") or ""
+    if not error or task.data.get("needs_owner") or error["at"] < progress:
+        return None
+    message = " ".join(str(error["message"]).split())
+    return {"at": error["at"], "run_id": task.run_id, "message": f"utolsó hiba ({error['class']}): {message}"}
+
+
+def questions(ctx):
+    """Writer questions on owner items, one line per question, in key order."""
+    from ..review import relations
+    asked = {}
+    for key, item in relations.inventory(ctx.notes_path)["items"].items():
+        if item["status"] == "owner" and item.get("owner_question"):
+            asked.setdefault(item["owner_question"], []).append(key.rsplit("/", 1)[-1])
+    return sorted((keys, text) for text, keys in asked.items())
 
 
 def round_pending(ctx):
@@ -143,6 +166,7 @@ def render(data):
         lines.append("  Nyitott hiba: nincs.")
     lines.append(f"  Sorok: {data['items']} nyitott tétel, {data['figures']} függő ábra, {data['drive']} Drive-csomag.")
     lines.append(f"  Tulajdonosi döntésre vár: {data.get('owner_items', 0)} review-tétel.")
+    lines += [f"    A jegyzetíró kérdése ({', '.join(keys)}): {text}" for keys, text in data.get("questions", [])]
     lines.append(f"  Képkeret: {data['budget']}.")
     return "\n".join(lines)
 

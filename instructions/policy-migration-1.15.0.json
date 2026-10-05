@@ -83,7 +83,7 @@
       "heading": "Sources",
       "destination": "instructions/sources-and-evidence.md",
       "source_sha256": "666eba81e2908049ac684ac9238acd1008b77d14afc370bec536d9045bb5c503",
-      "migrated_sha256": "468c6222fda378b8a23953c30cfb2efcb1a1361af8c08a6c4092f9f025c7bcf4",
+      "migrated_sha256": "f9baef50aea3f4b2e8ecbb17077c730feef6152a69a506a5d0348e809f08898e",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
       "updated_in": "1.16.1: original teaching files stay on Drive; 1.16.2: the public view leaves out links and citations of private files; 1.17.0: neutral catch-up wording, private source observations, explicit teacher-image permission/request route"
     },

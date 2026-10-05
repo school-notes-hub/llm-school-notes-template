@@ -481,3 +481,24 @@ def test_t154_final_keys_on_rebased_commit_before_build(env):
     hooks.final_keys, hooks.build = final_keys, build
     assert finish.run(task, env.wt, hooks, T, {}) == "done"
     assert len(checked) == 1 and len(checked[0]) == 1
+
+
+def test_held_build_names_the_amended_commit(env):
+    """Fix-48: the report amended into a held build's commit is what goes out; the hold must
+    name that commit, or the hourly catch-up rebuilds it and mails a second time."""
+    task = env.start_run()
+    (env.path / "wiki/a.md").write_text("line 1\nchanged\nline 3\n")
+    seen = {}
+
+    def build(commit):
+        seen["built"] = commit
+        (env.path / "docs/review").mkdir(parents=True, exist_ok=True)
+        (env.path / "docs/review/run.md").write_text("held\n")
+        return {"commit": commit, "held": True, "reason": "build"}
+    hooks = env.hooks()
+    hooks.build, hooks.message = build, fixed_message(task)
+    hooks.held = lambda record: seen.setdefault("held", record)
+    assert finish.run(task, env.wt, hooks, T, {}) == "done"
+    main = subprocess.run(["git", f"--git-dir={env.origin}", "rev-parse", "main"],
+                          capture_output=True, text=True, check=True).stdout.strip()
+    assert seen["held"]["commit"] == main != seen["built"] and seen["held"]["reason"] == "build"

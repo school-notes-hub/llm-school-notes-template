@@ -65,6 +65,7 @@ def _finish(ctx, task, notify_owner_items):
         empty_blocks=markers.empty_all,
         rerecord=lambda paths: steps.rerecord(ctx, task, paths),
         final_keys=lambda: review_phases.final_keys(ctx, task),
+        held=lambda record: _held(ctx, record),
         extra_paths=("references",) if task.mode == "interactive" else ())
     t = git_finish.Timeouts(ctx.cfg.timeouts.fetch_s, ctx.cfg.timeouts.push_s,
                             ctx.cfg.timeouts.ls_remote_s)
@@ -156,6 +157,13 @@ def _build(ctx: Ctx, task: Task, commit: str) -> dict:
         return {"commit": commit, "held": True, "reason": "build"}
     return {"commit": record.commit, "output": str(record.output),
             "duration_s": record.duration_s}
+
+
+def _held(ctx: Ctx, record: dict) -> None:
+    """The amended commit (with the run's report) is what goes out: the hold names it, so the
+    catch-up does not rebuild it and the mail decision of `_build` stays the only one."""
+    from . import publish
+    publish.hold(ctx, record["commit"], record["reason"], notify=False)
 
 
 def _publish(ctx: Ctx, task: Task, record: dict) -> None:

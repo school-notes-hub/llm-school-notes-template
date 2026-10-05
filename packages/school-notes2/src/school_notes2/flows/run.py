@@ -153,15 +153,23 @@ def advance(ctx: Ctx, task: Task) -> None:
 
 
 def owner_items(ctx: Ctx, task: Task, items: list[dict]) -> bool:
-    """Drain owner notices through the suppression gate, including legacy tasks."""
+    """Drain owner notices through the suppression gate, including legacy tasks. Item notices
+    stay in the status; a writer question on items is one mail per run (`owner-question`)."""
     delivered = True
     for item in sorted(items, key=lambda i: (i["file"], i["item_id"])):
+        reason = "the writer asked a question" if item.get("question") else item.get("reason", "stayed open five times")
         sent = owner_notices.send(ctx, Notice(ctx.name, f"review_owner:{item['file']}:{item['item_id']}",
-                               task.run_id, "finish", "owner", f"{item['file']} {item['item_id']}: "
-                               + item.get("reason", "stayed open five times"),
+                               task.run_id, "finish", "owner", f"{item['file']} {item['item_id']}: " + reason,
                                "settle it in `school-notes chat`"))
         if not sent:
             delivered = False
+    asked = sum(1 for i in items if i.get("question"))
+    if asked:
+        name = ctx.name.capitalize()
+        delivered = owner_notices.send(ctx, Notice(
+            ctx.name, f"owner-question:{task.run_id}", task.run_id, "finish", f"{name}: kérdés",
+            f"{name}: a jegyzetíró kérdést tett fel {asked} javítandó review-tételnél, ezért ezek a tételek "
+            f"a válaszodra várnak; teendőd: válaszolj a school-notes chat {ctx.name} munkamenetben.", "")) and delivered
     return delivered
 
 
