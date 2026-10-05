@@ -106,6 +106,9 @@ def test_t095_rejected_fix_survives_rollback_restart(guarded_session, monkeypatc
     safefs.write_text(ctx.notes_path, page, before + "\nElutasított javítás.\n")
     safefs.write_text(ctx.notes_path, "wiki/m/else.md", "Tiltott bővítés.\n")
     safefs.write_bytes(ctx.notes_path, "wiki/assets/new.bin", b"\0\xffimage")
+    def invalid(*args, **kwargs):
+        raise steps.CheckFailed([{"file": page, "message": "invalid assigned page"}])
+    monkeypatch.setattr(steps, "check_changed", invalid)
     crashed = []
     if boundary == "restore":
         original = correction.restore
@@ -131,7 +134,7 @@ def test_t095_rejected_fix_survives_rollback_restart(guarded_session, monkeypatc
     assert b"GIT binary patch" in patch and "Elutasított javítás".encode() in patch
     answer = chat.session_finish(ctx)
     assert answer["state"] == "done" and answer["correction_rolled_back"] is True
-    assert "unassigned page" in answer["reason"]
+    assert "check found" in answer["reason"]
     assert answer["rejected_patch"] == "attempt-1/correction/rejected.patch"
     assert safefs.read_bytes(root, "rejected.patch") == patch
     assert safefs.read_bytes(root, "rejected/wiki/assets/new.bin") == b"\0\xffimage"
@@ -139,7 +142,7 @@ def test_t095_rejected_fix_survives_rollback_restart(guarded_session, monkeypatc
 
 
 @pytest.mark.parametrize("damage", [False, True])
-def test_p4_fix_and_rollback_keep_race_guard(guarded_session, monkeypatch, damage):
+def test_p4_scope_restore_keeps_race_guard(guarded_session, monkeypatch, damage):
     ctx, task, page = guarded_session
     install_reader(monkeypatch, page, findings=[finding(page)])
     chat.session_finish(ctx)
@@ -149,7 +152,9 @@ def test_p4_fix_and_rollback_keep_race_guard(guarded_session, monkeypatch, damag
         safefs.write_text(ctx.notes_path, "wiki/m/else.md", "scope error")
     answer = chat.session_finish(ctx)
     assert answer["state"] == "done"
-    assert answer.get("correction_rolled_back", False) == damage
+    assert not answer.get("correction_rolled_back", False)
+    assert not safefs.is_file(ctx.notes_path, "wiki/m/else.md")
+    assert "Javítás." in safefs.read_text(ctx.notes_path, page)
 
 
 @pytest.mark.parametrize("last_result", [True, False])
@@ -226,6 +231,9 @@ def test_new_attempt_without_p4_clears_rollback_answer(session, monkeypatch, fai
     assert chat.session_finish(ctx)["state"] == "review_items"
     submit(ctx, task)
     safefs.write_text(ctx.notes_path, "wiki/m/else.md", "Tiltott módosítás")
+    from school_notes2.flows import correction_chat
+    child = correction_chat.active(phase.load(task.dir))
+    child.update(writer_check={"count": 1, "warnings": ["H1"]})
     original = finish.git_finish.run
     def fail(*args):
         if failure == "check":

@@ -67,7 +67,8 @@ def _cycle(cfg, contexts, started):
     state = read_json(path, {})
     nights = state.get("nightly_started", {})
     cache = {}
-    state = {"started": started.isoformat(), "status": "running", "nightly_started": nights}
+    state = {"started": started.isoformat(), "status": "running", "nightly_started": nights,
+             "pending_learners": [ctx.name for ctx in contexts]}
     write_json(path, state)
     for kind, action in (("nightly", nightly.nightly), ("run", run.run)):
         for ctx in contexts:
@@ -77,6 +78,10 @@ def _cycle(cfg, contexts, started):
                 ctx.log.error("round.step", exc, step=kind)
                 from . import last_error
                 last_error.record(ctx, kind, "round_step", exc)
+            finally:
+                if kind == "run":
+                    state["pending_learners"].remove(ctx.name)
+                    write_json(path, state)
     state.update(status="done", finished=now().isoformat())
     write_json(path, state)
     from .status_text import snapshot

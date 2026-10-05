@@ -55,7 +55,24 @@ def collect(ctx, now=None):
             "current": current, "today": today, "errors": sorted(errors, key=lambda e: (e["at"], e["message"])),
             "items": sum(i["status"] == "open" for i in items),
             "owner_items": sum(i["status"] == "owner" for i in items), "figures": len(pending),
-            "drive": drive_count(drive, tasks), "budget": remaining(ctx)}
+            "drive": drive_count(drive, tasks), "budget": remaining(ctx),
+            "round_pending": round_pending(ctx)}
+
+
+def round_pending(ctx):
+    from .operation import vm_lock
+    lock = vm_lock(ctx.cfg)
+    state = read_json(ctx.cfg.state_dir / "round.json", {})
+    if lock.probe() or lock.holder().get("kind") != "round" or state.get("status") != "running":
+        return False
+    if "pending_learners" in state:
+        return ctx.name in state["pending_learners"]
+    # A round started before this release has no explicit queue.
+    names = list(ctx.cfg.students)
+    if state.get("step") == "nightly" or not state.get("step"):
+        return ctx.name in names
+    current = state.get("learner")
+    return current in names and ctx.name in names[names.index(current) + 1:]
 
 
 def drive_count(drive, tasks):
@@ -98,11 +115,14 @@ def render(data):
             state = f"{label} keretre vár"
         elif data["held"]:
             started = data["live"].get("started") or data["holder"].get("since")
-            state = f"{label} fut {clock(started)} óta, {stage} fázis, {minutes(task, data['live'], now)}. perc"
+            elapsed = max(0, round((now - datetime.fromisoformat(started)).total_seconds() / 60)) if started else 0
+            state = f"{label} fut {clock(started)} óta, {stage} fázis, {elapsed}. perc"
         else:
             state = f"{label} folytatásra vár, {stage} fázis"
     elif data["held"]:
         state = f"előkészítés fut {clock(data['holder'].get('since'))} óta"
+    elif data.get("round_pending"):
+        state = "szabad, a most futó körben következik"
     else:
         next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0)
         state = f"szabad, következő kör {next_hour:%H:%M}"

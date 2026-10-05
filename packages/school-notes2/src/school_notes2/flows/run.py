@@ -121,33 +121,46 @@ def _new_task(ctx: Ctx) -> Task | None:
 def advance(ctx: Ctx, task: Task) -> None:
     """Drive a cron notes task from its recorded phase to `done` (8.2)."""
     from ..figures import licenses
+    from . import writer_identity
+    writer_identity.ensure(ctx, task)
     licenses.preflight(ctx.notes_path)
     if task.phase == "waiting_quota":
         task.set_phase(task.get("quota_phase"))
     if task.get("mode") == "fix":
         from . import fix
         fix.prepare(ctx, task)
+        from . import fix_scope
+        fix_scope.resume(ctx, task)
     elif task.get("mode") == "repair":
         from . import repair
         repair.prepare(ctx, task)
     else:
         fetch_flow.advance(ctx, task, lambda: fetch_flow.drive_client(ctx))
     if task.phase in ("prepared", "writing") and not task.get("skip_writer"):
-        if writer.run_ranges(ctx, task, handlers.build(ctx, task.dir)) == "question":
+        if _write(ctx, task) == "question":
             raise NeedsOwner("the writer asked a blocking question",
                              todo=f"answer it in `school-notes chat {ctx.name}`",
                              details={"questions": task.get("question", [])})
     if task.get("mode") == "fix" and not task.get("review_complete"):
-        from . import correction, call_scope
-        correction.check_scope(ctx, task.dir / "fix-before", task.get("open_review_items", []),
-                               [e["commission"]["page"] for e in task.get("pending_figures", [])]
-                               + call_scope.link_pages(task))
+        from . import fix_scope
+        if task.phase in ("prepared", "writing"):
+            fix_scope.recover(ctx, task)
     try:
         finish_flow.finish(ctx, task, notify_owner_items=lambda items: owner_items(ctx, task, items))
     except steps.CheckFailed as exc:
         from . import call_scope
         call_scope.retry(ctx, task, exc.items)
         raise
+
+
+def _write(ctx, task):
+    from . import fix_scope
+    try:
+        return writer.run_ranges(ctx, task, handlers.build(ctx, task.dir))
+    except steps.CheckFailed as exc:
+        if not fix_scope.rollback(ctx, task, exc):
+            raise
+        return "done"
 
 
 def owner_items(ctx: Ctx, task: Task, items: list[dict]) -> bool:

@@ -19,7 +19,7 @@ def completion(ctx, task):
                                  f"Anyag: {request['source']}; kivágás: {request['crop']}; "
                                  f"cél: {request['purpose']}; hely: {request['page']}",
                                  "Dönts a kép felhasználási jogáról a tulajdonosi munkamenetben."))
-    notes = redact(merged["owner_notes"]
+    notes = redact(merged["owner_notes"] + task.get("scope_owner_notes", [])
                    + task.get("reader_owner_notes", []) + task.get("recheck_owner_notes", [])
                    + task.get("correction_result", {}).get("owner_notes", [])
                    + read_json(task.dir / "report.json", {}).get("owner_notes", []))

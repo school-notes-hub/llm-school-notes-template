@@ -59,6 +59,8 @@ def prepare(ctx, task):
                                    allowed={e["commission"]["id"] for e in task.get("pending_figures", [])})
     root = task.dir / "fix-before"
     correction.snapshot(ctx.notes_path, root)
+    from .fix_scope import TOOL_STATE
+    safefs.write_json(root, "tool-state.json", {k: task.get(k, {}) for k in TOOL_STATE})
     task.set_phase("prepared", calls=grouping, ranges=calls.ranges(grouping) or [[0, 0]], packages=[], pages=[],
                    pending_images=[], pending_figures=waiting, writing_k=1, skip_writer=not grouping,
                    correction_before=str(root / "before"), dot_git=safefs.read_text(ctx.notes_path, ".git"))

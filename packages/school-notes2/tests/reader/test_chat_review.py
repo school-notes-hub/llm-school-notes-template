@@ -78,7 +78,7 @@ def test_chat_existing_writer_handles_p4_and_fetch_preserves_result(session, mon
     assert record["round"] == (2 if status == "disagree" else 1)
 
 
-@pytest.mark.parametrize("damage", ["scope", "check", "warning", "closure", "json"])
+@pytest.mark.parametrize("damage", ["check", "warning", "closure", "json"])
 def test_bad_chat_fix_rolls_back_once_and_keeps_items_open(session, monkeypatch, damage):
     ctx, task, page = session
     invoked = install_reader(monkeypatch, page, findings=[finding(page)])
@@ -87,9 +87,7 @@ def test_bad_chat_fix_rolls_back_once_and_keeps_items_open(session, monkeypatch,
     task.reload()
     result = submit(ctx, task)
     safefs.write_text(ctx.notes_path, page, before + "\nJavítás.\n")
-    if damage == "scope":
-        safefs.write_text(ctx.notes_path, "wiki/m/else.md", "Unassigned")
-    elif damage == "check":
+    if damage == "check":
         def fail(*args, **kwargs):
             raise steps.CheckFailed([{"file": page, "line": 1, "severity": "error", "message": "bad"}])
         monkeypatch.setattr(steps, "check_changed", fail)

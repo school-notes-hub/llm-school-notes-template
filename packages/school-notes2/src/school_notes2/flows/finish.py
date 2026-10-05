@@ -39,14 +39,21 @@ def _finish(ctx, task, notify_owner_items):
     edits = {"restores": [], "replacements": []} if task.mode == "interactive" else None
     from . import review_phases
     if task.phase in ("prepared", "writing", "finishing") and not task.get("review_complete"):
-        prepared = steps.content_steps(ctx, task)
+        try:
+            prepared = steps.content_steps(ctx, task)
+        except steps.CheckFailed as exc:
+            from . import fix_scope
+            if not fix_scope.rollback(ctx, task, exc):
+                raise
+            prepared = steps.Prepared({"status": "done"}, False, [])
         notify_owner_items(prepared.new_owner)
         if prepared.question:
             raise NeedsOwner("the writer asked a blocking question",
                              todo="answer it in `school-notes chat`",
                              details={"questions": prepared.result.get("questions", [])})
         task.set_phase("figures", inspection_result=prepared.result,
-                       correction_rolled_back=False, correction_rollback_reason=None,
+                       correction_rolled_back=bool(task.get("fix_scope_rolled_back")),
+                       correction_rollback_reason=task.get("correction_rollback_reason") if task.get("fix_scope_rolled_back") else None,
                        correction_rollback_items=[], correction_rejected_patch=None,
                        attempt=task.get("attempt", 1), max_agents=task.get("max_agents", ctx.cfg.limits.max_agents))
     if task.phase in (*review_phases.PHASES, "waiting_quota"):

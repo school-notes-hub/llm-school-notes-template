@@ -99,6 +99,8 @@ def run(ctx, task, edits=None):
             rejected(ctx.notes_path, root, PREFIXES, ctx.log)
             saved["rejected_patch"] = (root / "rejected.patch").relative_to(task.dir).as_posix()
         safefs.write_json(root, "receipt.json", saved)
+    from .fix_scope import owner_notes
+    owner_notes(ctx, task, root)
     apply(ctx, task, root, saved, edits)
 
 
@@ -123,7 +125,7 @@ def execute(ctx, task, root, edits):
                 if outcome == "question":
                     raise BadWork("fix pass asked a blocking question")
                 result = writer.merge(writer.results(child))
-            saved = validated(ctx, child, root, items, result)
+            saved = validated(ctx, child, root, items, result, edits)
         except WaitingQuota:
             raise
         except launch.TimedOut as exc:
@@ -149,6 +151,8 @@ def apply(ctx, task, root, saved, edits=None):
         task.update(correction_result={"status": "done"}, correction_rolled_back=True,
                     correction_rollback_reason=saved["reason"], correction_rollback_items=saved.get("items", []),
                     correction_rejected_patch=saved.get("rejected_patch"))
+        if safefs.read_json(root, "scope-restores.json", []):
+            return  # A rejected scope repair leaves the snapshot's items open.
         outcome = files.apply_closure(ctx.notes_path, f"{task.run_id}-fix-a{task.get('attempt', 1)}", [],
                                       task.get("correction_items", []), automatic=task.mode == "cron")
         steps.record_tool_files(task, ctx.notes_path, outcome.written)
@@ -194,10 +198,14 @@ def apply_figures(ctx, task, root, saved):
                 inspection_figures=[figures[k] for k in sorted(figures)])
 
 
-def validated(ctx, child, root, items, result):
+def validated(ctx, child, root, items, result, edits=None):
     """Both writers enter the same result, scope, path and content gates."""
-    check_scope(ctx, root, items, [e["commission"]["page"] for e in child.get("pending_figures", [])]
-                + call_scope.link_pages(child))
+    from .fix_scope import recover
+    from .finish import _snapshot
+    before = _snapshot(ctx, child) if edits is not None else None
+    recover(ctx, child, root, items)
+    if edits is not None:
+        edits["restores"].append((before, _snapshot(ctx, child)))
     problems = checks.accounting(child, result)
     if problems:
         raise steps.CheckFailed(problems)
@@ -218,7 +226,7 @@ def validated(ctx, child, root, items, result):
             "tool_state": {k: child.get(k, {}) for k in ("tool_writes", "tool_parts", "tool_hashes")}}
 
 
-def check_scope(ctx, root, items, extra_paths=()):
+def check_scope(ctx, root, items, extra_paths=(), *, restore=False):
     from ..reader import units
     # Use the pre-edit tree: edits must not expand their own authorization.
     repo = root / "before"
@@ -231,13 +239,20 @@ def check_scope(ctx, root, items, extra_paths=()):
     for unit in units.collect(repo, sorted(p for p in allowed if p)):
         allowed.update(unit["pages"] + unit["context"])
     before = set(safefs.read_json(root, "snapshot.json"))
+    outside = []
     for path in sorted(before | set(safefs.walk_files(ctx.notes_path, "wiki"))):
         if not path.startswith("wiki/") or path.startswith("wiki/assets/") or path == "wiki/log.md":
             continue
         old = safefs.read_bytes(root, "before/" + path) if path in before else b""
         new = safefs.read_bytes(ctx.notes_path, path) if safefs.is_file(ctx.notes_path, path) else b""
         if path not in allowed and steps._llm_hash(path, old) != steps._llm_hash(path, new):
-            raise BadWork(f"fix changed an unassigned page: {path}")
+            outside.append(path)
+    if outside and not restore:
+        raise BadWork(f"fix changed an unassigned page: {outside[0]}")
+    if restore:
+        from .fix_scope import restore_pages
+        return restore_pages(ctx.notes_path, root, before, outside)
+    return []
 
 
 def _value_sources(repo, quotes, minimum=20):

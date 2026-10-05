@@ -56,8 +56,13 @@ def on_error(exc: BaseException, *, task: Task | None, student: str, step: str, 
     elif isinstance(exc, BadWork):
         if interactive:
             return kind          # the session gets the error through MCP; nothing counts
-        task.data["llm_failures"] += 1
-        task.save()
+        key = task.get("writer_output_key")
+        counted = task.get("counted_bad_outputs", [])
+        if not key or key not in counted:
+            task.data["llm_failures"] += 1
+            if key:
+                task.data["data"]["counted_bad_outputs"] = sorted(counted + [key])
+            task.save()
         if task.data["llm_failures"] >= MAX_LLM_FAILURES:
             _stop(task, exc, student, step, mailer, "the writer failed twice in a row")
     else:

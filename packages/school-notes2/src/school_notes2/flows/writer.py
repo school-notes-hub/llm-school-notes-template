@@ -42,6 +42,8 @@ def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
     role, harness = ctx.cfg.role("writer")
     if task.get("max_agents") is None:
         task.update(max_agents=ctx.cfg.limits.max_agents)
+    from . import writer_identity
+    writer_identity.ensure(ctx, task)
     call_scope.invalidate(task)
     n = len(task.get("ranges"))
     k = task.get("writing_k", 1)
@@ -53,7 +55,9 @@ def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
             if result is None:
                 write_inputs(ctx, task, k)
                 result = _invoke(ctx, task, k, role, harness, handlers)
-            from . import steps
+            from . import steps, fix_scope, writer_identity
+            writer_identity.remember(ctx, task, k, result)
+            fix_scope.recover(ctx, task)
             try:
                 _check_call(ctx, task, k, result)
             except steps.CheckFailed as exc:
@@ -62,6 +66,8 @@ def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
             from ..figures import infographics
             infographics.remember(task, result, ctx.notes_path)
             write_json(task.dir / f"result-{k}.json", result)
+        from . import fix_scope
+        fix_scope.recover(ctx, task)
         if result["status"] == "question":
             task.update(question=result.get("questions", []))
             return "question"
@@ -91,6 +97,10 @@ def _call(ctx: Ctx, task: Task, k: int, role, harness, handlers) -> dict:
             # from this stale copy would drop them.
             task.reload()
     from . import steps
+    from . import writer_identity
+    writer_identity.remember(ctx, task, k, outcome.output)
+    from . import fix_scope
+    fix_scope.recover(ctx, task)
     problems = checks.accounting(task, outcome.output)
     if problems:
         steps.write_check_items(ctx, problems)
@@ -165,7 +175,8 @@ def _fix_resume(ctx, task, k):
     """Recover a fix output before write_inputs removes it; one crash retry at most."""
     state = dict(task.get("fix_calls", {}))
     count = state.get(str(k), 0)
-    if count:
+    rejected = task.get("writer_output_key") in task.get("counted_bad_outputs", [])
+    if count and not rejected:
         result = safefs.read_json(ctx.notes_path, ".school-notes/result.json")
         try:
             validate("result", result)
@@ -173,6 +184,8 @@ def _fix_resume(ctx, task, k):
             if count >= 2:
                 raise BadWork("fix call interrupted twice without valid output") from None
         else:
+            from . import fix_scope
+            fix_scope.recover(ctx, task)
             problems = checks.accounting(task, result)
             if problems:
                 from .steps import CheckFailed
@@ -186,6 +199,7 @@ def _fix_resume(ctx, task, k):
 
 
 def _invoke(ctx, task, k, role, harness, handlers):
+    task.update(writer_invocation=task.get("writer_invocation", 0) + 1)
     try:
         try:
             return _call(ctx, task, k, role, harness, handlers)
@@ -197,6 +211,12 @@ def _invoke(ctx, task, k, role, harness, handlers):
                 raise
             task.update(fix_crash_retries=sorted(retried + [k]))
             return _call(ctx, task, k, role, harness, handlers)
+    except BadWork:
+        from . import writer_identity
+        path = ".school-notes/result.json"
+        raw = safefs.read_text(ctx.notes_path, path) if safefs.is_file(ctx.notes_path, path) else None
+        writer_identity.remember(ctx, task, k, raw)
+        raise
     except (WaitingQuota, launch.TimedOut):
         # Quota waits and T-125 have their own retry policy; never consume the
         # correction's crash budget or recover a failed call's partial output.
