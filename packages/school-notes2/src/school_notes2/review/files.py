@@ -157,7 +157,7 @@ def _num(item_id: str) -> int:
     return int(ITEM_NUM.fullmatch(item_id).group(1))
 
 
-@lru_cache(maxsize=32)
+@lru_cache(maxsize=4096)
 def _parsed_report(text):
     # Content keys cannot go stale on a rebase or a same-size rewrite.
     return fm.split(text)

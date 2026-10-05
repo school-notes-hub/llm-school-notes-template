@@ -30,6 +30,13 @@ def retry(ctx) -> None:
 
 def _deliver(ctx, pending, key) -> bool:
     notice = Notice(**pending[key])
+    if key.startswith("error:"):
+        from . import incidents
+        value = read_json(incidents.path(ctx), {}).get(key.split(":")[1], {})
+        if value.get("resolved_at") or (value and str(value["generation"]) != key.split(":")[2]):
+            del pending[key]
+            write_json(path(ctx), dict(sorted(pending.items())))
+            return True
     if mailed(notice) and notice.message.lstrip().startswith("{"):
         notice = _legacy_summary(ctx, notice)
         if notice is not None:

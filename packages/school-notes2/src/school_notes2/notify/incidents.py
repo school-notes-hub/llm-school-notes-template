@@ -28,23 +28,30 @@ def active(ctx):
 
 
 def wording(name, kind, step, *, task=None, exc=None, role=None):
+    return "a futás megállt: " + _reason(name, kind, step, task=task, exc=exc, role=role)
+
+
+def _reason(name, kind, step, *, task=None, exc=None, role=None):
     details = getattr(exc, "details", {}) or {}
     raw = str(exc or "")
     if kind == "timeout":
         role = role if role in ROLES else "writer"
-        return f"időtúllépés ({ROLES[role]}); teendőd: szükség esetén school-notes status --clear {name} {role} --continue"
+        return f"időtúllépés ({ROLES[role]}); teendőd: dönts az időkorlátról, majd school-notes status --clear {name} {role} --continue"
     questions = details.get("questions") or (task.get("question", []) if task else [])
     if questions or kind == "question":
         first = str(questions[0].get("text", "")) if questions and isinstance(questions[0], dict) else ""
         first = re.split(r"(?<=[.!?])\s", first.strip(), maxsplit=1)[0][:200]
         safe = first if first in SAFE_QUESTIONS else "a kérdés a privát munkamenetben olvasható"
-        return f"a jegyzetíró kérdést tett fel: {safe}; válasz kell"
+        return f"a jegyzetíró kérdést tett fel: {safe}; válasz kell tőled a school-notes chat {name} munkamenetben"
     conflicts = (task.get("conflict_files", []) if task else []) or details.get("files", [])
     if (task and task.get("rebase") == "conflict") or "content conflict" in raw:
         filename = PurePosixPath(str(sorted(conflicts)[0])).name if conflicts else "érintett fájl"
         filename = re.sub(r"[^\w.\-]", "_", filename)[:100]
-        return f"a futás és egy közben érkezett változás ütközött ({filename}); döntés kell"
+        return f"a futás és egy közben érkezett változás ütközött ({filename}); döntés kell tőled a school-notes chat {name} munkamenetben"
     if kind == "prerequisite":
+        disk = re.search(r"only ([0-9]+(?:\.[0-9]+)?) GB free", raw)
+        if disk:
+            return f"kevés a szabad lemezhely a VM-en: {disk[1]} GB; teendő: helyet kell felszabadítani"
         reason = "lejárt vagy hiányzó Drive-bejelentkezés" if "token" in raw.lower() or "drive" in raw.lower() else "az előkészítés ellenőrzése"
         login = re.search(r"school-notes login " + re.escape(name) + r" (writer|reviewer|reader|figure|figure-review)\b", getattr(exc, "todo", ""))
         if login:
@@ -60,21 +67,24 @@ def wording(name, kind, step, *, task=None, exc=None, role=None):
     if kind == "lock_held":
         return "a kör vagy a munkamenet 12 órája foglalja a zárat; a kontroller ellenőrzi"
     if kind == "bad_work":
-        return "a jegyzetíró kimenete hibás; a kontroller ellenőrzi az újrapróbálást"
+        return "a jegyzetíró kétszer hibás kimenetet adott; a kontroller ellenőrzi a hibát és indítja újra"
     if kind == "transient":
-        return "átmeneti működési hiba; nincs teendőd, a tool újrapróbálja"
+        return "három egymás utáni sikertelen próba átmeneti működési hiba miatt; a kontroller ellenőrzi a hibát és indítja újra"
     return "a feldolgozás döntésre vár; teendőd: school-notes status " + name + " --details"
 
 
-def record(ctx, kind, step, *, task=None, exc=None, scope=None, role=None, identity=None, run_id=""):
+def record(ctx, kind, step, *, task=None, exc=None, scope=None, role=None, run_id=""):
     if kind in ("waiting_quota", "race"):
         return None
     scope = scope or ("task:" + task.run_id if task else "operation:" + step)
     message = wording(ctx.name, kind, step, task=task, exc=exc, role=role)
-    # Store only the digest of diagnostic text, never its content in mail or state overview.
-    identity = identity or (str(exc) if exc is not None else message)
+    # Measurements change between attempts; the safe sentence defines the situation.
+    identity = meaning(message)
     fingerprint = hashlib.sha256(f"{scope}\n{kind}\n{identity}".encode()).hexdigest()
     state = read_json(path(ctx), {})
+    for value in state.values():
+        if value["scope"] == scope and value["class"] != kind and not value.get("resolved_at"):
+            value["resolved_at"] = now_iso()
     old = state.get(fingerprint, {})
     generation = old.get("generation", 0) + int(bool(old.get("resolved_at")))
     if not old or old.get("resolved_at"):
@@ -84,6 +94,10 @@ def record(ctx, kind, step, *, task=None, exc=None, scope=None, role=None, ident
         write_json(path(ctx), state)
     pending.send(ctx, notice(ctx, fingerprint, old))
     return old
+
+
+def meaning(message):
+    return re.sub(r"\b\d+(?:[.,]\d+)?\s*(?=GB\b|mp\b|s\b)", "<n> ", message)
 
 
 def notice(ctx, fingerprint, value):
@@ -118,16 +132,26 @@ def resolve(ctx, scope):
 
 
 def task_error(ctx, task, step="run", exc=None):
-    existing = [i for i in active(ctx) if i["scope"] == "task:" + task.run_id]
+    error = task.data.get("needs_owner") or {}
+    if not error:
+        return None
+    existing = [i for i in active(ctx) if i["scope"] == "task:" + task.run_id
+                and i["class"] == error.get("class") and i["message"].startswith("a futás megállt:")
+                and (exc is None or meaning(i["message"]) == meaning(wording(
+                    ctx.name, error["class"], step, task=task, exc=exc)))]
     if existing:
         return existing[0]
-    if (task.data.get("needs_owner") or {}).get("class") == "timeout" and any(
-            i["class"] == "timeout" for i in active(ctx)):
-        return None
-    error = task.data.get("needs_owner") or task.data.get("last_error") or {}
+    # Retire pre-upgrade intermediate incidents before recording the owner stop.
+    resolve(ctx, "task:" + task.run_id)
+    if error.get("class") == "timeout":
+        role = "reviewer" if task.kind == "review" else "writer"
+        return record(ctx, "timeout", role, role=role, scope="timeout:" + role, run_id=task.run_id)
     return record(ctx, error.get("class", "program"), step, task=task, exc=exc)
 
 
-def blocks_completion(ctx, task):
-    return any(value["run_id"] == task.run_id or value["run_id"].startswith(task.run_id + "-fix-a")
-               for value in active(ctx))
+def completed(ctx, task):
+    """A completed run is recovery, including its correction run's timeout incidents."""
+    resolve(ctx, "task:" + task.run_id)
+    for value in active(ctx):
+        if value["run_id"] == task.run_id or value["run_id"].startswith(task.run_id + "-fix-a"):
+            resolve(ctx, value["scope"])

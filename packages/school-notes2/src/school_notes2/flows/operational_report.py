@@ -83,9 +83,7 @@ def completed(ctx, task, report, duration, *, finishing=False):
         incidents.task_error(ctx, task)
         receipt = None
     elif receipt == "done":
-        incidents.resolve(ctx, "task:" + task.run_id)
-        if incidents.blocks_completion(ctx, task):
-            receipt = None
+        incidents.completed(ctx, task)
     # A resumed owner stop is a new closure; retries keep the same receipt.
     notice_key = completion_key(task, receipt) if receipt else None
     notices = task.get("completion_notices", {})
@@ -168,7 +166,7 @@ def ended(ctx, kind, started, before, *, successful=True):
     if task.data.get("needs_owner"):
         incidents.task_error(ctx, task)
     elif task.phase == "done":
-        incidents.resolve(ctx, "task:" + task.run_id)
+        incidents.completed(ctx, task)
     if task.kind == "review":
         review = read_json(task.dir / "review.json", {})
         report = {"időpont": now_iso(), "időtartam_s": task.get("active_seconds"), "tartomány": [task.get("base"), task.get("T")],
@@ -181,7 +179,7 @@ def ended(ctx, kind, started, before, *, successful=True):
                   "keretállapot": read_json(ctx.cfg.state_dir / "quota.json", {}), "tokenek": _metrics(task)}
         write_json(task.dir / "report.json", redact(report))
         receipt = terminal(task)
-        if receipt not in ("done", "closed", "retry_nightly") or (receipt == "done" and incidents.blocks_completion(ctx, task)):
+        if receipt not in ("done", "closed", "retry_nightly"):
             return
         pending.send(ctx, Notice(ctx.name, f"nightly:{task.run_id}:{completion_key(task, receipt)}", task.run_id, "nightly",
                                  subject(ctx.name, MODES["nightly"], receipt),

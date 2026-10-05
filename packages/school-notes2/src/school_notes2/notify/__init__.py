@@ -21,9 +21,6 @@ class Notice:
     todo: str
 
 
-RUN_KINDS = ("completion:", "nightly:", "error:")
-
-
 def mailed(notice: Notice) -> bool:
     if notice.kind.startswith("error:"):
         return True

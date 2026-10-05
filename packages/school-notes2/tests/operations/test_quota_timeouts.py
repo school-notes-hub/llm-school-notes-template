@@ -153,3 +153,22 @@ def test_nightly_timeout_blocks_unit_not_other_topics(world):
     assert timeouts.blocked(ctx, first) and not timeouts.blocked(ctx, other)
     timeouts.success(ctx, other)
     assert timeouts.blocked(ctx, first)
+
+
+def test_suspension_saved_before_notice_recovers_on_blocked_call(world, monkeypatch):
+    ctx, task, call, notices = world
+    timeouts.record(ctx, call)
+    with monkeypatch.context() as patch:
+        original = timeouts.write_json
+        def crash(path, value):
+            original(path, value)
+            raise KeyboardInterrupt()
+        patch.setattr(timeouts, "write_json", crash)
+        with pytest.raises(KeyboardInterrupt):
+            timeouts.record(ctx, call)
+    assert not notices and timeouts.blocked(ctx, call)
+    monkeypatch.setattr(launch, "_admitted", lambda *a, **kw: pytest.fail("suspended role launched"))
+    for _ in range(2):
+        with operation.scope(ctx), pytest.raises(launch.TimedOut):
+            launch.run_headless(call, log=ctx.log, snapshot=lambda: None)
+    assert len(notices) == 1 and "a futás megállt" in notices[0].get_content()

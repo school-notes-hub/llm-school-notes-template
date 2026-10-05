@@ -107,7 +107,7 @@ def form_problems(repo: Path, rel: str, body: str, meta: dict) -> list[str]:
     titles = [TITLE, PLURAL_TITLE] if len(meta.get("lessons", [])) > 1 else [TITLE]
     heading = re.search(r"^# (?:" + "|".join(titles) + r")\s*$", visible, re.M)
     if not heading:
-        return [f"lesson log needs '# {TITLE}' with 3-8 top-level `*`/`-` bullets, "
+        return [f"lesson log needs {' or '.join(repr('# ' + title) for title in titles)} with 3-8 top-level `*`/`-` bullets, "
                 "each linking `<topic>.md#<section>`"]
     section = re.split(r"^# ", visible[heading.end():], maxsplit=1, flags=re.M)[0]
     points = _learning_points(section)

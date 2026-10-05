@@ -33,15 +33,22 @@ def run(ctx: Ctx) -> int:
         owner_notices.retry(ctx)
         _settle_images(ctx)
         task = phase.open_task(ctx.task_root(), ctx.name, "notes")
+        from . import last_error
+        from ..state.files import read_json
+        previous = read_json(ctx.cfg.state_dir / ctx.name / "last-error.json", {})
+        recheck = previous.get("step") == "run" and previous.get("class") == "prerequisite"
+        if recheck:
+            _prerequisites(ctx, task)
+            last_error.clear(ctx, "run")
         if not _may_run(ctx, task):
             if task is not None and task.get("no_push"):
                 return 0
             publish.catch_up(ctx)        # 8.3: the kinds are independent
             return 0
-        _prerequisites(ctx, task)
+        if not recheck:
+            _prerequisites(ctx, task)
         if task is None:
             task = _new_task(ctx)
-        from . import last_error
         last_error.clear(ctx, "run")  # Prerequisites and Drive listing succeeded, even without new work.
         if task is None:
             publish.catch_up(ctx)

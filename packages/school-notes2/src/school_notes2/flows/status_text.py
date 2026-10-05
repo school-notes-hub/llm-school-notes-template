@@ -34,6 +34,8 @@ def collect(ctx, now=None):
     current = next((t for t in reversed(opened) if t.kind == ("review" if live.get("kind") == "nightly" else "notes")),
                    None if live else opened[-1] if opened else None)
     errors = incidents.active(ctx)
+    from .operation import vm_context
+    errors += incidents.active(vm_context(ctx))
     known = {e["scope"] for e in errors}
     for task in opened:
         if task.data.get("needs_owner") and "task:" + task.run_id not in known:
@@ -135,6 +137,12 @@ def overview(ctx, now=None):
 
 def snapshot(cfg):
     from . import context
-    text = "\n\n".join(overview(context.make(cfg, name, console=False)) for name in cfg.students) + "\n"
+    sections = [f"Készült: {datetime.now(TZ):%Y-%m-%d %H:%M}"]
+    for name in cfg.students:
+        try:
+            sections.append(overview(context.make(cfg, name, console=False)))
+        except Exception:
+            sections.append(f"{name.capitalize()}: az állapot nem olvasható; a kontroller ellenőrzi.")
+    text = "\n\n".join(sections) + "\n"
     write_text(cfg.state_dir / "allapot.txt", text)
     return text

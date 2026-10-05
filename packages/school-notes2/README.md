@@ -421,7 +421,7 @@ A failing learner step is logged; later learners still run.
 An empty successful night also consumes today's review slot. Finishing an older
 night does not consume today’s new review.
 The lock is inherited by detached MCP jobs and is never forcibly broken. A busy
-lock older than twelve hours records one incident per affected learner.
+lock older than twelve hours records one VM-wide incident, visible for every learner.
 
 Weekly quota probes use the role's home in a short container without a model call:
 Codex app-server JSON-RPC and Claude OAuth usage. Only the weekly window counts.
@@ -456,9 +456,16 @@ this scheduler, quota gate and timeout policy.
 Processing invocations accumulate active elapsed time; idle hours are excluded. A
 successful notes run or nonempty nightly review sends one Hungarian sentence with
 start/end time and work minutes; after continuation it describes the resumed segment.
-Errors send one immediate content-free sentence describing the failure and who acts.
+Stops send one immediate content-free sentence stating that work stopped, why, and who acts.
+Transient errors stop on the third consecutive failure, bad writer output on the second;
+intermediate retries send no mail. Taskless failures keep per-operation retry counters.
+Timeout mail opens one incident per learner/role upon suspension, never per topic.
+A successful role call closes it only when no unit of that role remains suspended;
+a successfully completed run also closes its remaining incidents and sends completion mail.
 `state/<learner>/incidents.json` keeps the unresolved error's durable identity; repeated
-rounds and the terminal report do not repeat it. Recovery closes the identity, so a
+rounds and the terminal report do not repeat it. Identity uses scope, class and the safe
+Hungarian sentence's meaning, ignoring changing measurements, never raw exception text.
+Recovery closes the identity, so a
 new failure can mail again. Pre-task errors and publish-task errors use the same path.
 `pending-owner-notices.json` and `notify-once.json` recover interrupted delivery. As
 with any SMTP handoff, a crash after server acceptance but before the local receipt
@@ -471,9 +478,13 @@ operational sentences are quoted, otherwise the mail refers to the private sessi
 `school-notes status` shows current work, today's runs, unresolved failures and
 responsibility, queue sizes and the remaining daily/monthly image budget in Hungarian.
 `--details` keeps the full former view; `--json` keeps the structured details. Every
-completed round atomically saves the short view to `state/allapot.txt`. A broken learner
+completed round atomically saves the short view to `state/allapot.txt`, with a `Készült:` timestamp. A broken learner
 state is reported without hiding the other learners. Installation takes the VM lock
-before learner locks and retains them through the atomic release switch.
+before learner locks and retains them through the atomic release switch. Before waiting
+it writes `state/operations/install-pending`; round releases its lock instead of starting
+another cycle while that flag exists. Installers serialize, write lock-holder metadata,
+and remove the flag after switching (or on a handled failure). After an uncatchable crash,
+rerunning the installer recovers the pending handoff.
 Review inventory parses each report once; nightly closure batches changes by report,
 using `CSafeLoader` when available. Machine-only changes without items or hits do not
 start recheck. `review.finalize`, `review.final_keys`, `review.close` and

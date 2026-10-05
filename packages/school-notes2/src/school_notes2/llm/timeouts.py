@@ -43,24 +43,33 @@ def record(ctx, run):
         count = units[key]["count"]
         value["suspended"] = count >= 2
         units[key]["suspended"] = count >= 2
+        state[role] = {**value, "suspended": any(u.get("suspended") for u in units.values())}
     write_json(path(ctx), state)
     events = read_json(ctx.cfg.state_dir / ctx.name / "timeout-events.json", [])
     events.append({"role": role, **value})
     write_json(ctx.cfg.state_dir / ctx.name / "timeout-events.json", events)
     ctx.log.event("llm.timeout", "stopped" if count >= 2 else "retry", role=role, **value)
-    incidents.record(ctx, "timeout", role, role=role,
-                     scope="timeout:" + role + (":" + run.label if role == "reviewer" else ""), run_id=run.run_id)
+    if count >= 2:
+        stopped(ctx, run)
     return count
+
+
+def stopped(ctx, run):
+    """Also replayed when suspension was saved just before an interrupted notice."""
+    role = role_name(run.role_name)
+    incidents.record(ctx, "timeout", role, role=role, scope="timeout:" + role, run_id=run.run_id)
 
 
 def success(ctx, run):
     state = read_json(path(ctx), {})
     role = role_name(run.role_name)
-    incidents.resolve(ctx, "timeout:" + role + (":" + run.label if role == "reviewer" else ""))
     state[role] = {"count": 0, "suspended": False, "at": now_iso()}
     if role == "reviewer":
         state.setdefault("reviewer_units", {})[run.label] = {"count": 0, "suspended": False}
+        state[role]["suspended"] = any(u.get("suspended") for u in state["reviewer_units"].values())
     write_json(path(ctx), state)
+    if role != "reviewer" or not any(unit.get("suspended") for unit in state.get("reviewer_units", {}).values()):
+        incidents.resolve(ctx, "timeout:" + role)
 
 
 def clear(ctx, role):

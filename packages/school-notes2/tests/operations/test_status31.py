@@ -55,7 +55,8 @@ def test_round_snapshot_matches_cli_and_keeps_other_learner_on_corrupt_state(cfg
     assert saved == status_text.snapshot(cfg)
     monkeypatch.setattr(cli.config, "load", lambda _: cfg)
     assert cli.main(["status"]) == 0
-    assert capsys.readouterr().out == saved
+    assert capsys.readouterr().out == saved.split("\n\n", 1)[1]
+    assert saved.splitlines()[0] == f"Készült: {datetime.now(TZ):%Y-%m-%d %H:%M}"
     assert cli._parser().parse_args(["status", "--details"]).details
     ctx = context.make(cfg, "third", console=False)
     task = phase.create(ctx.task_root(), ctx.name, "notes", "cron", "writing")
@@ -71,7 +72,7 @@ def test_error_since_and_responsibility_visible_without_private_content(cfg, mon
     ctx.mailer = recording_mailer(cfg.state_dir, ctx.log, monkeypatch, delivered)
     incidents.record(ctx, "program", "build")
     text = status_text.overview(ctx)
-    assert "Hiba " in text and " óta: programhiba" in text and "a javítás a kontrolleré" in text
+    assert "Hiba " in text and " óta: a futás megállt: programhiba" in text and "a javítás a kontrolleré" in text
     assert "{" not in text and str(cfg.root) not in text
 
 

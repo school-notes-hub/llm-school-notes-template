@@ -54,10 +54,19 @@ hold_locks() {
     # Keep every learner's lock for the whole install: no run sees a half-switched release.
     # Same order as round/chat: VM first, then learners. Hold across the symlink switch.
     mkdir -p "$ROOT/state/operations/vm"
+    # Serialize installers so one cannot remove another installer's pending flag.
+    exec 18>>"$ROOT/state/operations/install.lock"
+    flock 18
+    LOCK_FDS+=(18)
+    touch "$ROOT/state/operations/install-pending"
+    trap 'rm -f "$ROOT/state/operations/install-pending"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
     exec 19>>"$ROOT/state/operations/vm/lock"
     echo "waiting for the VM lock ..."
     flock 19
     LOCK_FDS+=(19)
+    note_holder "$ROOT/state/operations/vm"
     local fd=20
     for learner in $LEARNERS; do
         mkdir -p "$ROOT/state/$learner"
@@ -65,8 +74,23 @@ hold_locks() {
         echo "waiting for the lock of $learner ..."
         flock "$fd"
         LOCK_FDS+=("$fd")
+        note_holder "$ROOT/state/$learner"
         fd=$((fd + 1))
     done
+}
+
+note_holder() {
+    closed python3 - "$1" "$$" <<'PY'
+import json, os, sys
+from datetime import datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
+directory = Path(sys.argv[1])
+temporary = directory / "holder.json.new"
+temporary.write_text(json.dumps({"pid": int(sys.argv[2]), "kind": "install",
+    "since": datetime.now(ZoneInfo("Europe/Budapest")).isoformat()}) + "\n")
+os.replace(temporary, directory / "holder.json")
+PY
 }
 
 unpack() {
@@ -118,4 +142,5 @@ hold_locks
 build_image
 check_open_tasks
 switch_current
+rm -f "$ROOT/state/operations/install-pending"
 echo "installed $TAG"

@@ -37,11 +37,6 @@ def on_error(exc: BaseException, *, task: Task | None, student: str, step: str, 
             _mail(mailer, student, f"{kind}:{step}", None, step, exc)
         return kind
     task.record_error(kind, str(exc))
-    from .operation import CURRENT
-    from ..notify import incidents
-    current = CURRENT.get()
-    if current and kind != "timeout":  # Role timeouts own their cross-run incident.
-        incidents.record(current[0], kind, step, task=task, exc=exc)
 
     if isinstance(exc, WaitingQuota):
         if task.phase != "waiting_quota":
@@ -75,7 +70,7 @@ def on_success(task: Task) -> None:
     from .operation import CURRENT
     from ..notify import incidents
     if CURRENT.get() and task.phase == "done":
-        incidents.resolve(CURRENT.get()[0], "task:" + task.run_id)
+        incidents.completed(CURRENT.get()[0], task)
     if task.data["retries"]:
         task.data["retries"] = 0
         task.save()
@@ -86,6 +81,10 @@ def _stop(task: Task, exc: BaseException, student: str, step: str, mailer: Maile
     todo = getattr(exc, "todo", "") or "see `school-notes status`, then continue or discard"
     reason = f"{why}: {exc}" if why else str(exc)
     task.mark_needs_owner(reason[:500], todo, getattr(exc, "kind", "program"))
+    from .operation import CURRENT
+    from ..notify import incidents
+    if CURRENT.get():
+        incidents.task_error(CURRENT.get()[0], task, step, exc)
     _mail(mailer, student, f"needs_owner:{task.kind}", task, step, exc, reason)
 
 

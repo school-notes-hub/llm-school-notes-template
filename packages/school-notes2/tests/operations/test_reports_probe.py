@@ -178,7 +178,7 @@ def test_report_distinguishes_changed_pages_context_and_historical_findings(worl
     assert len(result["időtúllépések"]) == 1
 
 
-def test_vm_alert_is_once_per_affected_learner(world, monkeypatch):
+def test_vm_alert_is_once_for_all_affected_learners(world, monkeypatch):
     from school_notes2.flows import operation
     ctx, task, _, _ = world
     deliveries = []
@@ -191,12 +191,12 @@ def test_vm_alert_is_once_per_affected_learner(world, monkeypatch):
         for _ in range(2):
             with operation.admission(ctx, "round") as acquired:
                 assert not acquired
-        assert len(deliveries) == len(ctx.cfg.students)
-        assert read_json(ctx.cfg.state_dir / ctx.name / "last-error.json")["class"] == "lock_held"
+        assert len(deliveries) == 1
+        assert read_json(ctx.cfg.state_dir / "VM" / "last-error.json")["class"] == "lock_held"
         with operation.admission(ctx, "round") as acquired:
             assert not acquired
-        assert len(deliveries) == len(ctx.cfg.students)
-        assert read_json(ctx.cfg.state_dir / ctx.name / "last-error.json")["class"] == "lock_held"
+        assert len(deliveries) == 1
+        assert read_json(ctx.cfg.state_dir / "VM" / "last-error.json")["class"] == "lock_held"
     finally:
         lock.release()
 

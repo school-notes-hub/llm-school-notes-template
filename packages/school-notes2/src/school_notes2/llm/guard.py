@@ -19,6 +19,7 @@ def headless(run, invoke):
         if configured and run.role_name not in ("writer", "fix", "reviewer"):
             run = replace(run, role=configured.for_stage(run.role_name), harness=ctx.cfg.harnesses[configured.harness])
         if timeouts.blocked(ctx, run):
+            timeouts.stopped(ctx, run)
             raise TimedOut("A szerep tulajdonosi döntésre vár.", details={"suspended": True})
         quota.check(ctx, run, manual, cache)
     try:

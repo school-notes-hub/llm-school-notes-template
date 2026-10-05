@@ -1,8 +1,10 @@
 """Hourly sequential rounds, in configuration table order."""
 
 from datetime import datetime
+from types import SimpleNamespace
 
-from ..log import TZ
+from ..log import Log, TZ
+from ..notify import Mailer
 from ..state import phase
 from ..state.files import read_json, write_json
 from . import context, nightly, operation, run
@@ -28,18 +30,36 @@ def due(ctx, started, state):
 
 
 def round(cfg):
-    contexts = [context.make(cfg, name) for name in cfg.students]
+    contexts = _contexts(cfg)
     if not contexts:
         return 0
     with operation.admission(contexts[0], "round") as acquired:
         if not acquired:
             return 0
         while True:
+            if (cfg.state_dir / "operations/install-pending").exists():
+                return 0
             started = now()
             _cycle(cfg, contexts, started)
             # Coalesce missed hours into ONE successor, never replay a backlog.
             if int(now().timestamp() // 3600) <= int(started.timestamp() // 3600):
                 return 0
+
+
+def _contexts(cfg):
+    contexts = []
+    for name in cfg.students:
+        try:
+            contexts.append(context.make(cfg, name))
+        except Exception as exc:
+            from . import last_error
+            log = Log(cfg.log_path, student=name)
+            mailer = Mailer(cfg.secrets_dir / "msmtprc", cfg.email_to, cfg.state_dir / "notify.json",
+                            log, cfg.timeouts.msmtp_s)
+            fallback = SimpleNamespace(name=name, cfg=cfg, log=log, mailer=mailer)
+            log.error("round.context", exc)
+            last_error.record(fallback, "round", "program", exc)
+    return contexts
 
 
 def _cycle(cfg, contexts, started):

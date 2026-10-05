@@ -93,16 +93,16 @@ def test_question_conflict_and_timeout_are_private_safe(tmp_path):
     assert "időtúllépés (olvasó-lektor)" in incidents.wording("barna", "timeout", "reader", role="reader")
 
 
-def test_different_error_same_step_is_not_suppressed(tmp_path, log, monkeypatch):
+def test_different_diagnostics_same_situation_are_suppressed(tmp_path, log, monkeypatch):
     ctx = context(tmp_path, log, "barna")
     delivered = []
     ctx.mailer = recording_mailer(ctx.cfg.state_dir, log, monkeypatch, delivered)
     for error in (SnError("first"), SnError("second"), SnError("first")):
         incidents.record(ctx, "program", "run", exc=error)
-    assert len(delivered) == 2
+    assert len(delivered) == 1
 
 
-def test_unresolved_role_failure_has_no_duplicate_success_mail(tmp_path, log, monkeypatch):
+def test_unresolved_role_failure_closes_on_success_with_completion_mail(tmp_path, log, monkeypatch):
     ctx = context(tmp_path, log, "barna")
     delivered = []
     ctx.mailer = recording_mailer(ctx.cfg.state_dir, log, monkeypatch, delivered)
@@ -111,4 +111,6 @@ def test_unresolved_role_failure_has_no_duplicate_success_mail(tmp_path, log, mo
     task.set_phase("done")
     for _ in range(2):
         operational_report.ended(ctx, "run", 0, {task.run_id: True})
-    assert len(delivered) == 1 and "időtúllépés" in delivered[0].get_content()
+    assert len(delivered) == 2 and "időtúllépés" in delivered[0].get_content()
+    assert "kész" in delivered[1].get_content()
+    assert not incidents.active(ctx)

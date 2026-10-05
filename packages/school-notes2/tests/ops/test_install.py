@@ -83,6 +83,10 @@ def test_open_task_check_reads_the_configuration_that_chose_the_locks(tmp_path, 
     assert waits == locked
     assert calls.read_text() == f"--config {used} verify-tasks\n"
     assert (tmp_path / "srv/current").resolve() == release.resolve()
+    assert not (tmp_path / "srv/state/operations/install-pending").exists()
+    import json
+    holder = json.loads((tmp_path / "srv/state/operations/vm/holder.json").read_text())
+    assert holder["kind"] == "install" and holder["since"] and holder["pid"] > 0
 
 
 def test_a_python_without_tomllib_gets_a_plain_message(tmp_path):
@@ -111,12 +115,14 @@ def test_install_waits_for_round_vm_lock_before_taking_learner_locks(tmp_path):
             assert select.select([proc.stdout], [], [], 5)[0]
             assert proc.stdout.readline().strip() == "waiting for the VM lock ..."
             assert proc.poll() is None
+            assert (tmp_path / "srv/state/operations/install-pending").exists()
             assert not (tmp_path / "srv/state/benedek/lock").exists()
             fcntl.flock(lock, fcntl.LOCK_UN)
             stdout, stderr = proc.communicate(timeout=10)
             assert proc.returncode != 0  # No template clone; never contacts a remote.
             assert "waiting for the lock of benedek" in stdout
             assert "waiting for the lock of barna" in stdout
+            assert not (tmp_path / "srv/state/operations/install-pending").exists()
         finally:
             if proc.poll() is None:
                 proc.kill()
