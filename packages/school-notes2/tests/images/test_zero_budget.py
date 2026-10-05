@@ -20,7 +20,7 @@ def test_zero_budget_queues_nothing_and_preserves_attempts(tmp_path, student, at
     page.write_text("<!-- image: tema-banner -->\n")
     settings = ImageSettings(student, repo, tmp_path / "unused.py", tmp_path / "state",
                              tmp_path / "plans", tmp_path / "lock", tmp_path / "key",
-                             Decimal("10"), Decimal("5"), daily_usd=Decimal("0"),
+                             Decimal("10"), Decimal("5"), daily_usd=Decimal("0"), monthly_usd=Decimal("0"),
                              today=lambda: date(2026, 10, 4))
     write_json(settings.plans_dir / "tema-banner.json", {"id": "tema-banner"})
     ledger = {"request_id": settings.request_id, "jobs": {f"{student}-tema-banner": {

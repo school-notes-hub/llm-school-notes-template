@@ -65,14 +65,14 @@ def test_session_review_handoff_real_guard_and_git_finish(world, monkeypatch):
     def reader(repo, view, folder, stage, assigned, configured, **kwargs):
         invoked.append(stage)
         if stage == "reader-1":
-            findings = [{"id": "F-1", "file": page, "quote": "Mit tanultunk ezen az órán",
+            findings = [{"severity": "hiba", "id": "F-1", "file": page, "quote": "Mit tanultunk ezen az órán",
                          "category": "nyelvezet", "problem": "Pontatlan cím", "suggestion": "Pontosítsd",
                          "relates_to": None}] if page in [p["file"] for p in assigned["pages"]] else []
             review = {"pages": [{"file": p["file"], "verdict": "changes" if p["file"] == page else "ok",
                                   "first_glance": "Téma"} for p in assigned["pages"]],
                       "findings": findings, "owner_notes": []}
         else:
-            review = {"items": [{"key": i["key"], "verdict": "ok", "answer": "Rendben"}
+            review = {"items": [{"severity": "hiba", "key": i["key"], "verdict": "ok", "answer": "Rendben"}
                                  for i in assigned["items"]], "hits": [], "owner_notes": []}
         return {"status": "reviewed", "model": "fake/high", "review": review}
     monkeypatch.setattr(calls, "run", reader)

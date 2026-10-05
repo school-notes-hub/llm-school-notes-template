@@ -5,7 +5,7 @@ def test_index_block_on_top_and_hand_text_kept(tmp_path):
     idx = tmp_path / "docs/review/index.md"
     idx.parent.mkdir(parents=True)
     idx.write_text("# Review-állapot\n\nKézzel írt rész.\n", encoding="utf-8")
-    review = {"verdict": "changes", "findings": [{"id": "R1", "file": "w.md", "problem": "x"}]}
+    review = {"verdict": "changes", "findings": [{"severity": "hiba", "id": "R1", "file": "w.md", "problem": "x"}]}
     files.write_review(tmp_path, "2026-10-01", review, "r", "a", "b")
     files.write_review(tmp_path, "2026-10-02", {"verdict": "ok", "findings": []}, "r", "b", "c")
     index.update(tmp_path)

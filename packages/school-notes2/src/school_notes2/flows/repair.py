@@ -127,7 +127,12 @@ def complete(ctx, task):
 
 
 def next_task(ctx):
-    item = queue.next_item(queue.load(ctx.notes_path))
+    from . import set_aside
+    data = queue.load(ctx.notes_path)
+    stopped = set_aside.blocked(ctx)
+    data = {**data, "items": [{**i, "status": "owner"} if "repair:" + i["page"] in stopped else i
+                            for i in data["items"]]}
+    item = queue.next_item(data)
     return start(ctx, topic=item["page"]) if item else None
 
 

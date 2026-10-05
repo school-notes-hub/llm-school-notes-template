@@ -37,6 +37,13 @@ def on_error(exc: BaseException, *, task: Task | None, student: str, step: str, 
             _mail(mailer, student, f"{kind}:{step}", None, step, exc)
         return kind
     task.record_error(kind, str(exc))
+    from .operation import CURRENT
+    current = CURRENT.get()
+    if kind == "program" and task.get("mode") in ("fix", "repair") and not interactive and current:
+        from . import set_aside
+        set_aside.stop(current[0], task)
+        return kind
+
 
     if isinstance(exc, WaitingQuota):
         if task.phase != "waiting_quota":
@@ -89,6 +96,9 @@ def _stop(task: Task, exc: BaseException, student: str, step: str, mailer: Maile
     from .operation import CURRENT
     from ..notify import incidents
     if CURRENT.get():
+        from .set_aside import release
+        task.data["needs_owner"]["release"] = release(CURRENT.get()[0])
+        task.save()
         incidents.task_error(CURRENT.get()[0], task, step, exc)
     _mail(mailer, student, f"needs_owner:{task.kind}", task, step, exc, reason)
 

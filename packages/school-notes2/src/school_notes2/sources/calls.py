@@ -98,3 +98,36 @@ def subject(path: str, embedded=None) -> str:
 
 def ranges(calls: list[dict]) -> list[list[int]]:
     return [[min(c["seqs"]), max(c["seqs"])] if c["seqs"] else [0, 0] for c in calls]
+
+
+def fix_assignments(repo, reviews, pending, limit=30):
+    """Every item once; whole page groups where possible, all figures in call one."""
+    groups = review_groups(reviews, repo=repo)
+    embedded = relations.related_pages(repo)
+    out, chunk, name = [], [], None
+    for page, items in groups.items():
+        own = subject(page, embedded)
+        for first in range(0, len(items), limit):
+            portion = items[first:first + limit]
+            if chunk and (own != name or len(chunk) + len(portion) > limit):
+                out.append(_fix_call(repo, name, chunk))
+                chunk = []
+            name = own
+            chunk += portion
+    if chunk:
+        out.append(_fix_call(repo, name, chunk))
+    if pending:
+        # Figures precede the first page group in the same call, without an extra invocation.
+        if not out:
+            out.append(_fix_call(repo, "", []))
+        out[0]["pending_figure_ids"] = sorted(e["commission"]["id"] for e in pending)
+    return out
+
+
+def _fix_call(repo, name, items):
+    call = {"subject": name, "packages": [], "seqs": [], "open_review_items": items,
+            "pending_images": [], "pending_figure_ids": []}
+    card = cards.load(repo, name) if name else None
+    if card is not None:
+        call["card"] = card
+    return call

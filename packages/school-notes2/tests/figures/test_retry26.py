@@ -39,7 +39,7 @@ def test_lost_last_attempt_escalates_once_without_taking_capacity(repo, make_fig
     for _ in range(2):
         entries = pending.load(repo)
         actual = correction_figures.assignable(ctx, entries, paid_disabled=paid_disabled)
-        assert [e["commission"]["id"] for e in actual] == ([] if paid_disabled else ["next"])
+        assert [e["commission"]["id"] for e in actual] == ["next"]
         correction_figures.persist_owners(ctx, entries)
     stored = pending.load(repo)[0]
     assert stored["owner_required"] and stored["run_ids"] == ["old"]

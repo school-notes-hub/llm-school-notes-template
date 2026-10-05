@@ -36,12 +36,12 @@ def test_unlocated_fix_finding_stays_open(tmp_path, repos, mode, quote):
     unit = task.get("units")[0]
     unit["mode"] = mode
     task.update(topic_results=[{"unit": unit, "receipt": {"status": "reviewed", "review": {
-        "findings": [{"file": "wiki/a.md", "quote": quote, "problem": "Wrong", "relates_to": None}],
+        "findings": [{"severity": "hiba", "file": "wiki/a.md", "quote": quote, "problem": "Wrong", "relates_to": None}],
         "hits": []}}, "input": {"hits": []}}])
     value = topic_result.assemble(task, repos.repo, repos.wt_path)
     path = files.write_review(repos.wt_path, IDENT.date, value, "fake", "a", "b")
     item = relations.inventory(repos.wt_path)["items"][path.relative_to(repos.wt_path).as_posix() + "#R1"]
-    assert item["status"] == "open" and item["chain"] == 1 and item["unlocated"]
+    assert item["status"] == "open" and item["chain"] == (1 if mode == "targeted" else 0) and item["unlocated"]
 
 
 def test_markdown_second_search_retains_blame_line(tmp_path, repos):
@@ -58,7 +58,7 @@ def test_relates_to_chain_cannot_be_lowered(tmp_path, state, inherited):
     safefs.write_text(tmp_path, "wiki/a.md", "# A\n")
     safefs.write_text(tmp_path, "docs/review/old.md", f"---\nitems: {{R1: {state}}}\n"
                       f"item_details: {{R1: {{file: wiki/a.md, chain: {inherited}}}}}\n---\n")
-    value = {"verdict": "changes", "findings": [{"id": "R1", "file": "wiki/a.md", "problem": "Wrong",
+    value = {"verdict": "changes", "findings": [{"severity": "hiba", "id": "R1", "file": "wiki/a.md", "problem": "Wrong",
               "chain": 0, "relates_to": "docs/review/old.md#R1"}]}
     path = files.write_review(tmp_path, IDENT.date, value, "fake", "a", "b")
     item = relations.inventory(tmp_path)["items"][path.relative_to(tmp_path).as_posix() + "#R1"]

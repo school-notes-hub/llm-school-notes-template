@@ -79,7 +79,8 @@ def _closed_tasks(ctx):
     from ..flows import operational_report as report
     from ..state import phase
     for task in phase.all_tasks(ctx.task_root(), ctx.name):
-        if not task.data.get("closed") or not task.get("closure_reason") or task.get("closure_notice_delivered"):
+        closed = task.data.get("closed") and task.get("closure_reason")
+        if not (closed or task.get("set_aside")) or task.get("closure_notice_delivered"):
             continue
         receipt = report.terminal(task)
         mode = "nightly" if task.kind == "review" else task.get("mode", "run")

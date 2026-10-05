@@ -22,7 +22,7 @@ def test_interactive_fetch_prioritizes_owner_over_twenty_one_open_items(learning
     ctx, task = learning_run
     for day, count, owner in [("2026-09-01", 21, False), ("2026-10-04", 1, True)]:
         path = files.write_review(ctx.notes_path, day, {"verdict": "changes", "findings": [
-            {"id": f"R{n}", "file": TOPIC, "problem": "Hiba."} for n in range(1, count + 1)]},
+            {"severity": "hiba", "id": f"R{n}", "file": TOPIC, "problem": "Hiba."} for n in range(1, count + 1)]},
             "r", "a", "b")
         if owner:
             path.write_text(frontmatter.set_keys(path.read_text(), {"items": {"R1": "owner"}}))

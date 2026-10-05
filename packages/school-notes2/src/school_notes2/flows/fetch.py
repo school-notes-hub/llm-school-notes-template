@@ -130,10 +130,10 @@ def prepare(ctx: Ctx, task: Task, *, new_subject_index) -> None:
     steps.record_tool_files(task, ctx.notes_path, written)
     from . import learning
     learning.migrate(ctx, task)
-    reviews = calls.select_reviews(review_files.open_items(ctx.notes_path, task.mode),
-                                   ctx.cfg.limits.review_closures_per_run, mode=task.mode, repo=ctx.notes_path) if task.mode == "interactive" else []
+    available = review_files.open_items(ctx.notes_path, task.mode) if task.mode == "interactive" else []
+    reviews = calls.select_reviews(available, len(available), mode=task.mode, repo=ctx.notes_path)
     assigned = calls.assignments(ctx.notes_path, packages, pages, reviews, found["pending"],
-                                 ctx.cfg.sources.pages_per_call, ctx.cfg.limits.review_closures_per_run,
+                                 ctx.cfg.sources.pages_per_call, len(reviews),
                                  mode=task.mode)
     from ..figures import pending as figure_pending
     from . import correction_figures
@@ -251,6 +251,11 @@ def fetch_json(task: Task, k: int, *, grade: int, whole_run: bool = False, repo=
     data["pending_figures"] = [e for e in task.get("pending_figures", [])
                                if whole_run or not data.get("subject") or
                                e["commission"]["page"].split("/")[1] == data["subject"]]
+    if task.get("calls") and not whole_run:
+        call = task.get("calls")[k - 1]
+        if "pending_figure_ids" in call:
+            data["pending_figures"] = [e for e in task.get("pending_figures", [])
+                                       if e["commission"]["id"] in call["pending_figure_ids"]]
     if task.get("mode") == "repair":
         data.update(mode="repair", repair_targets=task.get("repair_targets", []))
     if task.get("conflict_files"):

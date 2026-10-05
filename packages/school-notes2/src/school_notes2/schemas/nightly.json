@@ -35,7 +35,8 @@
           "file",
           "problem",
           "relates_to",
-          "quote"
+          "quote",
+          "severity"
         ],
         "properties": {
           "id": {
@@ -75,6 +76,12 @@
           "quote": {
             "type": "string",
             "minLength": 1
+          },
+          "severity": {
+            "enum": [
+              "hiba",
+              "javaslat"
+            ]
           }
         }
       }
@@ -114,7 +121,8 @@
         "required": [
           "key",
           "verdict",
-          "answer"
+          "answer",
+          "severity"
         ],
         "properties": {
           "key": {
@@ -136,6 +144,12 @@
             "type": "string",
             "minLength": 1,
             "pattern": "\\S"
+          },
+          "severity": {
+            "enum": [
+              "hiba",
+              "javaslat"
+            ]
           }
         }
       }
@@ -149,7 +163,8 @@
           "hit_id",
           "verdict",
           "covered_by",
-          "reason"
+          "reason",
+          "severity"
         ],
         "properties": {
           "hit_id": {
@@ -174,6 +189,12 @@
             "type": "string",
             "minLength": 1,
             "pattern": "\\S"
+          },
+          "severity": {
+            "enum": [
+              "hiba",
+              "javaslat"
+            ]
           }
         }
       }

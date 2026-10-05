@@ -56,6 +56,12 @@
             "expected": {
               "type": "string",
               "minLength": 1
+            },
+            "severity": {
+              "enum": [
+                "hiba",
+                "javaslat"
+              ]
             }
           }
         }

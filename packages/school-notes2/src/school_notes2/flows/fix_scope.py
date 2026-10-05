@@ -72,12 +72,9 @@ def resume(ctx, task):
         paths = sorted({p for key in TOOL_STATE for p in task.get(key, {})})
         refresh_records(ctx, task, paths)
         task.update(learning_pending=None)
-    outcome = files.apply_closure(ctx.notes_path, task.run_id, [], task.get("open_review_items", []),
-                                  automatic=task.mode == "cron")
-    steps.record_tool_files(task, ctx.notes_path, outcome.written)
     ctx.log.event("fix.scope_rollback", reason=saved["reason"])
     task.set_phase("figures", fix_scope_rolled_back=True, skip_writer=True, pending_figures=[],
-                   scope_owner_items=outcome.new_owner,
+                   scope_owner_items=[],
                    inspection_result={"status": "done"}, correction_rolled_back=True,
                    correction_rollback_reason=saved["reason"])
 

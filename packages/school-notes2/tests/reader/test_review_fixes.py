@@ -87,7 +87,7 @@ def test_context_verdict_is_ignored_but_finding_survives_one_call(setup, monkeyp
     record = next(iter(relations.inventory(ctx.notes_path)["items"].values()))
     assert record["file"] == other and not record["unlocated"] and record["status"] == "open"
     assert record["outside_assignment"]
-    assert correction.assigned(ctx, task) == []
+    assert len(correction.assigned(ctx, task)) == 1
     assert record["quote"] == "Összefoglaló"
     for pages in ([], pass1(page)["pages"] * 2):
         with pytest.raises(ValueError, match="exactly one"):
@@ -108,6 +108,7 @@ def test_pending_contract_checked_in_p1_and_failed_in_p2(setup, monkeypatch, dam
     fetch = {"packages": [], "pages": [], "pending_figures": [entry]}
     assert check_result(ctx.notes_path, {"status": "done"}, fetch, set())
     install_reader(monkeypatch, page)
+    monkeypatch.setattr(correction, "run", lambda ctx, task, *a: task.update(correction_rolled_back=True))
     review_phases.advance(ctx, task, lambda _: None)
     assert task.phase == "finishing" and task.data["needs_owner"] is None
     assert task.get("inspection_figures")[0]["candidate"]["state"] == "failed"

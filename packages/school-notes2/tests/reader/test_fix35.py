@@ -68,7 +68,7 @@ def test_scope_recovery_continues_and_reports(setup, monkeypatch, learner, mode,
             files.apply_closure(ctx.notes_path, task.run_id, result["review_closure"], items)
             task.set_phase("figures", inspection_result=result)
     review_phases.advance(ctx, task, lambda _: None)
-    assert task.phase == "finishing" and calls == [1]
+    assert task.phase == "finishing" and calls == ([1, 1] if invalid else [1])
     assert task.data["llm_failures"] == 0 and not task.data["needs_owner"]
     text = steps._llm_part(safefs.read_text(ctx.notes_path, page))
     assert ("Javított magyarázat." in text) != invalid
@@ -86,7 +86,7 @@ def test_scope_recovery_continues_and_reports(setup, monkeypatch, learner, mode,
     assert any(e["action"] == "fix.scope_restored" and e["pages"] == [NEW, OTHER] for e in events)
     assert not any(e["action"].startswith("notify.") for e in events)
     review_phases.advance(ctx, phase.load(task.dir), lambda _: None)
-    assert calls == [1]
+    assert calls == ([1, 1] if invalid else [1])
 
 
 @pytest.mark.parametrize("boundary", ["journal", "restore", "rollback"])
@@ -166,6 +166,8 @@ def test_cached_fix_result_restores_scope_before_finish_without_llm(setup, monke
     safefs.write_text(ctx.notes_path, NEW, "Nem kiosztott oldal.\n")
     safefs.write_json(task.dir, "result-1.json", {"status": "done"})
     monkeypatch.setattr(writer, "_call", lambda *a: pytest.fail("replayed writer"))
+    # This test isolates cached P1 recovery; P4 retries have separate coverage.
+    monkeypatch.setattr(correction, "run", lambda ctx, task, *a: task.update(correction_rolled_back=True))
     def content(ctx, task):
         assert not safefs.is_file(ctx.notes_path, NEW)
         errors = check_links(ctx.notes_path, page, safefs.read_text(ctx.notes_path, page))

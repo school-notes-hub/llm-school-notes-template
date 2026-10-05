@@ -29,7 +29,7 @@ def test_round_three_students_nightly_first_table_order(cfg, monkeypatch):
     monkeypatch.setattr(scheduler.nightly, "nightly", night)
     monkeypatch.setattr(scheduler.run, "run", lambda c: calls.append(("run", c.name)))
     scheduler.round(cfg)
-    assert calls == [(k, n) for k in ("night", "run") for n in cfg.students]
+    assert calls == [(k, n) for k in ("run", "night") for n in cfg.students]
     calls.clear()
     scheduler.round(cfg)
     assert calls == [("run", n) for n in cfg.students]

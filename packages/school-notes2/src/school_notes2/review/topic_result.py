@@ -53,12 +53,15 @@ def assemble(task, repo, work):
             own = list(value["findings"])
             # Generate list findings without changing the pinned worktree's verdict store.
             by_id = {h["id"]: h for h in entry["input"]["hits"]}
+            advice_ids = {f["id"] for f in own if not (f.get("severity", "hiba") == "hiba")}
             for hit in value["hits"]:
-                if hit["verdict"] == "hiba" and not hit.get("covered_by"):
+                covered = hit.get("covered_by")
+                if hit["verdict"] == "hiba" and (not covered or covered in advice_ids and (hit.get("severity", "hiba") == "hiba")):
                     row = by_id[hit["hit_id"]]
                     lines = topics.text(repo, task.get("H"), row["file"]).splitlines()
                     f = {"file": row["file"], "quote": lines[row["line"] - 1], "problem": hit["reason"],
-                         "category": "forráskötött", "relates_to": None, "hit_id": row["id"]}
+                         "category": "forráskötött", "relates_to": None, "hit_id": row["id"],
+                         "severity": hit.get("severity", "hiba")}
                     own.append(f)
             own += entry.get("figure_findings", [])
             if unit["mode"] == "targeted":

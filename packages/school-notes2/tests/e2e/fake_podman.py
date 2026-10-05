@@ -26,7 +26,7 @@ if out and any("-reader-" in a or "-recheck-" in a for a in args):
         review = {"pages": [{"file": p["file"], "verdict": "ok", "first_glance": ""}
                             for p in assigned["pages"]], "findings": [], "owner_notes": []}
     else:
-        review = {"hits": [{"hit_id": h, "verdict": "téves", "covered_by": None, "reason": "test"}
+        review = {"hits": [{"severity": "hiba", "hit_id": h, "verdict": "téves", "covered_by": None, "reason": "test"}
                            for h in assigned["hits"]], "owner_notes": []}
     Path(out, "review.json").write_text(json.dumps(review))
     sys.exit(0)
@@ -37,7 +37,7 @@ if out:                                   # the reviewer: read-only /work, write
     page = assigned["pages"][0]
     review = {"verdict": "changes", "pages": [{"file": p, "verdict": "changes" if p == page else "ok"}
                                              for p in assigned["pages"]], "findings": [
-        {"id": "R1", "file": page, "quote": "Új bekezdés.", "problem": "Hiányzik egy példa.",
+        {"severity": "hiba", "id": "R1", "file": page, "quote": "Új bekezdés.", "problem": "Hiányzik egy példa.",
          "suggestion": "Adj hozzá egy példát.", "relates_to": None}], "items": [], "hits": [], "owner_notes": []}
     Path(out, "review.json").write_text(json.dumps(review), encoding="utf-8")
     sys.exit(0)

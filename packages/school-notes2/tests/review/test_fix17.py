@@ -103,7 +103,7 @@ def test_export_error_and_reviewer_notes_share_one_section(tmp_path, repos, log,
     def review(run, **kwargs):
         result = good(run)
         result.output["owner_notes"] = ["Lektori észrevétel."]
-        result.output["findings"] = [{"id": "R1", "file": "wiki/a.md", "quote": "Hibás állítás.",
+        result.output["findings"] = [{"severity": "hiba", "id": "R1", "file": "wiki/a.md", "quote": "Hibás állítás.",
                                       "problem": "Javítandó.", "category": "tárgyi",
                                       "relates_to": old_report + "#R1"}]
         result.output["items"][0]["verdict"] = "not-ok"
@@ -140,7 +140,7 @@ def test_nightly_routes_generated_findings_before_blame(tmp_path, repos, origin)
                                   + literal + "\nHibás cím\n<!-- /school-notes:generated -->\n\nÚj próza.\n"})
     task = prepare(tmp_path, repos)
     unit = next(u for u in task.get("units") if u["topic"] == "wiki/index.md")
-    findings = [{"file": "wiki/index.md", "quote": q, "problem": "Hibás.", "relates_to": None}
+    findings = [{"severity": "hiba", "file": "wiki/index.md", "quote": q, "problem": "Hibás.", "relates_to": None}
                 for q in (literal, "Hibás cím")]
     value = {"findings": [], "hits": []}
     entry = {"unit": unit, "receipt": {"status": "reviewed", "review": value}, "input": {"hits": []}}
@@ -148,7 +148,7 @@ def test_nightly_routes_generated_findings_before_blame(tmp_path, repos, origin)
         lines = safefs.read_text(repos.wt_path, "wiki/index.md").splitlines()
         entry["input"]["hits"] = [{"id": str(n), "file": f["file"], "line": lines.index(f["quote"]) + 1}
                                   for n, f in enumerate(findings)]
-        value["hits"] = [{"hit_id": str(n), "verdict": "hiba", "reason": f["problem"]}
+        value["hits"] = [{"severity": "hiba", "hit_id": str(n), "verdict": "hiba", "reason": f["problem"]}
                          for n, f in enumerate(findings)]
     elif origin == "figure_findings":
         entry[origin] = findings

@@ -27,6 +27,10 @@ def check_result(repo: Path, result: dict, fetch: dict, open_items: set[tuple[st
     for s in result.get("new_subjects") or []:
         if s["subject"] not in new:
             out.append(item(RESULT, None, f"new_subjects: {s['subject']!r} is not new in this run"))
+    if fetch.get("mode") == "fix" and result.get("status") == "done":
+        decided = {(c["file"], c["item_id"]) for c in result.get("review_closure", [])}
+        if open_items - decided:
+            out.append(item(RESULT, None, "review_closure: every assigned item needs a decision"))
     out += check_closures(repo, result, open_items, closure_limit)
     out += check_figures(repo, result, fetch, base_content, generated)
     out += check_checks(repo, result, fetch)
@@ -43,8 +47,6 @@ def check_result(repo: Path, result: dict, fetch: dict, open_items: set[tuple[st
 def check_closures(repo, result, open_items, closure_limit):
     out = []
     closures = result.get("review_closure") or []
-    if len([c for c in closures if c["status"] != "open"]) > closure_limit:
-        out.append(item(RESULT, None, f"review_closure: at most {closure_limit} items per run"))
     keys = [(c["file"], c["item_id"]) for c in closures]
     if len(keys) != len(set(keys)):
         out.append(item(RESULT, None, "review_closure: duplicate item keys"))

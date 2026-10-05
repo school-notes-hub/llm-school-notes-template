@@ -16,7 +16,7 @@ from tests.flows.test_subject_calls import data
 
 def review(repo, locations):
     path = files.write_review(repo, "2026-10-04", {"verdict": "changes", "findings": [
-        {"id": f"R{n}", "file": rel, "problem": "Hiba."} for n, rel in enumerate(locations, 1)]},
+        {"severity": "hiba", "id": f"R{n}", "file": rel, "problem": "Hiba."} for n, rel in enumerate(locations, 1)]},
         "r", "a", "b")
     return path.relative_to(repo).as_posix()
 

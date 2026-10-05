@@ -16,7 +16,8 @@
           "hit_id",
           "verdict",
           "covered_by",
-          "reason"
+          "reason",
+          "severity"
         ],
         "properties": {
           "hit_id": {
@@ -41,6 +42,12 @@
             "type": "string",
             "minLength": 1,
             "pattern": "\\S"
+          },
+          "severity": {
+            "enum": [
+              "hiba",
+              "javaslat"
+            ]
           }
         }
       }

@@ -43,7 +43,7 @@ def test_prepare_persists_only_allocated_review_capacity(tmp_path, monkeypatch):
     shared(repo)
     ctx = context(repo, monkeypatch)
     report = files.write_review(repo, "2026-10-04", {"verdict": "changes", "findings": [
-        {"id": f"R{n}", "file": "wiki/statika/topic.md", "problem": "Hiba."}
+        {"severity": "hiba", "id": f"R{n}", "file": "wiki/statika/topic.md", "problem": "Hiba."}
         for n in range(1, 25)]}, "r", "a", "b")
     task = phase.create(tmp_path / "tasks", "barna", "notes", "cron", "moved")
     task.update(selected=[])

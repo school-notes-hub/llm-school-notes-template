@@ -57,7 +57,7 @@ def test_replacement_needs_reason_and_existing_asset(repo, make_figure):
 
 def test_pending_counts_runs_not_resumes_and_restores_full_commission(repo, make_figure):
     brief, _ = make_figure()
-    defects = [{"location": "arrow", "observed": "wrong direction", "expected": "left"}]
+    defects = [{"severity": "hiba", "location": "arrow", "observed": "wrong direction", "expected": "left"}]
     for run in ["1", "1", "2"]:
         pending.record(repo, brief, run, defects)
     assert pending.load(repo)[0]["runs"] == 2

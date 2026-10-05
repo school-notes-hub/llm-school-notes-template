@@ -24,8 +24,8 @@ def test_pending_reservations_then_two_new_commissions_survive_restart(repo, mak
     for fid in ("a", "b", "c"):
         new, _ = make_figure(fid=fid, kind="infographic")
         figures.append({k: new[k] for k in ("id", "page", "kind")})
-    assert infographics.generation_gate(ctx, task, "a")["state"] == "budget-exhausted"
-    assert task.get("infographic_commissions", []) == []
+    assert infographics.generation_gate(ctx, task, "a") is None
+    assert task.get("infographic_commissions", []) == ["a"]
     assert infographics.generation_gate(ctx, task, "waiting") is None
     config.daily_usd = Decimal("1")
     assert infographics.generation_gate(ctx, task, "a") is None
@@ -45,7 +45,7 @@ def test_free_candidate_retrieval_is_not_blocked_by_pending_reservations(repo, m
     task = phase.create(repo.parent / "state", "benedek", "notes", "cron", "writing")
     ctx = SimpleNamespace(notes_path=repo, image_settings=lambda: config)
     assert infographics.generation_gate(ctx, task, "overview") is None
-    assert infographics.generation_gate(ctx, task, "overview", "Javítás")["state"] == "budget-exhausted"
+    assert infographics.generation_gate(ctx, task, "overview", "Javítás") is None
 
 
 def test_figure_verdict_without_key_invalidates_without_keyerror(repo, make_figure):

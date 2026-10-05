@@ -171,7 +171,13 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
     _record_writes(task, repo, whole=[], parts=parts)
     new_pages.record(ctx, task)  # Lesson type is supplied by machine.write_lesson_notes.
     check_changed(ctx, task, result=result)
-    outcome = review_files.apply_closure(repo, task.run_id, result.get("review_closure", []),
+    from . import correction_round
+    run_id = correction_round.identity(task) if task.get("mode") == "fix" else task.run_id
+    # An already applied 2.4.3 closure must not acquire another attempt on resume.
+    if task.get("mode") == "fix" and any(task.run_id in i.get("repair_runs", [])
+            for i in review_files.relations.inventory(repo)["items"].values()):
+        run_id = task.run_id
+    outcome = review_files.apply_closure(repo, run_id, result.get("review_closure", []),
                                          listed, ctx.cfg.limits.owner_after_open,
                                          automatic=task.mode == "cron" and task.get("mode") == "fix")
     evidence = records.append(repo, records.from_writer(result.get("checks", [])),

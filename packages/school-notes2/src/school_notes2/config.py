@@ -80,7 +80,7 @@ class Sources:
 @dataclass(frozen=True)
 class Limits:
     max_agents: int = 3
-    fix_runs_per_day: int = 6
+    fix_runs_per_day: int = 6  # Legacy configuration; no longer a scheduling limit.
 
     def __post_init__(self):
         if type(self.fix_runs_per_day) is not int or self.fix_runs_per_day < 1:
@@ -88,14 +88,14 @@ class Limits:
         if type(self.max_agents) is not int or self.max_agents < 1:
             raise ConfigError("[limits] max_agents must be a positive integer")
 
-    image_daily_usd: float = 1.0
+    image_daily_usd: float = 1.0  # Legacy input; only the monthly budget applies.
     image_monthly_usd: float = 10.0
     image_reservation_usd: float = 0.05
     image_year_total_usd: float = 120.0     # safety cap: twelve monthly caps
     image_year_learner_usd: float = 120.0
     min_free_gb: float = 5.0
     chat_lock_alert_h: float = 12.0
-    review_closures_per_run: int = 30
+    review_closures_per_run: int = 30  # Legacy configuration; no closure cap.
     owner_after_open: int = 5
     mcp_wait_s: int = 50
 

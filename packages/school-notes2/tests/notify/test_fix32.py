@@ -68,8 +68,8 @@ def test_status_separates_owner_items_from_automatic_queue(tmp_path, log):
     ctx.notes_path.mkdir(parents=True, exist_ok=True)
     ctx.lock = lambda: StudentLock(ctx.cfg.state_dir, "barna")
     files.write_review(ctx.notes_path, "2026-10-05", {"verdict": "changes", "findings": [
-        {"id": "R1", "file": "wiki/a.md", "problem": "Hiba.", "chain": 1},
-        {"id": "R2", "file": "wiki/a.md", "problem": "Döntés.", "category": "forrásellentmondás"},
+        {"severity": "hiba", "id": "R1", "file": "wiki/a.md", "problem": "Hiba.", "chain": 1},
+        {"severity": "hiba", "id": "R2", "file": "wiki/a.md", "problem": "Döntés.", "category": "forrásellentmondás"},
     ]}, "r", "a", "b")
     data = status_text.collect(ctx, datetime.fromisoformat("2026-10-05T10:00:00+02:00"))
     assert data["items"] == data["owner_items"] == 1

@@ -106,4 +106,7 @@ def generate(ctx, task, plan_id, note):
     blocked = infographics.generation_gate(ctx, task, plan_id, note)
     if blocked:
         return blocked
-    return image_generate.generate(ctx.image_settings(), plan_id, note, log=ctx.log)
+    result = image_generate.generate(ctx.image_settings(), plan_id, note, log=ctx.log)
+    from . import image_notices
+    image_notices.threshold(ctx)
+    return result

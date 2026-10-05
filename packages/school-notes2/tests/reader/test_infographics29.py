@@ -121,5 +121,6 @@ def test_five_daily_ten_monthly_budget_blocks_without_an_attempt(tmp_path, learn
     path = settings.state_dir / "ledger.json"
     write_json(path, ledger)
     before = path.read_bytes()
-    assert generate._blocked(settings, f"{learner}-overview")["state"] == "budget-exhausted"
+    blocked = generate._blocked(settings, f"{learner}-overview")
+    assert blocked is None if exhausted == "daily" else blocked["state"] == "budget-exhausted"
     assert path.read_bytes() == before

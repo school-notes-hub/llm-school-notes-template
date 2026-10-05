@@ -12,7 +12,7 @@ from .test_review_fixes import figure
 def test_preview_quote_belongs_to_figure_and_has_no_section_notice(setup):
     ctx, task, page = setup
     brief, _ = figure(ctx, task, page)
-    f = {"file": page, "quote": "![Ábra](<../assets/reader-preview/f.png>)", "problem": "Hibás irány"}
+    f = {"severity": "hiba", "file": page, "quote": "![Ábra](<../assets/reader-preview/f.png>)", "problem": "Hibás irány"}
     mapped = report.figure_quote(ctx.notes_path, f)
     assert mapped["figure_id"] == "f" and not report.locate(ctx.notes_path, mapped)["unlocated"]
     text = safefs.read_text(ctx.notes_path, page)
@@ -21,7 +21,7 @@ def test_preview_quote_belongs_to_figure_and_has_no_section_notice(setup):
 
 def test_target_scope_only_changed_lines():
     old, new = "Untouched.\nBad.\n", "Untouched.\nFixed.\n"
-    findings = [{"file": "p", "quote": quote, "problem": quote} for quote in ["Untouched.", "Fixed.", "Missing."]]
+    findings = [{"severity": "hiba", "file": "p", "quote": quote, "problem": quote} for quote in ["Untouched.", "Fixed.", "Missing."]]
     kept, notes = scope.partition(findings, lambda _: old, lambda _: new, ["p"])
     assert [f["quote"] for f in kept] == ["Fixed.", "Missing."] and len(notes) == 1
     assert kept[1]["unlocated"]
@@ -58,7 +58,7 @@ def test_fix_p3_calls_only_recheck_and_resumes_without_second_review(setup, monk
     if changed:
         safefs.write_text(ctx.notes_path, page, text.replace("A test lefelé gyorsul.", "A test a gravitáció miatt gyorsul."))
     path = files.write_review(ctx.notes_path, "2026-10-04", {"verdict": "changes", "findings": [
-        {"id": "R1", "file": page, "quote": "A test lefelé gyorsul.", "problem": "Miért?", "relates_to": None}]},
+        {"severity": "hiba", "id": "R1", "file": page, "quote": "A test lefelé gyorsul.", "problem": "Miért?", "relates_to": None}]},
         "fake", "a", "b").relative_to(ctx.notes_path).as_posix()
     closure = {"file": path, "item_id": "R1", "status": "fixed"}
     files.apply_closure(ctx.notes_path, task.run_id, [closure], [])
@@ -71,7 +71,7 @@ def test_fix_p3_calls_only_recheck_and_resumes_without_second_review(setup, monk
         assert all(p["text"] == "" and p["items"] == {} for p in pages)
         assert ("gravitáció" in str(pages[0]["changed_lines"])) == changed
         return {"status": "reviewed", "model": "fake/high", "review": {"items": [
-            {"key": path + "#R1", "verdict": "ok", "answer": "Megmagyarázza."}], "hits": [], "owner_notes": []}}
+            {"severity": "hiba", "key": path + "#R1", "verdict": "ok", "answer": "Megmagyarázza."}], "hits": [], "owner_notes": []}}
     monkeypatch.setattr(calls, "run", review)
     inspection.prepare(ctx, task)
     original = inspection._apply
@@ -137,8 +137,8 @@ def test_p4_does_not_count_unassigned_tool_failure_on_resume(setup, monkeypatch)
 
 def test_recheck_optional_findings_contract():
     from school_notes2.reader import contracts
-    finding = {"id": "F-1", "file": "/work/m/a.md", "quote": "Text", "category": "olvasói lyuk",
-               "problem": "Missing", "suggestion": "Explain", "relates_to": "decision"}
+    finding = {"severity": "hiba", "id": "F-1", "file": "/work/m/a.md", "quote": "Text", "category": "olvasói lyuk",
+               "problem": "Missing", "suggestion": "Explain", "relates_to": "decision", "item_key": None}
     value = {"items": [], "hits": [], "owner_notes": [], "findings": [finding]}
     assigned = {"items": [], "hits": []}
     known = {"pages": {"wiki/m/a.md": {"decisions": ["decision"]}}}

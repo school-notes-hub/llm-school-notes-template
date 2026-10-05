@@ -32,8 +32,10 @@ def summary(ctx: Ctx) -> dict:
     if round_state.get("status") == "running" and (not vm_state["held"] or vm_state.get("kind") != "round"):
         round_state["status"] = "interrupted"
     tasks = phase.all_tasks(ctx.task_root(), ctx.name)
+    from .work_pending import completion
     return {
         "learner": ctx.name,
+        "completion": completion(ctx, tasks=tasks, held=not ctx.lock().probe()),
         "incidents": incidents.active(ctx),
         "last_error": read_json(ctx.cfg.state_dir / ctx.name / "last-error.json"),
         "browser_warnings": [{"run_id": t.run_id, **i} for t in tasks for i in t.get("browser_warnings", [])],
@@ -174,7 +176,7 @@ def _pack_mb(bare: Path) -> float:
 
 def render(data: dict) -> str:
     """The console form of `summary`."""
-    lines = [f"== {data['learner']}"]
+    lines = [f"== {data['learner']}"] + data.get("completion", [])
     for key, label in (("vm_lock", "VM-zár"), ("round", "kör"), ("quota", "heti keret"), ("timeouts", "T-125"), ("figure_requests", "licenckérelmek"),
                        ("approved_figure_requests", "engedélyezve, beillesztésre vár"),
                        ("license_error", "licencadat javítandó"), ("nightly_state", "éjszakai témakörök")):
@@ -207,7 +209,7 @@ def render(data: dict) -> str:
     img = data["images"]
     lines.append(f"képek: függő {len(img.get('pending', []))}, elakadt {len(img.get('exhausted', []))}, "
                  f"ismeretlen kimenet {'igen' if img.get('waiting_unknown') else 'nem'}, "
-                 f"napi keret {'van' if img.get('budget_left') else 'elfogyott'}")
+                 f"havi keret {'van' if img.get('budget_left') else 'elfogyott'}")
     r = data["review_items"]
     lines.append(f"review-tételek: nyitott {r['open']}, tulajdonosra vár {r['owner']}; "
                  f"utolsó review: {data['last_review'] or '-'}")

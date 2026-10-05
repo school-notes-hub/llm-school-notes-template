@@ -72,7 +72,7 @@ Infografika-döntés a meglévő témaoldalakon: a `fetch.json.infographic_pages
 
 Függő ábrák
 
-A `fetch.json.pending_figures` kiosztott munka, a review-tételek 20–30-as keretén kívül. Mindegyikhez a `defects[]` alapján új jelölt vagy indokolt `failed` kell ebben a futásban a `.school-notes/figures/<id>/figure.json` fájlban; a korábbi jelölt nem új próba. A banner és az infografika generált úton készül. A napi képkeret miatt ki nem osztott függő ábrát a tool későbbre hagyja; ez nem fogyaszt próbát.
+A `fetch.json.pending_figures` kiosztott munka, a review-tételek mellett, elsőként elvégzendő. Mindegyikhez a `defects[]` alapján új jelölt vagy indokolt `failed` kell ebben a futásban a `.school-notes/figures/<id>/figure.json` fájlban; a korábbi jelölt nem új próba. A banner és az infografika generált úton készül. A képkeret továbbra is érvényes; ha elfogyott, indokolt failed eredményt adj, ez nem fogyaszt generálási próbát.
 
 Tilos a látható szövegben
 
@@ -111,3 +111,12 @@ A `.school-notes/result.json` a futás szerződése: `status: done | question`, 
 Ha `truncated`, a teljes lista a `check.json`-ban van.
 
 A `fetch.json` `approved_figure_requests` listája az engedélyezett, beillesztésre váró kérelmeket adja. Az érintett oldalon készíts a kérelem azonosítójával normál ábramegbízást és jelöltet; a kérelem jelölője maradjon az ábraellenőrzésig.
+
+A javító futás a teljes kiosztható hibalistát feldolgozza, egymás utáni, oldalcsoportonként legfeljebb 30 tételes hívásokban. Minden most kiosztott tételről adj lezárási döntést; nincs futásonkénti lezárási plafon. Az összes függő ábra az első hívás feladata, ezekkel kezdj. A meglévő hátralék minden kiosztott tétele javítandó, a stílusjellegű is.
+
+
+Rossz: „⚠️ 🤖 gépi javítás: az erő nem sebesség.” Jó: „⚠️ 🤖 gépi javítás: az erő a testek kölcsönhatását jellemzi.” A helyes állítást tanítsd, a hibás forrásalak privát lábjegyzetbe kerül.
+Rossz: „Javítsd a füzetedben!” önmagában vagy bekezdésenként. Jó: a nyitott kérdések között egy összevont tétel: „Javítsd a füzetedben is: 1 kg = 1000 g.” Csak igazolt füzethibánál.
+Rossz pipeline-lábjegyzet: „A P3 ellenőrizte, a rendszer feldolgozta.” Jó: csak a tárgyi állítás forráshelyét vagy bizonyítékát tartalmazó privát lábjegyzet; munkafolyamat-magyarázat nem kerül a jegyzetbe.
+Rossz kvízfejléc: „Kérdések a feltöltött anyagról”. Jó: „🧠 Kérdezd ki magad”, a tananyagról szóló kérdésekkel.
+Rossz bannersablon: „Novella” címhez hegedű és cirkusz egyetlen olvasmányból. Jó: a műfajt mutató kép vagy semleges fejléc „Novella” felirattal; a témához tervezz képet.

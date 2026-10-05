@@ -1,6 +1,7 @@
 """Targeted nightly input and results enforce the repair boundary."""
 
 from school_notes2.review import topic_input, topic_result
+from school_notes2.reader import units
 from school_notes2.state import safefs
 from .test_topics import prepare, FIX
 from .conftest import sh
@@ -12,13 +13,15 @@ def test_targeted_input_and_outside_finding(tmp_path, repos):
     sh("git", "push", "-q", "origin", "HEAD:claude-reviewed", cwd=repos.laptop)
     repos.commit({page: "# A\n\nUntouched.\n\nFixed.\n"}, FIX)
     task = prepare(tmp_path, repos)
-    unit = task.get("units")[0]
+    assert task.get("units") == []
+    unit = {**units.collect(repos.wt_path, [page])[0],
+            "base": task.get("base"), "mode": "targeted", "commits": [], "assigned_pages": [page]}
     folder = task.dir / "input"
     assigned = topic_input.prepare(repos.repo, repos.wt_path, task, unit, folder)
     value = safefs.read_json(folder, "input.json")
     assert value["mode"] == "targeted" and not value["pages"] and not value["sources"]
     assert value["changed_lines"][page] == [{"line": 5, "text": "Fixed."}]
-    findings = [{"file": page, "quote": quote, "problem": "Wrong", "relates_to": None}
+    findings = [{"severity": "hiba", "file": page, "quote": quote, "problem": "Wrong", "relates_to": None}
                 for quote in ["Untouched.", "Fixed."]]
     task.update(topic_results=[{"unit": unit, "input": assigned, "receipt": {
         "status": "reviewed", "review": {"findings": findings, "hits": []}}}])
@@ -37,7 +40,9 @@ def test_targeted_figures_skip_unchanged_embeddings(tmp_path, repos):
     sh("git", "push", "-q", "origin", "HEAD:claude-reviewed", cwd=repos.laptop)
     repos.commit({page: text.replace("Bad.", "Fixed.")}, FIX)
     task = prepare(tmp_path, repos)
-    unit = task.get("units")[0]
+    assert task.get("units") == []
+    unit = {**units.collect(repos.wt_path, [page])[0],
+            "base": task.get("base"), "mode": "targeted", "commits": [], "assigned_pages": [page]}
     assert night_figures.targeted(repos.repo, repos.wt_path, unit, []) == []
     assert len(night_figures.targeted(repos.repo, repos.wt_path, unit, [{"file": asset}])) == 1
     safefs.write_bytes(repos.wt_path, asset, b"new")
@@ -51,9 +56,9 @@ def test_migration_uses_real_git_history(repos, git_factory):
              "purpose": "A", "must_show": [], "avoid_misreading": "A", "taught_conventions": [],
              "text_complete_without_figure": True}
     entry = {"commission": brief, "status": "pending", "runs": 2, "run_ids": ["a", "b"],
-             "owner_required": False, "defects": [{"location": "text", "observed": "small", "expected": "large"}]}
+             "owner_required": False, "defects": [{"severity": "hiba", "location": "text", "observed": "small", "expected": "large"}]}
     repos.commit({pending.PATH: json.dumps([entry]), "wiki/a.md": "<!-- figure: header -->\n# A\n"})
-    entry["defects"] = [{"location": "header", "observed": "nem készült új jelölt", "expected": "new"}]
+    entry["defects"] = [{"severity": "hiba", "location": "header", "observed": "nem készült új jelölt", "expected": "new"}]
     repos.commit({pending.PATH: json.dumps([entry])})
     migrate_pending.migrate(repos.laptop, state_dir=repos.laptop.parent / "state",
                             repo=git_factory(repos.laptop / ".git", repos.laptop))

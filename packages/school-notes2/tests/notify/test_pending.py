@@ -38,7 +38,7 @@ def test_finish_only_retries_completion_not_owner_item(tmp_path, log, monkeypatc
     task = phase.create(tmp_path, learner, "notes", "cron", "finishing")
     task.update(ranges=[[0, 0]])
     rel = files.write_review(ctx.notes_path, "2026-10-04", {"verdict": "changes", "findings": [
-        {"id": "R1", "file": "wiki/a/topic.md", "problem": "Hiba."}]}, "r", "a", "b")
+        {"severity": "hiba", "id": "R1", "file": "wiki/a/topic.md", "problem": "Hiba."}]}, "r", "a", "b")
     listed = files.open_items(ctx.notes_path, "cron")
     for n in range(4):
         files.apply_closure(ctx.notes_path, f"old-{n}", [], listed)

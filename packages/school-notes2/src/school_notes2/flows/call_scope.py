@@ -12,6 +12,27 @@ def subjects(ctx, items):
     return {i["file"]: calls.subject(i["file"], embedded) for i in items}
 
 
+def fix_pages(ctx, task):
+    """Route same-subject page groups and first-call figures to their own call."""
+    if task.get("mode") != "fix":
+        return {}
+    known = relations.inventory(ctx.notes_path)["items"]
+    pending = {e["commission"]["id"]: e["commission"]["page"] for e in task.get("pending_figures", [])}
+    related, assigned = relations.related_pages(ctx.notes_path), {}
+    for k, call in enumerate(task.get("calls", []), 1):
+        pages = [pending[fid] for fid in call.get("pending_figure_ids", []) if fid in pending]
+        pages += [known.get(i["file"] + "#" + i["item_id"], {}).get("file", "")
+                  for i in call.get("open_review_items", [])]
+        for page in sorted(set(pages) - {""}):
+            for path in sorted({page} | set(related.get(page, []))):
+                assigned.setdefault(path, set()).add(k)
+    for asset, pages in sorted(related.items()):
+        owners = {k for p in pages for k in assigned.get(p, [])}
+        if owners:
+            assigned.setdefault(asset, set()).update(owners)
+    return {p: sorted(owners) for p, owners in sorted(assigned.items())}
+
+
 def current(ctx, task, items, k=None):
     assigned = task.get("calls", [])
     if not assigned or (task.mode == "interactive" and task.get("mode") != "repair"):
@@ -20,8 +41,10 @@ def current(ctx, task, items, k=None):
     name = assigned[min(k, len(assigned)) - 1]["subject"]
     known = {c["subject"] for c in assigned}
     located = subjects(ctx, items)
+    pages = fix_pages(ctx, task)
     # Unlocated invocation errors (e.g. its result.json) still belong to this call.
-    return [i for i in items if located[i["file"]] == name or located[i["file"]] not in known]
+    return [i for i in items if (k in pages[i["file"]] if i["file"] in pages else
+                                 located[i["file"]] == name or located[i["file"]] not in known)]
 
 
 def retry(ctx, task, items):
@@ -32,14 +55,15 @@ def retry(ctx, task, items):
         groups = {str(len(task.get("ranges"))): items}
     else:
         located, groups, unassigned = subjects(ctx, items), {}, []
+        pages = fix_pages(ctx, task)
         for item in items:
             name = located[item["file"]]
-            k = next((n for n, c in enumerate(assigned, 1) if name and c["subject"] == name), None)
+            k = next(iter(pages.get(item["file"], [])), None) or next((n for n, c in enumerate(assigned, 1) if name and c["subject"] == name), None)
             if item["file"] == ".school-notes/result.json" or (not name and item["file"].startswith("wiki/")):
                 k = 1  # Same fallback as the original subjectless/asset assignment.
             if k is None and item.get("kind") == "browser-link":
                 target_subject = calls.subject(item.get("target", ""))
-                k = next((n for n, c in enumerate(assigned, 1) if c["subject"] == target_subject), None)
+                k = next(iter(pages.get(item.get("target"), [])), None) or next((n for n, c in enumerate(assigned, 1) if c["subject"] == target_subject), None)
             if k is None:
                 unassigned.append(item)
             else:

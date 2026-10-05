@@ -73,6 +73,9 @@ def check_recheck(value, assigned, known, allowed_paths):
             raise ValueError("decision-related finding requires new_evidence")
     exact(value["items"], [i["key"] for i in assigned["items"]], "key")
     states = {i["key"]: i["status"] for i in assigned["items"]}
+    for finding in value.get("findings", []) + value["hits"]:
+        if finding.get("item_key") is not None and finding["item_key"] not in states:
+            raise ValueError("item_key must name an item corrected in this round")
     for item in value["items"]:
         allowed = ("ok", "not-ok") if states[item["key"]] == "fixed" else ("accept", "keep")
         if item["verdict"] not in allowed:

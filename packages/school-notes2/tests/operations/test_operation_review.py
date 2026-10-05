@@ -129,8 +129,8 @@ def test_first_learner_exception_does_not_starve_others(cfg, monkeypatch, failur
     scheduler.round(cfg)
     scheduler.round(cfg)
     assert [(k, n) for k, n in calls if n != "third"][:4] == [
-        (k, n) for k in ("nightly", "run") for n in ("first", "second")]
-    assert len(delivered) == (2 if failure in ("before", "action") else 1)
+        (k, n) for k in ("run", "nightly") for n in ("first", "second")]
+    assert len(delivered) == 1
     assert read_json(cfg.state_dir / failing / "last-error.json")["class"] in ("program", "round_step", "report_failed")
     if failure in ("due", "before", "action"):
         assert "third" not in read_json(cfg.state_dir / "round.json")["nightly_started"]

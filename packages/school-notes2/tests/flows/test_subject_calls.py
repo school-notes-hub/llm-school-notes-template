@@ -54,7 +54,7 @@ def test_pending_images_and_review_items_are_subject_scoped(tmp_path):
     from school_notes2.review import files
     packages, pages = data(tmp_path)
     path = files.write_review(tmp_path, "2026-10-04", {"verdict": "changes", "findings": [
-        {"id": "R1", "file": "wiki/b/topic.md", "problem": "Hiba."}]}, "r", "a", "b")
+        {"severity": "hiba", "id": "R1", "file": "wiki/b/topic.md", "problem": "Hiba."}]}, "r", "a", "b")
     reviews = [{"file": path.relative_to(tmp_path).as_posix(), "item_id": "R1"}]
     pending = [{"plan_id": "diagram", "page": "wiki/a/topic.md"}]
     assigned = calls.assignments(tmp_path, packages, pages, reviews, pending)

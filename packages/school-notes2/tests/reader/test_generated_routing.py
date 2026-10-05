@@ -101,8 +101,8 @@ def test_recheck_routed_value_cannot_upgrade_original_page(setup):
     task.update(inspection_report=path, reader_pages=[{"file": page}])
     saved = {"receipts": {}, "units": [{"status": "reviewed", "model": "model", "hits": [hit],
              "items": [{"key": path + "#R1", "file": page}], "review": {
-                 "items": [{"key": path + "#R1", "verdict": "ok", "answer": "Javítva."}],
-                 "hits": [{"hit_id": "H1", "verdict": "hiba", "reason": "Címhiba."}], "owner_notes": []}}]}
+                 "items": [{"severity": "hiba", "key": path + "#R1", "verdict": "ok", "answer": "Javítva."}],
+                 "hits": [{"severity": "hiba", "hit_id": "H1", "verdict": "hiba", "reason": "Címhiba."}], "owner_notes": []}}]}
     recheck.apply(ctx, task, saved)
     assert verdicts.valid(repo, page)["verdict"] == "changes"
     item = relations.inventory(repo)["items"][path + "#R2"]

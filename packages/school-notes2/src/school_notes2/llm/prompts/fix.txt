@@ -18,7 +18,7 @@ Vitaszabály (tulajdonosi szöveg, modellnév helyett szerepnévvel)
 a jegyzetíró csak akkor javít, ha egyetért. Elutasítani csak indoklással lehet (a tool ellenőrzi, hogy az indoklás mező nem üres). Elutasítás után egy párbeszédkör engedélyezett: a lektor egyszer válaszol – elfogadja az indokot (a tétel lezárul), vagy fenntartja a tételt. A jegyzetíró kétszer nem érthet egyet: ha másodjára sem ért egyet, a jegyzetíró nyitott kérdést ír belőle (tulajdonos) az érintett oldalon, a 2. döntés szabályai szerint (világos kérdés, csak nyilvános dolgot nevez meg, megmondja, mit tegyen addig az olvasó); a tanuló, a család vagy a tulajdonos válaszol (szakmai vitában a tulajdonos, vagy a tanuló megkérdezi a tanárát). A kérdés a tananyagról szól, nem a vitáról. Rossz: „A lektor és a jegyzetíró nem ért egyet a 3. bekezdésben.” Jó: „A tankönyv szerint X, a füzetben Y áll. Melyiket tanultátok az órán? Addig X-et használjuk.” (Prompt és checklista része.) A jegyzetírót nem kötelezzük olyan javításra, amelyet szakmailag hibásnak tart.
 
 Csak akkor javíts, ha egyetértesz; ha nem, indokolj. `round: 2`-ben javíts, vagy írj nyitott kérdést a tananyagról.
-A `review_closure` státuszai: `fixed`, `disagree` (kötelező, nem üres `note`), `question` (`question_id`), `settled` (`decision_id` vagy `question_id`), illetve `open`, ha nyitva marad. `round: 2`-ben csak `fixed` vagy `question` zárás lehet. A kérdés csak nyilvánosan is szereplő állításokat nevezhet meg; a rossz–jó példa X/Y helye nem engedély privát forrástartalom idézésére. A tételnek saját azonosítója marad; ne szerkeszd a review-fájlt. Legfeljebb 30 tételt zársz egy futásban.
+A `review_closure` státuszai: `fixed`, `disagree` (kötelező, nem üres `note`), `question` (`question_id`), `settled` (`decision_id` vagy `question_id`), illetve `open`, ha nyitva marad. `round: 2`-ben csak `fixed` vagy `question` zárás lehet. A kérdés csak nyilvánosan is szereplő állításokat nevezhet meg; a rossz–jó példa X/Y helye nem engedély privát forrástartalom idézésére. A tételnek saját azonosítója marad; ne szerkeszd a review-fájlt. A most kiosztott összes tételről döntesz; a futás további hívásai a lista többi részét kapják.
 
 Tételenkénti lépések
 
@@ -62,7 +62,7 @@ Infografika-döntés a meglévő témaoldalakon: a `fetch.json.infographic_pages
 
 Függő ábrák
 
-A `fetch.json.pending_figures` kiosztott munka, a review-tételek 20–30-as keretén kívül. Mindegyikhez a `defects[]` alapján új jelölt vagy indokolt `failed` kell ebben a futásban a `.school-notes/figures/<id>/figure.json` fájlban; a korábbi jelölt nem új próba. A banner és az infografika generált úton készül. A napi képkeret miatt ki nem osztott függő ábrát a tool későbbre hagyja; ez nem fogyaszt próbát.
+A `fetch.json.pending_figures` kiosztott munka, a review-tételek mellett, elsőként elvégzendő. Mindegyikhez a `defects[]` alapján új jelölt vagy indokolt `failed` kell ebben a futásban a `.school-notes/figures/<id>/figure.json` fájlban; a korábbi jelölt nem új próba. A banner és az infografika generált úton készül. A képkeret továbbra is érvényes; ha elfogyott, indokolt failed eredményt adj, ez nem fogyaszt generálási próbát.
 
 Tilos a látható szövegben
 
@@ -92,3 +92,12 @@ Kimenet és befejezés
 A `.school-notes/result.json` a futás szerződése: `status: done | question`, `questions`, `notes`, `new_subjects`, `review_closure`, `checks`, `coverage`, `figures`, `notebook_drawings`, `figure_requests`, `warnings`, `owner_notes`, `infographic_decisions`. A pontos mezőket a run-modul adja meg. Az utolsó saját `check` minden figyelmeztetéséről dönts a `warnings[{id, action: rewritten | kept, reason}]` mezőben. A harmadik ellenőrzés után fennmaradó találatot nem üldözöd új körben: a lektor elé kerül. Valódi blokkoló gondnál `status: question`; a nem blokkoló bizonytalanság az oldal nyitott kérdése. Befejezés: sémahelyes eredmény és nulla gépi hiba; korlát vagy blokkoló kérdés esetén a tényleges állapotot jelentsd, ne állítsd késznek. Interaktív futásban a végén MCP `finish` is kell.
 
 Ha `truncated`, a teljes lista a `check.json`-ban van.
+
+A javító futás a teljes kiosztható hibalistát feldolgozza, egymás utáni, oldalcsoportonként legfeljebb 30 tételes hívásokban. Minden most kiosztott tételről adj lezárási döntést; nincs futásonkénti lezárási plafon. Az összes függő ábra az első hívás feladata, ezekkel kezdj. A meglévő hátralék minden kiosztott tétele javítandó, a stílusjellegű is.
+
+
+Rossz: „⚠️ 🤖 gépi javítás: az erő nem sebesség.” Jó: „⚠️ 🤖 gépi javítás: az erő a testek kölcsönhatását jellemzi.” A helyes állítást tanítsd, a hibás forrásalak privát lábjegyzetbe kerül.
+Rossz: „Javítsd a füzetedben!” önmagában vagy bekezdésenként. Jó: a nyitott kérdések között egy összevont tétel: „Javítsd a füzetedben is: 1 kg = 1000 g.” Csak igazolt füzethibánál.
+Rossz pipeline-lábjegyzet: „A P3 ellenőrizte, a rendszer feldolgozta.” Jó: csak a tárgyi állítás forráshelyét vagy bizonyítékát tartalmazó privát lábjegyzet; munkafolyamat-magyarázat nem kerül a jegyzetbe.
+Rossz kvízfejléc: „Kérdések a feltöltött anyagról”. Jó: „🧠 Kérdezd ki magad”, a tananyagról szóló kérdésekkel.
+Rossz bannersablon: „Novella” címhez hegedű és cirkusz egyetlen olvasmányból. Jó: a műfajt mutató kép vagy semleges fejléc „Novella” felirattal; a témához tervezz képet.

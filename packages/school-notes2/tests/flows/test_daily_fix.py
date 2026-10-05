@@ -23,7 +23,7 @@ def test_daily_fix_prepare_crash_and_subject_assignments(tmp_path, log, monkeypa
     ctx.cfg.timeouts = SimpleNamespace(fetch_s=1)
     monkeypatch.setattr(fix.repos, "fetch", lambda *a: None)
     files.write_review(ctx.notes_path, "2026-10-04", {"verdict": "changes", "findings": [
-        {"id": "R1", "file": page, "problem": "Hiba.", "relates_to": None}]}, "fake", "a", "b")
+        {"severity": "hiba", "id": "R1", "file": page, "problem": "Hiba.", "relates_to": None}]}, "fake", "a", "b")
     task = fix.next_task(ctx)
     assert task.get("mode") == "fix"
     original = task.set_phase
@@ -52,17 +52,18 @@ def test_priority_is_new_packages_then_fix_then_repair(monkeypatch):
     assert run._new_task(ctx) == "new-task" and seen == ["fix"]
 
 
-def test_fix_inspection_goes_directly_to_finalization(tmp_path, monkeypatch):
+def test_fix_inspection_enters_correction_loop(tmp_path, monkeypatch):
     task = phase.create(tmp_path, "one", "notes", "cron", "figures")
     task.update(mode="fix")
     seen = []
     monkeypatch.setattr(review_phases.inspection, "prepare", lambda *a: seen.append("figures"))
     monkeypatch.setattr(review_phases.inspection, "inspect", lambda *a: seen.append("inspect"))
     monkeypatch.setattr(review_phases.correction, "all_items", lambda *a: ["finding"])
+    monkeypatch.setattr(review_phases.correction, "run", lambda ctx, task, *a: (seen.append("correct"), task.update(correction_rolled_back=True)) and None)
     monkeypatch.setattr(review_phases, "finalize", lambda *a: seen.append("finalize"))
     monkeypatch.setattr(review_phases.relations, "inventory", lambda *a: {"items": {}})
     review_phases.advance(SimpleNamespace(notes_path=tmp_path), task, lambda *a: None)
-    assert task.phase == "finishing" and seen == ["figures", "inspect", "finalize"]
+    assert task.phase == "finishing" and seen == ["figures", "inspect", "correct", "finalize"]
 
 
 @pytest.mark.parametrize("item_page", ["wiki/s/topic.md", "wiki/assets/a.png"])
@@ -80,7 +81,7 @@ def test_fix_allows_unit_and_embedding_but_not_unrelated_page(tmp_path, item_pag
         safefs.write_text(repo, page, text)
     safefs.write_bytes(repo, "wiki/assets/a.png", b"image")
     report = files.write_review(repo, "2026-10-04", {"verdict": "changes", "findings": [
-        {"id": "R1", "file": item_page, "problem": "Hiba", "relates_to": None}]}, "fake", "a", "b")
+        {"severity": "hiba", "id": "R1", "file": item_page, "problem": "Hiba", "relates_to": None}]}, "fake", "a", "b")
     items = [{"file": report.relative_to(repo).as_posix(), "item_id": "R1"}]
     correction.snapshot(repo, snapshot)
     for page in ("topic", "log", "summary"):
@@ -109,7 +110,7 @@ def test_fix_may_edit_the_page_whose_description_an_index_finding_quotes(tmp_pat
     for page, text in pages.items():
         safefs.write_text(repo, page, text)
     report = files.write_review(repo, "2026-10-04", {"verdict": "changes", "findings": [
-        {"id": "R1", "file": "wiki/s/index.md", "problem": "A leírás metaadattal kezdődik.",
+        {"severity": "hiba", "id": "R1", "file": "wiki/s/index.md", "problem": "A leírás metaadattal kezdődik.",
          "quote": f"[Óra](ora.md) - {description}", "relates_to": None}]}, "fake", "a", "b")
     items = [{"file": report.relative_to(repo).as_posix(), "item_id": "R1"}]
     correction.snapshot(repo, snapshot)
@@ -134,7 +135,7 @@ def test_legacy_owner_only_starts_fix_and_migrates_before_assignment(tmp_path, l
     ctx.cfg.timeouts = SimpleNamespace(fetch_s=1)
     monkeypatch.setattr(fix.repos, "fetch", lambda *a: None)
     path = files.write_review(ctx.notes_path, "2026-10-04", {"verdict": "changes", "findings": [
-        {"id": "R1", "file": page, "problem": "Hiba.", "chain": 1}]}, "r", "a", "b")
+        {"severity": "hiba", "id": "R1", "file": page, "problem": "Hiba.", "chain": 1}]}, "r", "a", "b")
     path.write_text(frontmatter.set_keys(path.read_text(), {"items": {"R1": "owner"}, "repair_policy": 0}))
     task = fix.next_task(ctx)
     assert task is not None and task.get("open_review_items") == []

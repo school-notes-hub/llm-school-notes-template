@@ -1,4 +1,4 @@
-"""P2–P6, one forward-only pass per attempt; no model call after finalization."""
+"""P2–P6 with up to three correction rounds; no model call after finalization."""
 
 from ..log import duration
 from ..figures import insert, pending, migration_gate
@@ -6,7 +6,7 @@ from ..reader import notice_migration, notices, report, verdicts
 from ..review import relations
 from ..state import safefs
 from ..state.errors import WaitingQuota
-from . import correction, correction_figures, inspection, recheck, steps
+from . import correction, correction_figures, correction_round, inspection, recheck, steps
 
 PHASES = ("figures", "inspecting", "correcting", "rechecking", "review_ready")
 
@@ -27,17 +27,26 @@ def _advance(ctx, task, notify, edits):
         task.set_phase("inspecting")
     if task.phase == "inspecting":
         inspection.inspect(ctx, task)
-        task.set_phase("correcting" if task.get("mode") != "fix" and (correction.all_items(ctx, task) or correction_figures.waiting(ctx, task))
-                       else "review_ready")
-    if task.phase == "correcting":
-        handoff = correction.run(ctx, task, edits)
-        if handoff is not None:
-            return handoff
-        task.set_phase("rechecking" if correction.needs_recheck(ctx, task) and not task.get("correction_rolled_back")
-                       else "review_ready")
-    if task.phase == "rechecking":
+        initial = task.get("mode") == "fix"
+        record_figures(ctx, task, f"{task.run_id}-r1" if initial else task.run_id)
+        more = correction.all_items(ctx, task) or correction_figures.waiting(ctx, task)
+        task.set_phase("correcting" if more else "review_ready",
+                       correction_round=2 if initial and not task.get("fix_scope_rolled_back") else 1)
+    while task.phase in ("correcting", "rechecking"):
+        if task.phase == "correcting":
+            handoff = correction.run(ctx, task, edits)
+            if handoff is not None:
+                return handoff
+            # Two complete rollbacks already retried inside correction.run; no attempt counted.
+            task.set_phase("review_ready" if task.get("correction_rolled_back") else "rechecking")
+            if task.phase == "review_ready":
+                break
         recheck.run(ctx, task)
-        task.set_phase("review_ready")
+        record_figures(ctx, task, f"{task.run_id}-r{correction_round.number(task)}")
+        more = correction.all_items(ctx, task) or correction_figures.waiting(ctx, task)
+        n = correction_round.number(task)
+        task.set_phase("correcting" if more and n < 3 and task.mode != "interactive" else "review_ready",
+                       correction_round=n + 1 if more and n < 3 and task.mode != "interactive" else n)
     if task.phase == "review_ready":
         finalize(ctx, task, edits)
         items = relations.inventory(ctx.notes_path)["items"]
@@ -52,7 +61,7 @@ def finalize(ctx, task, edits=None):
 
 
 def _finalize(ctx, task, edits=None):
-    repo, written, owners = ctx.notes_path, [], []
+    repo, written = ctx.notes_path, []
     for state in task.get("inspection_figures", []):
         brief = state["brief"]
         if migration_gate.concerns(repo, brief):
@@ -72,24 +81,42 @@ def _finalize(ctx, task, edits=None):
                 ctx.log.event("figure.stale", id=brief["id"], reason=str(exc))
         if state["candidate"]["state"] == "no-figure":
             continue
-        previous = next((e for e in pending.load(repo) if e["commission"]["id"] == brief["id"]), {})
-        defects = correction_figures.defects(state, receipt, previous.get("defects", []))
-        exhausted = correction_figures.mark_exhausted(ctx, {"commission": brief})
-        entry = pending.record(repo, brief, task.run_id, defects,
-                               log=getattr(ctx, "log", None),
-                               owner_required=exhausted, review_pending=correction_figures.awaiting(ctx, brief),
-                               attempted=state["attempted"] if "attempted" in state else correction_figures.attempted(ctx, task, brief))
-        written += [pending.PATH, migration_gate.MARK]
-        if entry["owner_required"] and entry["runs"] >= 3 and not exhausted:
-            owners.append({"file": brief["page"], "quote": f"<!-- figure: {brief['id']} -->",
-                           "owner_status": "owner", "figure_id": brief["id"], "category": "kép–szöveg", "origin": "figure", "chain": 1, "relates_to": None,
-                           "problem": "Az ábramegbízás három futás után is függőben van.", "suggestion": ""})
-    if owners:
-        path = task.get("inspection_report")
-        written.append(report.append(repo, path, owners, [], "figures"))
+    identity = task.run_id if task.get("correction_round") is None else f"{task.run_id}-r{correction_round.number(task)}"
+    written += record_figures(ctx, task, identity, final=True)
     written += refresh_notices(ctx, task, _notice_pages(ctx, task))
     steps.record_tool_files(task, repo, written)
     steps.generate_all(ctx, task)
+    from . import fix_progress
+    fix_progress.record(ctx, task)
+
+
+def record_figures(ctx, task, run_id, *, final=False):
+    written, owners = [], []
+    for state in task.get("inspection_figures", []):
+        brief = state["brief"]
+        if migration_gate.concerns(ctx.notes_path, brief):
+            continue
+        receipt = task.get("inspection_receipts", {}).get(brief["id"], {})
+        verdict = correction_figures.verdict_for(receipt, brief["id"])
+        if verdict.get("verdict") == "accept" or state["candidate"]["state"] == "no-figure":
+            continue
+        previous = next((e for e in pending.load(ctx.notes_path) if e["commission"]["id"] == brief["id"]), {})
+        exhausted = correction_figures.mark_exhausted(ctx, {"commission": brief})
+        entry = pending.record(ctx.notes_path, brief, run_id,
+            correction_figures.defects(state, receipt, previous.get("defects", [])),
+            owner_required=exhausted, review_pending=correction_figures.awaiting(ctx, brief),
+            attempted=((state["attempted"] if "attempted" in state else correction_figures.attempted(ctx, task, brief))
+                       if not final or task.get("correction_round") is None else False), log=getattr(ctx, "log", None))
+        written += [pending.PATH, migration_gate.MARK]
+        if final and entry["owner_required"] and entry["runs"] >= 3 and not exhausted:
+            owners.append({"file": brief["page"], "quote": f"<!-- figure: {brief['id']} -->",
+                "owner_status": "owner", "figure_id": brief["id"], "category": "kép–szöveg", "origin": "figure",
+                "chain": 1, "relates_to": None, "problem": "Az ábramegbízás három próba után is függőben van.", "suggestion": ""})
+    if owners:
+        path = recheck.report_path(ctx, task)
+        written.append(report.append(ctx.notes_path, path, owners, [], "figures"))
+    steps.record_tool_files(task, ctx.notes_path, written)
+    return written
 
 
 def _notice_pages(ctx, task):

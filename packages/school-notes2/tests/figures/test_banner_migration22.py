@@ -37,7 +37,7 @@ def test_budget_deferred_banner_does_not_block(repo, make_figure):
     settings = SimpleNamespace(ledger=lambda: {"jobs": {}}, today=lambda: date(2026, 10, 5),
         daily_usd=Decimal(0), monthly_usd=Decimal(10), reservation_usd=Decimal("0.05"), max_attempts=3, learner="one")
     ctx = SimpleNamespace(notes_path=repo, image_settings=lambda: settings)
-    assert correction_figures.assignable(ctx, [entry]) == []
+    assert correction_figures.assignable(ctx, [entry]) == [entry]
     safefs.unlink(repo, ".school-notes/figures/forces.json")
     safefs.write_text(repo, brief["page"], "---\ntype: topic\n---\n<!-- image: forces -->\nChanged.\n")
     assert not banners.check_required(repo, [brief["page"]])
@@ -131,7 +131,7 @@ def test_migration_stops_on_concurrent_page_edit(repo, monkeypatch, during_plan)
 
 def test_migration_lists_missing_history_and_clears_poison(repo, make_figure, monkeypatch):
     brief, _ = make_figure()
-    pending.record(repo, brief, "old", [{"location": "f", "observed": "nem készült új jelölt", "expected": "new"}])
+    pending.record(repo, brief, "old", [{"severity": "hiba", "location": "f", "observed": "nem készült új jelölt", "expected": "new"}])
     monkeypatch.setattr(migrate_pending, "historical", lambda *a: {})
     result = migrate_pending.migrate(repo, state_dir=repo.parent / "state", repo=object())
     assert result["restored"] == [] and result["unrestored"] == [brief["id"]]

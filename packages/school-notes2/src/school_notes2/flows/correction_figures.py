@@ -15,30 +15,9 @@ def assignable(ctx, entries, *, paid_disabled=False):
         return []
     entries = sorted((e for e in entries if (e.get("runs", 0) < 3 or e.get("review_pending")) and not e.get("owner_required")),
                      key=pending.assignment_order)
-    slots, free = 0, set()
-    if any(pending.generated(ctx.notes_path, e["commission"]) for e in entries):
-        settings = ctx.image_settings()
-        ledger, day = settings.ledger(), settings.today()
-        for entry in entries:
-            mark_exhausted(ctx, entry, settings, ledger)
-            job = ledger.get("jobs", {}).get(plans.job_id(settings.learner, entry["commission"]["id"]), {"attempts": []})
-            if awaiting_review(job):
-                free.add(entry["commission"]["id"])
-        if not paid_disabled and not budget.unknown_calls(ledger):
-            remaining = settings.daily_usd - budget.spent_on(ledger, day)
-            if settings.monthly_usd is not None:
-                remaining = min(remaining, settings.monthly_usd - budget.spent_in_month(ledger, day))
-            slots = max(0, int(remaining // (settings.max_attempts * settings.reservation_usd)))
-    result = []
     for entry in entries:
-        if entry.get("owner_required"):
-            continue
-        if pending.generated(ctx.notes_path, entry["commission"]) and entry["commission"]["id"] not in free:
-            if not slots:
-                continue
-            slots -= 1
-        result.append(entry)
-    return result
+        mark_exhausted(ctx, entry)
+    return [e for e in entries if not e.get("owner_required")]
 
 
 def awaiting(ctx, brief):
@@ -90,7 +69,7 @@ def attempted(ctx, task, brief):
         entry = settings.ledger().get("jobs", {}).get(plans.job_id(settings.learner, brief["id"]), {})
         start = datetime.fromisoformat(task.data["created"])
         paid = any(datetime.fromisoformat(a["started_at"]) >= start and
-                   (a["state"] != "failed" or budget.attempt_cost(a) > 0)
+                   (a["state"] != "unknown" and (a["state"] != "failed" or budget.attempt_cost(a) > 0))
                    for a in entry.get("attempts", []))
     return pending.has_attempt(ctx.notes_path, brief, paid=paid)
 
@@ -109,19 +88,25 @@ def defects(state, receipt, previous=()):
 
 
 def waiting(ctx, task):
-    old = {e["commission"]["id"]: e for e in task.get("pending_figures", [])}
-    entries = []
+    old = {e["commission"]["id"]: e for e in pending.load(ctx.notes_path)}
+    entries = dict(old)
     for state in task.get("inspection_figures", []):
         brief = state["brief"]
         receipt = task.get("inspection_receipts", {}).get(brief["id"], {})
         verdict = verdict_for(receipt, brief["id"])
         if verdict.get("verdict") == "accept" or state["candidate"]["state"] == "no-figure":
+            entries.pop(brief["id"], None)
             continue
         previous = old.get(brief["id"], {})
-        entries.append({"commission": brief, "status": "pending", "runs": previous.get("runs", 0),
-                        "run_ids": previous.get("run_ids", []), "owner_required": False,
-                        "defects": defects(state, receipt, previous.get("defects", []))})
-    return assignable(ctx, entries, paid_disabled=task.get("mode") == "repair")
+        entries[brief["id"]] = {**previous, "commission": brief, "status": "pending", "runs": previous.get("runs", 0),
+                        "run_ids": previous.get("run_ids", []), "owner_required": previous.get("owner_required", False),
+                        "defects": defects(state, receipt, previous.get("defects", []))}
+    waiting = assignable(ctx, list(entries.values()), paid_disabled=task.get("mode") == "repair")
+    if task.get("mode") == "repair":
+        waiting = [e for e in waiting if not pending.generated(ctx.notes_path, e["commission"])
+                   or awaiting(ctx, e["commission"])]
+    from . import fix_progress
+    return fix_progress.available(ctx, [], waiting)[1]
 
 
 def start(repo, entries):

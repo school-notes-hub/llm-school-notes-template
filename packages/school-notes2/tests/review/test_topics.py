@@ -43,9 +43,9 @@ def good(run, **kwargs):
     assigned = safefs.read_json(run.mounts.in_dir, "assigned.json")
     value = {"verdict": "ok", "pages": [{"file": p, "verdict": "ok"} for p in assigned["pages"]],
              "findings": [], "owner_notes": [], "hits": [
-                 {"hit_id": h, "verdict": "megengedett", "reason": "érthető", "covered_by": None}
+                 {"severity": "hiba", "hit_id": h, "verdict": "megengedett", "reason": "érthető", "covered_by": None}
                  for h in assigned["hits"]], "items": [
-                 {"key": i["key"], "verdict": {"fixed": "ok", "disagree": "accept"}.get(i["status"], "open"),
+                 {"severity": "hiba", "key": i["key"], "verdict": {"fixed": "ok", "disagree": "accept"}.get(i["status"], "open"),
                   "answer": "ellenőrizve"} for i in assigned["items"]]}
     safefs.write_json(run.mounts.out_dir, "review.json", value)
     return SimpleNamespace(output=value)
@@ -83,12 +83,8 @@ def test_targeted_final_state_once_and_mixed_commit_full(tmp_path, repos):
     repos.commit({"wiki/a.md": "# A\n\nJavítás 1.\n"}, FIX)
     head = repos.commit({"wiki/a.md": "# A\n\nJavítás 2.\n"}, FIX)
     task = prepare(tmp_path, repos)
-    assert [(u["topic"], u["mode"]) for u in task.get("units")] == [("wiki/a.md", "targeted")]
-    unit = task.get("units")[0]
-    assert unit["assigned_pages"] == ["wiki/a.md"]
-    patch = topics.patch(repos.repo, unit, head)
-    assert "Javítás 2" in patch and "Javítás 1" not in patch
-    repos.commit({"wiki/a.md": "# A\n\nEmberi változás.\n"}, "manual")
+    assert task.get("units") == []
+    repos.commit({"wiki/a.md": "# A\n\nEmberi változás.\n"}, "manual\n\nSchool-Notes-Run: chat")
     next_task = prepare(tmp_path, repos, "two")
     assert next_task.get("units")[0]["mode"] == "full"
 
@@ -114,20 +110,15 @@ def test_closure_only_assigns_topic_and_fix_origin(tmp_path, repos, report_after
         repos.commit({"docs/review/old.md": report}, "report")
     repos.commit({"docs/review/old.md": report.replace("R1: open", "R1: fixed")}, FIX)
     task = prepare(tmp_path, repos)
-    unit = task.get("units")[0]
-    data = topic_input.prepare(repos.repo, repos.wt_path, task, unit, task.dir / "in")
-    assert unit["mode"] == "targeted" and data["items"][0]["fix_commit"]
-    answer = {"key": "docs/review/old.md#R1", "verdict": "not-ok", "answer": "Hibás javítás."}
-    _, owner = topic_result.apply_item(repos.wt_path, data["items"][0], answer)
-    assert owner is None
-    meta = frontmatter.split((repos.wt_path / "docs/review/old.md").read_text()).meta
-    assert meta["items"]["R1"] == "open" and meta["item_details"]["R1"]["chain"] == 1
+    assert task.get("units") == []
+    closed = topics.closure_changes(repos.repo, task.get("base"), task.get("H"))
+    assert "docs/review/old.md#R1" in closed
 
 
 def test_blame_chain_even_full_mode_and_missing_quote(tmp_path, repos):
     repos.commit({"wiki/a.md": "# A\n\nRégi.\n"})
     repos.commit({"wiki/a.md": "# A\n\nJavított, de hibás.\n"}, FIX)
-    head = repos.commit({"wiki/a.md": "# A\n\nJavított, de hibás.\n\nÚj anyag.\n"}, "new source")
+    head = repos.commit({"wiki/a.md": "# A\n\nJavított, de hibás.\n\nÚj anyag.\n"}, "new source\n\nSchool-Notes-Run: run")
     task = prepare(tmp_path, repos)
     assert task.get("units")[0]["mode"] == "full"
     finding = {"file": "wiki/a.md", "quote": "Javított, de hibás."}
@@ -273,7 +264,7 @@ def test_done_topic_uses_own_base_even_when_global_diff_is_empty(tmp_path, repos
     repos.wt.run("switch", "--detach", head)
     grouped, skipped = topics.plan(repos.repo, repos.wt_path, base, head,
                                    {"done_topics": [{"topic": "wiki/a.md", "commit": done}]})
-    assert [(u["topic"], u["base"], u["mode"]) for u in grouped] == [("wiki/a.md", done, "targeted")]
+    assert grouped == [] and skipped == ["wiki/a.md"]
 
 
 def test_sources_follow_lesson_index_then_source_order(tmp_path):
@@ -302,7 +293,7 @@ def test_allowed_hits_and_existing_review_items_are_not_reassigned(tmp_path, rep
     warnings.record(repos.wt_path, [first], [{"id": first["id"], "verdict": "megengedett", "reason": "allowed"}])
     from school_notes2.review import files
     files.write_review(repos.wt_path, "2026-10-01", {"verdict": "changes", "findings": [
-        {"id": "R1", "file": "wiki/a.md", "problem": "Already assigned", "hit_id": second["id"], "relates_to": None}]},
+        {"severity": "hiba", "id": "R1", "file": "wiki/a.md", "problem": "Already assigned", "hit_id": second["id"], "relates_to": None}]},
         "fake", "a", "b")
     repeated = topic_input.prepare(repos.repo, repos.wt_path, task, unit, task.dir / "filtered")
     assert repeated["assigned"]["hits"] == []
@@ -314,10 +305,10 @@ def test_disagreement_keep_is_round_two_without_chain(tmp_path, repos):
     repos.commit({"wiki/a.md": "# A\n"})
     task = prepare(tmp_path, repos)
     report = files.write_review(repos.wt_path, "2026-10-01", {"verdict": "changes", "findings": [
-        {"id": "R1", "file": "wiki/a.md", "problem": "Issue", "relates_to": None}]}, "fake", "a", "b")
+        {"severity": "hiba", "id": "R1", "file": "wiki/a.md", "problem": "Issue", "relates_to": None}]}, "fake", "a", "b")
     path = report.relative_to(repos.wt_path).as_posix()
     files.apply_closure(repos.wt_path, "fix", [{"file": path, "item_id": "R1", "status": "disagree", "note": "Reason"}], [])
-    item = {"key": path + "#R1", "verdict": "keep", "answer": "Still wrong"}
+    item = {"severity": "hiba", "key": path + "#R1", "verdict": "keep", "answer": "Still wrong"}
     _, owner = topic_result.apply_item(repos.wt_path, {"status": "disagree", "fix_commit": True}, item)
     record = relations.inventory(repos.wt_path)["items"][path + "#R1"]
     assert owner is None and record["status"] == "open" and record["round"] == 2 and record["chain"] == 0

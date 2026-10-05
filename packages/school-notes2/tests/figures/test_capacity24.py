@@ -67,7 +67,7 @@ def test_new_content_precedes_replacements_regardless_of_id(repo, make_figure, c
     config.daily_usd = Decimal(capacity)
     ctx = SimpleNamespace(notes_path=repo, image_settings=lambda: config)
     actual = correction_figures.assignable(ctx, entries)
-    expected = ["z-new"] + (["a-replacement"] if capacity == "0.30" else [])
+    expected = ["z-new", "a-replacement"]
     assert [e["commission"]["id"] for e in actual] == expected
     restored = pending.for_subjects(repo, {"physics"}, allowed=set(expected))
     assert [e["commission"]["id"] for e in restored] == expected

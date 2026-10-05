@@ -40,9 +40,9 @@ def round(cfg):
             if install_pending.waiting(operation.vm_context(contexts[0])):
                 return 0
             started = now()
-            _cycle(cfg, contexts, started)
+            progressed = _cycle(cfg, contexts, started)
             # Coalesce missed hours into ONE successor, never replay a backlog.
-            if int(now().timestamp() // 3600) <= int(started.timestamp() // 3600):
+            if not progressed and int(now().timestamp() // 3600) <= int(started.timestamp() // 3600):
                 return 0
 
 
@@ -70,11 +70,28 @@ def _cycle(cfg, contexts, started):
     state = {"started": started.isoformat(), "status": "running", "nightly_started": nights,
              "pending_learners": [ctx.name for ctx in contexts]}
     write_json(path, state)
-    for kind, action in (("nightly", nightly.nightly), ("run", run.run)):
+    progressed = False
+    for kind, action in (("run", run.run), ("nightly", nightly.nightly)):
         for ctx in contexts:
             try:
-                _step(ctx, kind, action, started, state, path, cache)
+                if getattr(ctx, "round_failed", False) or kind == "nightly" and getattr(ctx, "night_failed", False):
+                    continue
+                if kind == "nightly" and not _night_ready(contexts, now()):
+                    continue
+                before = {t.run_id for t in phase.all_tasks(ctx.task_root(), ctx.name) if t.phase == "done"}
+                result = _step(ctx, kind, action, started, state, path, cache)
+                if kind == "nightly" and result:
+                    ctx.night_failed = True
+                if kind == "run":
+                    tasks = phase.all_tasks(ctx.task_root(), ctx.name)
+                    ctx.round_failed = bool(result or any(t.kind == "notes" and t.open and t.data.get("needs_owner") for t in tasks))
+                    progressed |= result in (None, 0) and any(t.kind == "notes" and t.phase == "done" and t.run_id not in before
+                                      and not t.get("set_aside") and not t.data.get("closed") for t in tasks)
             except Exception as exc:
+                if kind == "run":
+                    ctx.round_failed = True
+                else:
+                    ctx.night_failed = True
                 ctx.log.error("round.step", exc, step=kind)
                 from . import last_error
                 last_error.record(ctx, kind, "round_step", exc)
@@ -86,6 +103,7 @@ def _cycle(cfg, contexts, started):
     write_json(path, state)
     from .status_text import snapshot
     snapshot(cfg)
+    return progressed
 
 
 def _step(ctx, kind, action, started, state, path, cache):
@@ -108,3 +126,17 @@ def _step(ctx, kind, action, started, state, path, cache):
         # An empty night also consumes today; only an older continuation is exempt.
         nights[ctx.name] = day
         write_json(path, state)
+    return result
+
+
+def _night_ready(contexts, current):
+    from .work_pending import ready
+    from datetime import timedelta
+    hour, minute = map(int, contexts[0].cfg.nightly_after.split(":"))
+    due_at = current.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if due_at > current:
+        due_at -= timedelta(days=1)
+    deadline = due_at.replace(hour=6, minute=0)
+    if deadline < due_at:
+        deadline += timedelta(days=1)
+    return current >= deadline or not any(ready(ctx) for ctx in contexts if not getattr(ctx, "round_failed", False))

@@ -190,9 +190,13 @@ def message(ctx: Ctx, task: Task) -> str:
     """The commit message of 6.4."""
     role, _ = ctx.cfg.role("writer")
     title = _log_title(ctx, task) or f"{task.run_id}, {_count(ctx, task)} fájl"
+    import json
+    material = ""
+    if task.mode != "interactive" and task.get("mode") not in ("fix", "repair"):
+        material = "School-Notes-Material: " + json.dumps(task.get("inspection_changed", []), ensure_ascii=False) + "\n"
     return (f"notes({ctx.name}): {title}\n\nRun-Id: {task.run_id}\nKind: notes\n"
             f"Tool: school-notes {VERSION}\nWriter: {role.model}/{role.effort}\n"
-            f"School-Notes-Run: {task.get('mode') or ('chat' if task.mode == 'interactive' else 'run')}\n")
+            f"School-Notes-Run: {task.get('mode') or ('chat' if task.mode == 'interactive' else 'run')}\n" + material)
 
 
 def _log_title(ctx: Ctx, task: Task) -> str:

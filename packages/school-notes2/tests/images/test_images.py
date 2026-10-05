@@ -112,13 +112,13 @@ def test_unknown_outcome_stops_both_learners_until_settled(make_settings, fake_a
     assert run(benedek, log)["number"] == 2  # the lost attempt counts
 
 
-def test_daily_budget_from_todays_ledger_entries(make_settings, fake_api, log):
-    s = make_settings(daily_usd=Decimal("0.08"))
-    other = make_settings("barna", daily_usd=Decimal("0.08"))
+def test_monthly_budget_ignores_daily_limit(make_settings, fake_api, log):
+    s = make_settings(daily_usd=Decimal("0"), monthly_usd=Decimal("0.08"))
+    other = make_settings("barna", daily_usd=Decimal("0"), monthly_usd=Decimal("0.08"))
     assert run(s, log)["state"] == "generated"            # 0.04 spent today
     assert run(other, log)["state"] == "budget-exhausted"  # 0.04 + 0.05 reservation > 0.08
-    tomorrow = budapest_today() + timedelta(days=1)
-    s_next_day = make_settings(daily_usd=Decimal("0.08"), today=lambda: tomorrow)
+    tomorrow = (budapest_today().replace(day=1) + timedelta(days=32)).replace(day=1)
+    s_next_day = make_settings(daily_usd=Decimal("0"), monthly_usd=Decimal("0.08"), today=lambda: tomorrow)
     assert pending.scan(s_next_day)["budget_left"]
     assert pending.scan(other)["pending"] == [] and not pending.scan(other)["budget_left"]
     assert fake_api.calls == 1

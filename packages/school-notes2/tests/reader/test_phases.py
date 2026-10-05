@@ -20,12 +20,12 @@ def install_reader(monkeypatch, page, *, findings=None):
         if stage == "reader-1":
             review = pass1(page, findings)
         elif stage == "reader-2":
-            review = {"hits": [{"hit_id": h, "verdict": "hiba", "covered_by": "F-1" if findings else None,
+            review = {"hits": [{"severity": "hiba", "hit_id": h, "verdict": "hiba", "covered_by": "F-1" if findings else None,
                                  "reason": "Hibás"} for h in assigned["hits"]], "owner_notes": []}
         else:
-            review = {"items": [{"key": i["key"], "verdict": "ok" if i["status"] == "fixed" else "keep",
+            review = {"items": [{"severity": "hiba", "key": i["key"], "verdict": "ok" if i["status"] == "fixed" else "keep",
                                    "answer": "Indok"} for i in assigned["items"]],
-                      "hits": [{"hit_id": h, "verdict": "megengedett", "reason": "rendben"} for h in assigned["hits"]],
+                      "hits": [{"severity": "hiba", "hit_id": h, "verdict": "megengedett", "reason": "rendben"} for h in assigned["hits"]],
                       "owner_notes": []}
         return {"status": "reviewed", "model": "model/high", "review": review}
     monkeypatch.setattr(calls, "run", fake)
@@ -33,7 +33,7 @@ def install_reader(monkeypatch, page, *, findings=None):
 
 
 def finding(page):
-    return {"id": "F-1", "file": page, "quote": "A test lefelé gyorsul.", "category": "olvasói lyuk",
+    return {"severity": "hiba", "id": "F-1", "file": page, "quote": "A test lefelé gyorsul.", "category": "olvasói lyuk",
             "problem": "Hiányzik az ok.", "suggestion": "Magyarázd el.", "relates_to": None}
 
 
@@ -108,7 +108,7 @@ def test_actual_fix_rollback_and_resume(setup, monkeypatch):
     correction.run(ctx, phase.load(task.dir))
     assert safefs.read_text(ctx.notes_path, page) == before
     assert not safefs.is_file(ctx.notes_path, "wiki/m/new.md")
-    assert len(count) == 1 and task.get("correction_rolled_back")
+    assert len(count) == 2 and task.get("correction_rolled_back")
 
 
 def test_waiting_quota_keeps_phase(setup, monkeypatch):
@@ -134,11 +134,7 @@ def test_t095_p4_timeout_rolls_back_and_second_stops(setup, monkeypatch, count):
         safefs.write_text(ctx.notes_path, page, "Partial fix")
         raise launch.TimedOut("timeout", details={"count": count})
     monkeypatch.setattr(correction.writer, "run_ranges", timeout)
-    if count == 2:
-        with pytest.raises(launch.TimedOut):
-            correction.run(ctx, task)
-    else:
-        correction.run(ctx, task)
+    correction.run(ctx, task)
     assert safefs.read_text(ctx.notes_path, page) == before
     monkeypatch.setattr(correction.writer, "run_ranges", lambda *a: pytest.fail("replayed timed-out P4"))
     resumed = phase.load(task.dir)
@@ -268,11 +264,10 @@ def test_capacity_exhausted_still_completes_p4_before_p6(setup, monkeypatch):
     install_reader(monkeypatch, page, findings=[finding(page)])
     task.update(inspection_result={"status": "done", "review_closure": [
         {"file": "docs/review/older.md", "item_id": f"R{n}", "status": "fixed"} for n in range(ctx.cfg.limits.review_closures_per_run)]})
-    # The old closures' pages are absent from the fixture, so they add no review unit.
-    review_phases.advance(ctx, task, lambda _: None)
-    saved = safefs.read_json(inspection.folder(task) / "correction", "receipt.json")
-    assert saved["status"] == "done" and task.phase == "finishing"
-    assert task.get("correction_items") == []
+    inspection.prepare(ctx, task)
+    inspection.inspect(ctx, task)
+    # Earlier closures cannot consume a later correction's assignment capacity.
+    assert len(correction.assigned(ctx, task)) == 1
 
 
 def test_open_section_notice_is_byte_stable(setup, monkeypatch):

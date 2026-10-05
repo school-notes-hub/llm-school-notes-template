@@ -26,7 +26,7 @@ def test_paid_attempt_gate_survives_candidate_failure_and_restart(setup, monkeyp
     start = datetime.fromisoformat(task.data["created"])
     attempts = [{"started_at": (start - timedelta(days=1)).isoformat(), "state": "generated", "cost_usd": "0.05"}]
     if paid:
-        attempts.append({"started_at": start.isoformat(), "state": "unknown", "cost_usd": None, "reserved_usd": "0.05"})
+        attempts.append({"started_at": start.isoformat(), "state": "rejected", "cost_usd": "0.05", "reserved_usd": "0.05"})
     ledger = {"jobs": {"tester-f": {"attempts": attempts}, "other-f": {"attempts": [
         {"started_at": start.isoformat(), "state": "generated", "cost_usd": "0.05"}]}}}
     ctx.image_settings = lambda: SimpleNamespace(learner="tester", ledger=lambda: ledger)
@@ -72,7 +72,7 @@ def test_targeted_ambiguous_quotes_remain_unlocated(setup, quote):
     ctx, _, page = setup
     text = "Repeated.\nRepeated.\nChanged.\n"
     safefs.write_text(ctx.notes_path, page, text)
-    kept, notes = scope.partition([{"file": page, "quote": quote, "problem": "Explain."}],
+    kept, notes = scope.partition([{"severity": "hiba", "file": page, "quote": quote, "problem": "Explain."}],
         lambda _: "Repeated.\nRepeated.\nOld.\n", lambda _: text, [page])
     assert len(kept) == 1 and not notes
     assert report.locate(ctx.notes_path, kept[0])["unlocated"]
@@ -83,7 +83,7 @@ def test_recheck_not_ok_and_new_hit_stay_open_on_replay(setup, mode):
     ctx, task, page = setup
     task.update(mode=mode)
     path = files.write_review(ctx.notes_path, "2026-10-05", {"verdict": "changes", "findings": [
-        {"id": "R1", "file": page, "quote": "Old.", "problem": "Explain.", "chain": 0,
+        {"severity": "hiba", "id": "R1", "file": page, "quote": "Old.", "problem": "Explain.", "chain": 0,
          "relates_to": None}]}, "fake", "a", "b").relative_to(ctx.notes_path).as_posix()
     files.apply_closure(ctx.notes_path, task.run_id, [{"file": path, "item_id": "R1", "status": "fixed"}], [])
     before = task.dir / "before"
@@ -93,8 +93,8 @@ def test_recheck_not_ok_and_new_hit_stay_open_on_replay(setup, mode):
     task.update(inspection_report=path)
     saved = {"receipts": {}, "units": [{"status": "reviewed", "model": "fake", "before": str(before),
         "unit": {"pages": [page]}, "items": [], "hits": [{"id": "hit", "file": page, "line": 1}],
-        "review": {"items": [{"key": path + "#R1", "verdict": "not-ok", "answer": "Still wrong."}],
-                   "hits": [{"hit_id": "hit", "verdict": "hiba", "reason": "New issue.", "covered_by": None}],
+        "review": {"items": [{"severity": "hiba", "key": path + "#R1", "verdict": "not-ok", "answer": "Still wrong."}],
+                   "hits": [{"severity": "hiba", "hit_id": "hit", "verdict": "hiba", "reason": "New issue.", "covered_by": None}],
                    "owner_notes": []}}]}
     recheck.apply(ctx, task, saved)
     recheck.apply(ctx, phase.load(task.dir), saved)

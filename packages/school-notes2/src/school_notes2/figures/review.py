@@ -22,8 +22,10 @@ def validate_output(value: dict, assigned: dict, repo: Path, briefs: list[dict])
         current = context.verdict_key(repo, brief, commissions.candidate(repo, brief))
         if verdict["key"] != wanted[verdict["id"]] or current != verdict["key"]:
             raise ValueError(f"{verdict['id']}: stale verdict key")
-        if verdict["verdict"] == "accept" and (verdict["defects"] or verdict["text_mismatch"]):
+        if verdict["verdict"] == "accept" and any((d.get("severity", "hiba") == "hiba") for d in verdict["defects"] + verdict["text_mismatch"]):
             raise ValueError("accept cannot contain outstanding defects or text mismatches")
+        if verdict["verdict"] != "accept" and not any((d.get("severity", "hiba") == "hiba") for d in verdict["defects"] + verdict["text_mismatch"]):
+            raise ValueError("repair/reject requires a hiba defect; suggestions do not block acceptance")
         uses = [context.page_context(repo, brief["page"])] + context.other_uses(
             repo, brief, commissions.candidate(repo, brief))
         decisions = {d["id"] for use in uses for d in use["decisions"]}
@@ -44,7 +46,7 @@ def run_batch(repo: Path, briefs: list[dict], name: str, run: launch.RoleRun, *,
         raise ValueError("invalid review batch name")
     briefs = sorted(briefs, key=lambda b: commissions.order(repo, b))
     folder = run.task_dir / "figure-review" / name
-    saved = safefs.read_json(folder, "accepted.json")
+    saved = _saved_receipt(folder)
     if saved is not None:
         assigned = {"figures": [{"id": v["id"], "key": v["key"]} for v in saved["review"]["figures"]]}
         saved_ids = {v["id"] for v in assigned["figures"] + saved.get("failed", [])}
@@ -82,7 +84,7 @@ def run_batch(repo: Path, briefs: list[dict], name: str, run: launch.RoleRun, *,
 
 def _resume(repo, briefs, name, run, folder, assigned, state, log, invoke):
     while True:
-        saved = safefs.read_json(folder, "accepted.json")
+        saved = _saved_receipt(folder)
         if saved is not None:
             validate_output(saved["review"], assigned, repo, briefs)
             _save(repo, name, saved)
@@ -133,7 +135,11 @@ def _failure(folder, state, kind, reason):
 
 def _accept(repo, briefs, name, run, folder, state, output):
     by_id = {v["id"]: v for v in output["figures"]}
-    output = {**output, "figures": [by_id[b["id"]] for b in briefs]}
+    advice = [f"{b['page']} ({b['id']}): {d['observed']} – {d['expected']}"
+              for b in briefs for d in by_id[b["id"]]["defects"] + by_id[b["id"]]["text_mismatch"]
+              if d.get("severity") == "javaslat"]
+    output = {**output, "figures": [by_id[b["id"]] for b in briefs],
+              "owner_notes": sorted(set(output["owner_notes"] + advice))}
     receipt = {"status": "reviewed", "model": f"{run.role.model}/{run.role.effort}",
                "review": output, "input": state["input"], "failed": state.get("failed", [])}
     safefs.write_json(folder, "accepted.json", receipt)  # durable before either repo write
@@ -153,4 +159,17 @@ def for_figure(receipt: dict, fid: str) -> dict:
 
 def verdict_for(receipt: dict, fid: str, *, unique=False) -> dict:
     found = [v for v in receipt.get("review", {}).get("figures", []) if v["id"] == fid]
-    return found[0] if found and (not unique or len(found) == 1) else {}
+    if not found or (unique and len(found) != 1):
+        return {}
+    return {**found[0], **{k: [d for d in found[0][k] if (d.get("severity", "hiba") == "hiba")]
+                          for k in ("defects", "text_mismatch") if k in found[0]}}
+
+
+def _saved_receipt(folder):
+    """Accepted pre-upgrade receipts are trusted; new model outputs stay strict."""
+    saved = safefs.read_json(folder, "accepted.json")
+    if saved is not None:
+        for verdict in saved["review"]["figures"]:
+            for field in ("defects", "text_mismatch"):
+                verdict[field] = [{"severity": "hiba", **d} for d in verdict[field]]
+    return saved

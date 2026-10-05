@@ -114,6 +114,11 @@ def _with_frontmatter(body: str, reviewer: str, frm: str, to: str, items: dict) 
 def write_review(repo: Path, date: str, review: dict, reviewer: str, frm: str, to: str, *,
                  path: Path | None = None, known: dict | None = None) -> Path:
     """A new review file from a validated review.json; returns its path."""
+    from ..reader.report import advice_notes
+    findings, notes = advice_notes(review["findings"], review.get("owner_notes", []))
+    review = {**review, "findings": findings, "owner_notes": notes}
+    if not review["findings"]:
+        review["verdict"] = "ok"
     ids = [f["id"] for f in review["findings"]]
     if len(set(ids)) != len(ids):
         raise ValueError("review.json: duplicate finding ids")
@@ -130,7 +135,7 @@ def write_review(repo: Path, date: str, review: dict, reviewer: str, frm: str, t
         items[f["id"]] = status
         records[f["id"]] = {"file": f["file"], "round": 1, "chain": chain,
                             **attempts.inherited(f, known),
-                            "origin": f.get("origin", "nightly"), "category": f.get("category"),
+                            "origin": f.get("origin", "nightly"), "category": f.get("category"), "severity": "hiba",
                             "relates_to": f.get("relates_to"), "unlocated": unlocated or f.get("unlocated", False),
                             **{k: f[k] for k in ("quote", "hit_id", "figure_id", "outside_assignment") if k in f}}
     body = render_body(date, {**review, "findings": active}, frm, to)

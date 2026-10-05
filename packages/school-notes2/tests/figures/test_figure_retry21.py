@@ -54,7 +54,7 @@ def test_only_real_attempts_count_and_missing_candidate_is_check_error(repo, mak
 
 
 def test_defects_keep_review_when_writer_failed():
-    old = [{"location": "arrow", "observed": "reversed", "expected": "forward"}]
+    old = [{"severity": "hiba", "location": "arrow", "observed": "reversed", "expected": "forward"}]
     state = {"brief": {"id": "f"}, "candidate": {"state": "failed", "reason": "render failed"}}
     found = correction_figures.defects(state, {}, old)
     assert found[0] == old[0] and len(found) == 2
@@ -64,8 +64,8 @@ def test_defects_keep_review_when_writer_failed():
 @pytest.mark.parametrize("boundary", ["page", "pending", "receipt"])
 def test_migration_replay_and_no_second_reset(repo, make_figure, monkeypatch, boundary):
     brief, _ = make_figure(kind="banner")
-    old = [{"location": "letters", "observed": "unreadable", "expected": "larger"}]
-    pending.record(repo, brief, "one", [{"location": "f", "observed": "nem készült új jelölt", "expected": "new"}])
+    old = [{"severity": "hiba", "location": "letters", "observed": "unreadable", "expected": "larger"}]
+    pending.record(repo, brief, "one", [{"severity": "hiba", "location": "f", "observed": "nem készült új jelölt", "expected": "new"}])
     monkeypatch.setattr(migrate_pending, "historical", lambda *a: {brief["id"]: old})
     write_json, write_text = safefs.write_json, safefs.write_text
     fired = []
@@ -113,7 +113,7 @@ def test_nightly_rejection_resumes_without_duplicate_queue(repo, make_figure, mo
     page = brief["page"]
     safefs.write_text(repo, page, safefs.read_text(repo, page).replace("<!-- figure: forces -->", "![F](../assets/physics/forces.png)"))
     spec = night_figures.discover(repo, {"topic": page, "pages": [page]})[0]
-    verdict = {"defects": [{"location": "arrow", "observed": "wrong", "expected": "right"}],
+    verdict = {"defects": [{"severity": "hiba", "location": "arrow", "observed": "wrong", "expected": "right"}],
                "text_mismatch": [], "observed": "arrow"}
     entry = rejected.request(spec, brief, verdict, night_figures.fingerprint(repo, spec))
     original = safefs.write_text

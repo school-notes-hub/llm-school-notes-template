@@ -88,12 +88,12 @@ def _blocked(settings: ImageSettings, job_id: str, *, repairing: bool = False) -
         return {"state": "exhausted", "message": "all attempts used; only interactive work"}
     if not budget_left(ledger, settings.today(), settings.daily_usd, settings.reservation_usd,
                        settings.monthly_usd):
-        return {"state": "budget-exhausted", "message": "today's image budget is used up"}
+        return {"state": "budget-exhausted", "message": "the monthly image budget is used up"}
     return None
 
 
 def attempts_used(entry: dict) -> int:
-    return sum(1 for a in entry["attempts"] if a["state"] != "failed")
+    return sum(1 for a in entry["attempts"] if a["state"] not in ("failed", "unknown"))
 
 
 def exhausted(entry: dict, maximum: int) -> bool:

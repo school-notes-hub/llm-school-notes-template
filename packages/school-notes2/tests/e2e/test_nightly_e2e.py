@@ -15,7 +15,7 @@ def laptop_commit(tmp_path, origin, rel, text):
     clone = tmp_path / "laptop"
     subprocess.run(["git", "clone", "-q", str(origin), str(clone)], check=True, env=ENV)
     (clone / rel).write_text(text, encoding="utf-8")
-    subprocess.run(["git", "-C", str(clone), "commit", "-qam", "laptop edit"], check=True, env=ENV)
+    subprocess.run(["git", "-C", str(clone), "commit", "-qam", "laptop edit\n\nSchool-Notes-Run: chat"], check=True, env=ENV)
     subprocess.run(["git", "-C", str(clone), "push", "-q", "origin", "main"], check=True, env=ENV)
 
 

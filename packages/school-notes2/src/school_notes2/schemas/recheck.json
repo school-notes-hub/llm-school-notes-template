@@ -16,7 +16,8 @@
         "required": [
           "key",
           "verdict",
-          "answer"
+          "answer",
+          "severity"
         ],
         "properties": {
           "key": {
@@ -36,6 +37,12 @@
             "type": "string",
             "minLength": 1,
             "pattern": "\\S"
+          },
+          "severity": {
+            "enum": [
+              "hiba",
+              "javaslat"
+            ]
           }
         }
       }
@@ -48,7 +55,9 @@
         "required": [
           "hit_id",
           "verdict",
-          "reason"
+          "reason",
+          "severity",
+          "item_key"
         ],
         "properties": {
           "hit_id": {
@@ -67,6 +76,18 @@
             "type": "string",
             "minLength": 1,
             "pattern": "\\S"
+          },
+          "severity": {
+            "enum": [
+              "hiba",
+              "javaslat"
+            ]
+          },
+          "item_key": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       }
@@ -91,7 +112,9 @@
           "category",
           "problem",
           "suggestion",
-          "relates_to"
+          "relates_to",
+          "severity",
+          "item_key"
         ],
         "properties": {
           "id": {
@@ -129,6 +152,18 @@
           },
           "new_evidence": {
             "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "hiba",
+              "javaslat"
+            ]
+          },
+          "item_key": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       }

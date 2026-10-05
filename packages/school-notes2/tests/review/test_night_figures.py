@@ -176,12 +176,12 @@ def test_rejected_figure_problem_is_readable(tmp_path, log, monkeypatch):
     def rejected(repo, briefs, *args, **kwargs):
         return {"status": "reviewed", "review": {"figures": [
             {"id": briefs[0]["id"], "verdict": "reject", "observed": "Wrong", "relates_to": None,
-             "defects": [{"location": "Nyíl", "observed": "Balra mutat", "expected": "Jobbra mutasson"}],
+             "defects": [{"severity": "hiba", "location": "Nyíl", "observed": "Balra mutat", "expected": "Jobbra mutasson"}],
              "text_mismatch": []}]}}
     monkeypatch.setattr(review, "run_batch", rejected)
     result = night_figures.run(repo, {"topic": page, "pages": [page]}, folder, run, lambda *a: png(), log)
     assert result["findings"] == []
-    assert result["retries"][0]["defects"] == [{"location": "Nyíl", "observed": "Balra mutat", "expected": "Jobbra mutasson"}]
+    assert result["retries"][0]["defects"] == [{"severity": "hiba", "location": "Nyíl", "observed": "Balra mutat", "expected": "Jobbra mutasson"}]
     from school_notes2.figures import pending, rejected
     rejected.apply(repo, result["retries"])
     rejected.apply(repo, result["retries"])

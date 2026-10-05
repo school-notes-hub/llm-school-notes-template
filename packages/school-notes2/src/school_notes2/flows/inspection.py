@@ -37,7 +37,7 @@ def prepare(ctx, task):
     briefs = [s["brief"] for s in states]
     changed = sorted(steps.llm_snapshot(ctx, task))
     grouped = units.collect(ctx.notes_path, changed, result.get("review_closure", []), briefs)
-    task.update(inspection_changed=changed, inspection_all_units=grouped)
+    task.update(inspection_changed=task.get("inspection_changed", changed), inspection_all_units=grouped)
     # Retry only changed keys. A unit containing an invalid page is read as a whole.
     grouped = [u for u in grouped if task.get("mode") == "fix" or any(verdicts.valid(ctx.notes_path, p) is None for p in u["pages"])
                or any(s["brief"]["page"] in u["pages"] and figure_changed(ctx, task, s) for s in states)]
@@ -167,7 +167,7 @@ def _reader(ctx, task, view, unit):
         if second["status"] == "reviewed":
             review = second["review"]
             safefs.write_json(repo, f".school-notes/reader/{root.name}/pass2.json", review)
-            findings += report.list_findings(repo, hits, review["hits"])
+            findings += report.list_findings(repo, hits, review["hits"], findings)
             notes += review["owner_notes"]
             errors = [h for h in review["hits"] if h["verdict"] == "hiba"]
             coverage = {"errors": len(errors), "covered": sum(h["covered_by"] is not None for h in errors)}

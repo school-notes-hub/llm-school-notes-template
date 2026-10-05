@@ -182,7 +182,7 @@ def _merge(repo, unit, name, batch, receipt, by_id, result):
         else:
             from ..figures import rejected
             brief = next(b for b in batch if b["id"] == verdict["id"])
-            result.setdefault("retries", []).append(rejected.request(spec, brief, verdict, key))
+            result.setdefault("retries", []).append(rejected.request(spec, brief, review.verdict_for(receipt, brief["id"]), key))
     if receipt["status"] != "reviewed" or receipt.get("failed"):
         result["notes"].append(f"Hiányzó ábraítélet: {unit['topic']} ({name}).")
         judged = {v["id"] for v in receipt.get("review", {}).get("figures", [])}

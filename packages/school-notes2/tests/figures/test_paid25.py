@@ -54,7 +54,7 @@ def test_third_unreviewed_run_resumes_without_owner(repo, make_figure, monkeypat
 @pytest.mark.parametrize("last", ["unknown", "lost", "accepted", "generated"])
 def test_exhaustion_requires_no_unreviewed_candidate(last):
     entry = {"attempts": [{"state": "rejected"}, {"state": "rejected"}, {"state": last}]}
-    assert generate.exhausted(entry, 3) == (last != "generated")
+    assert generate.exhausted(entry, 3) == (last not in ("generated", "unknown"))
     entry["attempts"][-1]["state"] = "rejected"
     entry["attempts"].append({"state": "failed"})
     assert generate.exhausted(entry, 3)

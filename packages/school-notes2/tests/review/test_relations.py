@@ -16,7 +16,7 @@ def report(tmp_path):
     page.write_text(frontmatter.set_keys(QUESTION, {"decisions": [
         {"id": "tema-nev", "claim": "Név", "answer": "Válasz", "by": "owner", "on": "2026-10-04"}]}))
     path = files.write_review(tmp_path, "2026-10-04", {"verdict": "changes", "findings": [
-        {"id": "R1", "file": PAGE, "problem": "Hiány."}]}, "reviewer", "a", "b")
+        {"severity": "hiba", "id": "R1", "file": PAGE, "problem": "Hiány."}]}, "reviewer", "a", "b")
     return path, path.relative_to(tmp_path).as_posix()
 
 
@@ -95,10 +95,10 @@ def test_disagreement_reply_exactly_once_and_resume(tmp_path, report, verdict):
 def test_full_key_routes_to_correct_report_and_unknown_is_unlocated(tmp_path, report):
     _, rel = report
     review = {"verdict": "changes", "findings": [
-        {"id": "R1", "file": PAGE, "problem": "Ugyanaz.", "relates_to": f"{rel}#R1"},
-        {"id": "R2", "file": PAGE, "problem": "Kérdés.", "relates_to": "tema-datum"},
-        {"id": "R3", "file": PAGE, "problem": "Döntés.", "relates_to": "tema-nev", "new_evidence": "Új adat."},
-        {"id": "R4", "file": PAGE, "problem": "Ismeretlen.", "relates_to": "docs/review/missing.md#R1"},
+        {"severity": "hiba", "id": "R1", "file": PAGE, "problem": "Ugyanaz.", "relates_to": f"{rel}#R1"},
+        {"severity": "hiba", "id": "R2", "file": PAGE, "problem": "Kérdés.", "relates_to": "tema-datum"},
+        {"severity": "hiba", "id": "R3", "file": PAGE, "problem": "Döntés.", "relates_to": "tema-nev", "new_evidence": "Új adat."},
+        {"severity": "hiba", "id": "R4", "file": PAGE, "problem": "Ismeretlen.", "relates_to": "docs/review/missing.md#R1"},
     ]}
     validate("review", review)
     path = files.write_review(tmp_path, "2026-10-05", review, "r", "b", "c")
@@ -110,7 +110,7 @@ def test_full_key_routes_to_correct_report_and_unknown_is_unlocated(tmp_path, re
     assert f"{rel}#R1" in relations.inventory(tmp_path)["items"]
     with pytest.raises(SchemaError):
         validate("review", {"verdict": "changes", "findings": [
-            {"id": "R1", "file": PAGE, "problem": "P", "relates_to": "R1"}]})
+            {"severity": "hiba", "id": "R1", "file": PAGE, "problem": "P", "relates_to": "R1"}]})
 
 
 @pytest.mark.parametrize("note", [None, "", " \n "])
@@ -144,7 +144,7 @@ def test_reply_crash_resume(tmp_path, report, monkeypatch, when):
 def test_new_review_requires_relates_to_and_no_direct_family_questions():
     with pytest.raises(SchemaError):
         validate("review", {"verdict": "changes", "findings": [
-            {"id": "R1", "file": PAGE, "problem": "Hiány."}]})
+            {"severity": "hiba", "id": "R1", "file": PAGE, "problem": "Hiány."}]})
     with pytest.raises(SchemaError):
         validate("review", {"verdict": "ok", "findings": [], "family_questions": []})
 
@@ -155,7 +155,7 @@ def test_saved_legacy_review_is_still_resumable(tmp_path):
     from school_notes2.state.files import write_json
     task = phase.create(tmp_path, "tester", "review", "cron", "reviewed")
     write_json(task.dir / "review.json", {"verdict": "changes", "findings": [
-        {"id": "R1", "file": PAGE, "problem": "Régi tétel."}], "family_questions": ["Régi kérdés."]})
+        {"severity": "hiba", "id": "R1", "file": PAGE, "problem": "Régi tétel."}], "family_questions": ["Régi kérdés."]})
     saved = nightly.load_review(task)
     assert saved["findings"][0]["relates_to"] is None
     assert saved["family_questions"] == ["Régi kérdés."]
@@ -167,7 +167,7 @@ def test_related_dispute_never_reborn_and_chain_is_tool_owned(tmp_path, report, 
     path, rel = report
     record = {**relations.details(path.read_text(), "R1"), "chain": chain}
     path.write_text(frontmatter.set_keys(path.read_text(), {"items": {"R1": status}, "item_details": {"R1": record}}))
-    finding = {"id": "R1", "file": PAGE, "problem": "Ismételt.", "relates_to": f"{rel}#R1"}
+    finding = {"severity": "hiba", "id": "R1", "file": PAGE, "problem": "Ismételt.", "relates_to": f"{rel}#R1"}
     new = files.write_review(tmp_path, "2026-10-05", {"verdict": "changes", "findings": [finding]}, "r", "b", "c")
     meta = frontmatter.split(new.read_text()).meta
     if status == "disagree":
@@ -218,7 +218,7 @@ def test_missing_decision_evidence_is_invalid_output_not_unlocated(tmp_path, rep
     task = phase.create(tmp_path / "tasks", "tester", "review", "cron", "reviewing")
     page = tmp_path / PAGE
     page.write_text(page.read_text() + '\n![Ábra](../assets/a.svg)\n')
-    finding = {"id": "R1", "file": target, "problem": "Más adat.", "relates_to": "tema-nev"}
+    finding = {"severity": "hiba", "id": "R1", "file": target, "problem": "Más adat.", "relates_to": "tema-nev"}
     with pytest.raises(BadWork, match="requires new_evidence"):
         nightly.record_review(task, {"verdict": "changes", "findings": [finding]}, tmp_path)
     assert task.phase == "reviewing" and not (task.dir / "review.json").exists()
@@ -242,8 +242,8 @@ def test_asset_routes_using_embedding_page_questions_and_decisions(tmp_path, rep
     assert known["questions"] == (["masik-datum", "tema-datum"] if embedded else ["masik-datum"])
     assert relations.reviewer_inventory(tmp_path)["pages"][asset] == {**known, "items": {}}
     review = {"verdict": "changes", "findings": [
-        {"id": "R1", "file": asset, "problem": "Kérdés.", "relates_to": "tema-datum"},
-        {"id": "R2", "file": asset, "problem": "Döntés.", "relates_to": "tema-nev", "new_evidence": "Új adat."}]}
+        {"severity": "hiba", "id": "R1", "file": asset, "problem": "Kérdés.", "relates_to": "tema-datum"},
+        {"severity": "hiba", "id": "R2", "file": asset, "problem": "Döntés.", "relates_to": "tema-nev", "new_evidence": "Új adat."}]}
     task = phase.create(tmp_path / "tasks", "tester", "review", "cron", "reviewing")
     nightly.record_review(task, review, tmp_path)
     path = files.write_review(tmp_path, "2026-10-05", nightly.load_review(task), "r", "b", "c")
@@ -260,7 +260,7 @@ def test_asset_routes_using_embedding_page_questions_and_decisions(tmp_path, rep
 def test_duplicate_responses_drop_both_without_choosing_a_verdict(tmp_path, report):
     path, rel = report
     files.apply_closure(tmp_path, "writer", [{"file": rel, "item_id": "R1", "status": "disagree", "note": "Indok."}], [])
-    responses = [{"key": f"{rel}#R1", "verdict": verdict, "answer": "Indok."} for verdict in ("keep", "accept")]
+    responses = [{"severity": "hiba", "key": f"{rel}#R1", "verdict": verdict, "answer": "Indok."} for verdict in ("keep", "accept")]
     kept, dropped = relations.valid_responses(responses, relations.inventory(tmp_path))
     assert not kept and len(dropped) == 2
     assert all(i["reason"] == "duplicate response key" for i in dropped)

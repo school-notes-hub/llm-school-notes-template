@@ -31,7 +31,7 @@ class Repos:
     repo: Git
     wt: Git
 
-    def commit(self, files: dict[str, str | bytes], msg: str = "change") -> str:
+    def commit(self, files: dict[str, str | bytes], msg: str = "change\n\nSchool-Notes-Run: run") -> str:
         for rel, data in files.items():
             path = self.laptop / rel
             path.parent.mkdir(parents=True, exist_ok=True)

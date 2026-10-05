@@ -133,8 +133,8 @@ def remember(task, result, repo):
 
 
 def generation_gate(ctx, task, plan_id, repair_note=None):
-    """Reserve remaining pending attempts before admitting a new generated figure."""
-    from ..images import budget, generate, plans
+    """Retain the existing new-infographic contract; pending work has no capacity gate."""
+    from ..images import generate, plans
     try:
         brief = commissions.read(ctx.notes_path, plan_id)
     except (ValueError, OSError):
@@ -153,18 +153,6 @@ def generation_gate(ctx, task, plan_id, repair_note=None):
         if brief["kind"] == "infographic":
             task.update(infographic_commissions=sorted(ids | {plan_id}))
         return None  # Retrieving an existing image spends nothing.
-    reserved = 0
-    for entry in task.get("pending_figures", []):
-        commission = entry["commission"]
-        if not pending.generated(ctx.notes_path, commission):
-            continue
-        job = ledger.get("jobs", {}).get(plans.job_id(settings.learner, commission["id"]), {})
-        if job.get("accepted") or generate.awaiting_review(job or {"attempts": []}):
-            continue
-        reserved += max(0, settings.max_attempts - generate.attempts_used(job or {"attempts": []}))
-    amount = (reserved + 1) * settings.reservation_usd
-    if not budget.budget_left(ledger, settings.today(), settings.daily_usd, amount, settings.monthly_usd):
-        return {"state": "budget-exhausted", "message": "A képkeretben a függő ábrák elsőbbséget kapnak."}
     if brief["kind"] == "infographic":
         task.update(infographic_commissions=sorted(ids | {plan_id}))
     return None

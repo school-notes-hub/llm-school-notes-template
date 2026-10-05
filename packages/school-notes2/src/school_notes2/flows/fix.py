@@ -1,8 +1,7 @@
-"""Bounded hourly source-free correction runs, using the ordinary P1/P2/P6 chain."""
+"""Complete source-free correction runs, using the ordinary P1/P2/P6 chain."""
 
 from ..git import repos, workbranch
 from ..figures import pending, migration_gate
-from ..log import today
 from ..review import files, repair_migration
 from ..sources import calls
 from ..state import phase, safefs
@@ -10,30 +9,30 @@ from . import correction, correction_figures, steps
 
 
 def next_task(ctx):
-    if sum(t.kind == "notes" and t.get("mode") == "fix" and
-           (t.data["created"][:10] == today() or t.phase == "done" and t.data["updated"][:10] == today())
-           for t in phase.all_tasks(ctx.task_root(), ctx.name)) >= ctx.cfg.limits.fix_runs_per_day:
-        return None
     # fetch.start has inspected Drive; refresh main before selecting review closures.
     repos.fetch(ctx.bare(), ctx.cfg.timeouts.fetch_s)
     wt = ctx.worktree("notes")
     base = repos.rev(wt, "refs/remotes/origin/main")
     wt.run("switch", "--detach", base)
     reviews = [i for i in files.open_items(ctx.notes_path, "cron") if not migration_gate.concerns(ctx.notes_path, i)]
-    limit = ctx.cfg.limits.review_closures_per_run
-    for page, group in calls.review_groups(reviews, repo=ctx.notes_path).items():
-        if len(group) > limit:
-            ctx.log.event("fix.page_over_limit", target=page, count=len(group), limit=limit)
-    items = calls.select_reviews(reviews, limit, repo=ctx.notes_path)
+    items = reviews
     entries = pending.load(ctx.notes_path)
     was_owner = {e["commission"]["id"] for e in entries if e["owner_required"]}
     waiting = correction_figures.assignable(ctx, entries)
     owners = [e for e in entries if e["owner_required"] and e["commission"]["id"] not in was_owner]
-    if not items and not waiting and not owners and not next(repair_migration.updates(ctx.notes_path), None):
+    migration = next(repair_migration.updates(ctx.notes_path), None) is not None
+    from . import fix_progress
+    items, waiting = fix_progress.available(ctx, items, waiting)
+    if not items and waiting and fix_progress.image_wait(ctx, waiting):
+        from ..figures import pending as figures
+        waiting = [e for e in waiting if not figures.generated(ctx.notes_path, e["commission"])
+                   or correction_figures.awaiting(ctx, e["commission"])]
+    if not owners and not migration and not items and not waiting:
         return None
     task = phase.create(ctx.task_root(), ctx.name, "notes", "cron", "moved")
     task.update(mode="fix", base=base, preparation_base=base, open_review_items=items,
-                max_agents=ctx.cfg.limits.max_agents, attempt=1, pending_figures=waiting, figure_owners=owners)
+                max_agents=ctx.cfg.limits.max_agents, attempt=1, pending_figures=waiting, figure_owners=owners,
+                fix_work=fix_progress.keys(items, waiting))
     return task
 
 
@@ -46,17 +45,15 @@ def prepare(ctx, task):
     learning.migrate(ctx, task)
     # Reopened legacy items join this first repair run, after the journaled migration.
     reviews = [i for i in files.open_items(ctx.notes_path, "cron") if not migration_gate.concerns(ctx.notes_path, i)]
-    task.update(open_review_items=calls.select_reviews(reviews, ctx.cfg.limits.review_closures_per_run, repo=ctx.notes_path))
+    from . import fix_progress
+    reviews, _ = fix_progress.available(ctx, reviews, [])
+    task.update(open_review_items=reviews)
     written = correction_figures.persist_owners(ctx, task.get("figure_owners", []))
     steps.record_tool_files(task, ctx.notes_path, written)
-    image_subjects = [{"plan_id": e["commission"]["id"], "page": e["commission"]["page"]}
-                      for e in task.get("pending_figures", [])]
-    grouping = calls.assignments(ctx.notes_path, [], [], task.get("open_review_items"), image_subjects,
-                                 review_limit=ctx.cfg.limits.review_closures_per_run)
-    for call in grouping:
-        call["pending_images"] = []
-    waiting = pending.for_subjects(ctx.notes_path, {c["subject"] for c in grouping},
-                                   allowed={e["commission"]["id"] for e in task.get("pending_figures", [])})
+    waiting = task.get("pending_figures", [])
+    correction_figures.start(ctx.notes_path, waiting)
+    grouping = calls.fix_assignments(ctx.notes_path, reviews, waiting)
+    task.update(fix_work=fix_progress.keys(reviews, waiting))
     root = task.dir / "fix-before"
     correction.snapshot(ctx.notes_path, root)
     from .fix_scope import TOOL_STATE

@@ -44,7 +44,7 @@ def test_round_pending_matches_actual_order_including_nightly(cfg, monkeypatch):
     monkeypatch.setattr(scheduler.run, "run", check)
     scheduler.round(cfg)
     names = list(cfg.students)
-    assert [p for _, p in seen] == [names, names, names, names, names[1:], names[2:]]
+    assert [p for _, p in seen] == [names, names[1:], names[2:], [], [], []]
     for name in names:
         assert "szabad, következő kör" in status_text.overview(context.make(cfg, name, console=False))
 

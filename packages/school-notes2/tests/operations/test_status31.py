@@ -33,7 +33,7 @@ def test_hungarian_running_idle_today_queues_and_budget(cfg, monkeypatch, learne
         text = status_text.overview(ctx, now)
         assert f"{learner.capitalize()}: javító futás fut 09:12 óta, írás fázis, 14. perc" in text
         assert "1 nyitott tétel, 0 függő ábra, 3 Drive-csomag" in text
-        assert "napi 1.00 USD, havi 10.00 USD" in text
+        assert "havi 10.00 USD" in text
         assert "Mai futások: 09:12–" in text
     finally:
         lock.release()
@@ -41,7 +41,9 @@ def test_hungarian_running_idle_today_queues_and_budget(cfg, monkeypatch, learne
     text = status_text.overview(ctx, now)
     assert "szabad, következő kör 10:00" in text
     assert "09:12–09:26 14 p kész" in text
-    assert len(text.splitlines()) == 6
+    assert len(text.splitlines()) == 8
+    assert "Automatikus feldolgozás:" in text
+    assert "Tanulásra kész: nem" in text
     assert "Tulajdonosi döntésre vár: 1 review-tétel." in text
 
 

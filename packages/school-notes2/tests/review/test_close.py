@@ -10,7 +10,7 @@ from tests.conftest import assert_suppressed
 
 IDENT = close.Identity("benedek", "opus-5.5/high", "2.0.0", "2026-10-04", "2026-10-04T03:20:00+02:00")
 REVIEW = {"verdict": "changes",
-          "findings": [{"id": "R1", "file": "wiki/a.md", "line": 1, "problem": "Elírás.", "relates_to": None}],
+          "findings": [{"severity": "hiba", "id": "R1", "file": "wiki/a.md", "line": 1, "problem": "Elírás.", "relates_to": None}],
           "figures": [{"file": "wiki/assets/f.svg", "page": "wiki/a.md", "verdict": "jó",
                        "observed": "Két nyíl."}]}
 
@@ -135,8 +135,8 @@ def test_discard_timeout_steps_marker_past_commit(tmp_path, repos):
 def disputed_report(repos):
     from school_notes2.review import files
     report = files.write_review(repos.laptop, "2026-10-03", {"verdict": "changes", "findings": [
-        {"id": "R1", "file": "wiki/a.md", "problem": "Vita.", "relates_to": None},
-        {"id": "R2", "file": "wiki/a.md", "problem": "Nyitott.", "relates_to": None}]}, "r", "a", "b")
+        {"severity": "hiba", "id": "R1", "file": "wiki/a.md", "problem": "Vita.", "relates_to": None},
+        {"severity": "hiba", "id": "R2", "file": "wiki/a.md", "problem": "Nyitott.", "relates_to": None}]}, "r", "a", "b")
     rel = report.relative_to(repos.laptop).as_posix()
     files.apply_closure(repos.laptop, "writer", [{"file": rel, "item_id": "R1", "status": "disagree", "note": "Indok."}], [])
     repos.commit({"wiki/a.md": "Tananyag.\n"})
@@ -149,7 +149,7 @@ def test_close_valid_and_invalid_responses_keeps_good_findings(tmp_path, repos, 
     from school_notes2.state.files import read_json
     rel = disputed_report(repos)
     task = reviewed(tmp_path, repos)
-    responses = [{"key": key, "verdict": verdict, "answer": "Válasz."} for key in
+    responses = [{"severity": "hiba", "key": key, "verdict": verdict, "answer": "Válasz."} for key in
                  (f"{rel}#R1", f"{rel}#R2", "docs/review/missing.md#R1")]
     nightly.record_review(task, {**REVIEW, "responses": responses}, repos.wt_path)
     assert len(task.get("dropped_responses")) == 2
@@ -167,7 +167,7 @@ def test_close_revalidates_response_after_upstream_answer(tmp_path, repos):
     rel = disputed_report(repos)
     task = reviewed(tmp_path, repos)
     nightly.record_review(task, {**REVIEW, "responses": [
-        {"key": f"{rel}#R1", "verdict": "keep", "answer": "Későbbi válasz."}]}, repos.wt_path)
+        {"severity": "hiba", "key": f"{rel}#R1", "verdict": "keep", "answer": "Későbbi válasz."}]}, repos.wt_path)
     relations.reply(repos.laptop, f"{rel}#R1", "accept", "Korábbi válasz.")
     repos.commit({"wiki/a.md": "Tananyag.\nÚj mondat.\n"})
     r, _ = close.close(task, repos.repo, repos.wt, IDENT)
@@ -186,7 +186,7 @@ def test_close_decision_owner_notification_survives_crash(tmp_path, repos, monke
                                                      "by": "owner", "on": "2026-10-04"}]})
     repos.commit({"wiki/a.md": text})
     task = reviewed(tmp_path, repos)
-    review = {"verdict": "changes", "findings": [{"id": "R1", "file": "wiki/a.md", "problem": "Új adat.",
+    review = {"verdict": "changes", "findings": [{"severity": "hiba", "id": "R1", "file": "wiki/a.md", "problem": "Új adat.",
                                                 "relates_to": "nev", "new_evidence": "Bizonyíték."}]}
     nightly.record_review(task, review, repos.wt_path)
     real_finish = close._finish

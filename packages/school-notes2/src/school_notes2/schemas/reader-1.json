@@ -48,7 +48,8 @@
           "category",
           "problem",
           "suggestion",
-          "relates_to"
+          "relates_to",
+          "severity"
         ],
         "properties": {
           "id": {
@@ -86,6 +87,12 @@
           },
           "new_evidence": {
             "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "hiba",
+              "javaslat"
+            ]
           }
         }
       }

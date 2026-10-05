@@ -62,7 +62,7 @@ def test_report_failure_and_round_step_are_durable_without_mail(cfg, monkeypatch
     monkeypatch.setattr(scheduler, "_step", broken)
     scheduler._cycle(cfg, [ctx], datetime(2026, 10, 5, 8, tzinfo=TZ))
     assert status.summary(ctx)["last_error"]["class"] == "round_step"
-    assert len(delivered) == 3  # report failure, then nightly/run step failures
+    assert len(delivered) == 2  # report failure and run failure; no nightly retry
 
 
 def test_last_error_write_is_replay_safe_after_crash(cfg, monkeypatch):

@@ -55,10 +55,7 @@ def spent_in_month(ledger: dict, day: date) -> Decimal:
 
 def budget_left(ledger: dict, day: date, daily: Decimal, reservation: Decimal,
                 monthly: Decimal | None = None) -> bool:
-    """True when the next reservation fits into today's budget and into
-    the month's cap."""
-    if spent_on(ledger, day) + reservation > daily:
-        return False
+    """The deprecated daily parameter is readable but has no limiting effect."""
     return monthly is None or spent_in_month(ledger, day) + reservation <= monthly
 
 

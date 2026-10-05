@@ -40,7 +40,7 @@ def test_batch_closure_parses_once_and_replay_is_identical(tmp_path, monkeypatch
         calls.append(1)
         return original(text)
     monkeypatch.setattr(frontmatter, "split", split)
-    answers = [({"status": "fixed"}, {"key": f"{rel}#R{i}", "verdict": "ok", "answer": "Javítva."}) for i in range(300)]
+    answers = [({"status": "fixed"}, {"severity": "hiba", "key": f"{rel}#R{i}", "verdict": "ok", "answer": "Javítva."}) for i in range(300)]
     assert topic_result.apply_items(tmp_path, answers) == ([rel], [])
     assert len(calls) == 1
     before = safefs.read_bytes(tmp_path, rel)

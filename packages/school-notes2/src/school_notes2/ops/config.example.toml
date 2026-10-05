@@ -75,7 +75,6 @@ jpeg_quality = 85
 pdf_dpi = 200
 
 [limits]
-fix_runs_per_day = 6
 max_agents = 3
-image_daily_usd = 1.0
+image_daily_usd = 10.0  # Legacy input; only image_monthly_usd limits spending.
 min_free_gb = 5.0

@@ -268,8 +268,8 @@ def test_recheck_tool_hit_does_not_spoil_repaired_page_verdict(setup):
     task.update(inspection_report=path, reader_pages=[{"file": page}])
     saved = {"receipts": {}, "units": [{"status": "reviewed", "model": "model", "hits": [hit],
              "items": [{"key": key, "file": page}], "review": {
-                 "items": [{"key": key, "verdict": "ok", "answer": "Javítva."}],
-                 "hits": [{"hit_id": "H1", "verdict": "hiba", "reason": "Sablonhiba."}], "owner_notes": []}}]}
+                 "items": [{"severity": "hiba", "key": key, "verdict": "ok", "answer": "Javítva."}],
+                 "hits": [{"severity": "hiba", "hit_id": "H1", "verdict": "hiba", "reason": "Sablonhiba."}], "owner_notes": []}}]}
     recheck.apply(ctx, task, saved)
     assert verdicts.valid(ctx.notes_path, page)["verdict"] == "ok"
     assert len(relations.inventory(ctx.notes_path)["items"]) == 1

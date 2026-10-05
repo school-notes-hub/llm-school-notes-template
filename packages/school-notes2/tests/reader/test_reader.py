@@ -89,7 +89,7 @@ def test_exact_coverage_and_no_family_questions(setup):
         contracts.check({**pass1(page), "family_questions": []}, "reader-1", {"pages": [{"file": page}]})
     with pytest.raises(ValueError):
         contracts.check(pass1(page), "reader-1", {"pages": [{"file": "wiki/m/missing.md"}]})
-    hit = {"hit_id": "H1", "verdict": "hiba", "covered_by": "F-2", "reason": "hiba"}
+    hit = {"severity": "hiba", "hit_id": "H1", "verdict": "hiba", "covered_by": "F-2", "reason": "hiba"}
     with pytest.raises(ValueError, match="covered_by"):
         contracts.check({"hits": [hit], "owner_notes": []}, "reader-2", {"hits": ["H1"], "findings": ["F-1"]})
     with pytest.raises(ValueError):

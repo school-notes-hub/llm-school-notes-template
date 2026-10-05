@@ -97,10 +97,10 @@ def _prerequisites(ctx: Ctx) -> None:
 
 
 def _review(ctx: Ctx, task: phase.Task) -> None:
-    if task.get("units") != []:
-        _prerequisites(ctx)
     review.resume_prepared(task, ctx.bare(), ctx.worktree("review"),
                            lambda svgs, out: _rasterize(ctx, svgs, out))
+    if task.get("units") != []:
+        _prerequisites(ctx)
     if task.get("topic_review"):
         from . import night_topics
         night_topics.run(ctx, task)

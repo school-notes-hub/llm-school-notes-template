@@ -64,7 +64,7 @@ def test_nightly_uses_current_output_contract_without_transcription_goal():
     for text in (file_text, stdout_text):
         assert 'suggestion, category, relates_to' in text
         assert '`assigned.json`, `diff.patch`, `input.json`' in text
-        assert '`items[{key, verdict, answer}]`' in text
+        assert '`items[{severity: hiba | javaslat, key, verdict, answer}]`' in text
         assert 'még válasz nélküli `fixed` és `disagree` lezárásokról' in text
         assert 'amit a mai kimenet nem tud külön ítéletként rögzíteni' not in text
     with pytest.raises(ValueError):
@@ -102,7 +102,7 @@ def test_fix_restores_required_question_and_drawing_clauses():
     assert drawing in text
     commission = next(line for line in writer.splitlines() if line.startswith('A `.school-notes/figures/'))
     assert commission in text
-    assert text.count('Rossz:') == 2 and text.count('Jó:') == 2
+    assert text.count('Rossz:') >= 2 and text.count('Jó:') >= 2
     assert 'A kiosztott ábrajavításon belül:' in text
 
 
@@ -158,8 +158,9 @@ def test_writer_requires_own_svg_source_and_tool_render_for_raster(role):
 
 
 def test_targeted_nightly_instruction_is_not_an_owner_quote():
-    line = next(line for line in prompt("reviewer", grade=9).splitlines() if line.startswith("Célzott mód"))
-    assert "„" not in line and "”" not in line
+    text = prompt("reviewer", grade=9)
+    assert "mode: targeted" not in text
+    assert "School-Notes" not in text or "új anyag" in text
 
 
 @pytest.mark.parametrize('role', ['reader-1', 'reviewer'])

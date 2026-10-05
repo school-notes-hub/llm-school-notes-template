@@ -51,7 +51,8 @@ def collect(ctx, now=None):
     items = files.open_items(ctx.notes_path, "interactive") if ctx.notes_path.is_dir() else []
     pending = figures.load(ctx.notes_path) if ctx.notes_path.is_dir() else []
     drive = read_json(ctx.cfg.state_dir / ctx.name / "last-run.json", {})
-    return {"name": ctx.name, "now": now, "held": held, "holder": lock.holder(), "live": live,
+    from .work_pending import completion
+    return {"completion": completion(ctx, tasks=tasks, held=held), "name": ctx.name, "now": now, "held": held, "holder": lock.holder(), "live": live,
             "current": current, "today": today, "errors": sorted(errors, key=lambda e: (e["at"], e["message"])),
             "items": sum(i["status"] == "open" for i in items),
             "owner_items": sum(i["status"] == "owner" for i in items), "figures": len(pending),
@@ -89,7 +90,7 @@ def remaining(ctx):
         ledger, day = settings.ledger(), settings.today()
         daily = max(Decimal(0), settings.daily_usd - budget.spent_on(ledger, day))
         monthly = max(Decimal(0), settings.monthly_usd - budget.spent_in_month(ledger, day))
-        return f"napi {daily:.2f} USD, havi {monthly:.2f} USD"
+        return f"havi {monthly:.2f} USD"
     except (AttributeError, OSError, ValueError):
         return "nem elérhető"
 
@@ -127,11 +128,12 @@ def render(data):
         next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0)
         state = f"szabad, következő kör {next_hour:%H:%M}"
     lines = [f"{name}: {state}."]
+    lines += ["  " + line for line in data.get("completion", [])]
     runs = []
     for t in data["today"]:
         started = t.get("resumed_at") or t.data["created"]
         end = t.get("ended_at") or (t.data.get("needs_owner") or {}).get("at") or (t.data["updated"] if t.phase == "done" or t.data.get("closed") else "")
-        result = "elakadt" if t.data.get("needs_owner") else operational_report.STATES[operational_report.terminal(t)] if t.data.get("closed") else "kész" if t.phase == "done" else "vár" if not data["held"] or t != task else "fut"
+        result = "elakadt" if t.data.get("needs_owner") else operational_report.STATES[operational_report.terminal(t)] if t.data.get("closed") else operational_report.STATES[operational_report.terminal(t)] if t.phase == "done" else "vár" if not data["held"] or t != task else "fut"
         work = minutes(t, data["live"] if t == task and data["held"] else None, now)
         runs.append(f"{clock(started)}–{clock(end)} {work} p {result}")
     lines.append("  Mai futások: " + ("; ".join(runs) or "nincs") + ".")

@@ -43,7 +43,7 @@ def test_fix_freezes_legacy_then_migration_unlocks(tmp_path, log, monkeypatch, l
     ctx.cfg.timeouts = SimpleNamespace(fetch_s=1)
     monkeypatch.setattr(fix.repos, "fetch", lambda *a: None)
     files.write_review(ctx.notes_path, "2026-10-04", {"verdict": "changes", "findings": [
-        {"id": "R1", "file": page, "problem": "Text problem", "relates_to": None}]}, "fake", "a", "b")
+        {"severity": "hiba", "id": "R1", "file": page, "problem": "Text problem", "relates_to": None}]}, "fake", "a", "b")
     for _ in range(2):
         task = fix.next_task(ctx)
         assert task is not None  # The fixture's unrelated text review still runs.
@@ -89,8 +89,8 @@ def test_nightly_and_reader_skip_pending_image_but_keep_text(repo, make_figure):
     safefs.write_text(repo, brief["page"], f"# Topic\n\n<!-- figure: {brief['id']} -->\n![Image](../assets/physics/{asset.rsplit('/', 1)[-1]})\nText.\n")
     unit = {"topic": brief["page"], "pages": [brief["page"]]}
     assert night_figures.discover(repo, unit) == []
-    findings = [{"file": brief["page"], "quote": f"<!-- figure: {brief['id']} -->", "problem": "Pending"},
-                {"file": brief["page"], "quote": "Text.", "problem": "Text problem"}]
+    findings = [{"severity": "hiba", "file": brief["page"], "quote": f"<!-- figure: {brief['id']} -->", "problem": "Pending"},
+                {"severity": "hiba", "file": brief["page"], "quote": "Text.", "problem": "Text problem"}]
     kept, _, _ = report.prepare(repo, findings, [])
     assert [f["problem"] for f in kept] == ["Text problem"]
     assert safefs.read_bytes(repo, pending.PATH) == before

@@ -30,7 +30,7 @@ It does every mechanical step; the LLM runs in a container and asks for mechanic
 | `sources/` | order, photo and PDF preparation, hashes, duplicates, batching |
 | `wiki/` | path guard, `check`, machine frontmatter, indexes, `public.json`, migration |
 | `review/`, `evidence/` | nightly review (range, input, closing), review files, evidence records |
-| `images/` | wrapper of `tools/learning_image.py`: daily budget, lock, generation, acceptance |
+| `images/` | wrapper of `tools/learning_image.py`: monthly budget, lock, generation, acceptance |
 | `site/` | public build from a commit (`study-site`) and the `gh-pages` release |
 | `llm/` | the `podman run` argv, role templates (`templates.toml`), fixed prompts, output |
 | `container/` | `Containerfile`, entrypoint, firewall, preflight |
@@ -182,9 +182,9 @@ against the writer. Author text is checked before stamping as well as afterwards
 
 Cron persists the writer assignments in `phase.json`: subjects follow `tools/subjects.json`,
 new subjects follow by path; each call receives only its own packages, pages, card and
-review/image assignments. The tool assigns at most 30 review items per run, keeping each page together, in round-2,
+review/image assignments. The tool assigns all repair items in calls of at most 30, keeping each page together where possible, in round-2,
 report-date and numeric item order. Unassigned items do not accrue untouched counts.
-Interactive preparation puts owner items first within the same capacity, so the owner
+Interactive preparation puts owner items first, so the owner
 can settle them in chat. Both dated report names and repair run IDs supply calendar dates.
 Subjectless items go to the first call; asset items go to the subject of their first
 embedding content page by path. D36 ranges receive each review/image assignment once.
@@ -344,19 +344,16 @@ three fixed Hungarian prompts and output schemas are `reader-1`, `reader-2` and
 `recheck`. Receipts are private; outputs are copied to `.school-notes/reader/`.
 
 P3 writes one run report; relation routing precedes writer assignment. P4 invokes
-the existing subject writer with `fix.txt`, the remaining closure capacity and a
+the existing subject writer with `fix.txt`, the complete assigned list and a
 saved pre-fix tree. Failed fixes restore that tree; a completed or rolled-back P4
 can enter P6 directly when there is nothing to recheck. P5 judges only the closed
-items, new hits and changed figures. It never starts another correction pass.
+items, new hits and changed figures. Up to three round-local correction/recheck passes finish the entire assignable backlog.
 Open, disputed and owner items retain their chain and round metadata.
 
 Automatic P4 and source-free fixes restore out-of-scope pages before checking the
 retained work. A changed author line linking to a restored page (with or without
-an anchor) rejects the whole fix; P5 also receives `scope-restores.json`. A full
-rollback consumes one durable automatic repair attempt per assigned item, including
-across interrupted rollbacks. The third failure leaves the item with the owner;
-scope rollbacks send one content-free `scope_owner` notice per item through the
-existing delivery receipts. Other item notices remain suppressed. Only concrete
+an anchor) rejects the whole fix; P5 also receives `scope-restores.json`. A full rollback consumes no item or figure attempt, and gets one replayable retry.
+Two full rollbacks publish the previously accepted work and send one tool-error notice. Other item notices remain suppressed. Only concrete
 errors tied to restored links bypass the bad-work counter. In chat, scope violations
 reject the whole correction and preserve its edits in `rejected.patch`.
 
@@ -419,7 +416,9 @@ interruption, figure insertion, G4/G5 retries and pending-figure damage.
 ## Operational rounds (unit 3)
 
 `school-notes round` takes the VM flock (`state/operations/vm/lock`), visits `[students]` in
-TOML table order, runs due nightly reviews first, then notes runs. `nightly_after`
+TOML table order, runs notes first, then due nightly reviews only when no immediate learner work remains
+or 06:00 has passed since the due time. Successful publication immediately repeats the
+cycle; errors, owner stops and archived runs do not. `nightly_after`
 defaults to `03:15` Budapest time. Open nights resume; timed-out nights wait until
 the next date. A round crossing an hourly boundary starts one immediate successor;
 each successor makes the same decision, without collecting missed-hour jobs.
@@ -486,7 +485,7 @@ archive bundle name is included when one exists. A closed night awaiting retry s
 operational sentences are quoted, otherwise the mail refers to the private session.
 
 `school-notes status` shows current work, today's runs, unresolved failures and
-responsibility, queue sizes and the remaining daily/monthly image budget in Hungarian.
+responsibility, queue sizes and the remaining monthly image budget in Hungarian.
 `--details` keeps the full former view; `--json` keeps the structured details. Every
 completed round atomically saves the short view to `state/allapot.txt`, with a `Készült:` timestamp. A broken learner
 state is reported without hiding the other learners. Installation takes the VM lock
@@ -546,11 +545,10 @@ actual HTML/PDF/site-file negative tests; without it those two browser builds sk
 ## Topic-based nightly review and hourly fixes (unit 5)
 
 The night pins `claude-reviewed..H`, derives topic units from actual author changes and
-unanswered review closures, and calls the reviewer once per topic in path order. D60's
+new-material `run`/`chat` commits, and calls the reviewer once per topic in path order. D60's
 `review_max_images` and `review_max_diff_kb` configuration keys are obsolete; for one
 release the parser warns and ignores them. Remove them before the next release. The
-reviewer timeout defaults to 5400 seconds; explicit configuration still wins. Fix-only
-topic ranges use the literal targeted-review prompt; any ordinary author commit selects
+reviewer timeout defaults to 5400 seconds; explicit configuration still wins. Repair and maintenance commits never start a nightly call. Eligible topics receive
 full review. Per-topic receipts recover valid output after a crash and skip completed
 calls after quota suspension. Format and crash retries are bounded independently;
 timeout has no immediate retry. The configured `claude-review` template leaves native
@@ -588,20 +586,25 @@ replacement marker, without a duplicate review item or a consumed writer attempt
 during publication.
 
 A source-free `fix` run follows new Drive packages and precedes the one-time repair
-queue on each hourly round, at most `[limits] fix_runs_per_day = 6` per learner/day.
-It assigns whole pages of open/round-2 items (default capacity 30) and eligible pending
-figures outside that capacity. If the highest-priority page exceeds the configured
-capacity, it receives that many items on its own; the remainder stays queued for the next run. P3 uses targeted reader recheck plus figure review;
-there is no second correction pass. Package writers receive no old review items.
-Targeted reader/nightly inputs contain repaired items and changed lines; findings
-on uniquely located unchanged lines become private owner notes; absent or ambiguous
-quotes remain `unlocated` items. Every new finding is located at H; Git blame determines whether its quote
-was last changed by a fix commit, in full and targeted mode alike. A second search
-strips inline Markdown while preserving blame line numbers. An unlocated quote inherits
-chain 1 when a fix commit touched the topic range; related items always retain the
-maximum inherited chain. Such a nightly finding keeps chain 1 and stays open for repair.
-Nightly and reader `not-ok` verdicts escalate only after three automatic repair attempts. The fix run's P3 recheck follows P5 instead: `not-ok` reopens
-with unchanged chain and `origin: recheck`; new errors stay open. The fix scope uses the pre-edit unit, including related
+queue on each hourly round, with no daily cap. It assigns every open error in deterministic
+page groups of at most 30 items per writer call. All assignable pending figures go to the
+first call, before text repairs; paid generation still obeys its existing budget. Saved
+call results survive restart. A common targeted recheck (P5) and one finish chain follow
+all writer calls; up to three correction/recheck rounds run immediately. A zero-progress
+run records its work keys and release under `state/<learner>/set-aside.json`; new work
+and a new release can run. Monthly-budget and unknown-call waits do not set this brake. Three failed automatic repairs still escalate to the owner.
+Package writers receive no old review items.
+Nightly calls are full reviews only, triggered exclusively by author changes in `run`
+or `chat` commits. For `run`, the `School-Notes-Material` trailer limits selection to
+P1–P2 material; old pages fixed by P4 are excluded. Fix, repair, migration, tool and shared-rule commits cause no nightly
+call. Reader recheck retains its narrow repair scope. Legacy targeted receipts remain
+readable. New suggestions (`severity: javaslat`) go to the run report’s `owner_notes` section;
+only new `hiba` findings enter review queues. Existing backlog items are never reclassified.
+There is no suggestion migration or new learner file. Status separately reports automatic
+processing completion and readiness for learning.
+The legacy `fix_runs_per_day` and `review_closures_per_run` configuration keys remain
+readable for upgrades, but do not cap repair work.
+The fix scope uses the pre-edit unit, including related
 lessons, summaries and image embedding pages. Textbook inputs contain printed-page
 excerpts selected through the book index; ambiguous or unavailable references are
 explicitly marked. `keep` reopens the existing disagreement at round 2. Successful P5
@@ -611,7 +614,7 @@ twice.
 The upgrade tests retain legacy saved-report closure recovery. New fake-harness tests
 cover preparation, valid-output recovery, missing-topic continuation, failed-topic
 blocking/clearing, exact accounting, a report push interrupted before its checkpoint,
-targeted mode, blame routing, bounded hourly fix admission and legacy figure inspection.
+new-material admission, blame routing, zero-progress fix admission and legacy figure inspection.
 
 The pending-figure migration (units 21–25) runs after installing 2.4.0, with
 no open notes tasks. Use the tool user's configured learner names, not worktree paths:
@@ -627,7 +630,7 @@ Tracked changes (including staged changes) or untracked files cause exit 2, with
 path listed and no writes. Each planned pending entry lists its ID, kind, exact image
 job ID (or null for a drawn figure), used paid attempts, post-migration eligibility,
 owner status and whether an existing candidate can be checked for free. Eligibility
-here is before the ordinary daily/monthly admission check. Missing-page entries stay
+here is before the ordinary monthly budget check. Missing-page entries stay
 unassignable. Job identity is exactly `<learner>-<commission-id>`: a v1 job called
 `learner-topic-banner` does not match a v2 commission `topic-header`; the latter
 uses `learner-topic-header`. No alias or cost reset is inferred from similar names.
@@ -671,8 +674,9 @@ Stop scheduling and finish/discard open runs first; preserve later learner work 
 the host receipts before restoring the old release. Merely changing the release
 symlink leaves `runs: 0` records that 2.3.7 cannot read.
 
-Generated pending assignments reserve `max_attempts × reservation_usd` per figure
-against both daily and monthly capacity, only for the run’s assigned subjects.
+Every pending figure with remaining attempts is assigned, across all subjects.
+There is no image capacity reservation or daily admission limit; generation enforces
+the monthly budget.
 New content precedes replacements regardless of their IDs. An exhausted paid job
 is excluded and marked `owner_required` when no generated candidate awaits review
 (including a rejected or lost last attempt), with an owner record and suppressed notification;

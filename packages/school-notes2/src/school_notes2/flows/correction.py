@@ -1,4 +1,4 @@
-"""P4: one subject-scoped fix pass, with an atomic snapshot receipt for rollback."""
+"""P4: the complete work list in resumable calls, with round-local rollback receipts."""
 
 import copy
 
@@ -9,7 +9,7 @@ from ..sources import calls
 from ..state import phase, safefs
 from ..state.errors import BadWork, Transient, WaitingQuota
 from ..wiki import frontmatter
-from . import correction_figures, generation_receipts
+from . import correction_figures, correction_round, generation_receipts
 from .correction_figures import changed_figures
 from . import call_scope, checks, handlers, inspection, steps, writer
 
@@ -17,26 +17,15 @@ PREFIXES = ("wiki", "docs", "publication", "tools", ".school-notes")
 
 
 def all_items(ctx, task):
-    path = task.get("inspection_report")
-    if not path:
-        return []
-    text = safefs.read_text(ctx.notes_path, path)
-    items = frontmatter.split(text).meta.get("items", {})
-    pages = {p for u in task.get("inspection_units", []) for p in u["pages"]}
-    selected = [{"file": path, "item_id": key, "status": status,
-                 "round": relations.details(text, key)["round"],
-                 "chain": relations.details(text, key)["chain"], "key": path + "#" + key}
-                for key, status in items.items() if status == "open"
-                and (not relations.details(text, key).get("outside_assignment")
-                     or relations.details(text, key).get("file") in pages)]
-    return selected
+    from ..figures import migration_gate
+    from . import fix_progress
+    items = [i for i in files.open_items(ctx.notes_path, "cron")
+             if not migration_gate.concerns(ctx.notes_path, i)]
+    return fix_progress.available(ctx, items, [])[0]
 
 
 def assigned(ctx, task):
-    # P1 and P4 share the run's closure capacity.
-    selected = all_items(ctx, task)
-    used = sum(c["status"] != "open" for c in task.get("inspection_result", {}).get("review_closure", []))
-    return calls.select_reviews(selected, max(0, ctx.cfg.limits.review_closures_per_run - used), repo=ctx.notes_path)
+    return all_items(ctx, task)
 
 
 def snapshot(repo, root):
@@ -65,19 +54,22 @@ def child_task(ctx, task, root, items):
     if child is not None:
         return child
     data = copy.deepcopy(task.data)
-    data.update(run_id=f"{task.run_id}-fix-a{task.get('attempt', 1)}", mode="cron", phase="writing")
+    data.update(run_id=correction_round.identity(task) + ("-retry" if root.name.endswith("-retry") else ""), mode="cron", phase="writing")
+    from ..log import now_iso
+    data["created"] = now_iso()
+    data.update(retries=0, llm_failures=0, needs_owner=None, last_error=None)
     child = phase.Task(root / "writer", data)
     waiting = task.get("correction_figures", [])
-    images = [{"plan_id": e["commission"]["id"], "page": e["commission"]["page"]} for e in waiting]
-    grouping = calls.assignments(ctx.notes_path, [], [], items, images, review_limit=len(items))
-    for call in grouping:
-        call["pending_images"] = []
+    grouping = calls.fix_assignments(ctx.notes_path, items, waiting)
     correction_figures.start(ctx.notes_path, waiting)
     child.data["data"].update(mode="fix", packages=[], pages=[], calls=grouping,
                                ranges=calls.ranges(grouping), writing_k=1, open_review_items=items,
                                pending_images=[], pending_figures=waiting, skip_writer=False, effective_result=None,
                                correction_parent=task.run_id, correction_before=str(root / "before"),
-                               paid_disabled=task.get("mode") == "repair")
+                               paid_disabled=task.get("mode") == "repair",
+                               fix_calls={}, fix_crash_retries=[], writer_invocation=0, writer_output_key=None,
+                               counted_bad_outputs=[], retry_calls=[], retry_items={}, retry_link_pages=[],
+                               writer_check={"count": 0, "warnings": []}, fix_scope_rolled_back=False)
     if task.mode == "interactive":
         child.data["mode"] = "interactive"
         child.data["data"].update(calls=[], ranges=[[0, 0]], writer_check={"count": 0, "warnings": []})
@@ -87,21 +79,31 @@ def child_task(ctx, task, root, items):
 
 
 def run(ctx, task, edits=None):
-    root = inspection.folder(task) / "correction"
-    root.mkdir(parents=True, exist_ok=True)
-    saved = safefs.read_json(root, "receipt.json")
-    if saved is None:
-        saved = execute(ctx, task, root, edits)
-        if saved is None or "status" not in saved:
-            return saved
-        if saved["status"] == "rollback" and task.mode == "interactive":
-            from .correction_backup import rejected
-            rejected(ctx.notes_path, root, PREFIXES, ctx.log)
-            saved["rejected_patch"] = (root / "rejected.patch").relative_to(task.dir).as_posix()
-        safefs.write_json(root, "receipt.json", saved)
-    from .fix_scope import owner_notes
-    owner_notes(ctx, task, root)
-    apply(ctx, task, root, saved, edits)
+    base = correction_round.root(task)
+    roots = (base,) if task.get("fix_scope_rolled_back") and correction_round.number(task) == 1 else (base, base.with_name(base.name + "-retry"))
+    for root in roots:
+        root.mkdir(parents=True, exist_ok=True)
+        saved = safefs.read_json(root, "receipt.json")
+        if saved is None:
+            saved = execute(ctx, task, root, edits)
+            if saved is None or "status" not in saved:
+                return saved
+            if saved["status"] == "rollback" and task.mode == "interactive":
+                from .correction_backup import rejected
+                rejected(ctx.notes_path, root, PREFIXES, ctx.log)
+                saved["rejected_patch"] = (root / "rejected.patch").relative_to(task.dir).as_posix()
+            safefs.write_json(root, "receipt.json", saved)
+        from .fix_scope import owner_notes
+        owner_notes(ctx, task, root)
+        # A retry snapshot proves the first rollback was already applied.
+        retry = base.with_name(base.name + "-retry")
+        if root == base and safefs.is_file(retry, "snapshot.json"):
+            continue
+        apply(ctx, task, root, saved, edits)
+        if saved["status"] != "rollback" or task.mode == "interactive":
+            return
+    from . import set_aside
+    set_aside.rollback_notice(ctx, task)
 
 
 def execute(ctx, task, root, edits):
@@ -113,6 +115,9 @@ def execute(ctx, task, root, edits):
         saved = {"status": "done", "result": {"status": "done"}}
     else:
         snapshot(ctx.notes_path, root)
+        from .fix_scope import TOOL_STATE
+        if not safefs.is_file(root, "tool-state.json"):
+            safefs.write_json(root, "tool-state.json", {k: task.get(k, {}) for k in TOOL_STATE})
         child = child_task(ctx, task, root, items)
         try:
             if task.mode == "interactive":
@@ -130,10 +135,7 @@ def execute(ctx, task, root, edits):
             raise
         except launch.TimedOut as exc:
             saved = {"status": "rollback", "reason": str(exc)}
-            if exc.details.get("count", 0) >= 2 or exc.details.get("suspended"):
-                safefs.write_json(root, "receipt.json", saved)
-                apply(ctx, task, root, saved, edits)
-                raise
+            saved["timeout"] = True
         except steps.CheckFailed as exc:
             saved = {"status": "rollback", "reason": str(exc), "items": exc.items[:10]}
         except (BadWork, Transient) as exc:
@@ -151,11 +153,8 @@ def apply(ctx, task, root, saved, edits=None):
         task.update(correction_result={"status": "done"}, correction_rolled_back=True,
                     correction_rollback_reason=saved["reason"], correction_rollback_items=saved.get("items", []),
                     correction_rejected_patch=saved.get("rejected_patch"))
-        outcome = files.apply_closure(ctx.notes_path, f"{task.run_id}-fix-a{task.get('attempt', 1)}", [],
-                                      task.get("correction_items", []), automatic=task.mode == "cron")
-        steps.record_tool_files(task, ctx.notes_path, outcome.written)
-        if safefs.read_json(root, "scope-restores.json", []):
-            task.update(scope_owner_items=outcome.new_owner)
+        state = safefs.read_json(root, "tool-state.json", {})
+        task.update(**state, learning_pending=None)
         return
     if task.mode == "interactive":
         from . import correction_chat
@@ -169,7 +168,7 @@ def apply(ctx, task, root, saved, edits=None):
     from ..figures import infographics
     infographics.record(ctx, task, result)
     generation_receipts.refresh(ctx, task)
-    outcome = files.apply_closure(ctx.notes_path, f"{task.run_id}-fix-a{task.get('attempt', 1)}", result.get("review_closure", []),
+    outcome = files.apply_closure(ctx.notes_path, correction_round.identity(task), result.get("review_closure", []),
                                   task.get("correction_items", []), ctx.cfg.limits.owner_after_open,
                                   automatic=task.mode == "cron")
     steps.record_tool_files(task, ctx.notes_path, outcome.written)
@@ -180,14 +179,16 @@ def apply_figures(ctx, task, root, saved):
     result = saved["result"]
     from ..figures import commissions
     figures = {s["brief"]["id"]: s for s in task.get("inspection_figures", [])}
-    for brief in commissions.validate_assignments(ctx.notes_path, result.get("figures", [])):
+    briefs = [e["commission"] for e in task.get("correction_figures", [])]
+    briefs += commissions.validate_assignments(ctx.notes_path, result.get("figures", []))
+    for brief in briefs:
         figures[brief["id"]] = {**figures.get(brief["id"], {}), "brief": brief}
     attempts = task.get("correction_attempts", {})
     if str(root) not in attempts:
         assigned_ids = {f["id"] for f in result.get("figures", [])} | {
             e["commission"]["id"] for e in task.get("correction_figures", [])}
         attempts = {**attempts, str(root): {
-            fid: state.get("attempted", False) or (fid in assigned_ids and correction_figures.attempted(ctx, task, state["brief"]))
+            fid: fid in assigned_ids and correction_figures.attempted(ctx, phase.load(root / "writer") or task, state["brief"])
             for fid, state in figures.items()}}
         task.update(correction_attempts=attempts)
     for state in figures.values():

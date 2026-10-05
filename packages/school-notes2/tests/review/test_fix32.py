@@ -14,7 +14,7 @@ PAGE = "wiki/a/topic.md"
 
 
 def finding(**extra):
-    return {"id": "R1", "file": PAGE, "problem": "Hiba.", "quote": "Állítás.",
+    return {"severity": "hiba", "id": "R1", "file": PAGE, "problem": "Hiba.", "quote": "Állítás.",
             "origin": "reader", "category": "tárgyi", "relates_to": None, "chain": 1, **extra}
 
 
@@ -43,7 +43,7 @@ def test_third_failed_repair_and_each_checkpoint_replay(tmp_path, reader, learne
         files.apply_closure(repo, f"fix-{n}", [closure], listed, automatic=True)
         assert safefs.read_bytes(repo, rel) == before
         assert item(repo, rel)["status"] == "fixed"  # The third success is not an owner item.
-        answer = {"key": rel + "#R1", "verdict": "not-ok", "answer": "Még hibás."}
+        answer = {"severity": "hiba", "key": rel + "#R1", "verdict": "not-ok", "answer": "Még hibás."}
         def reopen():
             if reader:
                 report.reopen(repo, answer["key"], answer["answer"])
@@ -133,7 +133,7 @@ def test_migration_interrupted_write_resumes_once(tmp_path, monkeypatch, learner
     assert page.meta["items"]["R18"] == "settled"
 
 
-def test_rollback_counts_once_after_restore_and_escalates(tmp_path):
+def test_rollback_does_not_consume_item_attempts(tmp_path):
     rel = setup(tmp_path)
     ctx = SimpleNamespace(notes_path=tmp_path)
     task = phase.create(tmp_path / "state", "one", "notes", "cron", "correcting")
@@ -147,8 +147,8 @@ def test_rollback_counts_once_after_restore_and_escalates(tmp_path):
         before = safefs.read_bytes(tmp_path, rel)
         correction.apply(ctx, phase.load(task.dir), root, saved)
         assert safefs.read_bytes(tmp_path, rel) == before
-    assert item(tmp_path, rel)["repair_attempts"] == 3
-    assert item(tmp_path, rel)["status"] == "owner"
+    assert item(tmp_path, rel).get("repair_attempts", 0) == 0
+    assert item(tmp_path, rel)["status"] == "open"
 
 
 def test_migration_alone_does_not_schedule_a_nightly_topic(tmp_path, repos):
@@ -173,7 +173,7 @@ def test_third_unsuccessful_disagreement_is_owner(tmp_path, nightly):
     files.apply_closure(tmp_path, "third", [closure], files.open_items(tmp_path, "cron"), automatic=True)
     if nightly:
         topic_result.apply_item(tmp_path, {"status": "disagree"},
-                                {"key": rel + "#R1", "verdict": "keep", "answer": "Fenntartom."})
+                                {"severity": "hiba", "key": rel + "#R1", "verdict": "keep", "answer": "Fenntartom."})
     else:
         relations.reply(tmp_path, rel + "#R1", "keep", "Fenntartom.")
     assert item(tmp_path, rel)["status"] == "owner"

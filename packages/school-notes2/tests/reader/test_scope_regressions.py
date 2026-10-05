@@ -50,7 +50,7 @@ def test_context_finding_has_section_notice_and_separate_assignment_flag(setup, 
     inspection.inspect(ctx, task)
     record = next(iter(relations.inventory(ctx.notes_path)["items"].values()))
     assert record["outside_assignment"] and not record["unlocated"]
-    assert correction.assigned(ctx, task) == []
+    assert len(correction.assigned(ctx, task)) == 1
     # Another unit has reviewed this page; the unrelated context finding stays local.
     verdicts.record(ctx.notes_path, pass1(other)["pages"], {other: units.page_key(ctx.notes_path, other)},
                     "model/high", task.data["created"])
@@ -112,6 +112,7 @@ def test_pending_damage_is_writer_error_only_when_base_was_valid(setup, monkeypa
     if not inherited:
         return
     install_reader(monkeypatch, page)
+    monkeypatch.setattr(correction, "run", lambda ctx, task, *a: task.update(correction_rolled_back=True))
     review_phases.advance(ctx, task, lambda _: None)
     assert task.phase == "finishing" and task.data["needs_owner"] is None
     assert task.get("inspection_figures")[0]["candidate"]["state"] == "failed"
@@ -220,6 +221,7 @@ def test_malformed_base_yaml_is_inherited_damage(setup, monkeypatch):
     fetch = {"packages": [], "pages": [], "pending_figures": [entry]}
     assert check_result(ctx.notes_path, {"status": "done"}, fetch, set(), base_content=base.get) == []
     install_reader(monkeypatch, page)
+    monkeypatch.setattr(correction, "run", lambda ctx, task, *a: task.update(correction_rolled_back=True))
     review_phases.advance(ctx, task, lambda _: None)
     assert task.phase == "finishing"
     assert task.get("inspection_figures")[0]["candidate"]["state"] == "failed"

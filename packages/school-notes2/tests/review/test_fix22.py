@@ -25,14 +25,14 @@ def test_nightly_retry_marker_is_a_tool_change(tmp_path, repos):
     current = safefs.read_text(repos.laptop, page)
     repos.commit({page: current.replace("Old.", "New.")}, FIX)
     task = prepare(tmp_path, repos)
-    assert [u["mode"] for u in task.get("units")] == ["targeted"]
+    assert task.get("units") == []
 
 
 def test_nightly_input_omits_already_rechecked_closure(tmp_path, repos, monkeypatch):
     page = "wiki/a.md"
     repos.commit({page: "Old.\n"})
     sh("git", "push", "-q", "origin", "HEAD:claude-reviewed", cwd=repos.laptop)
-    repos.commit({page: "New.\n"}, FIX)
+    repos.commit({page: "New.\n"})
     task = prepare(tmp_path, repos)
     unit = task.get("units")[0]
     key = "docs/review/test.md#R1"

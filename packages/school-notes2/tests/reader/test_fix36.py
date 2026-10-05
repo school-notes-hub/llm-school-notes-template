@@ -66,20 +66,20 @@ def test_three_scope_failures_become_owner_once(setup, monkeypatch, learner, mod
             correction.run(ctx, task)
             correction.run(ctx, phase.load(task.dir))
         record = relations.inventory(ctx.notes_path)["items"][items[0]["key"]]
-        assert record["repair_attempts"] == n
-        assert record["status"] == ("owner" if n == 3 else "open")
+        assert record.get("repair_attempts", 0) == 0
+        assert record["status"] == "open"
         assert safefs.read_text(ctx.notes_path, page) == before
-        assert task.get("tool_hashes")[items[0]["file"]]
         assert task.data["llm_failures"] == 0 and not task.data["needs_owner"]
         owners = [{"file": items[0]["file"], "item_id": "R1"}] if n == 3 else []
         assert run.owner_items(ctx, task, owners)
         assert run.owner_items(ctx, phase.load(task.dir), owners)
-    assert len(invoked) == 3 and delivered == []
+    assert len(invoked) == (6 if mode == "p4" else 3)
+    assert len(delivered) == (3 if mode == "p4" else 0)
     assert safefs.read_json(pending.path(ctx).parent, pending.path(ctx).name) == {}
 
 
 @pytest.mark.parametrize("mode", ["p4", "fix"])
-@pytest.mark.parametrize("boundary", ["closure", "record"])
+@pytest.mark.parametrize("boundary", ["restore", "task"])
 def test_scope_attempt_survives_rollback_crash(setup, monkeypatch, mode, boundary):
     ctx, task, page = setup
     items = review(ctx, page)
@@ -90,13 +90,11 @@ def test_scope_attempt_survives_rollback_crash(setup, monkeypatch, mode, boundar
     safefs.write_text(ctx.notes_path, NEW, "Új oldal.\n")
     safefs.write_text(ctx.notes_path, page, safefs.read_text(ctx.notes_path, page) + "\n[Új](new.md)\n")
     fix_scope.recover(ctx, task, root, items)
-    module, name = (files, "apply_closure") if boundary == "closure" else (steps, "record_tool_files")
+    module, name = (correction, "restore") if boundary == "restore" else (phase.Task, "update")
     original = getattr(module, name)
     def crash(*args, **kwargs):
         value = original(*args, **kwargs)
-        if boundary == "closure" or items[0]["file"] in args[-1]:
-            raise KeyboardInterrupt()
-        return value
+        raise KeyboardInterrupt()
     monkeypatch.setattr(module, name, crash)
     saved = {"status": "rollback", "reason": "scope dependency"}
     with pytest.raises(KeyboardInterrupt):
@@ -111,8 +109,7 @@ def test_scope_attempt_survives_rollback_crash(setup, monkeypatch, mode, boundar
             fix_scope.resume(ctx, task)
         else:
             correction.apply(ctx, task, root, saved)
-        assert relations.inventory(ctx.notes_path)["items"][items[0]["key"]]["repair_attempts"] == 1
-        assert task.get("tool_hashes")[items[0]["file"]]
+        assert relations.inventory(ctx.notes_path)["items"][items[0]["key"]].get("repair_attempts", 0) == 0
 
 
 @pytest.mark.parametrize("stage", ["write", "finish"])

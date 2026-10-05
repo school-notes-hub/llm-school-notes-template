@@ -163,11 +163,16 @@ def resume_prepared(task: phase.Task, repo: Git, wt: Git, rasterize: Rasterize) 
     wt.run("switch", "--detach", "--discard-changes", task.get("H"))
     if task.get("topic_review"):
         from . import topics
-        if task.get("units") is None:
+        if task.get("units") is None or task.get("material_policy") != 1:
             state = topics.read_state(repo, task.get("H"))
             grouped, skipped = topics.plan(repo, wt.work_tree, task.get("base"), task.get("H"), state)
-            task.update(units=grouped, nightly_state=state, skipped_topics=skipped,
-                        blocked_topics=state.get("blocked_topics", []), input_ready=True)
+            eligible = {u["topic"] for u in grouped}
+            results = [e for e in task.get("topic_results", [])
+                       if e["unit"]["topic"] in eligible and e["unit"]["mode"] == "full"]
+            task.update(units=grouped, material_policy=1, topic_results=results,
+                        nightly_state=state, skipped_topics=skipped,
+                        blocked_topics=[b for b in state.get("blocked_topics", [])
+                                        if b["topic"] in {u["topic"] for u in grouped}], input_ready=True)
         return
     base, end = task.get("base"), task.get("T")
     rng = Range(base, task.get("H"), end, task.get("commits"), build_patch(repo, base, end),
@@ -232,9 +237,12 @@ def load_review(task: phase.Task) -> dict:
     if task.get("topic_review"):
         return review  # Tool-assembled from separately validated topic receipts.
     # Already saved reports from the previous contract remain resumable.
-    legacy = {**review, "findings": [{"relates_to": None, **{
+    legacy = {**review, "findings": [{"relates_to": None, "severity": "hiba", **{
         k: v for k, v in f.items() if k not in ("origin", "chain", "unlocated")}}
         for f in review["findings"]]}
+    for field in ("hits", "items", "responses"):
+        if field in legacy:
+            legacy[field] = [{"severity": "hiba", **r} for r in legacy[field]]
     legacy.pop("family_questions", None)
     validate("review", legacy)
     return {**legacy, **({"family_questions": review["family_questions"]}

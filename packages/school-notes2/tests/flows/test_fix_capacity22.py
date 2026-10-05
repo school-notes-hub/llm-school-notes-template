@@ -25,7 +25,7 @@ def test_assignment_reserves_all_attempts_per_generated_figure(tmp_path, monthly
         monthly_usd=Decimal(monthly), reservation_usd=Decimal("0.05"), max_attempts=3, learner=learner, ledger=lambda: ledger)
     ctx = SimpleNamespace(notes_path=tmp_path, image_settings=lambda: settings)
     selected = correction_figures.assignable(ctx, entries[::-1])
-    assert [e["commission"]["id"] for e in selected] == (["a", "b", "d"] if monthly == "10" else ["a", "d"])
+    assert [e["commission"]["id"] for e in selected] == ["a", "b", "c", "d"]
     task = phase.create(tmp_path / "state", learner, "notes", "cron", "moved")
     task.update(pending_figures=selected)
     assert phase.load(task.dir).get("pending_figures") == selected
@@ -33,19 +33,19 @@ def test_assignment_reserves_all_attempts_per_generated_figure(tmp_path, monthly
 
 
 @pytest.mark.parametrize("p4", [False, True])
-def test_31_item_page_finishes_in_two_runs(tmp_path, p4):
+def test_31_item_page_assigned_in_one_run_two_calls(tmp_path, p4):
     page = "wiki/m/a.md"
     path = files.write_review(tmp_path, "2026-10-05", {"verdict": "changes", "findings": [
-        {"id": f"R{n}", "file": page, "problem": "Hiba.", "relates_to": None}
+        {"severity": "hiba", "id": f"R{n}", "file": page, "problem": "Hiba.", "relates_to": None}
         for n in range(1, 32)]}, "fake", "a", "b").relative_to(tmp_path).as_posix()
-    ctx = SimpleNamespace(notes_path=tmp_path, cfg=SimpleNamespace(limits=SimpleNamespace(review_closures_per_run=30)))
+    ctx = SimpleNamespace(name="learner", notes_path=tmp_path, cfg=SimpleNamespace(state_dir=tmp_path / "state", limits=SimpleNamespace(review_closures_per_run=30)))
     task = phase.create(tmp_path / "state", "learner", "notes", "cron", "correcting")
     task.update(inspection_report=path, inspection_units=[{"pages": [page]}], inspection_result={})
-    for n, count in [(1, 30), (2, 1)]:
-        selected = correction.assigned(ctx, phase.load(task.dir)) if p4 else calls.select_reviews(
-            files.open_items(tmp_path, "cron"), 30, repo=tmp_path)
-        assert len(selected) == count
-        assert [i["item_id"] for i in selected] == ([f"R{k}" for k in range(1, 31)] if n == 1 else ["R31"])
+    selected = correction.assigned(ctx, task) if p4 else files.open_items(tmp_path, "cron")
+    grouping = calls.fix_assignments(tmp_path, selected, [])
+    assert [len(c["open_review_items"]) for c in grouping] == [30, 1]
+    for n, call in enumerate(grouping, 1):
+        selected = call["open_review_items"]
         closures = [{"file": i["file"], "item_id": i["item_id"], "status": "fixed"} for i in selected]
         files.apply_closure(tmp_path, f"run-{n}", closures, selected)
     assert files.open_items(tmp_path, "cron") == []

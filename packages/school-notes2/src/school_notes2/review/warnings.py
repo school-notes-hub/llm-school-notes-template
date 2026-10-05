@@ -37,7 +37,7 @@ def record(repo: Path, assigned: list[dict], verdicts: list[dict]) -> list[dict]
         if v.get("verdict") not in ("megengedett", "téves", "hiba") or not v.get("reason", "").strip():
             raise ValueError("warning verdict needs a verdict and nonempty reason")
         finding = by_id[v["id"]]
-        if v["verdict"] == "hiba":
+        if v["verdict"] == "hiba" and v.get("severity", "hiba") == "hiba":
             stored.pop(key(finding), None)
             errors.append({**finding, "reason": v["reason"], "covered_by": v.get("covered_by")})
         else:

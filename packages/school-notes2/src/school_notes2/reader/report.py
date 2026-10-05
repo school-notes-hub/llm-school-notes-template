@@ -1,6 +1,7 @@
 """Merge reader/list/figure findings without duplicating pass-one findings."""
 
 import re
+import json
 
 from ..review import attempts, files, generated, relations, warnings
 from ..state import safefs
@@ -18,7 +19,7 @@ def locate(repo, finding):
             "unlocated": not bool(match)}
 
 
-def list_findings(repo, hits, output):
+def list_findings(repo, hits, output, findings=()):
     decisions = [{**h, "id": h["hit_id"]} for h in output]
     # The warning store's content keys apply to source_ref findings only.
     source = [h for h in hits if "line_hash" in h]
@@ -26,16 +27,20 @@ def list_findings(repo, hits, output):
     if source:
         warnings.record(repo, source, [d for d in decisions if d["id"] in selected])
     by_id = {h["id"]: h for h in hits}
+    advice_ids = {f["id"] for f in findings if not (f.get("severity", "hiba") == "hiba")}
     result = []
     for decision in decisions:
-        if decision["verdict"] != "hiba" or decision.get("covered_by"):
+        covered = decision.get("covered_by")
+        if decision["verdict"] != "hiba" or (covered and not (covered in advice_ids and (decision.get("severity", "hiba") == "hiba"))):
             continue
         hit = by_id[decision["id"]]
         lines = safefs.read_text(repo, hit["file"]).splitlines()
         n = hit.get("line") or 1
         result.append({"file": hit["file"], "quote": lines[n - 1] if n <= len(lines) else "",
                        "problem": decision["reason"], "suggestion": "", "category": "forráskötött",
-                       "origin": "list", "relates_to": None, "hit_id": hit["id"]})
+                       "origin": "list", "relates_to": None, "hit_id": hit["id"],
+                       "severity": decision.get("severity", "hiba"),
+                       **({"item_key": decision["item_key"]} if "item_key" in decision else {})})
     return result
 
 
@@ -44,7 +49,12 @@ def prepare(repo, findings, notes, pages=()):
     from ..figures import migration_gate
     findings = [figure_quote(repo, f) for f in findings]
     findings = [f for f in findings if not migration_gate.concerns(repo, f)]
+    advice = [f for f in findings if not (f.get("severity", "hiba") == "hiba")]
+    findings = [f for f in findings if (f.get("severity", "hiba") == "hiba")]
+    pages = [{**p, "verdict": "ok"} if any(f["file"] == p["file"] for f in advice)
+             and not any(f["file"] == p["file"] for f in findings) else p for p in pages]
     kept, notes, literals = generated.partition(repo, findings, notes)
+    _, notes = advice_notes(advice, notes)
     return kept, notes, generated.page_verdicts(pages, findings, literals)
 
 
@@ -54,7 +64,8 @@ def write(repo, path, findings, notes, model, base, at):
         return path
     located = [locate(repo, f) for f in findings]
     ordered = sorted(located, key=lambda f: (f["file"], f.get("line") or 0, f.get("origin", ""),
-                                             f.get("quote", ""), f["problem"], f.get("id", "")))
+                                             f.get("quote", ""), f["problem"], f.get("id", ""),
+                                             json.dumps(f, sort_keys=True, ensure_ascii=False)))
     review = {"verdict": "changes" if ordered else "ok", "owner_notes": notes,
               "findings": [{**f, "id": f"R{n}"} for n, f in enumerate(ordered, 1)]}
     files.write_review(repo, at[:10], review, model, base, base, path=repo / path)
@@ -79,6 +90,7 @@ def reopen(repo, key, answer):
 
 def append(repo, path, findings, notes, label):
     """One run report, replay-safe supplements for P5 and exhausted figures."""
+    findings, notes = advice_notes(findings, notes)
     text = safefs.read_text(repo, path)
     page = frontmatter.split(text)
     labels = page.meta.get("supplements", [])
@@ -89,7 +101,7 @@ def append(repo, path, findings, notes, label):
     number = max((int(k[1:]) for k in items), default=0)
     body = []
     for finding in sorted((locate(repo, f) for f in findings),
-                          key=lambda f: (f["file"], f.get("line") or 0, f["problem"])):
+                          key=lambda f: (f["file"], f.get("line") or 0, f["problem"], json.dumps(f, sort_keys=True, ensure_ascii=False))):
         status, unlocated = relations.route(finding, known)
         if status == "pending":
             body += ["## Függő (nyitott kérdésre vár)", "", finding["problem"], ""]
@@ -100,7 +112,7 @@ def append(repo, path, findings, notes, label):
         items[key] = finding.get("owner_status", status)
         details[key] = {"file": finding["file"], "round": 1, "chain": chain,
                         **attempts.inherited(finding, known),
-                        "origin": finding["origin"], "category": finding["category"],
+                        "origin": finding["origin"], "category": finding["category"], "severity": "hiba",
                         "relates_to": finding.get("relates_to"),
                         "unlocated": unlocated or finding["unlocated"],
                         **{k: finding[k] for k in ("quote", "hit_id", "figure_id", "outside_assignment") if k in finding}}
@@ -128,3 +140,11 @@ def figure_quote(repo, finding):
     text = safefs.read_text(repo, finding["file"])
     marker = next(m[0] for m in commissions.MARKER.finditer(text) if m[1] == fid)
     return {**finding, "quote": marker, "figure_id": fid, "unlocated": False}
+
+
+def advice_notes(findings, notes):
+    notes = list(notes)
+    for f in sorted(findings, key=lambda f: (f.get("file", ""), f.get("quote", ""), f.get("problem", ""), f.get("suggestion", ""))):
+        if f.get("severity", "hiba") == "javaslat":
+            notes.append(f"{f['file']}: {f['problem']}" + (f" → {f['suggestion']}" if f.get("suggestion") else ""))
+    return [f for f in findings if f.get("severity", "hiba") == "hiba"], list(dict.fromkeys(notes))

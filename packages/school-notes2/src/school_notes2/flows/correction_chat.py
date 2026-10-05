@@ -4,13 +4,13 @@ from ..llm.argv import prompt
 from ..schemas import validate
 from ..state import phase, safefs
 from ..state.errors import BadWork
-from . import fetch, inspection, writer
+from . import correction_round, fetch, inspection, writer
 
 
 def active(task):
     if task.mode != "interactive" or task.phase != "correcting":
         return None
-    return phase.load(inspection.folder(task) / "correction/writer")
+    return phase.load(correction_round.root(task) / "writer")
 
 
 def result(ctx, child):
@@ -46,7 +46,7 @@ def resume_inputs(ctx, task):
 def restore_inputs(ctx, task):
     safefs.write_json(ctx.notes_path, ".school-notes/fetch.json", fetch.fetch_json(
         task, min(task.get("writing_k", 1), len(task.get("ranges"))), grade=ctx.student.grade, repo=ctx.notes_path))
-    root = inspection.folder(task) / "correction"
+    root = correction_round.root(task)
     path = ".school-notes/result.json"
     if safefs.is_file(root, "before/" + path):
         safefs.write_bytes(ctx.notes_path, path, safefs.read_bytes(root, "before/" + path))

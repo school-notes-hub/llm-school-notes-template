@@ -33,6 +33,9 @@ def run(ctx: Ctx) -> int:
         owner_notices.retry(ctx)
         _settle_images(ctx)
         task = phase.open_task(ctx.task_root(), ctx.name, "notes")
+        from . import set_aside
+        if set_aside.resume(ctx, task):
+            return 1
         from . import last_error
         from ..state.files import read_json
         previous = read_json(ctx.cfg.state_dir / ctx.name / "last-error.json", {})
@@ -80,6 +83,11 @@ def _may_run(ctx: Ctx, task: Task | None) -> bool:
         _daily(ctx, "no_push", task.run_id, f"Visszatartott próba; fázis: {task.phase}. A cron vár.",
                f"Nézd meg, majd school-notes finish {ctx.name}; vagy status --clear {ctx.name} notes --discard.")
         return False
+    if task is not None and task.data.get("needs_owner"):
+        from .set_aside import release
+        owner = task.data["needs_owner"]
+        if owner["class"] == "program" and owner.get("release") != release(ctx):
+            task.clear_needs_owner()
     if task is not None and task.data.get("needs_owner"):
         ctx.log.event("run.skip", "needs_owner", target=task.run_id)
         return False
@@ -177,18 +185,8 @@ def owner_items(ctx: Ctx, task: Task, items: list[dict]) -> bool:
 
 
 def image_notices(ctx: Ctx) -> None:
-    """5.5: a used-up daily budget (daily) and an image out of attempts (once) are mailed."""
-    found = image_pending.scan(ctx.image_settings())
-    waiting = found["exhausted"] or image_plans.find_markers(ctx.notes_path)
-    if not found["budget_left"] and waiting:
-        ctx.mailer.send(Notice(ctx.name, "image_budget", "", "images", "image",
-                               "the daily or monthly image budget is used up; markers stay "
-                               "invisible", "nothing to do; generation continues when the budget "
-                               "allows (daily 1 USD, monthly 10 USD)"))
-    for item in found["exhausted"]:
-        ctx.mailer.send_once(Notice(ctx.name, f"image_exhausted:{item['plan_id']}", "", "images",
-                                    "image", f"image {item['plan_id']} ({item['page']}) failed "
-                                    "three times", "retry it in `school-notes chat`"))
+    from . import image_notices as notices
+    notices.threshold(ctx)
 
 
 def _settle_images(ctx: Ctx) -> None:

@@ -100,12 +100,13 @@ def asset_pages(work):
     return result
 
 
-def affected(repo, work, base, head):
+def affected(repo, work, base, head, material=None):
     changed = author_changes(repo, base, head)
+    if material is not None:
+        changed = sorted(set(changed) & set(material))
     related, published = asset_pages(work), set(wiki_pages(work))
-    closures = closure_changes(repo, base, head)
     pages, assets = set(), {}
-    for path in sorted(set(changed) | {item.get("file", "") for item in closures.values()}):
+    for path in sorted(set(changed)):
         if path in published:
             pages.add(path)
         elif not path.endswith(".md") and related.get(path):
@@ -135,21 +136,37 @@ def plan(repo, work, base, head, state):
     @cache
     def touched_at(commit):
         parent = repo.out("rev-parse", f"{commit}^").strip()
+        message = repo.out("show", "-s", "--format=%B", commit).splitlines()
+        if not any(line in ("School-Notes-Run: run", "School-Notes-Run: chat") for line in message):
+            return {}
+        if "School-Notes-Run: run" in message:
+            material = next((line.removeprefix("School-Notes-Material: ") for line in message
+                             if line.startswith("School-Notes-Material: ")), None)
+            if material is not None:
+                return {u["topic"]: u for u in affected(repo, work, parent, commit, json.loads(material))}
         return ranges(parent, commit)
 
+    @cache
+    def eligible(start):
+        merged = {}
+        for commit in history(start):
+            for topic, unit in touched_at(commit).items():
+                current = merged.setdefault(topic, {**unit, "commits": []})
+                current["commits"].append(commit)
+                for key in ("changed", "context", "pages"):
+                    current[key] = sorted(set(current[key]) | set(unit[key]))
+        return merged
+
     result, skipped = [], []
-    initial = set(ranges(base, head))
+    initial = set(eligible(base))
     for topic in sorted(initial | set(done) | set(blocked)):
         start = blocked.get(topic, {}).get("since_commit", done.get(topic, base))
-        current = ranges(start, head).get(topic)
+        current = eligible(start).get(topic)
         if current is None:
             skipped.append(topic)
             continue
-        touched = [commit for commit in history(start) if topic in touched_at(commit)]
-        mode = "targeted" if touched and all(is_fix(repo, c) for c in touched) else "full"
-        pages = current["changed"] if mode == "targeted" else current["pages"]
-        pages = [p for p in pages if p.endswith(".md") and not p.startswith("wiki/assets/")]
-        result.append({**current, "base": start, "mode": mode, "commits": touched,
+        pages = [p for p in current["pages"] if p.endswith(".md") and not p.startswith("wiki/assets/")]
+        result.append({**current, "base": start, "mode": "full",
                        "assigned_pages": pages, "blocked": topic in blocked})
     return result, skipped
 

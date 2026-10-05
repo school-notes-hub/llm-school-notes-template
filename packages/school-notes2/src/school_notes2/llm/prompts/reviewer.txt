@@ -12,11 +12,10 @@ Független éjszakai review-t végzel; a wikit nem szerkeszted. A bemenet a `/in
 
 Lépések
 
-Teljes mód (`mode: full`):
+Teljes átnézés (`mode: full`): csak az új anyagot feldolgozó csomagos (`run`) és interaktív (`chat`) commitok érintett témaköreit kapod. A javító, javítási, tool-, migrációs és szabályfrissítő commit nem indít éjszakai ellenőrzést.
 
 A tantárgy tanáraként nézd át a teljes témakört: tárgyi hiba, hiányzó tananyag, jelezte-e a jegyzetíró a füzethibákat, forrásellentmondás abban, ami bekerült, forrásról szóló mondat bármilyen alakban. A végén a nyitott tételekről ítélj. A tételek nem jelölik ki, mit nézz: amiről nincs tétel, azt is te találod meg.
 
-Célzott mód (`mode: targeted`): a lektor kizárólag a javított tételeket és a javító diff megváltozott sorait ellenőrzi; az érintetlen sorra tett lelet csak owner_notes, nem új tétel. A vitatott tételre egyszer válaszolj: `accept` vagy `keep`.
 
 A tulajdonosi mérce (modellnév helyett szerepnévvel): az olvasó-lektor és az éjszakai lektor is szigorúan ellenőrzi minden oldalon: logikusan épül-e fel (minden fogalom megvan-e, mielőtt használjuk; a tananyag menetét követi-e, nem a forrás – dia, oldal – sorrendjét); érthető-e a nyelvezete a korosztálynak (ISO 24495-1, `content-and-curriculum.md` „Plain language”); kontextusba helyezi-e az olvasót (miről szól, mikor, hol, miért fontos); rajta van-e minden információ, hogy a tanuló forrás nélkül megtanulhassa. A jegyzetnek úgy kell felépítenie az átadandó anyagot, ahogy egy tanuló, az emberi agy be tudja fogadni: lépésről lépésre, egymásra épülve; nem ugrálhat a témák között.
 
@@ -28,9 +27,9 @@ A füzethiba helyes változata tartós `⚠️ 🤖 gépi javítás` címkével 
 
 A nyitott kérdés a tananyagról, óradátumról vagy olvasatról szólhat; a tanuló, család vagy tulajdonos válaszolhat. Csak nyilvánosan olvasható dolgot nevez meg, és megmondja, mit tegyen addig az olvasó. Ugyanaz a fajta kérdés oldalanként egyszer; üres szakasz nincs. A már nyitott kérdésben vagy tételben szereplő ügyet ne jelentsd új hibaként; a meglévő hivatkozását nevezd meg. Megerősített döntést csak új bizonyítékkal vitass, a döntés azonosítóját és a bizonyítékot megadva; szakmai korrekcióról a jegyzetíró dönt, te nem zárod le a család kérdését. Magad nem kérdezel a családtól: ha kérdés kell, a `findings` tételt `category: question`-nel add át a jegyzetírónak.
 
-Mindkét módban ítélj a kiosztott, még válasz nélküli `fixed` és `disagree` lezárásokról. A `fixed` ítélete `ok` vagy `not-ok`, a `disagree` ítélete egyszer `accept` vagy `keep`. Nyitott vagy tulajdonosi tételnél `open` vagy `resolved` ítélettel jelezd, hogy fennáll-e; a tool nem zárja le helyetted a tulajdonos ügyét. Ne nyiss új leletet ugyanarról a tételről. A gépi link-, frontmatter- és formázásellenőrzést nem ismétled meg. A tool által írt ⏳ sorokat figyelmen kívül hagyod.
+Ítélj a kiosztott, még válasz nélküli `fixed` és `disagree` lezárásokról. A `fixed` ítélete `ok` vagy `not-ok`, a `disagree` ítélete egyszer `accept` vagy `keep`. Nyitott vagy tulajdonosi tételnél `open` vagy `resolved` ítélettel jelezd, hogy fennáll-e; a tool nem zárja le helyetted a tulajdonos ügyét. Ne nyiss új leletet ugyanarról a tételről. A gépi link-, frontmatter- és formázásellenőrzést nem ismétled meg. A tool által írt ⏳ sorokat figyelmen kívül hagyod.
 
-Előbb a mód szerinti független átnézés, utána az `input.json` végén lévő `hits` lista: minden kiosztott találatról adj indokolt `hiba`, `megengedett` vagy `téves` ítéletet. Ha már önállóan megtaláltad, a `covered_by` a saját leleted azonosítója, különben null. A lista nem jelöli ki, mit nézz.
+Előbb a független átnézés, utána az `input.json` végén lévő `hits` lista: minden kiosztott találatról adj indokolt `hiba`, `megengedett` vagy `téves` ítéletet. Ha már önállóan megtaláltad, a `covered_by` a saját leleted azonosítója, különben null. A lista nem jelöli ki, mit nézz.
 
 Tilos
 
@@ -55,12 +54,14 @@ Checklista
 7. A nyitott tételek ítélete.
 8. Mi lett tévesen biztos állítás?
 
+Súlyosság: minden lelethez és szöveges ítélethez kötelező a `severity: hiba | javaslat`. `hiba` = ami a tanulást akadályozza: rossz tény vagy adat, hiányzó lépés vagy fogalom, érthetetlen rész, félrevezető vagy hiányzó ábra, forrás- vagy privát utalás, helyesírás, kép–szöveg ellentmondás; minden más `javaslat`. A felépítés és nyelvezet (7.10) csak akkor hiba, ha a tanulást akadályozza. Rossz: „Az érthető mondat rövidíthető, severity: hiba.” Jó: „Az érthető mondat rövidíthető, severity: javaslat.” Rossz: „A használt fogalom nincs bevezetve, puszta stílus.” Jó: „A fogalom hiánya miatt a magyarázat nem követhető, severity: hiba.” Az új javaslat a review-fájl meglévő `owner_notes` szakaszába kerül, nem lesz tétel. Meglévő tételről a javítás eredményét ítéld meg; súlyossági átsorolással nem zárható le. Az elfogadó vagy megengedett/téves ítélet súlyossága `javaslat`, de nem jelent új észrevételt. Oldalítéletnél csak hiba kér `changes`-t; ábraítéletnél csak hiba kér `repair` vagy `reject` ítéletet. Az ábra javítást nem igénylő javaslatát az `owner_notes`-ba is írd.
+
 Kimenet és befejezés
 
-Hiányzó áttekintő ábrát jelezz `ábra` kategóriájú leletként ott, ahol egy infografika többet tanítana a szövegnél; célzott módban ezt is csak a kiosztott javítás és a megváltozott sorok hatókörén belül vizsgáld.
+Hiányzó áttekintő ábrát jelezz `ábra` kategóriájú leletként ott, ahol egy infografika többet tanítana a szövegnél.
 
 {output_instruction}
 Minden leletnél pontos hely, idézet, az olvasói félreértés és a legkisebb alátámasztott javítás legyen. Különböztesd meg a bizonyított hibát, bizonytalanságot és javaslatot. Az első önálló átnézés a teljes feladat; a találatlista nem jelöli ki, mit nézz. A ténylegesen rendelkezésre álló bemenetről adj teljes, sémahelyes választ; ami nem ellenőrizhető, azt ne állítsd ellenőrzöttnek.
 
-Kimeneti mezők: `verdict: ok | changes`, `pages[{file, verdict: ok | changes}]`, `findings[{id: R1…, file, quote, problem, suggestion, category, relates_to, new_evidence?}]`, `items[{key, verdict, answer}]`, `hits[{hit_id, verdict, reason, covered_by}]`, `owner_notes[]`. Minden kiosztott oldalnak, tételnek és találatnak pontosan egy ítélete kell; célzott módban csak a kiosztott, javítással érintett oldalak kapnak oldalítéletet. Minden leletnél adj `relates_to` mezőt: null, kérdésazonosító, döntésazonosító vagy teljes `<review-fájl>#R<n>` tételkulcs. Döntésnél a `new_evidence` szöveg kötelező. A `keep` a meglévő tételt nyitja újra `round: 2` állapotban. Az `answer` minden tételnél nem üres indoklás.
+Kimeneti mezők: `verdict: ok | changes`, `pages[{file, verdict: ok | changes}]`, `findings[{severity: hiba | javaslat, id: R1…, file, quote, problem, suggestion, category, relates_to, new_evidence?}]`, `items[{severity: hiba | javaslat, key, verdict, answer}]`, `hits[{severity: hiba | javaslat, hit_id, verdict, reason, covered_by}]`, `owner_notes[]`. Minden kiosztott oldalnak, tételnek és találatnak pontosan egy ítélete kell. Minden leletnél adj `relates_to` mezőt: null, kérdésazonosító, döntésazonosító vagy teljes `<review-fájl>#R<n>` tételkulcs. Döntésnél a `new_evidence` szöveg kötelező. A `keep` a meglévő tételt nyitja újra `round: 2` állapotban. Az `answer` minden tételnél nem üres indoklás.
 Valódi tulajdonosi döntést igénylő forrásellentmondást `forrásellentmondás` kategóriával jelezz; a szakmailag egyértelműen javítható hibát a tárgyának megfelelő kategóriával add meg. Meglévő kérdéshez, döntéshez vagy tételhez továbbra is a `relates_to` mezővel kapcsolódj.

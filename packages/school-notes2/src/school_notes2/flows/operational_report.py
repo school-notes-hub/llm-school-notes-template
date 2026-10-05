@@ -44,7 +44,7 @@ def details(ctx, task):
     events = read_json(ctx.cfg.state_dir / ctx.name / "timeout-events.json", [])
     return {"csomagok": task.get("packages", []), "változott oldalak": sorted(changed), "témák": topics,
             "⏳-jelzések": notices, "időtúllépések": [e for e in events if e["run_id"] == task.run_id
-                                                        or e["run_id"].startswith(task.run_id + "-fix-a")],
+                                                        or e["run_id"].startswith((task.run_id + "-fix-a", task.run_id + "-fix-r"))],
             "keretállapot": read_json(ctx.cfg.state_dir / "quota.json", {}), "tokenek": _metrics(task)}
 
 
@@ -64,6 +64,8 @@ def _metrics(task):
 
 
 def terminal(task):
+    if task.get("set_aside"):
+        return "set_aside"
     if task.data.get("needs_owner"):
         return "needs_owner"
     if task.data.get("closed"):
@@ -72,12 +74,15 @@ def terminal(task):
 
 
 def completed(ctx, task, report, duration, *, finishing=False):
-    from . import writer
-    notes = writer.merge(writer.results(task, required=False) if task.get("ranges") else [])["owner_notes"]
+    from . import writer, image_notices
+    receipt = terminal(task)
+    notes = []
+    if receipt != "set_aside":
+        image_notices.summary(ctx, task)
+        notes = writer.merge(writer.results(task, required=False) if task.get("ranges") else [])["owner_notes"]
     notes += task.get("reader_owner_notes", []) + task.get("recheck_owner_notes", [])
     notes += task.get("correction_result", {}).get("owner_notes", []) + report.get("owner_notes", [])
     report["owner_notes"] = list(dict.fromkeys(notes))
-    receipt = terminal(task)
     is_terminal = bool(receipt)
     if receipt == "needs_owner":
         incidents.task_error(ctx, task)
@@ -111,7 +116,7 @@ def completed(ctx, task, report, duration, *, finishing=False):
 MODES = {"publish": ("kiadási futás", "kiadási futása"), "run": ("jegyzetfutás", "jegyzetfutása"), "fix": ("javító futás", "javító futása"),
          "repair": ("javítási futás", "javítási futása"), "chat": ("interaktív munkamenet", "interaktív munkamenete"),
          "nightly": ("éjszakai review", "éjszakai review-ja")}
-STATES = {"done": "kész", "closed": "elvetve", "retry_nightly": "éjszaka újrapróbálja", "needs_owner": "elakadt, rád vár"}
+STATES = {"set_aside": "toolhiba; a futás félretéve, archívumban; a kontroller javítja; a többi munka megy", "done": "kész", "closed": "elvetve", "retry_nightly": "éjszaka újrapróbálja", "needs_owner": "elakadt, rád vár"}
 
 
 def subject(name, mode, receipt):
@@ -138,6 +143,8 @@ def sentence(name, mode, task, receipt, *, ended=None):
                    "bad_work": "hibás munkakimenet", "transient": "ismétlődő átmeneti hiba",
                    "prerequisite": "hiányzó előfeltétel"}
         text += f" ({reasons.get(owner.get('class'), 'tulajdonosi döntés szükséges')})"
+    if task.get("image_budget_note"):
+        text += "; " + task.get("image_budget_note")
     return text + "."
 
 

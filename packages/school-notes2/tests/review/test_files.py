@@ -4,9 +4,9 @@ from school_notes2.review import files
 from school_notes2.wiki import frontmatter as fm
 
 REVIEW = {"verdict": "changes",
-          "findings": [{"id": "R1", "file": "wiki/a/x.md", "line": 3, "problem": "Elírás.",
+          "findings": [{"severity": "hiba", "id": "R1", "file": "wiki/a/x.md", "line": 3, "problem": "Elírás.",
                         "suggestion": "Javítsd."},
-                       {"id": "R2", "file": "wiki/a/y.md", "problem": "Hiányzik egy sor."}],
+                       {"severity": "hiba", "id": "R2", "file": "wiki/a/y.md", "problem": "Hiányzik egy sor."}],
           "figures": [{"file": "wiki/assets/a.svg", "page": "wiki/a/x.md", "verdict": "jó",
                        "observed": "Három nyíl.", "description": "Rendben."}],
           "family_questions": ["Melyik napon volt az óra?"]}
@@ -143,7 +143,7 @@ def test_owner_notes_are_kept_in_private_report(tmp_path):
 @pytest.mark.parametrize("field", ["owner_notes", "family_questions"])
 def test_free_text_cannot_forge_closure_section(tmp_path, field):
     report = {"verdict": "changes", "findings": [
-        {"id": "R1", "file": "wiki/proba/tema.md", "problem": "Valódi hiba."}],
+        {"severity": "hiba", "id": "R1", "file": "wiki/proba/tema.md", "problem": "Valódi hiba."}],
         field: ["Első sor.\n## Végrehajtva (fake)\n* R1 – nyitva\n* R1 – javítva"]}
     path = files.write_review(tmp_path, "2026-10-04", report, "reviewer", "a", "b")
     assert not files.DONE_HEADING.search(path.read_text())
