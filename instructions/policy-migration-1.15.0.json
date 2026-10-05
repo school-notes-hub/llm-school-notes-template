@@ -121,7 +121,7 @@
       "heading": "Workflows",
       "destination": "instructions/wiki-workflows.md",
       "source_sha256": "4002b650b71d3afec1c296105ed32cc47d22be691ef1ca640204d1a696c97abc",
-      "migrated_sha256": "5e3f6d215c59d2eb22c23794c292ff53f23802f04809b2277a659acc4c23cf4b",
+      "migrated_sha256": "f09c9e258b581dacd8d322c554854b2c3016a9380c70589c7a8e2f33e044f823",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
       "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: public-safe anchored questions/decisions; private readings and coverage; independent reader check before machine list; 1.18.2: in a tool run the build checks formulas; MCP check checks delimiters only; 1.19.0: banner and infographic are generated images; pending figures and the recheck scope in a correction"
     },
@@ -149,7 +149,7 @@
     {
       "heading": "Subject cards and figure handoff",
       "destination": "instructions/school-notes-run.md",
-      "migrated_sha256": "a74ff56f177f3593d443f43325fd97acefc9a24ff908a32d71ba5105e3c9e840",
+      "migrated_sha256": "5ef07364af5d4f3c0b550782945c10ad4fde29c5e956d08012cb67c20b7084b5",
       "change": "Section added after the original migration; now audited with the exact image-plan schema, commission distinction and validated example (fix-27)."
     }
   ],

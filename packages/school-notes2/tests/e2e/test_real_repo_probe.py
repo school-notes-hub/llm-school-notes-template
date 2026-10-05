@@ -30,6 +30,8 @@ def synthetic(tmp_path):
     contents["wiki/masik/tema.md"] = contents["wiki/proba/elso.md"].replace("Első", "Másik")
     contents["tools/subjects.json"] = json.dumps({"subjects": {
         "proba": {"name": "Próba", "emoji": "🧪"}, "masik": {"name": "Másik", "emoji": "📖"}}})
+    public_config = json.loads(contents["publication/public.json"])
+    contents["publication/public.json"] = json.dumps({**public_config, "site": "https://probe.example.test"})
     for rel, text in contents.items():
         safefs.write_text(tree, rel, text)
     for page in ("wiki/proba/elso.md", "wiki/masik/tema.md"):
