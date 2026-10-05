@@ -83,7 +83,7 @@ def test_queue_no_push_finishes_real_commit_chain(world):
     assert show(origin, f"main:{queue.PATH}")
 
 
-def test_direct_failed_no_push_handoff_finishes_without_queue(world, monkeypatch):
+def test_direct_failed_no_push_repair_is_set_aside_without_queue(world, monkeypatch):
     from school_notes2.state.errors import BadWork
     ctx, origin, _, _ = world
     def bad(*args):
@@ -92,12 +92,11 @@ def test_direct_failed_no_push_handoff_finishes_without_queue(world, monkeypatch
     for _ in range(2):
         assert repair.repair(ctx, topic="wiki/proba/elso.md", no_push=True) == 1
     assert repair.repair(ctx, topic="wiki/proba/elso.md", no_push=True) == 0
-    task = phase.open_task(ctx.task_root(), ctx.name, "notes")
-    assert task.phase == "committed" and task.get("skip_writer")
+    assert phase.open_task(ctx.task_root(), ctx.name, "notes") is None
+    task = next(t for t in phase.all_tasks(ctx.task_root(), ctx.name) if t.get("set_aside"))
+    assert task.get("set_aside") and not task.get("repair_owner_item")
     assert not safefs.is_file(ctx.notes_path, queue.PATH)
-    assert chat.session_finish(ctx)["state"] == "done"
     assert not show(origin, f"main:{queue.PATH}")
-    assert "R1" in show(origin, f"main:{task.get('repair_owner_item')}")
 
 
 def test_new_packages_precede_queue_and_next_run_repairs_one_item(world, monkeypatch):
@@ -121,7 +120,7 @@ def test_new_packages_precede_queue_and_next_run_repairs_one_item(world, monkeyp
     assert queue.load(ctx.notes_path)["items"][0]["status"] == "done"
 
 
-def test_two_failed_repairs_archive_bad_work_and_commit_owner_handoff(world, monkeypatch):
+def test_two_failed_repairs_archive_bad_work_without_changing_queue(world, monkeypatch):
     from school_notes2.state.errors import BadWork
     ctx, origin, _, _ = world
     assert repair.repair(ctx, build_queue=True) == 0
@@ -132,10 +131,11 @@ def test_two_failed_repairs_archive_bad_work_and_commit_owner_handoff(world, mon
     monkeypatch.setattr(writer, "_call", bad)
     for _ in range(2):
         assert repair.repair(ctx, topic="wiki/proba/elso.md") == 1
-    task = phase.open_task(ctx.task_root(), ctx.name, "notes")
-    assert task.get("repair_failed") and task.phase == "moved"
+    assert phase.open_task(ctx.task_root(), ctx.name, "notes") is None
+    task = next(t for t in phase.all_tasks(ctx.task_root(), ctx.name) if t.get("set_aside"))
+    assert task.get("set_aside") and task.phase == "done"
     assert repair.repair(ctx, topic="wiki/proba/elso.md") == 0, ctx.cfg.log_path.read_text()[-3000:]
     assert phase.open_task(ctx.task_root(), ctx.name, "notes") is None
     assert show(origin, "main:wiki/proba/elso.md") == original
-    assert queue.load(ctx.notes_path)["items"][0]["status"] == "owner"
+    assert queue.load(ctx.notes_path)["items"][0]["status"] == "pending"
     assert (ctx.cfg.root / "archive" / ctx.name / f"{task.run_id}.bundle").is_file()

@@ -112,7 +112,7 @@ def _with_frontmatter(body: str, reviewer: str, frm: str, to: str, items: dict) 
 
 
 def write_review(repo: Path, date: str, review: dict, reviewer: str, frm: str, to: str, *,
-                 path: Path | None = None, known: dict | None = None) -> Path:
+                 path: Path | None = None, known: dict | None = None, write=None) -> Path:
     """A new review file from a validated review.json; returns its path."""
     from ..reader.report import advice_notes
     findings, notes = advice_notes(review["findings"], review.get("owner_notes", []))
@@ -143,7 +143,11 @@ def write_review(repo: Path, date: str, review: dict, reviewer: str, frm: str, t
         body += "\n## Függő (nyitott kérdésre vár)\n\n" + "\n".join(
             f"* {_one_line(f['file'])}: {_one_line(f['problem'])}" for f in pending) + "\n"
     text = _with_frontmatter(body, reviewer, frm, to, items)
-    _write(repo, path, fm.set_keys(text, {"item_details": records}))
+    output = fm.set_keys(text, {"item_details": records})
+    if write is None:
+        _write(repo, path, output)
+    else:
+        write(repo, _rel(repo, path), output)
     return path
 
 

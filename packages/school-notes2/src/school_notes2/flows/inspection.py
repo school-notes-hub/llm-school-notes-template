@@ -180,11 +180,12 @@ def _apply(ctx, task, saved):
     saved = {**saved, "findings": findings, "notes": notes, "pages": pages}
     path = f"docs/review/{task.data['created'][:10]}-{task.run_id}-run.md"
     if not task.get("inspection_figures") and not any(saved.get(k) for k in ("findings", "notes", "pages", "receipts", "fixes")):
-        task.update(inspection_report=None, inspection_receipts={}, reader_pages=[])
+        task.update(inspection_receipts={}, reader_pages=[])
         return
     model = role(ctx, task).role
-    if task.get("attempt", 1) > 1 and safefs.is_file(ctx.notes_path, path):
-        report.append(ctx.notes_path, path, saved["findings"], saved["notes"], f"attempt-{task.get('attempt')}")
+    existing = frontmatter.split(safefs.read_text(ctx.notes_path, path)) if safefs.is_file(ctx.notes_path, path) else None
+    if existing is not None and (task.get("attempt", 1) > 1 or existing.meta.get("reviewer") == "check"):
+        report.append(ctx.notes_path, path, saved["findings"], saved["notes"], f"attempt-{task.get('attempt', 1)}")
     else:
         report.write(ctx.notes_path, path, saved["findings"], saved["notes"],
                      f"{model.model}/{model.effort}", task.get("base"), task.data["created"])

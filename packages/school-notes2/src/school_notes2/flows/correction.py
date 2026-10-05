@@ -21,6 +21,10 @@ def all_items(ctx, task):
     from . import fix_progress
     items = [i for i in files.open_items(ctx.notes_path, "cron")
              if not migration_gate.concerns(ctx.notes_path, i)]
+    if task.mode == "interactive" or task.get("mode") == "repair":
+        own = {i["file"] + "#" + i["item_id"] for i in task.get("open_review_items", [])}
+        report = task.get("inspection_report")
+        items = [i for i in items if i["file"] == report or i["file"] + "#" + i["item_id"] in own]
     return fix_progress.available(ctx, items, [])[0]
 
 
@@ -68,6 +72,7 @@ def child_task(ctx, task, root, items):
                                correction_parent=task.run_id, correction_before=str(root / "before"),
                                paid_disabled=task.get("mode") == "repair",
                                fix_calls={}, fix_crash_retries=[], writer_invocation=0, writer_output_key=None,
+                               assigned_work=[], correction_work=[], failed_fix_calls=[],
                                counted_bad_outputs=[], retry_calls=[], retry_items={}, retry_link_pages=[],
                                writer_check={"count": 0, "warnings": []}, fix_scope_rolled_back=False)
     if task.mode == "interactive":
@@ -137,9 +142,13 @@ def execute(ctx, task, root, edits):
             saved = {"status": "rollback", "reason": str(exc)}
             saved["timeout"] = True
         except steps.CheckFailed as exc:
+            checks.record_failure(ctx, task, exc, "correction.check")
             saved = {"status": "rollback", "reason": str(exc), "items": exc.items[:10]}
         except (BadWork, Transient) as exc:
             saved = {"status": "rollback", "reason": str(exc)}
+        finally:
+            from .set_aside import work
+            task.update(correction_work=sorted(set(task.get("correction_work", [])) | set(work(child))))
     return saved
 
 
@@ -213,6 +222,8 @@ def validated(ctx, child, root, items, result, edits=None):
     from . import fetch
     from ..wiki.check_result import check_result
     supplied = fetch.fetch_json(child, 1, grade=ctx.student.grade, repo=ctx.notes_path, whole_run=True)
+    from . import correction_calls
+    supplied = correction_calls.successful_fetch(ctx, child, supplied)
     problems = check_result(ctx.notes_path, result, supplied,
                             {(i["file"], i["item_id"]) for i in items}, len(items),
                             base_content=steps.base_reader(ctx, child),

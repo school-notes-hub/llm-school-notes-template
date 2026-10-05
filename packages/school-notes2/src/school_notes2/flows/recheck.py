@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from ..review.severity import is_error
 from ..figures import inputs as figure_inputs
 from ..reader import calls, inputs, report, units, verdicts
 from ..review import relations, scope
@@ -80,6 +81,8 @@ def check_unit(ctx, task, view, unit, closures):
 
 def apply(ctx, task, saved):
     written, findings, notes = [], [], []
+    known = relations.inventory(ctx.notes_path)["items"]
+    sources = [i for entry in saved["units"] for i in entry.get("items", [])]
     for entry in saved["units"]:
         if entry["status"] != "reviewed":
             continue
@@ -91,17 +94,20 @@ def apply(ctx, task, saved):
             return safefs.read_text(before, page) if safefs.is_file(before, page) else ""
         new += review.get("findings", [])
         new = [report.figure_quote(ctx.notes_path, f) for f in new]
-        advice = [f for f in new if not (f.get("severity", "hiba") == "hiba")]
-        new = [f for f in new if (f.get("severity", "hiba") == "hiba")]
+        advice = [f for f in new if not is_error(f)]
+        new = [f for f in new if is_error(f)]
         new, outside = scope.partition(new, old, lambda p: safefs.read_text(ctx.notes_path, p), entry.get("unit", {}).get("pages", [f["file"] for f in new]))
         new, feedback, _ = report.prepare(ctx.notes_path, new + advice, outside)
         corrected = {i["key"]: i for i in entry.get("items", [])}
         for finding in new:
             key = finding.get("item_key")
             if key in corrected:
-                written.append(report.reopen(ctx.notes_path, key, finding["problem"]))
+                written.append(report.reopen(ctx.notes_path, key,
+                    f"{finding['file']}: {finding['quote']} — {finding['problem']}"))
             else:
-                findings.append({**finding, "origin": "recheck", "relates_to": None})
+                depth = source_chain(known, entry, finding, sources) + 1
+                findings.append({**finding, "origin": "recheck", "relates_to": None, "chain": depth,
+                                 **({"owner_status": "owner"} if depth > 3 else {})})
         notes += review["owner_notes"] + feedback
         _carry_verdicts(ctx, task, entry, new)
     notes += [note for fid in sorted(saved["receipts"])
@@ -109,7 +115,11 @@ def apply(ctx, task, saved):
     notes = sorted(set(notes))
     if findings or notes:
         path = report_path(ctx, task)
-        written.append(report.append(ctx.notes_path, path, findings, notes, f"recheck-{task.get('attempt', 1)}-r{correction_round.number(task)}"))
+        label = f"recheck-{task.get('attempt', 1)}"
+        labels = frontmatter.split(safefs.read_text(ctx.notes_path, path)).meta.get("supplements", [])
+        if correction_round.number(task) != 1 or label not in labels:
+            label += f"-r{correction_round.number(task)}"
+        written.append(report.append(ctx.notes_path, path, findings, notes, label))
     task.update(inspection_receipts=saved["receipts"], recheck_owner_notes=notes)
     steps.record_tool_files(task, ctx.notes_path, written + [verdicts.PATH, "docs/review/warning-verdicts.json"])
 
@@ -136,7 +146,7 @@ def _carry_verdicts(ctx, task, entry, new):
         own = {i["key"] for i in entry["items"] if i.get("file") == page or
                relations.details(safefs.read_text(ctx.notes_path, i["file"]), i["item_id"]).get("file") == page}
         judged = [i for i in review["items"] if i["key"] in own]
-        new_on_page = any(page in (f["file"], f.get("reported_file")) for f in new if (f.get("severity", "hiba") == "hiba"))
+        new_on_page = any(page in (f["file"], f.get("reported_file")) for f in new if is_error(f))
         if all(i["verdict"] in ("ok", "accept") for i in judged) and not new_on_page:
             open_items = any(i.get("file") == page and i["status"] in ("open", "owner")
                              for i in relations.inventory(ctx.notes_path)["items"].values())
@@ -151,3 +161,12 @@ def report_path(ctx, task):
         report.write(ctx.notes_path, path, [], [], "recheck", task.get("base"), task.data["created"])
         task.update(inspection_report=path)
     return path
+
+
+def source_chain(known, entry, finding, sources=()):
+    """A new error inherits depth, never another item's spent repair attempts."""
+    sources = [{**known.get(i["key"], {}), **i} for i in entry.get("items", []) or sources]
+    # Closure.file names the report; the inventory retains the learning-page path.
+    own = [i for i in sources if known.get(i["key"], {}).get("file", i.get("file"))
+           in (finding["file"], finding.get("reported_file"))]
+    return max((i.get("chain", 0) for i in own or sources), default=0)

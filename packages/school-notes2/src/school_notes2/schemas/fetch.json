@@ -48,7 +48,7 @@
                              "n": {"type": "integer", "minimum": 1}}},
     "open_review_items": {"type": "array", "items": {
       "type": "object", "additionalProperties": false, "required": ["file", "item_id"],
-      "properties": {"round": {"enum": [1, 2]}, "chain": {"enum": [0, 1]},
+      "properties": {"round": {"enum": [1, 2]}, "chain": {"type": "integer", "minimum": 0},
                      "status": {"enum": ["open", "owner"]},
                      "key": {"type": "string", "pattern": "^docs/review/(?!.*\\.\\.)[^\\\\#]+\\.md#R[0-9]+$"},
                      "file": {"type": "string"}, "item_id": {"type": "string", "pattern": "^R[0-9]+$"}}}},

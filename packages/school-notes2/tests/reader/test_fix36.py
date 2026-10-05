@@ -66,15 +66,15 @@ def test_three_scope_failures_become_owner_once(setup, monkeypatch, learner, mod
             correction.run(ctx, task)
             correction.run(ctx, phase.load(task.dir))
         record = relations.inventory(ctx.notes_path)["items"][items[0]["key"]]
-        assert record.get("repair_attempts", 0) == 0
-        assert record["status"] == "open"
+        assert record.get("repair_attempts", 0) == (n if mode == "p4" else 0)
+        assert record["status"] == ("owner" if mode == "p4" and n == 3 else "open")
         assert safefs.read_text(ctx.notes_path, page) == before
         assert task.data["llm_failures"] == 0 and not task.data["needs_owner"]
         owners = [{"file": items[0]["file"], "item_id": "R1"}] if n == 3 else []
         assert run.owner_items(ctx, task, owners)
         assert run.owner_items(ctx, phase.load(task.dir), owners)
     assert len(invoked) == (6 if mode == "p4" else 3)
-    assert len(delivered) == (3 if mode == "p4" else 0)
+    assert len(delivered) == 0
     assert safefs.read_json(pending.path(ctx).parent, pending.path(ctx).name) == {}
 
 

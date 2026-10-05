@@ -64,6 +64,8 @@ def _metrics(task):
 
 
 def terminal(task):
+    if task.phase == "done" and task.get("no_progress"):
+        return "no_progress"
     if task.get("set_aside"):
         return "set_aside"
     if task.data.get("needs_owner"):
@@ -108,7 +110,7 @@ def completed(ctx, task, report, duration, *, finishing=False):
     if choice == "completion":
         mode = MODES.get(task.get("mode") or ("chat" if task.mode == "interactive" else "run"), MODES["run"])
         pending.send(ctx, Notice(ctx.name, f"completion:{task.run_id}:{notice_key}", task.run_id, "finish",
-                                 subject(ctx.name, mode, receipt), sentence(ctx.name, mode, task, receipt), ""))
+                                 subject(ctx.name, mode, receipt, task), sentence(ctx.name, mode, task, receipt), ""))
     return report
 
 
@@ -116,11 +118,17 @@ def completed(ctx, task, report, duration, *, finishing=False):
 MODES = {"publish": ("kiadási futás", "kiadási futása"), "run": ("jegyzetfutás", "jegyzetfutása"), "fix": ("javító futás", "javító futása"),
          "repair": ("javítási futás", "javítási futása"), "chat": ("interaktív munkamenet", "interaktív munkamenete"),
          "nightly": ("éjszakai review", "éjszakai review-ja")}
-STATES = {"set_aside": "toolhiba; a futás félretéve, archívumban; a kontroller javítja; a többi munka megy", "done": "kész", "closed": "elvetve", "retry_nightly": "éjszaka újrapróbálja", "needs_owner": "elakadt, rád vár"}
+STATES = {"no_progress": "a javító futás nem haladt; a munka félretéve; a kontroller ellenőrzi", "set_aside": "toolhiba; a futás félretéve, archívumban; a kontroller javítja; a többi munka megy", "done": "kész", "closed": "elvetve", "retry_nightly": "éjszaka újrapróbálja", "needs_owner": "elakadt, rád vár"}
 
 
-def subject(name, mode, receipt):
-    return f"{name.capitalize()}: {mode[0]} – {STATES.get(receipt, receipt)}"
+def state_text(receipt, task=None):
+    if receipt == "set_aside" and task and task.get("set_aside_reason") == "bad_work":
+        return "a jegyzetíró kétszer hibás kimenetet adott; a futás félretéve; a kontroller ellenőrzi; a többi munka megy"
+    return STATES.get(receipt, receipt)
+
+
+def subject(name, mode, receipt, task=None):
+    return f"{name.capitalize()}: {mode[0]} – {state_text(receipt, task)}"
 
 
 def sentence(name, mode, task, receipt, *, ended=None):
@@ -131,7 +139,7 @@ def sentence(name, mode, task, receipt, *, ended=None):
     worked = round(max(0, (task.get("active_seconds") or 0) - (task.get("active_at_resume") or 0)) / 60)
     verb = "folytatódott" if resumed else "indult"
     text = (f"{name.capitalize()} {mode[1]} {started}-kor {verb}, {ended}-kor ért véget "
-            f"({worked} perc munka), állapota: {STATES.get(receipt, receipt)}")
+            f"({worked} perc munka), állapota: {state_text(receipt, task)}")
     if receipt == "closed":
         text = f"{name.capitalize()} {mode[1]} {started}-kor {verb}, {ended}-kor elvetve; a munkája nem került ki"
         if task.get("bundle"):

@@ -154,7 +154,8 @@ def _after_question_session(ctx: Ctx, task: phase.Task) -> None:
     A question the session did not settle goes back to the owner."""
     try:
         saved = save_session_result(ctx, task) if task.get("question") else True
-    except steps.CheckFailed:
+    except steps.CheckFailed as exc:
+        checks.record_failure(ctx, task, exc, "chat.question")
         task.mark_needs_owner("the session result lacks warning decisions",
                               f"complete it in `school-notes chat {ctx.name}`", "needs_owner")
         return
@@ -238,6 +239,7 @@ def session_finish(ctx: Ctx) -> dict:
                         mailer=ctx.mailer, interactive=True)
         return {"state": exc.kind, "message": str(exc), "phase": task.phase}
     except steps.CheckFailed as exc:
+        checks.record_failure(ctx, task, exc, "chat.finish")
         steps.write_check_items(ctx, exc.items)
         task.set_phase("writing", review_complete=False, attempt=task.get("attempt", 1) + 1)
         return {"state": "check_failed", **checks.response(exc.items)}

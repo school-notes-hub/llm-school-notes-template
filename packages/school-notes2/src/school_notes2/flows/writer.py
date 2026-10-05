@@ -22,6 +22,10 @@ def write_inputs(ctx: Ctx, task: Task, k: int) -> None:
     licenses.preflight(ctx.notes_path)
     root, workdir = ctx.notes_path, workbranch.WORKDIR
     fetch = fetch_flow.fetch_json(task, k, grade=ctx.student.grade, repo=ctx.notes_path)
+    if task.get("assigned_work") is not None:
+        from .fix_progress import keys
+        task.update(assigned_work=sorted(set(task.get("assigned_work")) |
+                    set(keys(fetch.get("open_review_items", []), fetch.get("pending_figures", [])))))
     rechecks.record(ctx, task, fetch.get("pending_figures", []))
     safefs.write_json(root, f"{workdir}/fetch.json", fetch)
     write_changes(ctx, task)
@@ -51,18 +55,11 @@ def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
         task.set_phase("writing", writing_k=k)
         result = read_json(task.dir / f"result-{k}.json")
         if result is None or result["status"] == "question":
-            result = _fix_resume(ctx, task, k) if task.get("mode") == "fix" else None
-            if result is None:
-                write_inputs(ctx, task, k)
-                result = _invoke(ctx, task, k, role, harness, handlers)
-            from . import steps, fix_scope, writer_identity
-            writer_identity.remember(ctx, task, k, result)
-            fix_scope.recover(ctx, task)
-            try:
-                _check_call(ctx, task, k, result)
-            except steps.CheckFailed as exc:
-                steps.write_check_items(ctx, exc.items)
-                raise
+            if task.get("correction_parent") and task.mode != "interactive" and task.get("calls"):
+                from . import correction_calls
+                result = correction_calls.run(ctx, task, k, lambda: _range(ctx, task, k, role, harness, handlers))
+            else:
+                result = _range(ctx, task, k, role, harness, handlers)
             from ..figures import infographics
             infographics.remember(task, result, ctx.notes_path)
             write_json(task.dir / f"result-{k}.json", result)
@@ -75,6 +72,23 @@ def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
         k += 1
         task.update(writing_k=k)
     return "done"
+
+
+def _range(ctx, task, k, role, harness, handlers):
+    from . import steps, fix_scope, writer_identity
+    result = _fix_resume(ctx, task, k) if task.get("mode") == "fix" else None
+    if result is None:
+        write_inputs(ctx, task, k)
+        result = _invoke(ctx, task, k, role, harness, handlers)
+    writer_identity.remember(ctx, task, k, result)
+    fix_scope.recover(ctx, task)
+    try:
+        _check_call(ctx, task, k, result)
+        fix_scope.check_dependencies(ctx, task)
+    except steps.CheckFailed as exc:
+        steps.write_check_items(ctx, exc.items)
+        raise
+    return result
 
 
 def _call(ctx: Ctx, task: Task, k: int, role, harness, handlers) -> dict:

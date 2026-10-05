@@ -8,10 +8,10 @@ def number(task):
     return task.get("correction_round", 1)
 
 
-def identity(task):
-    if task.get("correction_round") is None and (folder(task) / "correction").exists():
+def identity(task, n=None):
+    if n is None and task.get("correction_round") is None and (folder(task) / "correction").exists():
         return f"{task.run_id}-fix-a{task.get('attempt', 1)}"
-    return f"{task.run_id}-fix-r{number(task)}"
+    return f"{task.run_id}-fix-a{task.get('attempt', 1)}-r{number(task) if n is None else n}"
 
 
 def root(task):

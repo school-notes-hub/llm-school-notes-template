@@ -33,6 +33,8 @@ def wording(name, kind, step, *, task=None, exc=None, role=None):
 
 
 def _reason(name, kind, step, *, task=None, exc=None, role=None):
+    if step == "no-progress":
+        return "toolhiba; a javító futás nem haladt; a munka félretéve; a kontroller ellenőrzi"
     details = getattr(exc, "details", {}) or {}
     raw = str(exc or "")
     if kind == "timeout":
@@ -72,7 +74,7 @@ def _reason(name, kind, step, *, task=None, exc=None, role=None):
     if kind == "bad_work":
         return "a jegyzetíró kétszer hibás kimenetet adott; a kontroller ellenőrzi a hibát és indítja újra"
     if kind == "transient":
-        return "három egymás utáni sikertelen próba átmeneti működési hiba miatt; a kontroller ellenőrzi a hibát és indítja újra"
+        return "három egymás utáni sikertelen próba átmeneti működési hiba miatt; a következő óra első köre újrapróbálja"
     return "a feldolgozás döntésre vár; teendőd: school-notes status " + name + " --details"
 
 
@@ -169,5 +171,7 @@ def completed(ctx, task):
     """A completed run is recovery, including its correction run's timeout incidents."""
     resolve(ctx, "task:" + task.run_id)
     for value in active(ctx):
+        if value["scope"].startswith("no-progress:"):
+            continue
         if value["run_id"] == task.run_id or value["run_id"].startswith(task.run_id + "-fix-a"):
             resolve(ctx, value["scope"])

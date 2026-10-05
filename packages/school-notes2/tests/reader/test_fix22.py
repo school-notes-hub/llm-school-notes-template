@@ -100,7 +100,9 @@ def test_recheck_not_ok_and_new_hit_stay_open_on_replay(setup, mode):
     recheck.apply(ctx, phase.load(task.dir), saved)
     known = relations.inventory(ctx.notes_path)["items"]
     assert len(known) == 2
-    assert all(i["status"] == "open" and i["chain"] == 0 and i["origin"] == "recheck" for i in known.values())
+    assert all(i["status"] == "open" and i["origin"] == "recheck" for i in known.values())
+    assert known[path + "#R1"]["chain"] == 0
+    assert known[path + "#R2"]["chain"] == 1
 
 
 def test_p4_budget_assignment_stays_pinned_after_writer_crash(setup, monkeypatch):

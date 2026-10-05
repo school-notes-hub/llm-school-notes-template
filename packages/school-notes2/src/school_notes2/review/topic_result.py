@@ -2,6 +2,7 @@
 
 import re
 
+from .severity import is_error
 from ..reader import notice_migration, notices, report, verdicts
 from ..reader.units import page_key
 from ..state import safefs
@@ -53,10 +54,10 @@ def assemble(task, repo, work):
             own = list(value["findings"])
             # Generate list findings without changing the pinned worktree's verdict store.
             by_id = {h["id"]: h for h in entry["input"]["hits"]}
-            advice_ids = {f["id"] for f in own if not (f.get("severity", "hiba") == "hiba")}
+            advice_ids = {f["id"] for f in own if not is_error(f)}
             for hit in value["hits"]:
                 covered = hit.get("covered_by")
-                if hit["verdict"] == "hiba" and (not covered or covered in advice_ids and (hit.get("severity", "hiba") == "hiba")):
+                if hit["verdict"] == "hiba" and (not covered or covered in advice_ids and is_error(hit)):
                     row = by_id[hit["hit_id"]]
                     lines = topics.text(repo, task.get("H"), row["file"]).splitlines()
                     f = {"file": row["file"], "quote": lines[row["line"] - 1], "problem": hit["reason"],

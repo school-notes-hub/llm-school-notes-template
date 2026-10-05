@@ -7,7 +7,7 @@ import pytest
 from school_notes2.flows import chat, repair, run, status
 from school_notes2.repair import failure, preflight, queue
 from school_notes2.state import phase, safefs
-from school_notes2.state.errors import BadWork, NeedsOwner
+from school_notes2.state.errors import NeedsOwner
 from tests.flows.test_repair import context
 from tests.flows.test_repair_queue import page
 from tests.conftest import assert_suppressed
@@ -51,15 +51,15 @@ def test_preflight_reads_pinned_commit_not_worktree(tmp_path, log, git_factory):
 
 
 @pytest.mark.parametrize("has_queue", [False, True])
-def test_failed_handoff_hold_can_finish_without_creating_absent_queue(tmp_path, log, monkeypatch, has_queue):
+def test_pre_upgrade_failed_handoff_hold_can_finish_without_creating_absent_queue(tmp_path, log, monkeypatch, has_queue):
     ctx, topic, mailed = context(tmp_path, log, monkeypatch)
     ctx.lock = lambda: SimpleNamespace(note=lambda _: None)
     if has_queue:
         safefs.write_json(ctx.notes_path, queue.PATH, queue.build(ctx.notes_path))
     task = repair.start(ctx, topic=topic, no_push=True)
     repair.prepare(ctx, task)
-    for _ in range(2):
-        assert failure.handle(ctx, task, BadWork("bad"))
+    # Persisted pre-upgrade handoffs still resume through their original queue path.
+    task.set_phase("moved", repair_failed=True)
     monkeypatch.setattr(failure.discard, "discard", lambda *a: None)
     real = failure.write_item
     def crash(ctx, task):

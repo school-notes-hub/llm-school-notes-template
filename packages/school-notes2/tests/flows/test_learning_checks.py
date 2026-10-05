@@ -120,15 +120,15 @@ def test_legacy_log_check_finish_and_rebase_regeneration(learning_run, monkeypat
     assert all("decisions" not in entry and "draft_tracking" not in entry for entry in manifest["pages"])
 
 
-def test_legacy_log_author_edit_still_requires_new_form(learning_run):
+def test_legacy_log_author_edit_defers_inherited_form_errors(learning_run):
     ctx, task = learning_run
     note = ctx.notes_path / NOTE
     note.write_text(note.read_text() + "\nÚj tartalom.\n")
     answer = handlers.check(ctx, task)
-    assert not answer["ok"]
-    assert any("lesson log needs" in p["message"] for p in answer["problems"])
-    with pytest.raises(steps.CheckFailed):
-        steps.regenerate(ctx, task)
+    assert answer["ok"]
+    assert any("lesson log needs" in p["message"] and p["kind"] == "inherited-check"
+               for p in answer["problems"])
+    steps.regenerate(ctx, task)
 
 
 @pytest.mark.parametrize("invalid", ["yaml", "decisions", "date", "materials", "draft_tracking"])

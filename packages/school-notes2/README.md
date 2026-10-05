@@ -131,6 +131,15 @@ The fixed corpus is tested against the optional local learner checkouts, read-on
 directories.
 Per-file counts (before verdict suppression) appear in logs and status.
 
+The host and MCP checks compare wiki errors against `task.base`, including link and
+render dependencies read directly from Git. File/message identity ignores line shifts;
+occurrence counts preserve repeated defects and do not excuse an added copy. Inherited
+errors are nonblocking `inherited-check` entries, require no writer warning decision,
+and become deduplicated `hiba` items in the run report. Scope-restored pages equal to
+the base are omitted from changed paths; their remaining inherited defects are still
+recorded. Check failures retain the complete ordered list in `last_check_problems` and
+up to 20 file/line/message records in the error log.
+
 MCP check returns errors first, full counts, `truncated` and the full-list path. A durable
 counter permits three checks per invocation, including across background-job restarts;
 fetch of the same interactive run does not reset it; a new run gets its own budget.
@@ -151,7 +160,7 @@ Existing question/open-item and disagreement references go to the pending sectio
 decisions to owner, unknown references
 to unlocated. A decision reference without new evidence is invalid reviewer output.
 The tool inherits the related item's chain and automatic repair count. Chain 1 stays
-open; only a real decision or a third unsuccessful automatic repair goes to owner. Owner-item notifications pass through the common mail gate and
+open; a real decision, a third unsuccessful automatic repair, or an unbound P5 chain deeper than three goes to owner. Owner-item notifications pass through the common mail gate and
 are logged as `notify.suppressed`; their state remains visible in `status`.
 The durable handoff completes after suppression, including across closing restarts.
 Invalid or stale responses are dropped and logged. Completion mail enters the private
@@ -239,11 +248,12 @@ The scheduler reads the queue in its stored order after new packages and hourly 
 Runs change status without rebuilding or reordering the queue. A direct topic repair
 without a queue is allowed, but does not create one or complete absent entries.
 
-Two bad repair attempts hand the topic to an owner review item: the failed work is archived
-as a local Git bundle, then a tool-only continuation commits the queue's `owner` state
-(if a queue exists) and notifies once. The next runnable entry can proceed. Dependencies of an owner-blocked topic
-remain blocked. Preparation, per-call result saving, queue replacement and the committed
-hold all have interruption/resume tests. No new phase or model is introduced.
+Two bad fix/repair outputs use the same archival path as a tool failure: a local Git
+bundle and `state/<learner>/set-aside.json` retain the work keys, release and reason.
+The same work cannot restart on that release, including a repeated explicit repair;
+other work continues. One completion notice says the run was set aside for controller
+inspection, never that the notes are ready. Package runs still stop for the owner.
+Pre-upgrade owner-queue handoffs remain resumable. No new phase or model is introduced.
 
 The controller's trial order is sequential: create the queue, repair one topic page with
 `--no-push`, inspect, `finish`, then its lesson log after its topic dependencies are done.
@@ -345,14 +355,14 @@ three fixed Hungarian prompts and output schemas are `reader-1`, `reader-2` and
 
 P3 writes one run report; relation routing precedes writer assignment. P4 invokes
 the existing subject writer with `fix.txt`, the complete assigned list and a
-saved pre-fix tree. Failed fixes restore that tree; a completed or rolled-back P4
+saved pre-fix tree. Failed fixes restore their call's pre-edit tree; a completed or rolled-back P4
 can enter P6 directly when there is nothing to recheck. P5 judges only the closed
 items, new hits and changed figures. Up to three round-local correction/recheck passes finish the entire assignable backlog.
 Open, disputed and owner items retain their chain and round metadata.
 
 Automatic P4 and source-free fixes restore out-of-scope pages before checking the
 retained work. A changed author line linking to a restored page (with or without
-an anchor) rejects the whole fix; P5 also receives `scope-restores.json`. A full rollback consumes no item or figure attempt, and gets one replayable retry.
+an anchor) rejects that call; P5 also receives `scope-restores.json`. A P4 check failure restores only the current call, retries it once, then leaves its items open and counts one repair attempt. Earlier successful call results remain checkpointed. Only inseparable round results use the full rollback, which consumes no item or figure attempt and gets one replayable retry.
 Two full rollbacks publish the previously accepted work and send one tool-error notice. Other item notices remain suppressed. Only concrete
 errors tied to restored links bypass the bad-work counter. In chat, scope violations
 reject the whole correction and preserve its edits in `rejected.patch`.
@@ -591,8 +601,12 @@ page groups of at most 30 items per writer call. All assignable pending figures 
 first call, before text repairs; paid generation still obeys its existing budget. Saved
 call results survive restart. A common targeted recheck (P5) and one finish chain follow
 all writer calls; up to three correction/recheck rounds run immediately. A zero-progress
-run records its work keys and release under `state/<learner>/set-aside.json`; new work
-and a new release can run. Monthly-budget and unknown-call waits do not set this brake. Three failed automatic repairs still escalate to the owner.
+run records only actually assigned work keys and the release under `state/<learner>/set-aside.json`; new work
+and a new release can run. The stop sends one tool-error incident, appears in status, and the completion mail says that no progress was made. Completed tasks are never archived by this brake.
+Chat and repair P4 stay within their own assignments and run report; package and fix P4 include the backlog.
+New unbound P5 errors inherit the repaired page/item's chain depth plus one (the maximum source depth when ambiguous); depth above three requires the owner without spending another item's repair attempts.
+Round identities include both attempt and round (`-fix-a{attempt}-r{n}`); P1 fix always uses round one.
+Transient task retries wait at least 30 minutes, so three failed attempts span at least one hour. A transient owner stop permits one automatic probe in each following clock hour. Monthly-budget and unknown-call waits do not set this brake. Three failed automatic repairs still escalate to the owner.
 Package writers receive no old review items.
 Nightly calls are full reviews only, triggered exclusively by author changes in `run`
 or `chat` commits. For `run`, the `School-Notes-Material` trailer limits selection to
@@ -733,8 +747,9 @@ in `state/<learner>/last-error.json` with a timestamp and one safe Hungarian sen
 Nightly restores the caller’s logger even after interruption.
 
 Automatic review repairs persist `repair_attempts` and sorted `repair_runs` per item.
-A completed automatic fix assignment counts once, including an unchanged item or a
-rolled-back P4; resuming that assignment never adds another attempt. A third `fixed`
+A completed automatic fix assignment counts once, including an unchanged item or an
+individually restored P4 call; resuming that assignment never adds another attempt.
+A full-round rollback consumes no attempt. A third `fixed`
 closure remains fixed unless a reader/nightly `not-ok` verdict rejects it. Related
 findings inherit the consumed budget. Interactive closures do not consume it.
 `category: forrásellentmondás` and confirmed-decision references go directly to owner;

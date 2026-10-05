@@ -8,9 +8,14 @@ def test_transient_stops_on_third_failed_invocation(tmp_path, log, monkeypatch):
     task = phase.create(tmp_path, "benedek", "notes", "cron", "prepared")
     sent = []
     mailer = recording_mailer(tmp_path, log, monkeypatch, sent)
+    from datetime import datetime, timedelta
+    from school_notes2.flows import transient_retry
+    at = datetime(2026, 10, 5, 10, tzinfo=transient_retry.TZ)
+    monkeypatch.setattr(transient_retry, "now", lambda: at)
     for _ in range(2):
         policy.on_error(Transient("net"), task=task, student="benedek", step="fetch", log=log,
                         mailer=mailer)
+        at += timedelta(minutes=30)
     assert task.data["needs_owner"] is None and not sent
     policy.on_error(Transient("net"), task=task, student="benedek", step="fetch", log=log,
                     mailer=mailer)

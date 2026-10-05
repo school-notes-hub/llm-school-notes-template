@@ -22,6 +22,12 @@ def repair(ctx: Ctx, *, topic: str | None = None, build_queue: bool = False,
     try:
         setup.ensure(ctx)
         existing = phase.open_task(ctx.task_root(), ctx.name, "notes")
+        from . import set_aside
+        if set_aside.resume(ctx, existing):
+            return 1
+        if existing is None and not build_queue and "repair:" + str(topic) in set_aside.blocked(ctx):
+            ctx.log.event("repair.skip", "set_aside", target=topic)
+            return 0
         if existing is not None:
             if existing.get("mode") != "repair" or existing.get("repair_topic") != topic or bool(
                     existing.get("repair_request_queue", existing.get("queue_only"))) != build_queue:
@@ -61,7 +67,7 @@ def start(ctx, *, topic=None, build_queue=False, no_push=False):
         from ..repair.preflight import require_ready
         require_ready(wt, base, topic)
     task = phase.create(ctx.task_root(), ctx.name, "notes", "cron", "moved")
-    task.update(mode="repair", repair_topic=topic, queue_only=build_queue,
+    task.update(mode="repair", repair_topic=topic, queue_only=build_queue, assigned_work=[],
                 repair_request_queue=build_queue, no_push=no_push,
                 base=base, preparation_base=base, queue_previous=previous)
     return task

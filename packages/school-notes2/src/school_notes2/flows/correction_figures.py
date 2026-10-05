@@ -89,7 +89,9 @@ def defects(state, receipt, previous=()):
 
 def waiting(ctx, task):
     old = {e["commission"]["id"]: e for e in pending.load(ctx.notes_path)}
-    entries = dict(old)
+    scoped = task.mode == "interactive" or task.get("mode") == "repair"
+    own = {e["commission"]["id"] for e in task.get("pending_figures", [])}
+    entries = {fid: e for fid, e in old.items() if not scoped or fid in own}
     for state in task.get("inspection_figures", []):
         brief = state["brief"]
         receipt = task.get("inspection_receipts", {}).get(brief["id"], {})
@@ -106,7 +108,7 @@ def waiting(ctx, task):
         waiting = [e for e in waiting if not pending.generated(ctx.notes_path, e["commission"])
                    or awaiting(ctx, e["commission"])]
     from . import fix_progress
-    return fix_progress.available(ctx, [], waiting)[1]
+    return fix_progress.runnable_images(ctx, fix_progress.available(ctx, [], waiting)[1])
 
 
 def start(repo, entries):

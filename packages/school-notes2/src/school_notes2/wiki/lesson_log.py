@@ -101,7 +101,7 @@ def header_end(text: str) -> int:
     return markers.outside(text, cut)
 
 
-def form_problems(repo: Path, rel: str, body: str, meta: dict) -> list[str]:
+def form_problems(repo: Path, rel: str, body: str, meta: dict, *, read=read_page) -> list[str]:
     """Only structure is mechanical; subject matter and coverage stay with the writer."""
     visible = COMMENT.sub("", CODE_FENCE.sub("", body))
     titles = [TITLE, PLURAL_TITLE] if len(meta.get("lessons", [])) > 1 else [TITLE]
@@ -119,7 +119,7 @@ def form_problems(repo: Path, rel: str, body: str, meta: dict) -> list[str]:
               for t in lesson.get("topics", [])}
     for point in points:
         targets = [m["target"].strip("<>") for m in LINK.finditer(point) if not m["img"]]
-        if not any(_topic_section(repo, rel, target, topics) for target in targets):
+        if not any(_topic_section(repo, rel, target, topics, read=read) for target in targets):
             out.append("each learning point must link a listed topic page's teaching section")
     return out
 
@@ -136,12 +136,12 @@ def _learning_points(section: str) -> list[str]:
     return points
 
 
-def _topic_section(repo: Path, rel: str, target: str, topics: set[str]) -> bool:
+def _topic_section(repo: Path, rel: str, target: str, topics: set[str], *, read=read_page) -> bool:
     file, sep, anchor = target.partition("#")
     resolved = resolve(rel, file)
     if not sep or not anchor or resolved not in topics or resolved is None:
         return False
     try:
-        return read_page(repo, resolved).meta.get("type") == "topic"
+        return read(repo, resolved).meta.get("type") == "topic"
     except FileNotFoundError:
         return False

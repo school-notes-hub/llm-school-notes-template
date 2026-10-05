@@ -12,7 +12,10 @@ def ready(ctx):
     tasks = phase.all_tasks(ctx.task_root(), ctx.name)
     opened = [t for t in tasks if t.open and t.kind == "notes"]
     if opened:
-        return not opened[0].data.get("needs_owner") and opened[0].phase != "waiting_quota"
+        from . import transient_retry
+        if not transient_retry.ready(opened[0]):
+            return False
+        return (opened[0].data.get("needs_owner") or {}).get("class") in (None, "transient") and opened[0].phase != "waiting_quota"
     drive = read_json(ctx.cfg.state_dir / ctx.name / "last-run.json", {})
     moved = {e["package"]["id"] for t in tasks if t.data["created"] >= drive.get("at", "")
              and t.phase not in ("downloading", "downloaded") for e in t.get("selected", [])}

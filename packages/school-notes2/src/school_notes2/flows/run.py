@@ -83,6 +83,10 @@ def _may_run(ctx: Ctx, task: Task | None) -> bool:
         _daily(ctx, "no_push", task.run_id, f"Visszatartott próba; fázis: {task.phase}. A cron vár.",
                f"Nézd meg, majd school-notes finish {ctx.name}; vagy status --clear {ctx.name} notes --discard.")
         return False
+    from . import transient_retry
+    if not transient_retry.resume(task):
+        ctx.log.event("run.skip", "transient_wait", target=task.run_id)
+        return False
     if task is not None and task.data.get("needs_owner"):
         from .set_aside import release
         owner = task.data["needs_owner"]

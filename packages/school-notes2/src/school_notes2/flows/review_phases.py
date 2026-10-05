@@ -28,7 +28,7 @@ def _advance(ctx, task, notify, edits):
     if task.phase == "inspecting":
         inspection.inspect(ctx, task)
         initial = task.get("mode") == "fix"
-        record_figures(ctx, task, f"{task.run_id}-r1" if initial else task.run_id)
+        record_figures(ctx, task, correction_round.identity(task, 1) if initial else task.run_id)
         more = correction.all_items(ctx, task) or correction_figures.waiting(ctx, task)
         task.set_phase("correcting" if more else "review_ready",
                        correction_round=2 if initial and not task.get("fix_scope_rolled_back") else 1)
@@ -42,7 +42,7 @@ def _advance(ctx, task, notify, edits):
             if task.phase == "review_ready":
                 break
         recheck.run(ctx, task)
-        record_figures(ctx, task, f"{task.run_id}-r{correction_round.number(task)}")
+        record_figures(ctx, task, correction_round.identity(task))
         more = correction.all_items(ctx, task) or correction_figures.waiting(ctx, task)
         n = correction_round.number(task)
         task.set_phase("correcting" if more and n < 3 and task.mode != "interactive" else "review_ready",
@@ -81,7 +81,7 @@ def _finalize(ctx, task, edits=None):
                 ctx.log.event("figure.stale", id=brief["id"], reason=str(exc))
         if state["candidate"]["state"] == "no-figure":
             continue
-    identity = task.run_id if task.get("correction_round") is None else f"{task.run_id}-r{correction_round.number(task)}"
+    identity = task.run_id if task.get("correction_round") is None else correction_round.identity(task)
     written += record_figures(ctx, task, identity, final=True)
     written += refresh_notices(ctx, task, _notice_pages(ctx, task))
     steps.record_tool_files(task, repo, written)

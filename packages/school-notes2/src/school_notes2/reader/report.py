@@ -3,6 +3,7 @@
 import re
 import json
 
+from ..review.severity import is_error
 from ..review import attempts, files, generated, relations, warnings
 from ..state import safefs
 from ..wiki import frontmatter
@@ -27,11 +28,11 @@ def list_findings(repo, hits, output, findings=()):
     if source:
         warnings.record(repo, source, [d for d in decisions if d["id"] in selected])
     by_id = {h["id"]: h for h in hits}
-    advice_ids = {f["id"] for f in findings if not (f.get("severity", "hiba") == "hiba")}
+    advice_ids = {f["id"] for f in findings if not is_error(f)}
     result = []
     for decision in decisions:
         covered = decision.get("covered_by")
-        if decision["verdict"] != "hiba" or (covered and not (covered in advice_ids and (decision.get("severity", "hiba") == "hiba"))):
+        if decision["verdict"] != "hiba" or (covered and not (covered in advice_ids and is_error(decision))):
             continue
         hit = by_id[decision["id"]]
         lines = safefs.read_text(repo, hit["file"]).splitlines()
@@ -49,8 +50,8 @@ def prepare(repo, findings, notes, pages=()):
     from ..figures import migration_gate
     findings = [figure_quote(repo, f) for f in findings]
     findings = [f for f in findings if not migration_gate.concerns(repo, f)]
-    advice = [f for f in findings if not (f.get("severity", "hiba") == "hiba")]
-    findings = [f for f in findings if (f.get("severity", "hiba") == "hiba")]
+    advice = [f for f in findings if not is_error(f)]
+    findings = [f for f in findings if is_error(f)]
     pages = [{**p, "verdict": "ok"} if any(f["file"] == p["file"] for f in advice)
              and not any(f["file"] == p["file"] for f in findings) else p for p in pages]
     kept, notes, literals = generated.partition(repo, findings, notes)
@@ -88,7 +89,7 @@ def reopen(repo, key, answer):
     return rel
 
 
-def append(repo, path, findings, notes, label):
+def append(repo, path, findings, notes, label, *, write=safefs.write_text):
     """One run report, replay-safe supplements for P5 and exhausted figures."""
     findings, notes = advice_notes(findings, notes)
     text = safefs.read_text(repo, path)
@@ -121,7 +122,7 @@ def append(repo, path, findings, notes, label):
     if notes:
         body += ["## Tulajdonosi észrevételek", ""] + ["* " + " ".join(n.split()) for n in notes]
     output = text.rstrip() + "\n\n" + "\n".join(body) + "\n"
-    safefs.write_text(repo, path, frontmatter.set_keys(output, {
+    write(repo, path, frontmatter.set_keys(output, {
         "items": items, "item_details": details, "status": files.compute_status(items),
         "supplements": sorted(labels + [label])}))
     return path
@@ -147,4 +148,4 @@ def advice_notes(findings, notes):
     for f in sorted(findings, key=lambda f: (f.get("file", ""), f.get("quote", ""), f.get("problem", ""), f.get("suggestion", ""))):
         if f.get("severity", "hiba") == "javaslat":
             notes.append(f"{f['file']}: {f['problem']}" + (f" → {f['suggestion']}" if f.get("suggestion") else ""))
-    return [f for f in findings if f.get("severity", "hiba") == "hiba"], list(dict.fromkeys(notes))
+    return [f for f in findings if is_error(f)], list(dict.fromkeys(notes))

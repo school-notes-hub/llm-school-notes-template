@@ -1,17 +1,18 @@
 """One error policy for every entry point (plan 8.1, 8.3).
 
 Transient errors were already retried inside the step; here a failed invocation counts
-once (`retries`), and the third failed invocation in a row stops the run. Bad LLM work
+once per half hour (`retries`); a third failure stops until the next hourly probe. Bad LLM work
 counts in `llm_failures` (two in a row stop). Prerequisites never touch a task."""
 
 import traceback
 
+from . import transient_retry
 from ..log import Log
 from ..notify import Mailer, Notice
 from ..state.errors import BadWork, NeedsOwner, Prerequisite, SnError, Transient, WaitingQuota
 from ..state.phase import Task
 
-MAX_RETRIES = 3        # the failing hour plus the next two (8.1)
+MAX_RETRIES = transient_retry.LIMIT
 MAX_LLM_FAILURES = 2
 
 
@@ -36,14 +37,16 @@ def on_error(exc: BaseException, *, task: Task | None, student: str, step: str, 
         if not isinstance(exc, Transient):   # 8.4: no mail about an intermediate error
             _mail(mailer, student, f"{kind}:{step}", None, step, exc)
         return kind
+    if hasattr(exc, "items"):
+        from . import checks
+        task.update(last_check_problems=checks.ordered(exc.items))
     task.record_error(kind, str(exc))
     from .operation import CURRENT
     current = CURRENT.get()
-    if kind == "program" and task.get("mode") in ("fix", "repair") and not interactive and current:
+    if kind == "program" and task.phase != "done" and task.get("mode") in ("fix", "repair") and not interactive and current:
         from . import set_aside
         set_aside.stop(current[0], task)
         return kind
-
 
     if isinstance(exc, WaitingQuota):
         if task.phase != "waiting_quota":
@@ -56,25 +59,31 @@ def on_error(exc: BaseException, *, task: Task | None, student: str, step: str, 
                                   "timeout")
         return kind
     if isinstance(exc, Transient):
-        task.data["retries"] += 1
-        task.save()
-        if task.data["retries"] >= MAX_RETRIES:
+        if transient_retry.failed(task):
             _stop(task, exc, student, step, mailer, "a transient error did not pass in 3 tries")
     elif isinstance(exc, BadWork):
-        if interactive:
-            return kind          # the session gets the error through MCP; nothing counts
-        key = task.get("writer_output_key")
-        counted = task.get("counted_bad_outputs", [])
-        if not key or key not in counted:
-            task.data["llm_failures"] += 1
-            if key:
-                task.data["data"]["counted_bad_outputs"] = sorted(counted + [key])
-            task.save()
-        if task.data["llm_failures"] >= MAX_LLM_FAILURES:
-            _stop(task, exc, student, step, mailer, "the writer failed twice in a row")
+        _bad_work(task, exc, student, step, mailer, interactive, current)
     else:
         _stop(task, exc, student, step, mailer, "")
     return kind
+
+
+def _bad_work(task, exc, student, step, mailer, interactive, current):
+    if interactive:
+        return  # The session gets the error through MCP; nothing counts.
+    key = task.get("writer_output_key")
+    counted = task.get("counted_bad_outputs", [])
+    if not key or key not in counted:
+        task.data["llm_failures"] += 1
+        if key:
+            task.data["data"]["counted_bad_outputs"] = sorted(counted + [key])
+        task.save()
+    if task.data["llm_failures"] >= MAX_LLM_FAILURES:
+        if task.phase != "done" and task.get("mode") in ("fix", "repair") and current:
+            from . import set_aside
+            set_aside.stop(current[0], task, reason="bad_work")
+            return
+        _stop(task, exc, student, step, mailer, "the writer failed twice in a row")
 
 
 def on_success(task: Task) -> None:
@@ -83,9 +92,9 @@ def on_success(task: Task) -> None:
     from ..notify import incidents
     if CURRENT.get() and task.phase == "done":
         incidents.completed(CURRENT.get()[0], task)
-    if task.data["retries"]:
+    if task.data["retries"] or task.get("transient_after"):
         task.data["retries"] = 0
-        task.save()
+        task.update(transient_after=None)
 
 
 def _stop(task: Task, exc: BaseException, student: str, step: str, mailer: Mailer | None,

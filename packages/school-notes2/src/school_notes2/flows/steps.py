@@ -51,7 +51,10 @@ def base_of(task: Task) -> str:
 
 
 def changed_paths(ctx: Ctx, task: Task) -> list[str]:
-    return [c["path"] for c in workbranch.changed_files(ctx.worktree("notes"), base_of(task))]
+    read = base_reader(ctx, task)
+    return [c["path"] for c in workbranch.changed_files(ctx.worktree("notes"), base_of(task))
+            if not safefs.is_file(ctx.notes_path, c["path"])
+            or read(c["path"]) != safefs.read_bytes(ctx.notes_path, c["path"])]
 
 
 def base_reader(ctx: Ctx, task: Task):
@@ -172,7 +175,7 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
     new_pages.record(ctx, task)  # Lesson type is supplied by machine.write_lesson_notes.
     check_changed(ctx, task, result=result)
     from . import correction_round
-    run_id = correction_round.identity(task) if task.get("mode") == "fix" else task.run_id
+    run_id = correction_round.identity(task, 1) if task.get("mode") == "fix" else task.run_id
     # An already applied 2.4.3 closure must not acquire another attempt on resume.
     if task.get("mode") == "fix" and any(task.run_id in i.get("repair_runs", [])
             for i in review_files.relations.inventory(repo)["items"].values()):
@@ -208,9 +211,8 @@ def check_items(ctx: Ctx, task: Task) -> list[dict]:
     paths = sorted(llm_snapshot(ctx, task))
     from ..repair import check as repair_check
     items = repair_check.problems(ctx, task, paths)
-    inherited = repair_check.inherited_learning_problems(ctx, task, paths)
-    items += [i for i in wiki_check.check_files(ctx.notes_path, paths, today=today)
-              if (i["file"], i["message"]) not in inherited]
+    from . import inherited_check
+    items += inherited_check.classify(ctx, task, wiki_check.check_files(ctx.notes_path, paths, today=today))
     from ..wiki import banners
     items += banners.check_required(ctx.notes_path, paths)
     checks.tool_errors(ctx, task, items)
@@ -326,8 +328,7 @@ def llm_snapshot(ctx: Ctx, task: Task) -> dict:
     wt = ctx.worktree("notes")
     base = base_of(task)
     out = {}
-    for c in workbranch.changed_files(wt, base):
-        rel = c["path"]
+    for rel in changed_paths(ctx, task):
         if rel in task.get("tool_writes", {}):
             continue
         path = ctx.notes_path / rel

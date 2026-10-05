@@ -70,7 +70,7 @@ def _legacy_summary(ctx, notice):
     mode = ("nightly" if task.kind == "review" else
             task.get("mode", "chat" if task.mode == "interactive" else "run"))
     labels = report.MODES.get(mode, report.MODES["run"])
-    return replace(notice, error_class=report.subject(ctx.name, labels, receipt),
+    return replace(notice, error_class=report.subject(ctx.name, labels, receipt, task),
                    message=report.sentence(ctx.name, labels, task, receipt, ended=ended), todo="")
 
 
@@ -78,16 +78,23 @@ def _closed_tasks(ctx):
     """Recover a clear interrupted after saving the outcome but before queuing mail."""
     from ..flows import operational_report as report
     from ..state import phase
+    from ..flows import set_aside
+    stopped = read_json(set_aside.path(ctx), {})
     for task in phase.all_tasks(ctx.task_root(), ctx.name):
+        row = stopped.get(task.run_id, {})
+        if row.get("reason") == "no-progress":
+            if not task.get("no_progress"):
+                task.update(no_progress=True)
+            set_aside.no_progress_notice(ctx, task)
         closed = task.data.get("closed") and task.get("closure_reason")
-        if not (closed or task.get("set_aside")) or task.get("closure_notice_delivered"):
+        if not (closed or task.get("set_aside") or task.phase == "done" and task.get("no_progress")) or task.get("closure_notice_delivered"):
             continue
         receipt = report.terminal(task)
         mode = "nightly" if task.kind == "review" else task.get("mode", "run")
         labels = report.MODES.get(mode, report.MODES["run"])
         prefix = "nightly" if task.kind == "review" else "completion"
         notice = Notice(ctx.name, f"{prefix}:{task.run_id}:{report.completion_key(task, receipt)}", task.run_id,
-                        "finish", report.subject(ctx.name, labels, receipt),
+                        "finish", report.subject(ctx.name, labels, receipt, task),
                         report.sentence(ctx.name, labels, task, receipt), "")
         if send(ctx, notice):
             task.update(closure_notice_delivered=True)

@@ -28,19 +28,30 @@ def image_wait(ctx, waiting):
         ledger, settings.today(), settings.daily_usd, settings.reservation_usd, settings.monthly_usd)
 
 
-def record(ctx, task):
-    if task.get("mode") != "fix":
-        return
-    known = relations.inventory(ctx.notes_path)["items"]
-    closed = sum(known.get(i["file"] + "#" + i["item_id"], {}).get("status")
-                 in ("fixed", "disagree", "question", "settled", "owner") for i in task.get("open_review_items", []))
-    remaining = {e["commission"]["id"] for e in pending.load(ctx.notes_path)}
-    accepted = sum(e["commission"]["id"] not in remaining for e in task.get("pending_figures", []))
-    task.update(fix_progress=closed + accepted)
+def runnable_images(ctx, waiting):
     from . import correction_figures
-    waiting = task.get("pending_figures", [])
-    only_waiting = not task.get("open_review_items") and all(
-        pending.generated(ctx.notes_path, e["commission"]) and not correction_figures.awaiting(ctx, e["commission"])
-        for e in waiting) and image_wait(ctx, waiting)
-    if closed + accepted == 0 and not only_waiting:
+    if not image_wait(ctx, waiting):
+        return waiting
+    return [e for e in waiting if not pending.generated(ctx.notes_path, e["commission"])
+            or correction_figures.awaiting(ctx, e["commission"])]
+
+
+def record(ctx, task):
+    if task.get("mode") != "fix" or task.phase == "done":
+        return
+    work = set_aside.work(task)
+    known = relations.inventory(ctx.notes_path)["items"]
+    closed = sum(known.get(key, {}).get("status") in
+                 ("fixed", "disagree", "question", "settled", "owner")
+                 for key in work if not key.startswith("figure:"))
+    remaining = {e["commission"]["id"] for e in pending.load(ctx.notes_path)}
+    accepted = sum(key[7:] not in remaining for key in work if key.startswith("figure:"))
+    task.update(fix_progress=closed + accepted)
+    if closed + accepted:
+        set_aside.progressed(ctx, task)
+    waiting = [e for e in pending.load(ctx.notes_path) if "figure:" + e["commission"]["id"] in work]
+    only_waiting = all(key.startswith("figure:") for key in work) and not runnable_images(ctx, waiting)
+    if work and closed + accepted == 0 and not only_waiting:
         set_aside.record(ctx, task, "no-progress")
+        task.update(no_progress=True)
+        set_aside.no_progress_notice(ctx, task)

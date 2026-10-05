@@ -24,7 +24,7 @@ class Notice:
 def mailed(notice: Notice) -> bool:
     if notice.kind.startswith(("error:", "image-threshold:")):
         return True
-    return notice.kind.startswith(("completion:", "nightly:")) and notice.kind.split(":")[2:3] in (["done"], ["closed"], ["retry_nightly"], ["set_aside"])
+    return notice.kind.startswith(("completion:", "nightly:")) and notice.kind.split(":")[2:3] in (["done"], ["closed"], ["retry_nightly"], ["set_aside"], ["no_progress"])
 
 
 @dataclass(frozen=True)

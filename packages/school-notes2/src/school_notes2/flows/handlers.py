@@ -49,12 +49,14 @@ def check(ctx: Ctx, task) -> dict:
     try:
         steps.guard_step(ctx, task)
     except steps.CheckFailed as exc:
+        checks.record_failure(ctx, task, exc, "check.guard")
         problems += exc.items
     from . import learning
     metadata_valid = True
     try:
         problems += steps.check_items(ctx, task)
     except steps.CheckFailed as exc:
+        checks.record_failure(ctx, task, exc, "check.content")
         metadata_valid = False
         problems += exc.items
     if metadata_valid:
@@ -76,6 +78,7 @@ def check(ctx: Ctx, task) -> dict:
         try:
             learning.refresh(ctx, task)
         except steps.CheckFailed as exc:
+            checks.record_failure(ctx, task, exc, "check.refresh")
             problems += exc.items
     if metadata_valid:
         problems += public_problems(ctx.notes_path, generation_receipts.rights(ctx))

@@ -16,8 +16,11 @@ def now():
 
 def due(ctx, started, state):
     task = phase.open_task(ctx.task_root(), ctx.name, "review")
-    if task is not None and task.data.get("needs_owner"):
+    from . import transient_retry
+    if task is not None and not transient_retry.ready(task):
         return False
+    if task is not None and task.data.get("needs_owner"):
+        return task.data["needs_owner"]["class"] == "transient"
     if task is not None and task.get("timeout_day") == started.date().isoformat():
         return False
     if task is not None and not task.data.get("needs_owner"):
@@ -86,7 +89,7 @@ def _cycle(cfg, contexts, started):
                     tasks = phase.all_tasks(ctx.task_root(), ctx.name)
                     ctx.round_failed = bool(result or any(t.kind == "notes" and t.open and t.data.get("needs_owner") for t in tasks))
                     progressed |= result in (None, 0) and any(t.kind == "notes" and t.phase == "done" and t.run_id not in before
-                                      and not t.get("set_aside") and not t.data.get("closed") for t in tasks)
+                                      and not t.get("set_aside") and not t.get("no_progress") and not t.data.get("closed") for t in tasks)
             except Exception as exc:
                 if kind == "run":
                     ctx.round_failed = True

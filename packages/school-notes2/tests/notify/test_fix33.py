@@ -1,6 +1,8 @@
 """Only a stopped situation opens an incident; retries and diagnostics cannot spam."""
 
 from types import SimpleNamespace
+from datetime import datetime, timedelta
+from school_notes2.flows import transient_retry
 
 import pytest
 
@@ -35,10 +37,13 @@ def test_four_hours_of_decreasing_free_space_is_one_incident(world):
 
 
 @pytest.mark.parametrize("error,limit", [(Transient, 3), (BadWork, 2)])
-def test_task_retries_survive_restart_and_mail_only_on_stop(world, error, limit):
+def test_task_retries_survive_restart_and_mail_only_on_stop(world, monkeypatch, error, limit):
     ctx, sent = world
     task = phase.create(ctx.task_root(), ctx.name, "notes", "cron", "writing")
+    at = transient_retry.now()
+    monkeypatch.setattr(transient_retry, "now", lambda: at)
     for attempt in range(1, limit + 1):
+        at += timedelta(hours=1)
         task = phase.load(task.dir)
         with operation.scope(ctx):
             policy.on_error(error(f"attempt {attempt}"), task=task, student=ctx.name,
@@ -48,15 +53,20 @@ def test_task_retries_survive_restart_and_mail_only_on_stop(world, error, limit)
             assert not sent and not incidents.active(ctx)
     assert len(sent) == 1 and task.data["needs_owner"]
     message = sent[0].get_content()
-    assert "a futás megállt" in message and "a kontroller" in message
+    assert "a futás megállt" in message
+    assert ("a következő óra első köre" if error is Transient else "a kontroller") in message
     assert "nincs teendőd, a tool újrapróbálja" not in message
     operational_report.ended(ctx, "run", 0, {task.run_id: True})
     assert len(sent) == 1
 
 
-def test_taskless_transient_counts_per_step_and_success_resets(world):
+def test_taskless_transient_counts_per_step_and_success_resets(world, monkeypatch):
     ctx, sent = world
+    at = transient_retry.now()
+    monkeypatch.setattr(transient_retry, "now", lambda: at)
+    monkeypatch.setattr(last_error, "now_iso", lambda: at.isoformat())
     for attempt in range(1, 4):
+        at += timedelta(hours=1)
         # Both operations failing must not reset each other's consecutive count.
         for step in ("nightly", "run"):
             with operation.scope(ctx):
@@ -69,6 +79,7 @@ def test_taskless_transient_counts_per_step_and_success_resets(world):
     last_error.record(ctx, "run", "transient", Transient("new outage"))
     assert len(sent) == 2
     for _ in range(2):
+        at += timedelta(hours=1)
         last_error.record(ctx, "run", "transient", Transient("still down"))
     assert len(sent) == 3
 
@@ -166,8 +177,12 @@ def test_changed_stop_reason_at_same_task_gets_new_sentence(world):
 
 def test_taskless_stop_is_durable_before_retry_counter_save(world, monkeypatch):
     ctx, sent = world
+    at = transient_retry.now()
+    monkeypatch.setattr(transient_retry, "now", lambda: at)
+    monkeypatch.setattr(last_error, "now_iso", lambda: at.isoformat())
     for _ in range(2):
         last_error.record(ctx, "run", "transient", Transient("outage"))
+        at += timedelta(hours=1)
     with monkeypatch.context() as patch:
         patch.setattr(Mailer, "_deliver", lambda *a: False)
         def crash(*args):

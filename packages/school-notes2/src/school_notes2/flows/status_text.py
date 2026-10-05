@@ -133,7 +133,7 @@ def render(data):
     for t in data["today"]:
         started = t.get("resumed_at") or t.data["created"]
         end = t.get("ended_at") or (t.data.get("needs_owner") or {}).get("at") or (t.data["updated"] if t.phase == "done" or t.data.get("closed") else "")
-        result = "elakadt" if t.data.get("needs_owner") else operational_report.STATES[operational_report.terminal(t)] if t.data.get("closed") else operational_report.STATES[operational_report.terminal(t)] if t.phase == "done" else "vár" if not data["held"] or t != task else "fut"
+        result = "elakadt" if t.data.get("needs_owner") else operational_report.state_text(operational_report.terminal(t), t) if t.data.get("closed") else operational_report.state_text(operational_report.terminal(t), t) if t.phase == "done" else "vár" if not data["held"] or t != task else "fut"
         work = minutes(t, data["live"] if t == task and data["held"] else None, now)
         runs.append(f"{clock(started)}–{clock(end)} {work} p {result}")
     lines.append("  Mai futások: " + ("; ".join(runs) or "nincs") + ".")

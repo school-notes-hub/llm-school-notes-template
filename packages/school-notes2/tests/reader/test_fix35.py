@@ -68,11 +68,11 @@ def test_scope_recovery_continues_and_reports(setup, monkeypatch, learner, mode,
             files.apply_closure(ctx.notes_path, task.run_id, result["review_closure"], items)
             task.set_phase("figures", inspection_result=result)
     review_phases.advance(ctx, task, lambda _: None)
-    assert task.phase == "finishing" and calls == ([1, 1] if invalid else [1])
+    assert task.phase == "finishing" and calls == ([1] * (6 if mode == "p4" else 7) if invalid else [1])
     assert task.data["llm_failures"] == 0 and not task.data["needs_owner"]
     text = steps._llm_part(safefs.read_text(ctx.notes_path, page))
     assert ("Javított magyarázat." in text) != invalid
-    assert relations.inventory(ctx.notes_path)["items"][items[0]["key"]]["status"] == ("open" if invalid else "fixed")
+    assert relations.inventory(ctx.notes_path)["items"][items[0]["key"]]["status"] == ("owner" if invalid else "fixed")
     assert ("recheck" in invoked) != invalid
     # Real completion aggregation includes the tool note even after a full rollback.
     from school_notes2.flows import operational_report
@@ -86,7 +86,7 @@ def test_scope_recovery_continues_and_reports(setup, monkeypatch, learner, mode,
     assert any(e["action"] == "fix.scope_restored" and e["pages"] == [NEW, OTHER] for e in events)
     assert not any(e["action"].startswith("notify.") for e in events)
     review_phases.advance(ctx, phase.load(task.dir), lambda _: None)
-    assert calls == ([1, 1] if invalid else [1])
+    assert calls == ([1] * (6 if mode == "p4" else 7) if invalid else [1])
 
 
 @pytest.mark.parametrize("boundary", ["journal", "restore", "rollback"])

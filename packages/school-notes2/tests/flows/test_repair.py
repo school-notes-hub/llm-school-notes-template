@@ -12,7 +12,7 @@ from school_notes2.state.files import read_json, write_json
 from school_notes2.wiki import frontmatter
 from tests.flows.test_repair_queue import page
 from tests.sources.test_cards import CARD, LEARNERS, shared
-from tests.conftest import assert_suppressed, recording_mailer
+from tests.conftest import recording_mailer
 
 
 def context(tmp_path, log, monkeypatch):
@@ -88,33 +88,25 @@ def test_queue_prepare_is_tool_only_and_completion_is_resumable(tmp_path, log, m
     assert queue.load(ctx.notes_path)["items"][0]["status"] == "done"
 
 
-def test_second_bad_repair_retires_target_without_reordering_queue(tmp_path, log, monkeypatch):
+def test_second_bad_repair_is_set_aside_without_reordering_queue(tmp_path, log, monkeypatch):
+    from school_notes2.flows import set_aside
     ctx, topic, mailed = context(tmp_path, log, monkeypatch)
     page(ctx.notes_path, "b")
     safefs.write_json(ctx.notes_path, queue.PATH, queue.build(ctx.notes_path))
+    original = safefs.read_bytes(ctx.notes_path, queue.PATH)
     task = repair.start(ctx, topic=topic)
     repair.prepare(ctx, task)
-    assert failure.handle(ctx, task, BadWork("first"))
-    assert not task.get("repair_failed")
-    assert failure.handle(ctx, task, BadWork("second"))
-    assert task.phase == "moved" and task.get("repair_failed")
     discarded = []
     monkeypatch.setattr(failure.discard, "discard", lambda *args: discarded.append(1))
-    repair.prepare(ctx, phase.load(task.dir))
-    task = phase.load(task.dir)
-    assert discarded == [1]
-    assert task.get("skip_writer") and not task.data["needs_owner"]
-    data = queue.load(ctx.notes_path)
-    assert data["items"][0]["status"] == "owner"
-    assert queue.next_item(data)["page"] == "wiki/m/b.md"
-    record = frontmatter.split(safefs.read_text(ctx.notes_path, task.get("repair_owner_item"))).meta
-    assert record["items"] == {"R1": "owner"}
-    from school_notes2.review import repair_migration
-    assert record["repair_policy"] == repair_migration.POLICY
-    assert not list(repair_migration.updates(ctx.notes_path))
-    report.completion(ctx, task)
-    assert not mailed
-    assert_suppressed(log, "repair_owner:")
+    assert failure.handle(ctx, task, BadWork("first"))
+    assert not task.get("set_aside")
+    assert failure.handle(ctx, task, BadWork("second"))
+    assert task.phase == "done" and task.get("set_aside") and not task.data["needs_owner"]
+    assert discarded == [1] and len(mailed) == 1
+    assert safefs.read_bytes(ctx.notes_path, queue.PATH) == original
+    assert "repair:" + topic in set_aside.blocked(ctx)
+    monkeypatch.setattr(repair, "start", lambda ctx, topic: topic)
+    assert repair.next_task(ctx) == "wiki/m/b.md"
 
 
 def test_owner_notes_stay_in_private_report(tmp_path, log, monkeypatch):

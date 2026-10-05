@@ -3,6 +3,7 @@
 from dataclasses import replace
 from pathlib import Path
 
+from ..review.severity import is_error
 from ..llm import launch
 from ..schemas import validate
 from ..state import safefs
@@ -10,7 +11,7 @@ from ..state.errors import BadWork, Transient, WaitingQuota
 from . import commissions, context, inputs
 
 
-def validate_output(value: dict, assigned: dict, repo: Path, briefs: list[dict]) -> None:
+def validate_output(value: dict, assigned: dict, repo: Path, briefs: list[dict], *, legacy=False) -> None:
     validate("figure-review", value)
     wanted = {i["id"]: i["key"] for i in assigned["figures"]}
     got = [i["id"] for i in value["figures"]]
@@ -22,9 +23,9 @@ def validate_output(value: dict, assigned: dict, repo: Path, briefs: list[dict])
         current = context.verdict_key(repo, brief, commissions.candidate(repo, brief))
         if verdict["key"] != wanted[verdict["id"]] or current != verdict["key"]:
             raise ValueError(f"{verdict['id']}: stale verdict key")
-        if verdict["verdict"] == "accept" and any((d.get("severity", "hiba") == "hiba") for d in verdict["defects"] + verdict["text_mismatch"]):
+        if verdict["verdict"] == "accept" and any(is_error(d) for d in verdict["defects"] + verdict["text_mismatch"]):
             raise ValueError("accept cannot contain outstanding defects or text mismatches")
-        if verdict["verdict"] != "accept" and not any((d.get("severity", "hiba") == "hiba") for d in verdict["defects"] + verdict["text_mismatch"]):
+        if not legacy and verdict["verdict"] != "accept" and not any(is_error(d) for d in verdict["defects"] + verdict["text_mismatch"]):
             raise ValueError("repair/reject requires a hiba defect; suggestions do not block acceptance")
         uses = [context.page_context(repo, brief["page"])] + context.other_uses(
             repo, brief, commissions.candidate(repo, brief))
@@ -52,7 +53,7 @@ def run_batch(repo: Path, briefs: list[dict], name: str, run: launch.RoleRun, *,
         saved_ids = {v["id"] for v in assigned["figures"] + saved.get("failed", [])}
         if {b["id"] for b in briefs} != saved_ids:
             raise ValueError("saved review belongs to different assignments")
-        validate_output(saved["review"], assigned, repo, briefs)
+        validate_output(saved["review"], assigned, repo, briefs, legacy=saved.get("validation_version", 1) < 2)
         _save(repo, name, saved)
         return saved
     assigned = safefs.read_json(folder, "prepared.json")
@@ -86,7 +87,7 @@ def _resume(repo, briefs, name, run, folder, assigned, state, log, invoke):
     while True:
         saved = _saved_receipt(folder)
         if saved is not None:
-            validate_output(saved["review"], assigned, repo, briefs)
+            validate_output(saved["review"], assigned, repo, briefs, legacy=saved.get("validation_version", 1) < 2)
             _save(repo, name, saved)
             return saved
         if state["status"] == "pending":
@@ -140,7 +141,7 @@ def _accept(repo, briefs, name, run, folder, state, output):
               if d.get("severity") == "javaslat"]
     output = {**output, "figures": [by_id[b["id"]] for b in briefs],
               "owner_notes": sorted(set(output["owner_notes"] + advice))}
-    receipt = {"status": "reviewed", "model": f"{run.role.model}/{run.role.effort}",
+    receipt = {"validation_version": 2, "status": "reviewed", "model": f"{run.role.model}/{run.role.effort}",
                "review": output, "input": state["input"], "failed": state.get("failed", [])}
     safefs.write_json(folder, "accepted.json", receipt)  # durable before either repo write
     _save(repo, name, receipt)
@@ -161,7 +162,7 @@ def verdict_for(receipt: dict, fid: str, *, unique=False) -> dict:
     found = [v for v in receipt.get("review", {}).get("figures", []) if v["id"] == fid]
     if not found or (unique and len(found) != 1):
         return {}
-    return {**found[0], **{k: [d for d in found[0][k] if (d.get("severity", "hiba") == "hiba")]
+    return {**found[0], **{k: [d for d in found[0][k] if is_error(d)]
                           for k in ("defects", "text_mismatch") if k in found[0]}}
 
 

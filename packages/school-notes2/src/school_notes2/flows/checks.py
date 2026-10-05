@@ -32,6 +32,12 @@ def ordered(items: list[dict]) -> list[dict]:
                                         i.get("line") or 0, i["message"], i.get("id", "")))
 
 
+def record_failure(ctx, task, exc, step):
+    """Consumed failures need the same evidence as those reaching the error policy."""
+    ctx.log.error(step, exc)
+    task.update(last_check_problems=ordered(exc.items))
+
+
 def identify(items: list[dict], repo=None) -> list[dict]:
     counts, out, lines = Counter(), [], {}
     for i in ordered(items):
@@ -59,7 +65,8 @@ def response(items: list[dict]) -> dict:
 
 def remember(task, items: list[dict]) -> None:
     state = dict(task.get("writer_check", {"count": 0}))
-    state["warnings"] = [i["id"] for i in items if i.get("severity") == "warning"]
+    state["warnings"] = [i["id"] for i in items if i.get("severity") == "warning"
+                         and i.get("kind") != "inherited-check"]
     task.update(writer_check=state)
 
 
@@ -125,7 +132,7 @@ def after_writer(ctx, task, result: dict, items: list[dict]) -> list[dict]:
     decided = {i["id"] for i in result.get("warnings", [])}
     warnings = [{**i, "unhandled": i["id"] not in decided} for i in identify(items, ctx.notes_path)
                 if i.get("severity") == "warning"]
-    task.update(check_warnings=warnings)
+    task.update(check_warnings=[i for i in warnings if i.get("kind") != "inherited-check"])
     return warnings
 
 

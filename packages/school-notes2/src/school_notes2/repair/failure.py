@@ -1,4 +1,6 @@
-"""Two failed repairs leave an owner item and let the persisted queue continue (T-077)."""
+"""Route failed repair output; retain recovery of pre-upgrade owner-queue checkpoints."""
+
+from contextlib import nullcontext
 
 from ..git import discard, repos
 from ..notify import Notice
@@ -13,11 +15,9 @@ from . import queue
 def handle(ctx, task, exc) -> bool:
     if task is None or task.get("mode") != "repair" or task.get("queue_only") or not isinstance(exc, BadWork):
         return False
-    from ..flows import policy
-    policy.on_error(exc, task=task, student=ctx.name, step="repair", log=ctx.log, mailer=None)
-    if task.data["llm_failures"] >= 2:
-        task.data["needs_owner"] = None
-        task.set_phase("moved", repair_failed=True)
+    from ..flows import operation, policy
+    with nullcontext() if operation.CURRENT.get() else operation.scope(ctx):
+        policy.on_error(exc, task=task, student=ctx.name, step="repair", log=ctx.log, mailer=None)
     return True
 
 

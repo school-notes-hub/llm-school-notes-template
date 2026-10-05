@@ -16,10 +16,16 @@ def record(ctx, step, kind, exc=None):
     retries = read_json(retry_path, {})
     previous_retry = retries.get(step, {})
     attempts = (previous_retry.get("count", 0) if previous_retry.get("class") == kind else 0) + 1
+    retry_at = now_iso()
+    if kind == "transient" and previous_retry.get("class") == kind and previous_retry.get("at"):
+        from datetime import datetime
+        from . import transient_retry
+        if transient_retry.now() < datetime.fromisoformat(previous_retry["at"]) + transient_retry.INTERVAL:
+            attempts, retry_at = previous_retry["count"], previous_retry["at"]
     retry_limit = {"transient": 3, "bad_work": 2}.get(kind, 0)
     attempts = attempts if retry_limit else 0
     if attempts:
-        retries[step] = {"class": kind, "count": attempts}
+        retries[step] = {"class": kind, "count": attempts, "at": retry_at}
     else:
         retries.pop(step, None)
     stopped = not retry_limit or attempts >= retry_limit

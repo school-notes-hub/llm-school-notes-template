@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from typing import Callable
 
+from .severity import is_error
 from ..log import duration
 from ..evidence import records
 from ..git.run import Git, classify, failure_text
@@ -173,7 +174,7 @@ def _close_report(task, repo, wt, ident, t, fetch_pages):
         # Legacy tasks keep their original marker contract.
         return r if end == head and head_now == head else end
 
-    n = sum((f.get("severity", "hiba") == "hiba") for f in review["findings"])
+    n = sum(is_error(f) for f in review["findings"])
     title = f"{n} megállapítás ({base[:7]}..{end[:7]})"
     return _close(task, repo, wt, write, choose_m, _message(ident, task.run_id, title), t)
 

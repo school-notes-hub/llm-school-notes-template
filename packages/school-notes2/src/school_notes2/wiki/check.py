@@ -5,6 +5,7 @@ check.json items `{file, line, message, severity}`; errors send the run back to 
 writer, warnings do not.
 """
 
+import hashlib
 import json
 import re
 from datetime import date
@@ -12,7 +13,7 @@ from pathlib import Path
 
 from ..state import safefs
 from . import decisions, drafts, frontmatter, lesson_log, markers
-from .pages import CODE_FENCE, links, resolve, sha256
+from .pages import CODE_FENCE, links, resolve
 
 SIZE_WARN = 40 * 1024
 TYPES_WITH_CHAPTER = ("topic", "chapter-summary")
@@ -105,7 +106,7 @@ def check_formulas(rel: str, text: str) -> list[dict]:
     return []
 
 
-def check_links(repo: Path, rel: str, text: str) -> list[dict]:
+def check_links(repo: Path, rel: str, text: str, *, fs=safefs) -> list[dict]:
     out = []
     for link in links(text):
         target = link.target
@@ -123,21 +124,21 @@ def check_links(repo: Path, rel: str, text: str) -> list[dict]:
         elif link.image and resolved.startswith(("sources/", "references/")):
             out.append(item(rel, link.line, "a source or reference image may not be embedded; "
                                             "link it instead"))
-        elif target.endswith("/") or safefs.is_dir(repo, resolved):
+        elif target.endswith("/") or fs.is_dir(repo, resolved):
             out.append(item(rel, link.line, f"link to a directory {target!r}; link its index.md"))
-        elif not safefs.is_file(repo, resolved) and resolved.startswith(("sources/", "references/")):
+        elif not fs.is_file(repo, resolved) and resolved.startswith(("sources/", "references/")):
             # Citation-only targets (4.10): the site turns them into quotes, and v1 sources
             # live in the archive repository (B16) – the writer cannot fix such a link.
             out.append(item(rel, link.line, f"cited source is not in this repository: "
                                             f"{target!r}", "warning"))
-        elif not safefs.is_file(repo, resolved):
+        elif not fs.is_file(repo, resolved):
             out.append(item(rel, link.line, f"link target does not exist: {target!r}"))
         elif link.image and resolved.lower().endswith(".mp4"):
-            out += check_animation(repo, rel, link.line, resolved)
+            out += check_animation(repo, rel, link.line, resolved, fs=fs)
     return out
 
 
-def check_animation(repo: Path, rel: str, line: int, video: str) -> list[dict]:
+def check_animation(repo: Path, rel: str, line: int, video: str, *, fs=safefs) -> list[dict]:
     """An animation is a tool render under wiki/assets/ (render.json lists it) with its
     same-named .png poster, the static counterpart used in print."""
     if not video.startswith("wiki/assets/"):
@@ -145,11 +146,11 @@ def check_animation(repo: Path, rel: str, line: int, video: str) -> list[dict]:
     poster = video[:-4] + ".png"
     folder, name = video.rsplit("/", 1)
     out = []
-    if not safefs.is_file(repo, poster):
+    if not fs.is_file(repo, poster):
         out.append(item(rel, line, f"the animation needs its poster image {poster.rsplit('/', 1)[1]!r}"))
     receipt = f"{folder}/render.json"
     try:
-        outputs = json.loads(safefs.read_text(repo, receipt)).get("outputs") or {}
+        outputs = json.loads(fs.read_text(repo, receipt)).get("outputs") or {}
     except (FileNotFoundError, ValueError):
         outputs = {}
     if name not in outputs:
@@ -158,15 +159,15 @@ def check_animation(repo: Path, rel: str, line: int, video: str) -> list[dict]:
     return out
 
 
-def chapter_ids(repo: Path, rel: str) -> set[str] | None:
+def chapter_ids(repo: Path, rel: str, *, fs=safefs) -> set[str] | None:
     index = f"{Path(rel).parent.as_posix()}/index.md"
-    if not safefs.is_file(repo, index):
+    if not fs.is_file(repo, index):
         return None
-    chapters = frontmatter.split(safefs.read_text(repo, index)).meta.get("chapters") or []
+    chapters = frontmatter.split(fs.read_text(repo, index)).meta.get("chapters") or []
     return {c.get("id") for c in chapters if isinstance(c, dict)}
 
 
-def check_meta(repo: Path, rel: str, meta: dict) -> list[dict]:
+def check_meta(repo: Path, rel: str, meta: dict, *, fs=safefs) -> list[dict]:
     """Frontmatter rules by page type (plan 4.9; wiki-structure)."""
     name = Path(rel).name
     if name == "index.md":
@@ -190,9 +191,9 @@ def check_meta(repo: Path, rel: str, meta: dict) -> list[dict]:
         if not isinstance(tag, str) or not TAG.match(tag):
             out.append(item(rel, None, f"tag {tag!r} must be lowercase kebab-case, not numeric"))
     if kind in TYPES_WITH_CHAPTER:
-        out += check_chapter(repo, rel, meta)
+        out += check_chapter(repo, rel, meta, fs=fs)
     if kind == "lesson-notes":
-        out += check_lessons(repo, rel, meta)
+        out += check_lessons(repo, rel, meta, fs=fs)
     return out
 
 
@@ -214,9 +215,9 @@ def check_index_meta(rel: str, meta: dict) -> list[dict]:
     return out
 
 
-def check_chapter(repo: Path, rel: str, meta: dict) -> list[dict]:
+def check_chapter(repo: Path, rel: str, meta: dict, *, fs=safefs) -> list[dict]:
     out = []
-    ids = chapter_ids(repo, rel)
+    ids = chapter_ids(repo, rel, fs=fs)
     if meta.get("chapter") is None:
         out.append(item(rel, None, "`chapter` missing (an id from the subject index `chapters`)"))
     elif ids is not None and meta["chapter"] not in ids:
@@ -226,7 +227,7 @@ def check_chapter(repo: Path, rel: str, meta: dict) -> list[dict]:
     return out
 
 
-def check_lessons(repo: Path, rel: str, meta: dict) -> list[dict]:
+def check_lessons(repo: Path, rel: str, meta: dict, *, fs=safefs) -> list[dict]:
     lessons = meta.get("lessons")
     if not isinstance(lessons, list):
         return [item(rel, None, "`lessons` list missing")]
@@ -244,32 +245,32 @@ def check_lessons(repo: Path, rel: str, meta: dict) -> list[dict]:
             out.append(item(rel, None, f"lesson {n}: `topics` must be a list"))
             continue
         for topic in lesson.get("topics") or []:
-            if not _topic_exists(repo, folder, str(topic).split("#", 1)[0]):
+            if not _topic_exists(repo, folder, str(topic).split("#", 1)[0], fs=fs):
                 out.append(item(rel, None, f"lesson {n}: topic page {topic!r} does not exist"))
         anchor = lesson.get("anchor")
-        if anchor and f'id="{anchor}"' not in safefs.read_text(repo, rel):
+        if anchor and f'id="{anchor}"' not in fs.read_text(repo, rel):
             out.append(item(rel, None, f"lesson {n}: anchor {anchor!r} has no "
                                        f'<a id="{anchor}"></a> on this page', "warning"))
     return out
 
 
-def _topic_exists(repo: Path, folder: str, topic: str) -> bool:
+def _topic_exists(repo: Path, folder: str, topic: str, *, fs=safefs) -> bool:
     target = resolve(f"{folder}/index.md", topic)
-    return target is not None and safefs.is_file(repo, target)
+    return target is not None and fs.is_file(repo, target)
 
 
-def _same(repo: Path, rel: str, sha: str | None) -> bool:
+def _same(repo: Path, rel: str, sha: str | None, *, fs=safefs) -> bool:
     target = resolve("x", rel) if rel else None      # normalised, refuses leaving the repo
-    return bool(target) and safefs.is_file(repo, target) and sha256(repo, target) == sha
+    return bool(target) and fs.is_file(repo, target) and hashlib.sha256(fs.read_bytes(repo, target)).hexdigest() == sha
 
 
-def check_renders(repo: Path, receipts: list[str] | None = None) -> list[dict]:
+def check_renders(repo: Path, receipts: list[str] | None = None, *, fs=safefs) -> list[dict]:
     """render.json must still describe its source and outputs (no re-rendering here)."""
     out = []
     for rel in (sorted(receipts) if receipts is not None else
-                safefs.glob(repo, "wiki/assets", "wiki/assets/**/render.json")):
+                fs.glob(repo, "wiki/assets", "wiki/assets/**/render.json")):
         try:
-            data = json.loads(safefs.read_text(repo, rel))
+            data = json.loads(fs.read_text(repo, rel))
         except ValueError:
             out.append(item(rel, None, "render.json is not valid JSON"))
             continue
@@ -278,16 +279,16 @@ def check_renders(repo: Path, receipts: list[str] | None = None) -> list[dict]:
                 or any(not isinstance(info, dict) for info in data["outputs"].values())):
             out.append(item(rel, None, "render.json has invalid source/outputs fields"))
             continue
-        if not _same(repo, data["source"], data.get("source_sha256")):
+        if not _same(repo, data["source"], data.get("source_sha256"), fs=fs):
             out.append(item(rel, None, "the figure source changed after rendering; render again"))
         base = rel.rsplit("/", 1)[0]
         for name, info in (data.get("outputs") or {}).items():
-            if not _same(repo, f"{base}/{name}", (info or {}).get("sha256")):
+            if not _same(repo, f"{base}/{name}", (info or {}).get("sha256"), fs=fs):
                 out.append(item(rel, None, f"rendered output {name!r} differs from render.json"))
     return out
 
 
-def check_files(repo: Path, paths: list[str], *, today: date | None = None) -> list[dict]:
+def check_files(repo: Path, paths: list[str], *, today: date | None = None, fs=safefs, fix=True) -> list[dict]:
     """Check the run's changed markdown files and every render.json.
 
     Only files the writer may change are judged: wiki pages get every rule, `references/`
@@ -295,31 +296,32 @@ def check_files(repo: Path, paths: list[str], *, today: date | None = None) -> l
     docs/evidence, sources/) are never reported to the writer, who could not fix them."""
     out = []
     for rel in sorted(set(paths)):
-        if not rel.endswith(".md") or not safefs.is_file(repo, rel):
+        if not rel.endswith(".md") or not fs.is_file(repo, rel):
             continue
         if rel.startswith("references/"):
-            out += check_secrets(rel, safefs.read_text(repo, rel, errors="replace"))
+            out += check_secrets(rel, fs.read_text(repo, rel, errors="replace"))
             continue
         if not rel.startswith("wiki/") or rel.startswith("wiki/assets/"):
             continue
-        autofix(repo, rel)
-        text = safefs.read_text(repo, rel)
+        if fs is safefs and fix:
+            autofix(repo, rel)
+        text = fs.read_text(repo, rel).replace("\r\n", "\n")
         out += check_text(rel, text)
         try:
             page = frontmatter.split(text)
         except Exception as exc:
             out.append(item(rel, 1, f"frontmatter is not valid YAML: {exc}"))
             continue
-        out += check_meta(repo, rel, page.meta)
-        out += check_learning(repo, rel, page)
-        out += check_links(repo, rel, text)
-    if not errors(out):
+        out += check_meta(repo, rel, page.meta, fs=fs)
+        out += check_learning(repo, rel, page, fs=fs)
+        out += check_links(repo, rel, text, fs=fs)
+    if fs is safefs and not errors(out):
         out += [item(rel, None, message, "warning")
                 for rel, message in drafts.warnings(repo, today or date.today(), paths=paths)]
-    return out + check_renders(repo)
+    return out + check_renders(repo, fs=fs)
 
 
-def check_learning(repo: Path, rel: str, page: frontmatter.Page) -> list[dict]:
+def check_learning(repo: Path, rel: str, page: frontmatter.Page, *, fs=safefs) -> list[dict]:
     out = [item(rel, None, message) for message in
            decisions.decision_problems(page.meta) + drafts.problems(page.meta)]
     offset = len(page.raw_meta.splitlines()) + 2 if page.has_fm else 0
@@ -332,7 +334,8 @@ def check_learning(repo: Path, rel: str, page: frontmatter.Page) -> list[dict]:
         out.append(item(rel, None, "the tool renders the source pointer; supply lessons[].materials"))
     if lesson_log.is_lesson(rel, page.meta) and isinstance(page.meta.get("lessons"), list):
         out += [item(rel, None, message)
-                for message in lesson_log.form_problems(repo, rel, page.body, page.meta)]
+                for message in lesson_log.form_problems(repo, rel, page.body, page.meta,
+                                            read=lambda repo, path: frontmatter.split(fs.read_text(repo, path)))]
     elif lesson_log.BLOCK in markers.names(page.body):
         out.append(item(rel, None, "source pointer belongs only on a lesson log"))
     return out

@@ -31,6 +31,10 @@ def nightly(ctx: Ctx) -> int:
         for previous in tasks:
             if previous.phase == "done":
                 _notify_owners(ctx, previous)
+        from . import transient_retry
+        if any(t.open and not transient_retry.resume(t) for t in tasks):
+            ctx.log.event("nightly.skip", "transient_wait")
+            return 0
         if any(t.open and t.data.get("needs_owner") for t in tasks):
             ctx.log.event("nightly.skip", "needs_owner")
             return 0

@@ -34,6 +34,8 @@ def recover(ctx, task, root=None, items=None):
                                    + call_scope.link_pages(task), restore=task.mode != "interactive")
     if paths:
         refresh_records(ctx, task, paths)
+        from . import inherited_check
+        inherited_check.restored(ctx, task, paths)
     owner_notes(ctx, task, root)
     return paths
 
@@ -53,6 +55,7 @@ def rollback(ctx, task, exc):
     root = task.dir / "fix-before"
     if task.mode == "interactive" or task.get("mode") != "fix" or not related_errors(ctx, root, exc.items):
         return False
+    steps.checks.record_failure(ctx, task, exc, "fix.scope_rollback")
     safefs.write_json(root, "rollback.json", {"reason": str(exc)})
     resume(ctx, task)
     return True

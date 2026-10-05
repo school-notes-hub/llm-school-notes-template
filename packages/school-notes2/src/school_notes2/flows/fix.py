@@ -23,10 +23,7 @@ def next_task(ctx):
     migration = next(repair_migration.updates(ctx.notes_path), None) is not None
     from . import fix_progress
     items, waiting = fix_progress.available(ctx, items, waiting)
-    if not items and waiting and fix_progress.image_wait(ctx, waiting):
-        from ..figures import pending as figures
-        waiting = [e for e in waiting if not figures.generated(ctx.notes_path, e["commission"])
-                   or correction_figures.awaiting(ctx, e["commission"])]
+    waiting = fix_progress.runnable_images(ctx, waiting)
     if not owners and not migration and not items and not waiting:
         return None
     task = phase.create(ctx.task_root(), ctx.name, "notes", "cron", "moved")
@@ -53,7 +50,7 @@ def prepare(ctx, task):
     waiting = task.get("pending_figures", [])
     correction_figures.start(ctx.notes_path, waiting)
     grouping = calls.fix_assignments(ctx.notes_path, reviews, waiting)
-    task.update(fix_work=fix_progress.keys(reviews, waiting))
+    task.update(fix_work=fix_progress.keys(reviews, waiting), assigned_work=[])
     root = task.dir / "fix-before"
     correction.snapshot(ctx.notes_path, root)
     from .fix_scope import TOOL_STATE
