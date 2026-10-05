@@ -150,6 +150,12 @@ def test_three_fix_calls_finish_with_only_middle_open(learning_run, monkeypatch)
                 pending_figures=[], infographic_policy=False)
     invoked = []
     def write(ctx, task, k, *args):
+        if task.get("correction_parent"):
+            for target in pages:
+                safefs.write_text(ctx.notes_path, target, safefs.read_text(ctx.notes_path, target).replace("[Broken](missing.md)", "Javítva."))
+            return {"status": "done", "review_closure": [
+                {"file": i["file"], "item_id": i["item_id"], "status": "fixed"}
+                for i in task.get("calls")[k - 1]["open_review_items"]]}
         invoked.append(k)
         page = pages[k - 1]
         text = safefs.read_text(ctx.notes_path, page)
@@ -158,12 +164,14 @@ def test_three_fix_calls_finish_with_only_middle_open(learning_run, monkeypatch)
     monkeypatch.setattr(writer, "_call", write)
     assert writer.run_ranges(ctx, task, {}) == "done"
     monkeypatch.setattr(inspection, "inspect", lambda *a: None)
+    from school_notes2.reader import calls as reader_calls
+    monkeypatch.setattr(reader_calls, "run", lambda *a, **kw: {"status": "not_checked"})
     built = []
     monkeypatch.setattr(finish, "_build", lambda ctx, task, commit: built.append(commit) or {"commit": commit})
     assert finish.finish(ctx, task, notify_owner_items=lambda _: None) == "done"
     assert invoked == [1, 2, 2, 3] and len(built) == 1
     known = relations.inventory(ctx.notes_path)["items"]
-    assert [known[report + f"#R{k}"]["status"] for k in range(1, 4)] == ["fixed", "open", "fixed"]
+    assert [known[report + f"#R{k}"]["status"] for k in range(1, 4)] == ["fixed", "fixed", "fixed"]
     assert known[report + "#R2"]["repair_attempts"] == 1
     assert "Javítva." in safefs.read_text(ctx.notes_path, pages[0])
     assert "Javítva." in safefs.read_text(ctx.notes_path, pages[2])

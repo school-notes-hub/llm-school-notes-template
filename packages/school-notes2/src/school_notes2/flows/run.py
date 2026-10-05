@@ -161,7 +161,8 @@ def advance(ctx: Ctx, task: Task) -> None:
         finish_flow.finish(ctx, task, notify_owner_items=lambda items: owner_items(ctx, task, items))
     except steps.CheckFailed as exc:
         from . import call_scope
-        call_scope.retry(ctx, task, exc.items)
+        if not task.get("review_complete") and task.phase not in ("correcting", "rechecking", "review_ready"):
+            call_scope.retry(ctx, task, exc.items)
         raise
 
 

@@ -16,7 +16,7 @@ from ..wiki import frontmatter, lesson_log
 from . import checks, journal
 
 KIND = "inherited-check"
-MESSAGE = "Régi hiba, nem a te feladatod, ha az oldal nincs a kiosztásodban: "
+MESSAGE = "Régi hiba, önmagában nem blokkolja ezt a futást: "
 
 
 def key(problem):

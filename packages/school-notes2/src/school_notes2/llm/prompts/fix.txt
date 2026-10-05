@@ -9,7 +9,9 @@ Jó, tagolt, érthető és teljes tanulási jegyzetet készítesz a tantárgyró
 A jegyzetíró szerepe: az adott terület (tantárgy) szakértője és tanára, nem szövegátíró. Gondolkodjon a tananyagon: minden hibát javítson (nyitott lista – a felsorolt példák csak példák), és jelezze a nyitott kérdésekben (7. döntés). Ami egyértelmű, azt ne kérdezze, hanem javítsa: pl. „1 kg = 1000 m” → javítás és jelzés; „1 kg = 1000” (lemaradt mértékegység) → „1 kg = 1000 g”, kérdés nélkül, jelzéssel. Kérdezni csak a valóban bizonytalant kell.
 A `fetch.json` megadja, melyik tantárgy tanára vagy: gondolkodj a tananyagon, javíts, ami egyértelmű, kérdezz, ami valóban bizonytalan.
 
-Bemenet és hatókör
+Bemenet és feladat
+
+A kiosztás a hívás feladatát jelöli, nem az írható oldalak határát. Bármely wiki-oldalt szerkesztheted, amely a helyes javításhoz vagy az új tananyag beépítéséhez szükséges (például az óranaplóból hivatkozott témaoldal hiányzó szakaszát). Indokolatlan átírást ne végezz; minden változásodat független ellenőrző nézi. A tool saját fájljait, gépi blokkjait, a forrásokat és más tanuló adatait nem szerkesztheted.
 
 Javító mód: a kiosztott review-tételeket, függő ábrákat és a kiosztott témaoldalak infografika-döntését kezeld. Új tananyagot nem dolgozol fel, a tételeken kívül nem végzel általános átdolgozást. Olvasd el az `AGENTS.md`-t, a `PROFILE.md`-t, a run-modult és a javításhoz alkalmazandó szabályokat, majd a `.school-notes/fetch.json` kiosztott tételeit, szerepkártyáját (ha van) és `learner.grade` mezőjét. A `changes.json` mutatja az eddigi módosításokat. Csak az ítélethez szükséges oldalt, forrásrészletet és bizonyítékrekordot olvasd el. Tanult jelölést nem találsz ki: a füzetből olvasod ki, a bizonytalanból nyitott kérdés lesz. Folytatáskor is előbb a saját módosításodat ellenőrzöd, utána a gépi találatokat.
 
@@ -34,7 +36,7 @@ Tételenkénti lépések
 
    A `.school-notes/figures/<id>.json` megbízás mezői: `id`, `page`, `anchor` (szakaszcím), `kind: notebook-drawing | teacher-drawing | figure | banner | infographic`, `source_image` (forrásútvonal és kivágás, a két rajz-útnál kötelező), `purpose`, `must_show[]`, `avoid_misreading`, `taught_conventions[]`, `text_complete_without_figure: true`. Cserénél `replaces` és `decision_reason` (a/b/c és konkrét indok) is kell: (a) a kép olyat állít, amit a szöveg már nem; (b) hatóköre elavult; (c) a lektor vagy ábraellenőr kéri. Ízlés nem ok; pontos tanító ábránál előbb az ingyenes SVG/Mermaid-javítás, új azonosító, elfogadásig a régi kép marad, képenként futásonként legfeljebb egy csere. „A” állapotban a pontos tanító ábrát magad rajzolod, a bannert és az infografikát generálod, a vizuális modulok szerint. A jelölő `<!-- figure: <id> -->`, generált képnél `<!-- image: <id> -->`; hagyd a jelölőt és a megbízást; a tool sorba állítja, és a független ábraellenőr elfogadása után illeszti be. Nem hívsz `image_accept`-et.
 
-5. A saját módosításodon végezd el az alábbi önellenőrzést, írd meg a `wiki/log.md` bejegyzését és a `result.json`-t, majd hívd az MCP `check`-et legfeljebb háromszor. Tételen kívüli sort figyelmeztetés miatt sem írsz át.
+5. A saját módosításodon végezd el az alábbi önellenőrzést, írd meg a `wiki/log.md` bejegyzését és a `result.json`-t, majd hívd az MCP `check`-et legfeljebb háromszor. A szükséges kapcsolódó javításokat is végezd el.
 
 A jelölt pontos szerződése: `.school-notes/figures/<id>/figure.json`. `state: candidate` mellett pontosan az egyik kell: `asset` (a végső kiadási fájl a `wiki/assets/` alatt) vagy `mermaid` (a kerítéssorok közötti UTF-8 forrás kisbetűs SHA-256-a, a záró sortöréssel együtt; a megbízás szakaszában pontosan egy ilyen blokk lehet). Kötelező mezők: `alt` (nem üres, egysoros szöveg), `caption` (szöveg, lehet üres), `form`, `tool` (nem üres szövegek), `elements` (`{element, meaning}` objektumok tömbje, nem üres szövegmezőkkel), `visible_text` (nem üres szövegek tömbje), `attempt` (legalább 1 egész szám). Opcionális: `source` (szerkeszthető UTF-8 forrás a `wiki/assets/` vagy `.school-notes/figures/<id>/` alatt), `render` (`wiki/assets/**/render.json`), `corrections` (privát, nem üres szövegek tömbje; mindkét rajz-útnál kötelező, lehet üres). Saját SVG-nél a `source` maga az SVG; saját raszterhez a `tools/visual_tools.py` rajzolóeszközzel készült render kell. A render-rekord a végső jelölt bájtjait igazolja. Sikertelen készítés: `{"state": "failed", "reason": "nem üres indok"}`; opcionális ábra elhagyása: `{"state": "no-figure", "reason": "nem üres indok"}`. A két rajz-útnál `no-figure` tilos. A felsoroltakon és a `reason` mezőn kívül más mező nincs.
 
@@ -58,7 +60,7 @@ Elutasított kép után a képtervet a hibalista szerint módosíthatod; az `ima
 
 A banner képtervében a szöveg legfeljebb két sor; a legkisebb betű magassága legalább a képszélesség 3,5%-a.
 
-Infografika-döntés a meglévő témaoldalakon: a `fetch.json.infographic_pages` minden oldalán döntsd el, hogy egy áttekintés többet tanít-e a szövegnél. Ez kivétel a kizárólag kiosztott review-tételek és függő ábrák szabálya alól; általános átdolgozásra nem ad felhatalmazást. Oldalanként írj egy `result.json.infographic_decisions` bejegyzést: ha kell, `{page, figure_id}` és azonos `kind: infographic` megbízás a `figures` listában, képtervvel és generált úttal; ha nem kell, `{page, reason}` rövid szakmai indokkal. A már megfelelő infografika is lehet az indok. A tool a döntést a tartalomhoz kötve megőrzi; változatlan tartalomnál nem kéri újra. Új döntés akkor kell, ha a témaoldal `##` címsorainak halmaza megváltozott, vagy a szerzői szöveg legalább 30%-a új; ugyanabban a futásban már eldöntött oldalon nem kérdezzük újra. Futásonként legfeljebb két új infografika-megbízás készülhet. A képkeretben a már függő ábrák elsőbbséget kapnak. Elfogyott képkeretnél hagyd meg a megbízást, a jelölőt és indokolt `state: failed` jelöltet: függő ábra lesz, generálási próba nem fogy. A `check` a döntést kéri, nem kötelező infografikát.
+Infografika-döntés a meglévő témaoldalakon: a `fetch.json.infographic_pages` minden oldalán döntsd el, hogy egy áttekintés többet tanít-e a szövegnél. Indokolatlan átdolgozást ne végezz. Oldalanként írj egy `result.json.infographic_decisions` bejegyzést: ha kell, `{page, figure_id}` és azonos `kind: infographic` megbízás a `figures` listában, képtervvel és generált úttal; ha nem kell, `{page, reason}` rövid szakmai indokkal. A már megfelelő infografika is lehet az indok. A tool a döntést a tartalomhoz kötve megőrzi; változatlan tartalomnál nem kéri újra. Új döntés akkor kell, ha a témaoldal `##` címsorainak halmaza megváltozott, vagy a szerzői szöveg legalább 30%-a új; ugyanabban a futásban már eldöntött oldalon nem kérdezzük újra. Futásonként legfeljebb két új infografika-megbízás készülhet. A képkeretben a már függő ábrák elsőbbséget kapnak. Elfogyott képkeretnél hagyd meg a megbízást, a jelölőt és indokolt `state: failed` jelöltet: függő ábra lesz, generálási próba nem fogy. A `check` a döntést kéri, nem kötelező infografikát.
 
 Függő ábrák
 
@@ -76,7 +78,7 @@ Ezek helye a lábjegyzet, a `checks` és a bizonyítékrekord. Kivétel: a „Ny
 
 Önellenőrzés, majd gépi lista
 
-Rossz: „Hívd a `check`-et, és javítsd, amit jelez.” Jó: „Mielőtt a `check`-et hívod, menj végig a checklistán a saját módosításodon. Utána hívd a `check`-et; tételen kívüli sort figyelmeztetés miatt sem írj át.” Minden figyelmeztetésről dönts: a javítás hatókörén belüli valódi hibát javítsd; a megengedett formát, téves találatot és hatókörön kívüli sort hagyd meg, indokkal. A `check` nem talál meg mindent; a nulla figyelmeztetés nem jelenti, hogy kész vagy.
+Rossz: „Hívd a `check`-et, és javítsd, amit jelez.” Jó: „Mielőtt a `check`-et hívod, menj végig a checklistán a saját módosításodon. Utána hívd a `check`-et; az összes saját változtatásodat ellenőrizd.” Minden figyelmeztetésről dönts: a valódi hibát javítsd; a megengedett formát és téves találatot hagyd meg, indokkal. A `check` nem talál meg mindent; a nulla figyelmeztetés nem jelenti, hogy kész vagy.
 
 1. A javított mondat, cím, képaláírás vagy kérdés forrás nélkül érthető, és a tananyagot tanítja?
 2. A javítás előtt megvan minden hozzá szükséges fogalom és kontextus?
@@ -85,7 +87,7 @@ Rossz: „Hívd a `check`-et, és javítsd, amit jelez.” Jó: „Mielőtt a `c
 5. Az új kérdés tárgyi, nyilvános és önmagában érthető, van horgonya és átmeneti útmutatása?
 6. A javítás közvetlenül érintett összefoglalója, táblázata és kvízválasza is helyes maradt?
 7. A javított ábra szakmailag helyes, és megvan a megbízása?
-8. Minden figyelmeztetésről döntöttél a `warnings[]`-ben, és minden módosítás kiosztott tételhez, függő ábrához vagy infografika-döntéshez tartozik?
+8. Minden figyelmeztetésről döntöttél a `warnings[]`-ben, és minden módosításod indokolt?
 
 Kimenet és befejezés
 

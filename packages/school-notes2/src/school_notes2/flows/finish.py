@@ -42,16 +42,18 @@ def _finish(ctx, task, notify_owner_items):
         try:
             prepared = steps.content_steps(ctx, task)
         except steps.CheckFailed as exc:
-            from . import fix_scope
-            if not fix_scope.rollback(ctx, task, exc):
-                raise
-            prepared = steps.Prepared({"status": "done"}, False, [])
+            from . import machine_findings
+            result = steps.merged_result(ctx, task)
+            machine_findings.record(ctx, task, exc.items)
+            prepared = steps.Prepared(result, result["status"] == "question", [])
+            task.update(content_pending=True, inspection_changed=task.get("inspection_changed",
+                        sorted(steps.llm_snapshot(ctx, task))))
         notify_owner_items(prepared.new_owner)
         if prepared.question:
             raise NeedsOwner("the writer asked a blocking question",
                              todo="answer it in `school-notes chat`",
                              details={"questions": prepared.result.get("questions", [])})
-        task.set_phase("figures", inspection_result=prepared.result,
+        task.set_phase("correcting" if task.get("content_pending") else "figures", inspection_result=prepared.result,
                        correction_rolled_back=bool(task.get("fix_scope_rolled_back")),
                        correction_rollback_reason=task.get("correction_rollback_reason") if task.get("fix_scope_rolled_back") else None,
                        correction_rollback_items=[], correction_rejected_patch=None,
@@ -67,6 +69,9 @@ def _finish(ctx, task, notify_owner_items):
         steps.guard_step(ctx, task)
         steps.regenerate(ctx, task)
     from . import repair, report
+    if task.phase == "finishing" and task.get("content_pending"):
+        steps.content_steps(ctx, task)  # No commit/publication with remaining machine errors.
+        task.update(content_pending=False)
     if task.phase == "finishing":
         repair.complete(ctx, task)
     hooks = git_finish.Hooks(

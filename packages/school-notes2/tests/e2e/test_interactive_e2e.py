@@ -26,7 +26,7 @@ def test_session_check_failure_is_reported_not_counted(world, monkeypatch):
     subprocess.run([sys.executable, str(HERE / "fake_writer.py"), str(ctx.notes_path), "badlink"],
                    check=True)
     result = chat.session_finish(ctx)
-    assert result["state"] == "check_failed" and result["problems"]
+    assert result["state"] == "review_items" and result["open_review_items"]
     task = phase.open_task(ctx.task_root(), "benedek", "notes")
     assert task.data["llm_failures"] == 0 and task.data["needs_owner"] is None
 

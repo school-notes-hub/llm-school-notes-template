@@ -37,6 +37,9 @@ def wording(name, kind, step, *, task=None, exc=None, role=None):
 def _reason(name, kind, step, *, task=None, exc=None, role=None):
     if step == "no-progress":
         return "toolhiba; a javító futás nem haladt; a munka félretéve; a kontroller ellenőrzi"
+    if step == "machine-errors":
+        return ("gépi ellenőrzési hiba maradt a javítókörök után; a munka megmaradt, a kiadás vár; "
+                "a következő futás az íróval folytatja a javítást, nincs teendőd")
     details = getattr(exc, "details", {}) or {}
     raw = str(exc or "")
     if kind == "timeout":

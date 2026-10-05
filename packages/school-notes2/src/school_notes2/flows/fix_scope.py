@@ -1,44 +1,15 @@
-"""Journal scope repairs before changing files, for P4 and source-free fix runs."""
-
-from pathlib import Path
-from urllib.parse import unquote
+"""Protected-byte recovery and completion of already journaled legacy rollbacks."""
 
 from ..state import safefs
-from ..review import files
-from . import call_scope, correction, steps
+from . import correction, steps
 
-TOOL_STATE = ("tool_writes", "tool_parts", "tool_hashes")
-
-
-def restore_pages(repo, root, before, outside):
-    saved = safefs.read_json(root, "scope-restores.json", [])
-    paths = sorted(set(saved) | set(outside))
-    if not paths:
-        return []
-    # The complete list is durable before the first replacement/deletion.
-    safefs.write_json(root, "scope-restores.json", paths)
-    for path in paths:
-        if path in before:
-            safefs.write_bytes(repo, path, safefs.read_bytes(root, "before/" + path))
-        else:
-            safefs.unlink(repo, path)
-    return paths
+TOOL_STATE = ("tool_writes", "tool_parts", "tool_hashes", "tool_originals")
 
 
 def recover(ctx, task, root=None, items=None):
-    if root is None and (task.get("mode") != "fix" or not task.get("correction_before")):
-        return []
-    root = root or Path(task.get("correction_before")).parent
-    items = task.get("open_review_items", []) if items is None else items
-    paths = correction.check_scope(ctx, root, items,
-                                   [e["commission"]["page"] for e in task.get("pending_figures", [])]
-                                   + call_scope.link_pages(task), restore=task.mode != "interactive")
-    if paths:
-        refresh_records(ctx, task, paths)
-        from . import inherited_check
-        inherited_check.restored(ctx, task, paths)
-    owner_notes(ctx, task, root)
-    return paths
+    """Assignments never authorize or undo pages; repair only tool-owned bytes."""
+    from . import protected
+    return protected.restore(ctx, task)
 
 
 def owner_notes(ctx, task, root):
@@ -53,20 +24,11 @@ def owner_notes(ctx, task, root):
 
 
 def rollback(ctx, task, exc):
-    from .correction_calls import isolated
-    root = task.dir / "fix-before"
-    if isolated(task) or task.mode == "interactive" or task.get("mode") != "fix" or not related_errors(ctx, root, exc.items):
-        return False
-    steps.checks.record_failure(ctx, task, exc, "fix.scope_rollback")
-    safefs.write_json(root, "rollback.json", {"reason": str(exc)})
-    resume(ctx, task)
-    return True
+    # Kept for callers and old task receipts; no new scope rollback is created.
+    return False
 
 
 def resume(ctx, task):
-    from .correction_calls import isolated
-    if isolated(task):
-        return
     root = task.dir / "fix-before"
     saved = safefs.read_json(root, "rollback.json")
     if not saved or task.get("fix_scope_rolled_back"):
@@ -75,7 +37,8 @@ def resume(ctx, task):
     owner_notes(ctx, task, root)
     state = safefs.read_json(root, "tool-state.json")
     if state is not None:
-        task.update(**state, learning_pending=None)
+        # A 2.5.0 receipt has no originals: later records must not outlive the rollback.
+        task.update(**{"tool_originals": {}, **state}, learning_pending=None)
     else:  # A pre-upgrade snapshot has files, but no separate tool-state receipt.
         paths = sorted({p for key in TOOL_STATE for p in task.get(key, {})})
         refresh_records(ctx, task, paths)
@@ -98,57 +61,14 @@ def refresh_records(ctx, task, paths):
     steps.record_tool_files(task, ctx.notes_path, [p for p in paths if safefs.is_file(ctx.notes_path, p)])
 
 
-def dependencies(ctx, root):
-    """Only broken links depend on content that the scope gate has undone."""
-    from ..review import scope
-    from ..wiki import anchors, pages
-    paths = set(safefs.read_json(root, "scope-restores.json", []))
-    if not paths:
-        return []
-    found = []
-    for page in sorted(pages.wiki_pages(ctx.notes_path)):
-        if page in paths:
-            continue
-        old = safefs.read_text(root, "before/" + page) if safefs.is_file(root, "before/" + page) else ""
-        new = safefs.read_text(ctx.notes_path, page)
-        if steps._llm_hash(page, old.encode()) == steps._llm_hash(page, new.encode()):
-            continue
-        changed = scope.changed(old, new)
-        for link in pages.links(new):
-            target = pages.resolve(page, link.target)
-            if link.line in changed and target in paths:
-                found.append((page, link, target))
-    existing = {target for _, _, target in found if safefs.is_file(ctx.notes_path, target)}
-    ids = anchors.collect(ctx.notes_path, [target for _, link, target in found
-                                         if target in existing and link.fragment and target.endswith(".md")])
-    broken = [(page, link, target) for page, link, target in found
-              if target not in existing or (target in ids and link.fragment
-                                           and unquote(link.fragment) not in ids[target])]
-    return sorted(broken, key=lambda e: (e[0], e[1].line, e[2], e[1].target, e[1].fragment, e[1].text))
-
-
 def dependency_items(ctx, root):
-    from ..wiki.check import item
-    return [item(page, link.line, f"changed link depends on restored page: {target!r}")
-            for page, link, target in dependencies(ctx, root)]
+    # Old scope-restores receipts are evidence only, never a new check gate.
+    return []
 
 
 def check_dependencies(ctx, task):
-    if task.get("mode") != "fix" or not task.get("correction_before"):
-        return
-    problems = dependency_items(ctx, Path(task.get("correction_before")).parent)
-    if problems:
-        raise steps.CheckFailed(problems)
+    return None
 
 
 def related_errors(ctx, root, problems, *, require_all=True):
-    # Match concrete link errors, never just the presence of a restoration receipt
-    # or an error on the same page: unrelated defects remain bad writer work.
-    from ..wiki.check import item
-    related = dependency_items(ctx, root)
-    for page, link, target in dependencies(ctx, root):
-        if not safefs.is_file(ctx.notes_path, target):
-            related.append(item(page, link.line, f"link target does not exist: {link.target!r}"))
-    keys = {(i["file"], i.get("line"), i["message"]) for i in related}
-    matches = [(i.get("file"), i.get("line"), i.get("message")) in keys for i in problems]
-    return bool(matches) and (all(matches) if require_all else any(matches))
+    return False

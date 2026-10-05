@@ -91,10 +91,9 @@ def test_direct_failed_no_push_repair_is_set_aside_without_queue(world, monkeypa
     monkeypatch.setattr(writer, "_call", bad)
     for _ in range(2):
         assert repair.repair(ctx, topic="wiki/proba/elso.md", no_push=True) == 1
-    assert repair.repair(ctx, topic="wiki/proba/elso.md", no_push=True) == 0
-    assert phase.open_task(ctx.task_root(), ctx.name, "notes") is None
-    task = next(t for t in phase.all_tasks(ctx.task_root(), ctx.name) if t.get("set_aside"))
-    assert task.get("set_aside") and not task.get("repair_owner_item")
+    task = phase.open_task(ctx.task_root(), ctx.name, "notes")
+    assert task is not None and task.data["needs_owner"]
+    assert not task.get("set_aside") and not task.get("repair_owner_item")
     assert not safefs.is_file(ctx.notes_path, queue.PATH)
     assert not show(origin, f"main:{queue.PATH}")
 
@@ -131,11 +130,9 @@ def test_two_failed_repairs_archive_bad_work_without_changing_queue(world, monke
     monkeypatch.setattr(writer, "_call", bad)
     for _ in range(2):
         assert repair.repair(ctx, topic="wiki/proba/elso.md") == 1
-    assert phase.open_task(ctx.task_root(), ctx.name, "notes") is None
-    task = next(t for t in phase.all_tasks(ctx.task_root(), ctx.name) if t.get("set_aside"))
-    assert task.get("set_aside") and task.phase == "done"
-    assert repair.repair(ctx, topic="wiki/proba/elso.md") == 0, ctx.cfg.log_path.read_text()[-3000:]
-    assert phase.open_task(ctx.task_root(), ctx.name, "notes") is None
+    task = phase.open_task(ctx.task_root(), ctx.name, "notes")
+    assert task is not None and task.data["needs_owner"]
+    assert not task.get("set_aside")
     assert show(origin, "main:wiki/proba/elso.md") == original
     assert queue.load(ctx.notes_path)["items"][0]["status"] == "pending"
-    assert (ctx.cfg.root / "archive" / ctx.name / f"{task.run_id}.bundle").is_file()
+    assert not (ctx.cfg.root / "archive" / ctx.name / f"{task.run_id}.bundle").exists()

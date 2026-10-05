@@ -72,7 +72,7 @@ def test_chat_existing_writer_handles_p4_and_fetch_preserves_result(session, mon
     monkeypatch.setattr(steps, "check_changed", lambda *args, **kwargs: gates.append("check"))
     assert chat.session_finish(ctx)["state"] == "done"
     assert gates == ["guard", "check"]
-    assert invoked == ["reader-1"] + ([] if status == "open" else ["recheck"])
+    assert invoked == ["reader-1", "recheck"]
     record = next(iter(relations.inventory(ctx.notes_path)["items"].values()))
     assert record["status"] == ("fixed" if status == "fixed" else "open")
     assert record["round"] == (2 if status == "disagree" else 1)
@@ -98,13 +98,17 @@ def test_bad_chat_fix_rolls_back_once_and_keeps_items_open(session, monkeypatch,
         safefs.write_json(ctx.notes_path, ".school-notes/result.json", result)
     else:
         safefs.write_text(ctx.notes_path, ".school-notes/result.json", "{broken")
+    if damage != "json":
+        assert chat.session_finish(ctx)["state"] == "review_items"
+        assert "Javítás." in safefs.read_text(ctx.notes_path, page)
+        submit(ctx, task)
+        correction_chat.active(phase.load(task.dir)).update(writer_check={"count": 0, "warnings": []})
+        monkeypatch.setattr(steps, "check_changed", lambda *a, **kw: None)
     assert chat.session_finish(ctx)["state"] == "done"
     task.reload()
-    assert task.get("correction_rolled_back")
-    assert steps._llm_part(safefs.read_text(ctx.notes_path, page)) == steps._llm_part(before)
-    assert not safefs.is_file(ctx.notes_path, "wiki/m/else.md")
-    assert invoked == ["reader-1"]
-    assert next(iter(relations.inventory(ctx.notes_path)["items"].values()))["status"] == "open"
+    assert bool(task.get("correction_rolled_back")) == (damage == "json")
+    assert ("Javítás." in safefs.read_text(ctx.notes_path, page)) == (damage != "json")
+    assert invoked == (["reader-1"] if damage == "json" else ["reader-1", "recheck"])
 
 
 @pytest.mark.parametrize("after_write", [False, True])

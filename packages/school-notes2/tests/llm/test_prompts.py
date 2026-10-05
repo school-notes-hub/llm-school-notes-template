@@ -78,7 +78,8 @@ def test_fix_has_no_ingest_or_whole_page_assignment():
                    'az egész oldalon', 'Minden füzethibát javítottál'):
         assert ingest not in text
     assert 'a kiosztott review-tételeket, függő ábrákat és a kiosztott témaoldalak infografika-döntését kezeld' in text
-    assert 'Tételen kívüli sort figyelmeztetés miatt sem írsz át' in text
+    assert 'Bármely wiki-oldalt szerkesztheted' in text
+    assert 'minden változásodat független ellenőrző nézi' in text
     assert '`coverage[]`' in text
 
 
@@ -110,7 +111,8 @@ def test_repair_uses_writer_with_verbatim_preservation_clause():
     text = prompt('writer')
     assert 'Minden helyes állítást, magyarázatot, példát és ⚠️ javítást őrizz meg. Ezek jelölése marad. Csak a formát változtasd: a forrást leíró mondatból tárgyi állítás legyen. Ami már javítva van, azt ne javítsd újra.' in text
     assert '`mode: repair`' in text and '`repair_targets`' in text
-    assert 'a szövegük külön menetben készül' in text
+    assert 'A kapcsolódó óranaplót és összefoglalót is szerkesztheted, ha a helyes javításhoz szükséges.' in text
+    assert 'a szövegük külön menetben készül' not in text
 
 
 @pytest.mark.parametrize('role', ROLES)

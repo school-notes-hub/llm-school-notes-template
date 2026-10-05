@@ -358,29 +358,37 @@ two runs only for nonempty warning lists, with `covered_by` deduplication. The
 three fixed Hungarian prompts and output schemas are `reader-1`, `reader-2` and
 `recheck`. Receipts are private; outputs are copied to `.school-notes/reader/`.
 
-P3 writes one run report; relation routing precedes writer assignment. P4 invokes
-the existing subject writer with `fix.txt`, the complete assigned list and a
-saved pre-fix tree. Failed fixes restore their call's pre-edit tree; a completed or rolled-back P4
-can enter P6 directly when there is nothing to recheck. P5 judges only the closed
-items, new hits and changed figures. Up to three round-local correction/recheck passes finish the entire assignable backlog.
-Open, disputed and owner items retain their chain and round metadata.
+P3 writes one run report and reviews every author-changed page, including existing
+pages extended while writing new material. P4 invokes the existing writer with
+`fix.txt`; assignments organize work and never restrict editable wiki pages in any
+mode. P5 judges every author line changed in its round (against the round's
+pre-edit tree), on every page, with context. New errors outside assigned items become chained `origin: recheck`
+items for the next correction round. Up to three correction/recheck rounds run.
+The package material trailer includes all P1 author changes, but excludes unrelated
+backlog pages changed only during P4.
 
-Automatic P4 and source-free fixes restore out-of-scope pages before checking the
-retained work. A changed author line linking to a restored page (with or without
-an anchor) rejects that call; P5 also receives `scope-restores.json`. A check failure in either P1 fix mode or P4 restores only the current call, retries it
-once, then leaves its items open and counts one repair attempt; those failed items wait
-for the next run. Earlier successful call results remain checkpointed. The call snapshot
-is deleted only after its result is durable, also on interrupted cleanup. If the finish
-result cannot be saved, bad-work blocking covers only the failing calls. Only inseparable round results use the full rollback, which consumes no item or figure attempt and gets one replayable retry.
-Two full rollbacks publish the previously accepted work and send one tool-error notice. Other item notices remain suppressed. Only concrete
-errors tied to restored links bypass the bad-work counter. In chat, scope violations
-reject the whole correction and preserve its edits in `rejected.patch`.
+Machine-check errors preserve all edits. The writer receives the error list and
+one continuation on the same worktree; remaining errors become durable correction
+items. Publication still requires a clean machine check. Wiki errors left after
+the in-run rounds keep the task open with its worktree: one notice, and each later
+cron run continues with one writer round (eight rounds in all, item brakes apply).
+Errors outside wiki pages, or nothing left to assign, stop for the owner with the
+work kept. A failed call with a valid `result.json` keeps its files and leaves its
+items open. Only unusable output (invalid result JSON or a secret pattern; a
+machine path is a normal check error) can roll back a whole call, with an explicit
+log event. A removed generated block is not re-placed by the tool; the guard
+names it for the writer. Earlier completed calls remain checkpointed. Interruptions
+and timeouts preserve work. The tool never fixes author prose, links or anchors.
+Tool-owned files, fields and generated blocks are restored from exact recorded
+originals, preserving surrounding author content. Legacy `scope-restores.json`
+is evidence only; an already journaled 2.5.0 `rollback.json` is completed on resume,
+even for tasks with isolated calls.
 
 A changed release or closure of all blocked work resolves the no-progress incident.
 
 In chat, the first `finish` returns `state: review_items`, the assigned items and
 `fix.txt`; P4 stays `correcting`. The existing session writes its fix and closure
-result, and the next `finish` applies the same result, scope, path and content gates
+result, and the next `finish` applies the same result, path and content gates
 before P5. The saved handoff and check budget survive restart/fetch without erasing
 the result. No second writer container is launched. A busy writer home in cron
 still leaves the items open through the existing rollback fallback.

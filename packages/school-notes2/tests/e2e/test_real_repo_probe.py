@@ -179,7 +179,7 @@ def scenario(tmp_path, monkeypatch, learner, mode, bundle=None, *, render=True):
     assert task.get("correction_round") == 2
     assert expected <= {i["key"] for c in calls for i in c["open_review_items"]}
     assert figures <= set(images)
-    assert not (ctx.notes_path / "wiki/probe-unassigned.md").exists()
+    assert (ctx.notes_path / "wiki/probe-unassigned.md").exists()
     assert "Run-Id: " + task.run_id in show(origin, "main")
     if render:
         # The tool removes the build folder after the run; the log keeps the browser-checked build.

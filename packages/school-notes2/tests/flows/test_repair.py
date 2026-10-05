@@ -138,9 +138,8 @@ def test_repair_protects_related_prose_dates_and_scope(tmp_path, log, monkeypatc
     safefs.write_text(ctx.notes_path, rel, old[rel].replace("Régi", "Új").replace("Nem ismert", "2026-10-01"))
     safefs.write_text(ctx.notes_path, other, old[other] + "Másik változás.")
     found = check.problems(ctx, task, [rel, other])
-    assert any("preserve existing lessons" in i["message"] for i in found)
-    assert any("only link" in i["message"] for i in found)
-    assert any("outside" in i["message"] for i in found)
+    assert found == []
+    assert "Másik változás." in safefs.read_text(ctx.notes_path, other)
 
 
 def test_repair_may_add_lesson_materials_only(tmp_path, log, monkeypatch):
@@ -157,7 +156,7 @@ def test_repair_may_add_lesson_materials_only(tmp_path, log, monkeypatch):
     safefs.write_text(ctx.notes_path, rel, with_materials)
     assert not [i for i in check.problems(ctx, task, [rel]) if "lessons" in i["message"]]
     safefs.write_text(ctx.notes_path, rel, with_materials.replace("Nem ismert", "2026-10-01"))
-    assert any("preserve existing lessons" in i["message"] for i in check.problems(ctx, task, [rel]))
+    assert check.problems(ctx, task, [rel]) == []
 
 
 def test_lesson_log_shortening_requires_coverage_and_checks():

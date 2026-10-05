@@ -92,8 +92,7 @@ def test_fix_allows_unit_and_embedding_but_not_unrelated_page(tmp_path, item_pag
     # An edited link must not give the writer more scope.
     safefs.write_text(repo, "wiki/s/summary.md", "---\ntype: chapter-summary\n---\n[Other](other.md)\n")
     safefs.write_text(repo, "wiki/s/other.md", "# Más\n\nVáltozás.\n")
-    with pytest.raises(BadWork, match="unassigned page"):
-        correction.check_scope(ctx, snapshot, items)
+    assert correction.check_scope(ctx, snapshot, items) == []
 
 
 def test_fix_may_edit_the_page_whose_description_an_index_finding_quotes(tmp_path):
@@ -117,8 +116,7 @@ def test_fix_may_edit_the_page_whose_description_an_index_finding_quotes(tmp_pat
     safefs.write_text(repo, "wiki/s/ora.md", pages["wiki/s/ora.md"].replace("Füzetjegyzet egy dátum nélküli óráról, a p", "A p"))
     correction.check_scope(SimpleNamespace(notes_path=repo), snapshot, items)
     safefs.write_text(repo, "wiki/s/other.md", pages["wiki/s/other.md"] + "Változás.\n")
-    with pytest.raises(BadWork, match="unassigned page"):
-        correction.check_scope(SimpleNamespace(notes_path=repo), snapshot, items)
+    assert correction.check_scope(SimpleNamespace(notes_path=repo), snapshot, items) == []
 
 
 @pytest.mark.parametrize("learner", ["one", "two"])

@@ -92,8 +92,8 @@ def test_finish_errors_resume_the_assigned_page_call(tmp_path, monkeypatch):
     task.update(mode="fix", calls=grouping, ranges=calls.ranges(grouping), pending_figures=waiting)
     ctx = SimpleNamespace(notes_path=repo)
     defects = [{"file": p, "line": None, "message": "bad output"} for p in (pages[2], "wiki/b/figure.md")]
-    assert call_scope.current(ctx, task, defects, 1) == defects[1:]
-    assert call_scope.current(ctx, task, defects, 3) == defects[:1]
+    assert call_scope.current(ctx, task, defects, 1) == defects
+    assert call_scope.current(ctx, task, defects, 3) == defects
     shared = [{"file": pages[0], "message": "shared page error"}]
     assert all(call_scope.current(ctx, task, shared, k) == shared for k in (1, 2))
     for k in range(1, 5):

@@ -76,7 +76,7 @@ def test_attempt_round_identity(setup):
 
 
 @pytest.mark.parametrize("main_writer", [False, True])
-@pytest.mark.parametrize("crash", [None, "undo", "undo_partial", "result", "cleanup"])
+@pytest.mark.parametrize("crash", [None, "continue", "continue_partial", "result", "cleanup"])
 @pytest.mark.parametrize("retry_ok", [False, True])
 @pytest.mark.parametrize("failure_stage", ["invoke", "check"])
 def test_p4_call_failure_preserves_success_and_resumes(setup, monkeypatch, crash, retry_ok, failure_stage, main_writer):
@@ -105,6 +105,8 @@ def test_p4_call_failure_preserves_success_and_resumes(setup, monkeypatch, crash
         calls.append(k)
         target = {1: page, 2: other, 3: third}[k]
         safefs.write_text(ctx.notes_path, target, "Success.\n" if k == 1 else "Failed edit.\n")
+        safefs.write_json(task.dir / f"call-{k}", "candidate.json", {"status": "done", "review_closure": [
+            {"file": {1: path, 2: report2, 3: report3}[k], "item_id": "R1", "status": "fixed"}]})
         if failure_stage == "invoke" and k == 2 and (not retry_ok or calls.count(2) == 1):
             raise correction.steps.CheckFailed([{"file": other, "line": 1, "message": "bad output"}])
         result = {"status": "done", "review_closure": [{"file": {1: path, 2: report2, 3: report3}[k],
@@ -117,17 +119,18 @@ def test_p4_call_failure_preserves_success_and_resumes(setup, monkeypatch, crash
             raise correction.steps.CheckFailed([{"file": other, "line": 1, "message": "bad output"}])
     monkeypatch.setattr(writer, "_check_call", check_call)
     fired = []
-    original_restore = correction_calls.restore
+    original_restore = correction_calls.continue_work
     def restore(*args):
-        if crash == "undo_partial" and not fired:
+        if crash == "continue_partial" and not fired:
             fired.append(True)
-            correction.restore(ctx.notes_path, args[2])
+            steps = correction.steps
+            steps.write_check_items(ctx, args[3]["items"])
             raise KeyboardInterrupt
         original_restore(*args)
-        if crash == "undo" and not fired:
+        if crash == "continue" and not fired:
             fired.append(True)
             raise KeyboardInterrupt
-    monkeypatch.setattr(correction_calls, "restore", restore)
+    monkeypatch.setattr(correction_calls, "continue_work", restore)
     original_write = writer.write_json
     def write_json(target, value):
         if crash == "result" and target.name == "result-2.json" and not fired:
@@ -153,17 +156,17 @@ def test_p4_call_failure_preserves_success_and_resumes(setup, monkeypatch, crash
     assert calls.count(1) == 1
     assert calls.count(2) == 2 and calls.count(3) == 1
     assert safefs.read_text(ctx.notes_path, page) == "Success.\n"
-    assert safefs.read_text(ctx.notes_path, other) == ("Failed edit.\n" if retry_ok else "Before.\n")
+    assert safefs.read_text(ctx.notes_path, other) == "Failed edit.\n"
     result = writer.merge(writer.results(child))
     outcome = files.apply_closure(ctx.notes_path, correction_round.identity(parent),
                                  result["review_closure"], items, automatic=True)
     known = relations.inventory(ctx.notes_path)["items"]
     assert known[path + "#R1"]["status"] == "fixed"
-    assert known[report2 + "#R1"]["status"] == ("fixed" if retry_ok else "open")
+    assert known[report2 + "#R1"]["status"] == "fixed"
     assert known[report2 + "#R1"]["repair_attempts"] == 1
     assert known[report3 + "#R1"]["status"] == "fixed"
     if not retry_ok:
-        assert correction.assigned(ctx, child) == []
+        assert any(i.get("origin") == "check" for i in relations.inventory(ctx.notes_path)["items"].values())
 
 
 def test_chain_does_not_reset_on_a_related_page_without_its_own_closure():

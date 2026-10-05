@@ -56,7 +56,7 @@ def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
         task.set_phase("writing", writing_k=k)
         result = read_json(task.dir / f"result-{k}.json")
         if result is None or result["status"] == "question":
-            if correction_calls.isolated(task):
+            if task.mode != "interactive":
                 result = correction_calls.run(ctx, task, k, lambda: _range(ctx, task, k, role, harness, handlers))
             else:
                 result = _range(ctx, task, k, role, harness, handlers)
@@ -84,6 +84,9 @@ def _range(ctx, task, k, role, harness, handlers):
         write_inputs(ctx, task, k)
         result = _invoke(ctx, task, k, role, harness, handlers)
     writer_identity.remember(ctx, task, k, result)
+    validate("result", result)
+    (task.dir / f"call-{k}").mkdir(parents=True, exist_ok=True)
+    safefs.write_json(task.dir / f"call-{k}", "candidate.json", result)
     fix_scope.recover(ctx, task)
     try:
         _check_call(ctx, task, k, result)
@@ -120,6 +123,8 @@ def _call(ctx: Ctx, task: Task, k: int, role, harness, handlers) -> dict:
     writer_identity.remember(ctx, task, k, outcome.output)
     from . import fix_scope
     fix_scope.recover(ctx, task)
+    (task.dir / f"call-{k}").mkdir(parents=True, exist_ok=True)
+    safefs.write_json(task.dir / f"call-{k}", "candidate.json", outcome.output)
     problems = checks.accounting(task, outcome.output)
     if problems:
         steps.write_check_items(ctx, problems)
@@ -186,6 +191,7 @@ def _check_call(ctx, task, k, result):
             problems += exc.items
     problems += steps.order_step(ctx, task)
     problems = call_scope.current(ctx, task, problems, k)
+    problems = [i for i in problems if i not in task.get("machine_problems", [])]
     if problems:
         raise steps.CheckFailed(problems)
 

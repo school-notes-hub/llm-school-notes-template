@@ -121,9 +121,9 @@
       "heading": "Workflows",
       "destination": "instructions/wiki-workflows.md",
       "source_sha256": "4002b650b71d3afec1c296105ed32cc47d22be691ef1ca640204d1a696c97abc",
-      "migrated_sha256": "f09c9e258b581dacd8d322c554854b2c3016a9380c70589c7a8e2f33e044f823",
+      "migrated_sha256": "c216b6cffbb9147b9111713ad5dec7902a1bdfaabc0140b277927abbbaa8fc09",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
-      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: public-safe anchored questions/decisions; private readings and coverage; independent reader check before machine list; 1.18.2: in a tool run the build checks formulas; MCP check checks delimiters only; 1.19.0: banner and infographic are generated images; pending figures and the recheck scope in a correction"
+      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: public-safe anchored questions/decisions; private readings and coverage; independent reader check before machine list; 1.18.2: in a tool run the build checks formulas; MCP check checks delimiters only; 1.19.0: banner and infographic are generated images; pending figures and the recheck scope in a correction; 2.5.1 (fix-45): fix-mode checks cover every own change, including necessary edits on other pages"
     },
     {
       "heading": "Choosing and replacing authored visuals",

@@ -137,6 +137,14 @@ def check_parts(path: str, data: bytes, g: GuardInput) -> list[Violation]:
         return []
     if _pending(path, _sha(parts.encode()), False, g):
         return []
+    if base is not None:
+        # The tool never guesses where a removed block belongs; the writer puts it back.
+        old = base.decode("utf-8", "replace")
+        missing = [n for n in markers.names(old) if n not in markers.names(text)]
+        if missing:
+            block = next(m[0] for m in markers.BLOCK.finditer(old) if m["name"] == missing[0])
+            return [Violation(path, f"generated block {missing[0]!r} was removed; put it back unchanged "
+                                    f"at its place:\n{block}", False)]
     return [Violation(path, "a machine field or a generated block was edited", False)]
 
 

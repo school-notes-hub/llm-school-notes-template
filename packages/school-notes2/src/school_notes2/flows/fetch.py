@@ -236,7 +236,8 @@ def fetch_json(task: Task, k: int, *, grade: int, whole_run: bool = False, repo=
             "packages": task.get("packages", []), "pages": task.get("pages", []),
             "range": {"from": first, "to": last, "k": k, "n": len(task.get("ranges"))},
             "open_review_items": task.get("open_review_items", []),
-            "pending_images": task.get("pending_images", [])}
+            "pending_images": task.get("pending_images", []),
+            "editing_scope": "A kiosztás a hívás feladatát jelöli, nem az írható oldalak határát. Bármely wiki-oldalt szerkesztheted, amely a helyes javításhoz vagy az új tananyag beépítéséhez szükséges (például az óranaplóból hivatkozott témaoldal hiányzó szakaszát). Indokolatlan átírást ne végezz; minden változásodat független ellenőrző nézi. A tool saját fájljait, gépi blokkjait, a forrásokat és más tanuló adatait nem szerkesztheted."}
     if task.get("calls") and not whole_run and (task.mode != "interactive" or task.get("mode") == "repair"):
         call = task.get("calls")[k - 1]
         data.update(subject=call["subject"],

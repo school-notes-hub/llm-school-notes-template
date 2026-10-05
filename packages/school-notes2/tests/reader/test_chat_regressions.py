@@ -106,9 +106,7 @@ def test_t095_rejected_fix_survives_rollback_restart(guarded_session, monkeypatc
     safefs.write_text(ctx.notes_path, page, before + "\nElutasított javítás.\n")
     safefs.write_text(ctx.notes_path, "wiki/m/else.md", "Tiltott bővítés.\n")
     safefs.write_bytes(ctx.notes_path, "wiki/assets/new.bin", b"\0\xffimage")
-    def invalid(*args, **kwargs):
-        raise steps.CheckFailed([{"file": page, "message": "invalid assigned page"}])
-    monkeypatch.setattr(steps, "check_changed", invalid)
+    safefs.write_text(ctx.notes_path, ".school-notes/result.json", "{broken")
     crashed = []
     if boundary == "restore":
         original = correction.restore
@@ -134,7 +132,7 @@ def test_t095_rejected_fix_survives_rollback_restart(guarded_session, monkeypatc
     assert b"GIT binary patch" in patch and "Elutasított javítás".encode() in patch
     answer = chat.session_finish(ctx)
     assert answer["state"] == "done" and answer["correction_rolled_back"] is True
-    assert "unassigned page" in answer["reason"]
+    assert "JSON" in answer["reason"] or "property" in answer["reason"]
     assert answer["rejected_patch"] == "attempt-1/correction/rejected.patch"
     assert safefs.read_bytes(root, "rejected.patch") == patch
     assert safefs.read_bytes(root, "rejected/wiki/assets/new.bin") == b"\0\xffimage"
@@ -152,13 +150,9 @@ def test_p4_scope_restore_keeps_race_guard(guarded_session, monkeypatch, damage)
         safefs.write_text(ctx.notes_path, "wiki/m/else.md", "scope error")
     answer = chat.session_finish(ctx)
     assert answer["state"] == "done"
-    assert answer.get("correction_rolled_back", False) == damage
-    if damage:
-        patch = safefs.read_text(task.dir, answer["rejected_patch"])
-        assert "scope error" in patch and "Javítás." in patch
-        assert "Javítás." not in safefs.read_text(ctx.notes_path, page)
-    assert not safefs.is_file(ctx.notes_path, "wiki/m/else.md")
-    assert ("Javítás." in safefs.read_text(ctx.notes_path, page)) != damage
+    assert not answer.get("correction_rolled_back", False)
+    assert safefs.is_file(ctx.notes_path, "wiki/m/else.md") == damage
+    assert "Javítás." in safefs.read_text(ctx.notes_path, page)
 
 
 @pytest.mark.parametrize("last_result", [True, False])
@@ -237,7 +231,7 @@ def test_new_attempt_without_p4_clears_rollback_answer(session, monkeypatch, fai
     safefs.write_text(ctx.notes_path, "wiki/m/else.md", "Tiltott módosítás")
     from school_notes2.flows import correction_chat
     child = correction_chat.active(phase.load(task.dir))
-    child.update(writer_check={"count": 1, "warnings": ["H1"]})
+    safefs.write_text(ctx.notes_path, ".school-notes/result.json", "{broken")
     original = finish.git_finish.run
     def fail(*args):
         if failure == "check":
@@ -279,18 +273,16 @@ def test_check_rollback_details_survive_receipt_restart(session, monkeypatch, co
         if root.name == "correction" and rel == "receipt.json":
             raise RuntimeError("receipt saved")
     monkeypatch.setattr(safefs, "write_json", crash)
+    assert chat.session_finish(ctx)["state"] == "review_items"
+    submit(ctx, task)
     with pytest.raises(RuntimeError, match="receipt saved"):
         chat.session_finish(ctx)
     monkeypatch.setattr(safefs, "write_json", original)
-    monkeypatch.setattr(steps, "check_changed", lambda *a, **kw: pytest.fail("replayed P4"))
-    answer = chat.session_finish(ctx)
-    assert answer["state"] == "done" and answer["correction_rolled_back"]
-    assert answer["items"] == items[:10]
-    assert answer["rejected_patch"] == "attempt-1/correction/rejected.patch"
-    assert (task.dir / answer["rejected_patch"]).is_file()
+    assert chat.session_finish(ctx)["state"] == "check_failed"
     saved = safefs.read_json(inspection.folder(task) / "correction", "receipt.json")
-    assert saved["items"] == items[:10] and saved["rejected_patch"] == answer["rejected_patch"]
-    assert safefs.read_json(ctx.notes_path, ".school-notes/check.json") != items
+    assert saved["machine_problems"] == items and saved["status"] == "done"
+    assert not phase.load(task.dir).get("correction_rolled_back")
+    assert phase.load(task.dir).phase == "writing"
 
 
 @pytest.mark.parametrize("edit", [False, True])

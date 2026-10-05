@@ -144,14 +144,16 @@ def test_rollback_retries_once_without_consuming_attempts(setup, monkeypatch, re
     monkeypatch.setattr(correction, "validated", lambda ctx, child, root, items, result, edits:
                         {"status": "done", "result": result})
     monkeypatch.setattr(set_aside, "rollback_notice", lambda *a: mail.append(1))
-    correction.run(ctx, task)
-    assert len(writes) == 2
+    with pytest.raises(BadWork):
+        correction.run(ctx, task)
+    assert len(writes) == 1
+    if retry_ok:
+        correction.run(ctx, phase.load(task.dir))
     detail = relations.inventory(ctx.notes_path)["items"][path + "#R1"]
     assert detail.get("repair_attempts", 0) == int(retry_ok)
     assert detail["status"] == ("fixed" if retry_ok else "open")
-    assert mail == ([] if retry_ok else [1])
-    if not retry_ok:
-        assert safefs.read_text(ctx.notes_path, page) == original
+    assert mail == []
+    assert "Javított." in safefs.read_text(ctx.notes_path, page)
 
 
 def test_243_checkpoint_paths_remain_round_one(setup):
@@ -233,8 +235,10 @@ def test_full_rollback_keeps_figure_attempts_and_sends_one_tool_error(setup, mon
         calls.append(1)
         raise BadWork("whole round invalid")
     monkeypatch.setattr(correction.writer, "run_ranges", fail)
-    review_phases.advance(ctx, task, lambda _: None)
-    review_phases.advance(ctx, phase.load(task.dir), lambda _: None)
-    assert task.phase == "finishing" and len(calls) == 2
+    with pytest.raises(BadWork):
+        review_phases.advance(ctx, task, lambda _: None)
+    with pytest.raises(BadWork):
+        review_phases.advance(ctx, phase.load(task.dir), lambda _: None)
+    assert task.phase == "correcting" and len(calls) == 2
     assert pending.load(ctx.notes_path)[0]["run_ids"] == ["previous"]
-    assert len(delivered) == 1 and "Toolhiba" in delivered[0].get_content()
+    assert delivered == []

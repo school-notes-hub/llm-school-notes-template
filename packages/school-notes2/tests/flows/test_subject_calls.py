@@ -64,10 +64,10 @@ def test_pending_images_and_review_items_are_subject_scoped(tmp_path):
     assert assigned[1]["pending_images"] == pending
 
 
-def test_writer_resume_reuses_validated_result_after_checkpoint_crash(tmp_path, monkeypatch):
+def test_writer_resume_reuses_validated_result_after_checkpoint_crash(tmp_path, monkeypatch, log):
     task = phase.create(tmp_path, "barna", "notes", "cron", "prepared")
     task.update(ranges=[[1, 1], [2, 2]], writing_k=1)
-    ctx = SimpleNamespace(notes_path=tmp_path, cfg=SimpleNamespace(role=lambda _: (None, None), limits=SimpleNamespace(max_agents=3)))
+    ctx = SimpleNamespace(notes_path=tmp_path, log=log, cfg=SimpleNamespace(role=lambda _: (None, None), limits=SimpleNamespace(max_agents=3)))
     invoked = []
     monkeypatch.setattr(writer, "write_inputs", lambda *args: None)
     monkeypatch.setattr(writer, "_call", lambda ctx, task, k, *args: invoked.append(k) or {"status": "done"})
@@ -85,18 +85,20 @@ def test_writer_resume_reuses_validated_result_after_checkpoint_crash(tmp_path, 
     assert invoked == [1, 2]
 
 
-def test_writer_rechecks_each_call_before_saving_result(tmp_path, monkeypatch):
+def test_writer_rechecks_each_call_before_saving_result(tmp_path, monkeypatch, log):
     from school_notes2.flows import steps
     task = phase.create(tmp_path, "barna", "notes", "cron", "writing")
-    task.update(ranges=[[0, 0]])
-    ctx = SimpleNamespace(notes_path=tmp_path, cfg=SimpleNamespace(role=lambda _: (None, None), limits=SimpleNamespace(max_agents=3)))
+    task.update(ranges=[[0, 0]], base="base")
+    ctx = SimpleNamespace(notes_path=tmp_path, log=log, cfg=SimpleNamespace(role=lambda _: (None, None), limits=SimpleNamespace(max_agents=3)))
     monkeypatch.setattr(writer, "write_inputs", lambda *args: None)
     monkeypatch.setattr(writer, "_call", lambda *args: {"status": "done"})
+    invoked = []
     def bad(*args):
-        raise steps.CheckFailed([])
+        invoked.append(1)
+        raise steps.CheckFailed([{"file": "wiki/topic.md", "line": None, "message": "Broken"}])
     monkeypatch.setattr(writer, "_check_call", bad)
     monkeypatch.setattr(steps, "write_check_items", lambda *args: None)
-    with pytest.raises(steps.CheckFailed):
-        writer.run_ranges(ctx, task, None)
-    assert not (task.dir / "result-1.json").exists()
-    assert phase.load(task.dir).get("writing_k") == 1
+    assert writer.run_ranges(ctx, task, None) == "done"
+    assert len(invoked) == 2
+    assert (task.dir / "result-1.json").exists()
+    assert task.get("machine_problems")

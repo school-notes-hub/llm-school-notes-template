@@ -66,6 +66,8 @@ def base_reader(ctx: Ctx, task: Task):
 
 def guard_step(ctx: Ctx, task: Task) -> None:
     """Step 1: the path guard. Owner-class violations stop the run; others go back."""
+    from . import protected
+    protected.restore(ctx, task)
     wt = ctx.worktree("notes")
     base = base_of(task)
     changes = [guard.Change(c["path"], c["status"])
@@ -306,7 +308,9 @@ def _record_writes(task: Task, repo: Path, *, whole: list[str], parts: list[str]
     for rel in sorted(set(whole + parts)):
         if safefs.is_file(repo, rel):
             hashes[rel] = hashlib.sha256(safefs.read_bytes(repo, rel)).hexdigest()
-    task.update(tool_writes=files, tool_parts=tool_parts, tool_hashes=hashes)
+    from . import protected
+    originals = protected.remember(task, repo, whole + parts)
+    task.update(tool_writes=files, tool_parts=tool_parts, tool_hashes=hashes, tool_originals=originals)
 
 
 def _writer_label(ctx: Ctx) -> str:

@@ -32,8 +32,7 @@ def test_cross_unit_link_scope_survives_consuming_retry_items(learning_run):
     task = phase.load(task.dir)
     assert task.get("retry_items") == {}
     safefs.write_text(ctx.notes_path, other, "# Másik\n\n[Rész](../proba/elso.md#jo)\n")
-    with pytest.raises(BadWork):
-        correction.check_scope(ctx, root, [])
+    assert correction.check_scope(ctx, root, []) == []
     correction.check_scope(ctx, root, [], task.get("retry_link_pages"))
 
 

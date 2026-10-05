@@ -6,6 +6,7 @@
                "pending_images"],
   "additionalProperties": false,
   "properties": {
+    "editing_scope": {"type": "string"},
     "approved_figure_requests": {"$ref": "urn:school-notes:figure-requests"},
     "pending_figures": {"type": "array", "items": {"type": "object"}},
     "student": {"type": "string"},

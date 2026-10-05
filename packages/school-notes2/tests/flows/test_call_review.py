@@ -200,13 +200,14 @@ def test_per_call_validation_and_mcp_hide_other_subject_errors(tmp_path, monkeyp
         raise steps.CheckFailed(errors)
     monkeypatch.setattr(steps, "check_changed", changed)
     monkeypatch.setattr("school_notes2.wiki.check_result.check_result", lambda *a, **kw: [])
-    writer._check_call(ctx, task, 1, {"status": "done"})
+    with pytest.raises(steps.CheckFailed):
+        writer._check_call(ctx, task, 1, {"status": "done"})
     monkeypatch.setattr(steps, "check_items", lambda *a: errors)
     monkeypatch.setattr("school_notes2.flows.learning.refresh", lambda *a: None)
     monkeypatch.setattr(handlers, "public_problems", lambda *a: [])
     monkeypatch.setattr("school_notes2.flows.generation_receipts.rights", lambda *a: lambda _: None)
-    assert handlers.check(ctx, task)["ok"]
+    assert not handlers.check(ctx, task)["ok"]
     errors.append(check.item("wiki/b/topic.md", None, "own subject"))
     with pytest.raises(steps.CheckFailed) as failed:
         writer._check_call(ctx, task, 1, {"status": "done"})
-    assert [i["file"] for i in failed.value.items] == ["wiki/b/topic.md"]
+    assert [i["file"] for i in failed.value.items] == ["wiki/a/topic.md", "wiki/b/topic.md"]

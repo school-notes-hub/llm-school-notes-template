@@ -34,17 +34,8 @@ def fix_pages(ctx, task):
 
 
 def current(ctx, task, items, k=None):
-    assigned = task.get("calls", [])
-    if not assigned or (task.mode == "interactive" and task.get("mode") != "repair"):
-        return items
-    k = k or task.get("writing_k", 1)
-    name = assigned[min(k, len(assigned)) - 1]["subject"]
-    known = {c["subject"] for c in assigned}
-    located = subjects(ctx, items)
-    pages = fix_pages(ctx, task)
-    # Unlocated invocation errors (e.g. its result.json) still belong to this call.
-    return [i for i in items if (k in pages[i["file"]] if i["file"] in pages else
-                                 located[i["file"]] == name or located[i["file"]] not in known)]
+    # Checks cover all changes, including pages outside this call's focus.
+    return items
 
 
 def retry(ctx, task, items):
@@ -64,6 +55,8 @@ def retry(ctx, task, items):
             if k is None and item.get("kind") == "browser-link":
                 target_subject = calls.subject(item.get("target", ""))
                 k = next(iter(pages.get(item.get("target"), [])), None) or next((n for n, c in enumerate(assigned, 1) if c["subject"] == target_subject), None)
+            if k is None and item["file"].startswith("wiki/"):
+                k = 1
             if k is None:
                 unassigned.append(item)
             else:
@@ -89,7 +82,10 @@ def invalidate(task):
     if pending:
         for k in pending:
             (task.dir / f"result-{k}.json").unlink(missing_ok=True)
-        task.update(retry_calls=[])
+        counts = dict(task.get("fix_calls", {}))
+        for k in pending:
+            counts[str(k)] = 0
+        task.update(retry_calls=[], fix_calls=counts, writer_output_key=None)
 
 
 def write_check(ctx, task, k):

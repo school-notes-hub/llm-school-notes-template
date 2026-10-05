@@ -9,6 +9,8 @@ from ..state.errors import WaitingQuota
 from . import correction, correction_figures, correction_round, inspection, recheck, steps
 
 PHASES = ("figures", "inspecting", "correcting", "rechecking", "review_ready")
+# Three in-run rounds, then at most five continuation runs (one writer round each).
+MAX_ROUNDS = 8
 
 
 def advance(ctx, task, notify, edits=None):
@@ -48,11 +50,57 @@ def _advance(ctx, task, notify, edits):
         task.set_phase("correcting" if more and n < 3 and task.mode != "interactive" else "review_ready",
                        correction_round=n + 1 if more and n < 3 and task.mode != "interactive" else n)
     if task.phase == "review_ready":
+        prepared = None
+        if task.get("machine_problems") or task.get("content_pending"):
+            try:
+                if task.get("content_pending"):
+                    prepared = steps.content_steps(ctx, task)
+                else:
+                    steps.guard_step(ctx, task)
+                    steps.check_changed(ctx, task)
+            except steps.CheckFailed as exc:
+                return machine_errors_remain(ctx, task, exc)
+        if task.get("content_pending"):
+            task.update(inspection_result=prepared.result)
+            inspection.prepare(ctx, task)
+            inspection.inspect(ctx, task)
+            n = correction_round.number(task)
+            if correction.all_items(ctx, task) and n < 3 and task.mode != "interactive":
+                task.set_phase("correcting", correction_round=n + 1, content_pending=False)
+                return _advance(ctx, task, notify, edits)
+            task.update(content_pending=False)
         finalize(ctx, task, edits)
         items = relations.inventory(ctx.notes_path)["items"]
         notify([{"file": k.rsplit("#", 1)[0], "item_id": k.rsplit("#", 1)[1]}
                 for k, i in items.items() if i["status"] == "owner"])
         task.set_phase("finishing", review_complete=True)
+
+
+def machine_errors_remain(ctx, task, exc):
+    """Machine errors after the in-run rounds: nothing is published and nothing is undone.
+
+    The errors are correction items; the task keeps its worktree and the next cron run
+    continues with one more writer round. Item brakes (owner after repeated opens) and a
+    fixed round cap end the loop; then the owner gets the preserved work."""
+    from . import machine_findings
+    from ..state.errors import NeedsOwner
+    if task.mode == "interactive":
+        raise exc  # The session receives the list through MCP and fixes it.
+    machine_findings.record(ctx, task, exc.items)
+    n = correction_round.number(task)
+    # A writer round can fix wiki pages only; an error elsewhere (e.g. in a stored result)
+    # needs the owner, with the work kept.
+    fixable = all(i["file"].startswith("wiki/") for i in exc.items)
+    if n >= MAX_ROUNDS or not fixable or not correction.all_items(ctx, task):
+        raise NeedsOwner("machine-check errors remain after the correction rounds; the work is kept",
+                         todo="fix the listed errors in `school-notes chat`; publication waits for a clean check",
+                         details={"items": exc.items[:20]})
+    task.set_phase("correcting", correction_round=n + 1)
+    if getattr(ctx, "mailer", None):
+        from ..notify import incidents
+        incidents.record(ctx, "bad_work", "machine-errors", task=task, scope="machine-errors:" + task.run_id)
+    ctx.log.event("review.machine_errors_continue", round=n + 1, errors=len(exc.items))
+    return {"state": "machine_errors", "round": n + 1}
 
 
 def finalize(ctx, task, edits=None):

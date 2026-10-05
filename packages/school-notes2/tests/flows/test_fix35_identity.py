@@ -117,10 +117,10 @@ def test_known_bad_fix_output_gets_a_new_bounded_invocation(tmp_path, log, monke
         safefs.write_json(tmp_path, ".school-notes/result.json", {"status": "done"})
         raise BadWork("invalid result")
     monkeypatch.setattr(writer, "_call", bad)
-    for _ in range(2):
-        task = phase.load(task.dir)
-        with pytest.raises(BadWork):
-            writer.run_ranges(ctx, task, None)
-        policy.on_error(BadWork("invalid result"), task=task, student="barna", step="run", log=log, mailer=None)
+    # fix-45: a failed call with a valid result.json keeps its files; after the bounded
+    # second invocation its items stay open and the run continues (no stop, no discard).
+    task = phase.load(task.dir)
+    assert writer.run_ranges(ctx, task, None) == "done"
     assert called == [1, 1]
-    assert task.data["llm_failures"] == 2 and task.data["needs_owner"]
+    assert task.data["llm_failures"] == 0 and not task.data["needs_owner"]
+    assert task.get("failed_fix_calls") == [1]

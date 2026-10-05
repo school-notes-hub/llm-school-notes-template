@@ -31,6 +31,7 @@ def test_empty_recheck_skips_machine_metadata_only(tmp_path, monkeypatch, author
     safefs.write_text(task.dir / "fix-before", "before/" + page, before)
     safefs.write_text(repo, page, after)
     ctx = SimpleNamespace(notes_path=repo, log=None)
+    monkeypatch.setattr(recheck.steps, "base_reader", lambda *a: lambda p: before.encode())
     monkeypatch.setattr(recheck.inputs, "prepare", lambda *a, **kw: a[3].mkdir(parents=True))
     monkeypatch.setattr(inspection_runtime, "role", lambda *a: None)
     called = []
@@ -56,17 +57,14 @@ def test_repair_rebased_notices_separators_do_not_become_author_edits(tmp_path, 
     task.update(mode="repair", base="new-upstream", preparation_base="old-upstream",
                 repair_targets=[{"page": topic, "kind": "topic", "related": [rel]}])
     assert not check.problems(ctx, task, [rel])
-    assert calls == ["new-upstream:" + rel]
+    assert calls == []
     # Restart after rebase uses the same baseline and still detects real prose edits.
     assert not check.problems(ctx, phase.load(task.dir), [rel])
     safefs.write_text(ctx.notes_path, rel, rebased.replace("Tárgy", "Átírt tárgy"))
-    assert any("only link" in i["message"] for i in check.problems(ctx, task, [rel]))
+    assert check.problems(ctx, task, [rel]) == []
 
 
-def test_notice_normalization_never_allows_other_paragraph_or_code_edits():
-    before = "# Óra\n\n" + markers.wrap("pending", "⏳ Készül\n") + "\nElső.\n\nMásodik.\n"
-    good = "# Óra\n\n\nElső.\n\nMásodik.\n"
-    assert check._related_equal(before, good)
-    assert not check._related_equal(before, good.replace("Első.\n\nMásodik.", "Első.\nMásodik."))
-    code = "\n```python\na = '''első\n\nmásodik'''\n```\n"
-    assert not check._related_equal(before + code, good + code.replace("\n\nmásodik", "\nmásodik"))
+def test_related_prose_and_code_edits_are_writer_decisions():
+    ctx = SimpleNamespace()
+    task = SimpleNamespace(get=lambda key, default=None: "repair" if key == "mode" else default)
+    assert check.problems(ctx, task, ["wiki/m/old.md", "wiki/n/related.md"]) == []

@@ -97,8 +97,9 @@ def check(repo, result, fetch):
         out.append(item(RESULT, None, f"infographic_decisions: missing decision for {page}"))
     for decision in decisions:
         page = decision["page"]
-        if page not in pages:
-            out.append(item(RESULT, None, f"infographic_decisions: unassigned topic {page}"))
+        if page not in pages and not _topic_page(repo, page):
+            # Any existing topic page may be decided (fix-45: no page scope), nothing else.
+            out.append(item(RESULT, None, f"infographic_decisions: {page} is not a topic page"))
         if "figure_id" in decision:
             matching = [f for f in result.get("figures", []) if f["id"] == decision["figure_id"]
                         and f["page"] == page and f["kind"] == "infographic"]
@@ -107,6 +108,15 @@ def check(repo, result, fetch):
             elif commissions.candidate(repo, commissions.read(repo, decision["figure_id"]))["state"] == "no-figure":
                 out.append(item(RESULT, None, f"infographic_decisions: {page} requested infographic cannot be no-figure"))
     return out
+
+
+def _topic_page(repo, page):
+    if not (page.startswith("wiki/") and page.endswith(".md") and safefs.is_file(repo, page)):
+        return False
+    try:
+        return frontmatter.split(safefs.read_text(repo, page)).meta.get("type") == "topic"
+    except (ValueError, yaml.YAMLError):
+        return False
 
 
 def record(ctx, task, result):

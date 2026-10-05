@@ -48,13 +48,13 @@ def test_chapter_order_and_lessons(repo):
     assert any("YYYY-MM-DD" in m for m in found) and any("topic page" in m for m in found)
 
 
-def test_autofix_and_size_warning(repo):
+def test_check_preserves_author_bytes_and_reports_size(repo):
     rel = "wiki/proba/masodik.md"
     text = (repo / rel).read_text().replace("\n", "\r\n").rstrip() + "\r\n" + "x" * 41000
     (repo / rel).write_bytes(text.encode())
     items = check.check_files(repo, [rel])
     data = (repo / rel).read_bytes()
-    assert b"\r\n" not in data and data.endswith(b"\n")
+    assert data == text.encode()
     assert any(i["severity"] == "warning" and "40 KB" in i["message"] for i in items)
 
 

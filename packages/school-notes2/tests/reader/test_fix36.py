@@ -66,14 +66,14 @@ def test_three_scope_failures_become_owner_once(setup, monkeypatch, learner, mod
             correction.run(ctx, task)
             correction.run(ctx, phase.load(task.dir))
         record = relations.inventory(ctx.notes_path)["items"][items[0]["key"]]
-        assert record.get("repair_attempts", 0) == (n if mode == "p4" else 0)
-        assert record["status"] == ("owner" if mode == "p4" and n == 3 else "open")
-        assert safefs.read_text(ctx.notes_path, page) == before
+        assert record.get("repair_attempts", 0) == (1 if mode == "p4" else 0)
+        assert record["status"] == ("fixed" if mode == "p4" else "open")
+        assert f"[Lásd](<{target}>)" in safefs.read_text(ctx.notes_path, page)
         assert task.data["llm_failures"] == 0 and not task.data["needs_owner"]
         owners = [{"file": items[0]["file"], "item_id": "R1"}] if n == 3 else []
         assert run.owner_items(ctx, task, owners)
         assert run.owner_items(ctx, phase.load(task.dir), owners)
-    assert len(invoked) == (6 if mode == "p4" else 3)
+    assert len(invoked) == (1 if mode == "p4" else 3)
     assert len(delivered) == 0
     assert safefs.read_json(pending.path(ctx).parent, pending.path(ctx).name) == {}
 
@@ -99,7 +99,8 @@ def test_scope_attempt_survives_rollback_crash(setup, monkeypatch, mode, boundar
     saved = {"status": "rollback", "reason": "scope dependency"}
     with pytest.raises(KeyboardInterrupt):
         if mode == "fix":
-            fix_scope.rollback(ctx, task, steps.CheckFailed(fix_scope.dependency_items(ctx, root)))
+            safefs.write_json(root, "rollback.json", {"reason": "legacy rollback"})
+            fix_scope.resume(ctx, task)
         else:
             correction.apply(ctx, task, root, saved)
     monkeypatch.setattr(module, name, original)
@@ -129,6 +130,9 @@ def test_unrelated_check_failure_is_not_swallowed(setup, monkeypatch, stage, mix
         raise steps.CheckFailed(problems)
     monkeypatch.setattr(writer, "run_ranges", fail)
     monkeypatch.setattr(steps, "content_steps", fail)
+    monkeypatch.setattr(steps, "merged_result", lambda *a: {"status": "done"})
+    from school_notes2.flows import review_phases
+    monkeypatch.setattr(review_phases, "advance", fail)
     with pytest.raises(steps.CheckFailed) as exc:
         if stage == "write":
             run._write(ctx, task)
@@ -150,7 +154,8 @@ def test_only_changed_link_lines_depend_on_restored_page(setup, changed):
     text += "\n[Új cím](other.md#resz)\n" if changed else "\n[Lásd](other.md#resz)\n\nJavítás.\n"
     safefs.write_text(ctx.notes_path, page, text)
     fix_scope.recover(ctx, task)
-    assert bool(fix_scope.dependency_items(ctx, root)) == changed
+    assert fix_scope.dependency_items(ctx, root) == []
+    assert "Új rész." in safefs.read_text(ctx.notes_path, OTHER)
 
 
 @pytest.mark.parametrize("mode", ["p4", "fix"])
@@ -171,7 +176,7 @@ def test_recheck_receives_sorted_restored_paths(setup, monkeypatch, mode):
     monkeypatch.setattr(calls, "run", inspect_input)
     closure = {"file": items[0]["file"], "item_id": "R1", "status": "fixed"}
     recheck.check_unit(ctx, task, ctx.notes_path, units.collect(ctx.notes_path, [page])[0], [closure])
-    assert seen == [[NEW, OTHER]]
+    assert seen == [None]
 
 
 def test_rejected_output_cannot_bypass_crash_limit(setup):
@@ -197,5 +202,6 @@ def test_generated_links_on_unassigned_page_are_not_author_dependencies(setup):
     safefs.write_text(ctx.notes_path, page, text + "\n<!-- school-notes:generated topics -->\n"
                       "[Másik](other.md)\n<!-- /school-notes:generated -->\n")
     fix_scope.recover(ctx, task)
-    assert safefs.read_json(root, "scope-restores.json") == [OTHER]
+    assert safefs.read_json(root, "scope-restores.json") is None
+    assert "Nem kiosztott." in safefs.read_text(ctx.notes_path, OTHER)
     assert fix_scope.dependency_items(ctx, root) == []

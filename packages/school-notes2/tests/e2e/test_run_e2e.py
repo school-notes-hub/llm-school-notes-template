@@ -164,9 +164,15 @@ def test_bad_link_goes_back_to_the_writer_then_needs_owner(world, monkeypatch):
     monkeypatch.setenv("FAKE_WRITER", "badlink")
     assert run_flow.run(ctx) == 1
     task = phase.open_task(ctx.task_root(), "benedek", "notes")
-    assert task.phase == "writing" and task.data["llm_failures"] == 1
+    assert task.phase == "review_ready" and task.data["llm_failures"] == 0
+    assert task.get("machine_problems")
+    assert any("nincs-ilyen" in p.read_text() for p in (ctx.notes_path / "wiki").rglob("*.md"))
     check = json.loads((ctx.notes_path / ".school-notes/check.json").read_text())
     assert any("nincs-ilyen" in json.dumps(i) for i in check)
-    assert run_flow.run(ctx) == 1
+    # fix-45: the writer never fixed it, the machine item is exhausted (owner) within the
+    # rounds, so the run stops for the owner with the work kept: no discard, no strike.
+    assert task.data["needs_owner"]["class"] == "needs_owner"
+    assert run_flow.run(ctx) == 0
     task = phase.open_task(ctx.task_root(), "benedek", "notes")
-    assert task.data["needs_owner"]["class"] == "bad_work"
+    assert task.phase == "review_ready" and task.data["needs_owner"]
+    assert any("nincs-ilyen" in p.read_text() for p in (ctx.notes_path / "wiki").rglob("*.md"))

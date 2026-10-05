@@ -104,11 +104,11 @@ def test_actual_fix_rollback_and_resume(setup, monkeypatch):
         safefs.write_text(ctx.notes_path, "wiki/m/new.md", "unrelated")
         raise BadWork("bad fix")
     monkeypatch.setattr(correction.writer, "run_ranges", bad)
-    correction.run(ctx, task)
-    correction.run(ctx, phase.load(task.dir))
-    assert safefs.read_text(ctx.notes_path, page) == before
-    assert not safefs.is_file(ctx.notes_path, "wiki/m/new.md")
-    assert len(count) == 2 and task.get("correction_rolled_back")
+    with pytest.raises(BadWork):
+        correction.run(ctx, task)
+    assert safefs.read_text(ctx.notes_path, page) == "bad replacement"
+    assert safefs.is_file(ctx.notes_path, "wiki/m/new.md")
+    assert len(count) == 1 and not task.get("correction_rolled_back")
 
 
 def test_waiting_quota_keeps_phase(setup, monkeypatch):
@@ -134,12 +134,13 @@ def test_t095_p4_timeout_rolls_back_and_second_stops(setup, monkeypatch, count):
         safefs.write_text(ctx.notes_path, page, "Partial fix")
         raise launch.TimedOut("timeout", details={"count": count})
     monkeypatch.setattr(correction.writer, "run_ranges", timeout)
-    correction.run(ctx, task)
-    assert safefs.read_text(ctx.notes_path, page) == before
-    monkeypatch.setattr(correction.writer, "run_ranges", lambda *a: pytest.fail("replayed timed-out P4"))
+    with pytest.raises(launch.TimedOut):
+        correction.run(ctx, task)
+    assert safefs.read_text(ctx.notes_path, page) == "Partial fix"
     resumed = phase.load(task.dir)
-    correction.run(ctx, resumed)
-    assert resumed.get("correction_rolled_back")
+    with pytest.raises(launch.TimedOut):
+        correction.run(ctx, resumed)
+    assert not resumed.get("correction_rolled_back")
 
 
 def test_notices_are_idempotent_and_keep_hash(setup):

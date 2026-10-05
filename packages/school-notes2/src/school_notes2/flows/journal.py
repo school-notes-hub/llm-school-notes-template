@@ -30,7 +30,9 @@ def settle(ctx: Ctx, task: Task) -> None:
     hashes = dict(task.get("tool_hashes", {}))
     if text is not None and actual != pending["before"]:
         hashes[rel] = hashlib.sha256(text.encode()).hexdigest()
-    task.update(**{key: recorded}, tool_hashes=hashes, learning_pending=None)
+    from . import protected
+    originals = protected.remember(task, ctx.notes_path, [rel])
+    task.update(**{key: recorded}, tool_hashes=hashes, tool_originals=originals, learning_pending=None)
 
 
 def write(ctx: Ctx, task: Task, rel: str, text: str, *, whole: bool) -> None:

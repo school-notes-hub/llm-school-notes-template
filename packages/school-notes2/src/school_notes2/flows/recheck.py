@@ -1,4 +1,4 @@
-"""P5: only fixed/disputed items, new warning hits and changed figures."""
+"""P5: every changed author line, closures, new warning hits and figures."""
 
 from pathlib import Path
 
@@ -16,12 +16,18 @@ def run(ctx, task):
     root, repo = inspection.folder(task), ctx.notes_path
     saved = safefs.read_json(root, correction_round.p5(task))
     if saved is None:
+        from . import learning, machine_findings
+        try:
+            learning.validate(ctx, task)
+        except steps.CheckFailed as exc:
+            machine_findings.record(ctx, task, exc.items)
+            return  # Unparseable content stays for the next bounded writer round.
         changed = correction_figures.changed_figures(ctx, task)
         view = root / f"recheck-view-r{correction_round.number(task)}"
         inputs.preview(repo, view, [s["brief"] for s in task.get("inspection_figures", [])], inspection.render(ctx, task))
         closures = [c for c in task.get("correction_result", {}).get("review_closure", [])
                     if c["status"] in ("fixed", "disagree")]
-        grouped = units.collect(repo, [], closures, changed)
+        grouped = page_units(ctx, task, closures, changed)
         checked = [check_unit(ctx, task, view, u, closures) for u in grouped]
         receipts = dict(task.get("inspection_receipts", {}))
         for name, batch in figure_inputs.batches(repo, changed):
@@ -36,8 +42,18 @@ def run(ctx, task):
     apply(ctx, task, saved)
 
 
+def page_units(ctx, task, closures=(), changed=()):
+    affected = sorted(steps.llm_snapshot(ctx, task))
+    groups = units.collect(ctx.notes_path, affected, closures, changed)
+    pages = sorted({p for unit in groups for p in unit["pages"]})
+    return [{"topic": p, "pages": [p], "context": [], "keys": {p: units.page_key(ctx.notes_path, p)}}
+            for p in pages]
+
+
 def check_unit(ctx, task, view, unit, closures):
     root = correction_round.reader(task, units.slug(unit["topic"]))
+    # The round's own pre-edit tree: P3 (or an earlier P5) already judged older changes,
+    # so a round re-reads only what this round changed, on every page (fix-45).
     before = Path(task.get("correction_assignment_root") or correction_round.root(task))
     if task.get("mode") == "fix" and correction_round.number(task) == 1:
         before = task.dir / "fix-before"
@@ -69,7 +85,6 @@ def check_unit(ctx, task, view, unit, closures):
     safefs.write_json(root, "in/assigned.json", assigned)
     safefs.write_json(root, "in/items.json", items)
     safefs.write_json(root, "in/hits.json", inputs.hits(ctx.notes_path, hits))
-    safefs.write_json(root, "in/scope-restores.json", safefs.read_json(before, "scope-restores.json", []))
     receipt = calls.run(ctx.notes_path, view, root, "recheck", assigned, inspection.role(ctx, task), log=ctx.log,
                         allowed_paths=set(unit["pages"]))
     if receipt["status"] == "reviewed":

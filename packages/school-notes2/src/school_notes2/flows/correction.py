@@ -7,7 +7,7 @@ from ..llm import launch
 from ..review import files, relations
 from ..sources import calls
 from ..state import phase, safefs
-from ..state.errors import BadWork, Transient, WaitingQuota
+from ..state.errors import BadWork, NeedsOwner, Transient, WaitingQuota
 from ..wiki import frontmatter
 from . import correction_figures, correction_round, generation_receipts
 from .correction_figures import changed_figures
@@ -75,7 +75,7 @@ def child_task(ctx, task, root, items):
                                paid_disabled=task.get("mode") == "repair",
                                fix_calls={}, fix_crash_retries=[], writer_invocation=0, writer_output_key=None,
                                assigned_work=[], correction_work=[], failed_fix_calls=[],
-                               counted_bad_outputs=[], retry_calls=[], retry_items={}, retry_link_pages=[],
+                               machine_problems=[], counted_bad_outputs=[], retry_calls=[], retry_items={}, retry_link_pages=[],
                                writer_check={"count": 0, "warnings": []}, fix_scope_rolled_back=False)
     if task.mode == "interactive":
         child.data["mode"] = "interactive"
@@ -127,35 +127,75 @@ def execute(ctx, task, root, edits):
             safefs.write_json(root, "tool-state.json", {k: task.get(k, {}) for k in TOOL_STATE})
         child = child_task(ctx, task, root, items)
         try:
-            if task.mode == "interactive":
-                from . import correction_chat
-                result = correction_chat.result(ctx, child)
-                if result is None:
-                    return correction_chat.handoff(ctx, items)
-            else:
-                outcome = writer.run_ranges(ctx, child, handlers.build(ctx, child.dir))
-                if outcome == "question":
-                    raise BadWork("fix pass asked a blocking question")
-                result = writer.merge(writer.results(child))
-            saved = validated(ctx, child, root, items, result, edits)
-        except WaitingQuota:
-            raise
-        except launch.TimedOut as exc:
-            saved = {"status": "rollback", "reason": str(exc)}
-            saved["timeout"] = True
-        except steps.CheckFailed as exc:
-            from . import correction_calls, fix_scope
-            if correction_calls.isolated(child) and fix_scope.related_errors(ctx, root, exc.items, require_all=False):
-                call_scope.retry(ctx, child, exc.items)
+            saved = checked_calls(ctx, task, child, root, items, edits)
+        except (WaitingQuota, launch.TimedOut, Transient):
+            raise  # Interrupted work stays in place for the existing resume policy.
+        except BadWork as exc:
+            if task.mode != "interactive":
                 raise
-            checks.record_failure(ctx, task, exc, "correction.check")
-            saved = {"status": "rollback", "reason": str(exc), "items": exc.items[:10]}
-        except (BadWork, Transient) as exc:
+            from ..schemas import validate
+            try:
+                validate("result", safefs.read_json(ctx.notes_path, ".school-notes/result.json"))
+            except ValueError:
+                pass
+            else:
+                raise
+            ctx.log.event("writer.unusable_rollback", reason="invalid result.json")
             saved = {"status": "rollback", "reason": str(exc)}
         finally:
             from .set_aside import work
             task.update(correction_work=sorted(set(task.get("correction_work", [])) | set(work(child))))
     return saved
+
+
+def checked_calls(ctx, task, child, root, items, edits):
+    """Check failure keeps the round's work: one writer continuation with the error list,
+    then the remaining errors become items and every assignment of the round stays open."""
+    from ..state.errors import SnError
+    from . import correction_chat
+    while True:
+        pending = safefs.read_json(root, "validation-retry.json", {})
+        if pending and not pending.get("queued"):
+            try:
+                call_scope.retry(ctx, child, pending["items"])
+            except SnError:
+                # No writer call owns these errors (e.g. a tool file): no continuation.
+                safefs.write_json(root, "validation-retry.json", {**pending, "count": 2, "queued": True})
+                result = writer.merge(writer.results(child))
+                return preserved(ctx, task, child, result, pending["items"])
+            safefs.write_json(root, "validation-retry.json", {**pending, "queued": True})
+        if task.mode == "interactive":
+            result = correction_chat.result(ctx, child)
+            if result is None:
+                return correction_chat.handoff(ctx, items)
+        else:
+            writer.run_ranges(ctx, child, handlers.build(ctx, child.dir))
+            result = writer.merge(writer.results(child))
+        try:
+            return validated(ctx, child, root, items, result, edits)
+        except steps.CheckFailed as exc:
+            checks.record_failure(ctx, task, exc, "correction.check_preserved")
+            steps.write_check_items(ctx, exc.items)
+            count = 2 if child.get("machine_problems") else pending.get("count", 0) + 1
+            if count < 2:
+                if task.mode == "interactive":
+                    safefs.write_json(root, "validation-retry.json", {
+                        "count": count, "items": exc.items, "queued": True})
+                    safefs.unlink(ctx.notes_path, ".school-notes/result.json")
+                    return correction_chat.handoff(ctx, items)
+                safefs.write_json(root, "validation-retry.json", {"count": count, "items": exc.items})
+                continue
+            return preserved(ctx, task, child, result, exc.items)
+
+
+def preserved(ctx, task, child, result, problems):
+    from . import machine_findings
+    machine_findings.record(ctx, child, problems)
+    if child.get("inspection_report"):
+        task.update(inspection_report=child.get("inspection_report"))
+    return {"status": "done", "result": result, "machine_problems": problems,
+            "tool_state": {k: child.get(k, {}) for k in
+                           ("tool_writes", "tool_parts", "tool_hashes", "tool_originals")}}
 
 
 def apply(ctx, task, root, saved, edits=None):
@@ -175,10 +215,24 @@ def apply(ctx, task, root, saved, edits=None):
         from . import correction_chat
         correction_chat.restore_inputs(ctx, task)
     result = saved["result"]
+    if saved.get("machine_problems"):
+        task.update(machine_problems=saved["machine_problems"])
     task.update(deferred_fix_work=sorted(set(task.get("deferred_fix_work", [])) | set(saved.get("failed_work", []))))
     state = saved.get("tool_state", {})
     if task.get("correction_state_applied") != str(root):
         task.update(**state, correction_state_applied=str(root))
+    if saved.get("machine_problems"):
+        # Keep the author's files and original result in the receipt, but do not
+        # apply unchecked closure/figure metadata. Every assignment stays open.
+        result = {"status": "done", "review_closure": [
+            {"file": i["file"], "item_id": i["item_id"], "status": "open"}
+            for i in task.get("correction_items", [])]}
+        outcome = files.apply_closure(ctx.notes_path, correction_round.identity(task), result["review_closure"],
+                                      task.get("correction_items", []), ctx.cfg.limits.owner_after_open,
+                                      automatic=task.mode == "cron")
+        steps.record_tool_files(task, ctx.notes_path, outcome.written)
+        task.update(correction_result=result, correction_rolled_back=False)
+        return
     from . import licensing
     licensing.refresh(ctx, task, result, task.get("pages", []))
     from ..figures import infographics
@@ -242,50 +296,15 @@ def validated(ctx, child, root, items, result, edits=None):
     from .fix_scope import check_dependencies
     check_dependencies(ctx, child)
     if result["status"] != "done":
-        raise BadWork("fix pass asked a blocking question")
+        raise NeedsOwner("fix pass asked a blocking question", todo="answer in school-notes chat")
     return {"status": "done", "result": result, "warnings": child.get("check_warnings", []),
             "failed_work": correction_calls.failed_keys(child),
-            "tool_state": {k: child.get(k, {}) for k in ("tool_writes", "tool_parts", "tool_hashes")}}
+            "tool_state": {k: child.get(k, {}) for k in ("tool_writes", "tool_parts", "tool_hashes", "tool_originals")}}
 
 
 def check_scope(ctx, root, items, extra_paths=(), *, restore=False):
-    from ..reader import units
-    # Use the pre-edit tree: edits must not expand their own authorization.
-    repo = root / "before"
-    allowed = set(extra_paths)
-    details = [relations.details(safefs.read_text(repo, i["file"]), i["item_id"]) for i in items]
-    allowed.update(d.get("file") for d in details)
-    allowed.update(_value_sources(repo, [d.get("quote") or "" for d in details]))
-    embedded = relations.related_pages(repo)
-    allowed.update(p for asset in sorted(p for p in allowed if p) for p in embedded.get(asset, []))
-    for unit in units.collect(repo, sorted(p for p in allowed if p)):
-        allowed.update(unit["pages"] + unit["context"])
-    before = set(safefs.read_json(root, "snapshot.json"))
-    outside = []
-    for path in sorted(before | set(safefs.walk_files(ctx.notes_path, "wiki"))):
-        if not path.startswith("wiki/") or path.startswith("wiki/assets/") or path == "wiki/log.md":
-            continue
-        old = safefs.read_bytes(root, "before/" + path) if path in before else b""
-        new = safefs.read_bytes(ctx.notes_path, path) if safefs.is_file(ctx.notes_path, path) else b""
-        if path not in allowed and steps._llm_hash(path, old) != steps._llm_hash(path, new):
-            outside.append(path)
-    if outside and not restore:
-        raise BadWork(f"fix changed an unassigned page: {outside[0]}")
-    if restore:
-        from .fix_scope import restore_pages
-        return restore_pages(ctx.notes_path, root, before, outside)
+    """Legacy entry point: page assignments are work organization only."""
     return []
-
-
-def _value_sources(repo, quotes, minimum=20):
-    """Pages whose own title, description or lesson title appears in a quote: a finding on a
-    generated list (an index) is fixed in that page's frontmatter (plan 8.1)."""
-    from ..review import generated
-    quotes = [" ".join(q.split()) for q in quotes if q.strip()]
-    if not quotes:
-        return set()
-    return {path for path, value in generated._source_values(repo)
-            if len(value.strip()) >= minimum and any(" ".join(value.split()) in q for q in quotes)}
 
 
 def needs_recheck(ctx, task):

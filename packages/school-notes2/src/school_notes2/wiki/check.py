@@ -1,6 +1,6 @@
 """The mechanical `check` of plan 5.4/5 on markdown files.
 
-Fixes what is unambiguous (line endings, final newline) and returns the rest as
+Preserves author bytes and reports defects as
 check.json items `{file, line, message, severity}`; errors send the run back to the
 writer, warnings do not.
 """
@@ -32,6 +32,9 @@ def load_patterns(path: Path = PATTERNS_FILE) -> tuple[str, ...]:
 
 
 SECRET_PATTERNS = load_patterns()
+SECRETS = frozenset(json.loads(PATTERNS_FILE.read_text(encoding="utf-8"))["secrets"])
+# The only check result that makes a writer call unusable (fix-45): a real secret.
+SECRET_MESSAGE = "forbidden secret pattern"
 CONFLICT = re.compile(r"^(<<<<<<<|>>>>>>>)( |$)", re.M)
 TAG = re.compile(r"^(?=.*[a-z])[a-z0-9-]+(/[a-z0-9-]+)*$")
 FILE_NAME = re.compile(r"^[a-z0-9][a-z0-9-]*\.md$")
@@ -44,14 +47,7 @@ def item(file: str, line: int | None, message: str, severity: str = "error") -> 
 
 
 def autofix(repo: Path, rel: str) -> bool:
-    """CRLF to LF and a final newline: unambiguous, so the tool fixes them itself."""
-    data = safefs.read_bytes(repo, rel)
-    fixed = data.replace(b"\r\n", b"\n")
-    if fixed and not fixed.endswith(b"\n"):
-        fixed += b"\n"
-    if fixed != data:
-        safefs.write_bytes(repo, rel, fixed)
-        return True
+    """Compatibility entry point: checking never rewrites author bytes."""
     return False
 
 
@@ -65,9 +61,9 @@ def check_secrets(rel: str, text: str) -> list[dict]:
     for m in CONFLICT.finditer(text):
         out.append(item(rel, line_of(text, m.start()), "unresolved conflict marker"))
     for pattern in SECRET_PATTERNS:
+        message = SECRET_MESSAGE if pattern in SECRETS else "forbidden secret or machine-path pattern"
         for m in re.finditer(pattern, text, re.I):
-            out.append(item(rel, line_of(text, m.start()),
-                            f"forbidden secret or machine-path pattern {pattern!r}"))
+            out.append(item(rel, line_of(text, m.start()), f"{message} {pattern!r}"))
     return out
 
 

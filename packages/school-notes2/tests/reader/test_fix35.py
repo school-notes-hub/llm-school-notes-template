@@ -54,8 +54,8 @@ def test_scope_recovery_continues_and_reports(setup, monkeypatch, learner, mode,
         return result
     monkeypatch.setattr(writer, "_call", write)
     def check(*args, **kwargs):
-        assert safefs.read_text(ctx.notes_path, OTHER) == OLD
-        assert not safefs.is_file(ctx.notes_path, NEW)
+        assert "Nem kiosztott javítás." in safefs.read_text(ctx.notes_path, OTHER)
+        assert safefs.is_file(ctx.notes_path, NEW)
         from school_notes2.wiki.check import check_links
         problems = check_links(ctx.notes_path, page, safefs.read_text(ctx.notes_path, page))
         if problems:
@@ -63,17 +63,16 @@ def test_scope_recovery_continues_and_reports(setup, monkeypatch, learner, mode,
     monkeypatch.setattr(steps, "check_changed", check)
     if mode == "fix":
         assert run._write(ctx, task) == "done"
-        if not invalid:
-            result = writer.merge(writer.results(task))
-            files.apply_closure(ctx.notes_path, task.run_id, result["review_closure"], items)
-            task.set_phase("figures", inspection_result=result)
+        result = writer.merge(writer.results(task))
+        files.apply_closure(ctx.notes_path, task.run_id, result["review_closure"], items)
+        task.set_phase("figures", inspection_result=result)
     review_phases.advance(ctx, task, lambda _: None)
-    assert task.phase == "finishing" and calls == ([1] * (2 if mode == "p4" else 3) if invalid else [1])
+    assert task.phase == "finishing" and calls == [1]
     assert task.data["llm_failures"] == 0 and not task.data["needs_owner"]
     text = steps._llm_part(safefs.read_text(ctx.notes_path, page))
-    assert ("Javított magyarázat." in text) != invalid
-    assert relations.inventory(ctx.notes_path)["items"][items[0]["key"]]["status"] == ("open" if invalid else "fixed")
-    assert ("recheck" in invoked) != invalid
+    assert "Javított magyarázat." in text
+    assert relations.inventory(ctx.notes_path)["items"][items[0]["key"]]["status"] == "fixed"
+    assert "recheck" in invoked
     # Real completion aggregation includes the tool note even after a full rollback.
     from school_notes2.flows import operational_report
     from school_notes2.repair import failure
@@ -81,61 +80,39 @@ def test_scope_recovery_continues_and_reports(setup, monkeypatch, learner, mode,
     monkeypatch.setattr(failure, "notify", lambda *a: None)
     report.completion(ctx, task)
     notes = safefs.read_json(task.dir, "report.json")["owner_notes"]
-    assert len(notes) == 1 and NEW in notes[0] and OTHER in notes[0]
+    assert notes == []
     events = [json.loads(line) for line in ctx.log.main.read_text().splitlines()]
-    assert any(e["action"] == "fix.scope_restored" and e["pages"] == [NEW, OTHER] for e in events)
+    assert not any(e["action"] == "fix.scope_restored" for e in events)
     assert not any(e["action"].startswith("notify.") for e in events)
     review_phases.advance(ctx, phase.load(task.dir), lambda _: None)
-    assert calls == ([1] * (2 if mode == "p4" else 3) if invalid else [1])
+    assert calls == [1]
 
 
 @pytest.mark.parametrize("boundary", ["journal", "restore", "rollback"])
 def test_scope_restore_crash_replays_saved_list_and_full_rollback(setup, monkeypatch, boundary):
+    # A 2.5.0 rollback must finish even when the new release has page freedom.
     ctx, task, page = setup
     root = task.dir / "fix-before"
-    safefs.write_text(ctx.notes_path, OTHER, OLD)
-    correction.snapshot(ctx.notes_path, root)
-    task.set_phase("writing", mode="fix", correction_before=str(root / "before"),
-                   retry_link_pages=[page])
     before = safefs.read_text(ctx.notes_path, page)
-    safefs.write_text(ctx.notes_path, page, before + "\nJó javítás.\n")
-    safefs.unlink(ctx.notes_path, OTHER)
-    safefs.write_text(ctx.notes_path, NEW, "Törlendő.\n")
-    task.update(tool_parts={OTHER: "stale", NEW: "new"}, tool_hashes={OTHER: "stale", NEW: "new"})
-    fired = []
-    original = safefs.write_json if boundary == "journal" else safefs.write_bytes
-    def crash(root_, rel, value, *args):
-        original(root_, rel, value, *args)
-        target = root_ == root and rel == "scope-restores.json" if boundary == "journal" else root_ == ctx.notes_path and rel == OTHER
-        if target and not fired:
-            fired.append(1)
-            raise KeyboardInterrupt()
-    if boundary != "rollback":
-        monkeypatch.setattr(safefs, "write_json" if boundary == "journal" else "write_bytes", crash)
-        with pytest.raises(KeyboardInterrupt):
-            fix_scope.recover(ctx, task)
-        task = phase.load(task.dir)
-    assert fix_scope.recover(ctx, task) == [NEW, OTHER]
-    assert safefs.read_text(ctx.notes_path, OTHER) == OLD
-    assert not safefs.is_file(ctx.notes_path, NEW)
-    assert "Jó javítás." in safefs.read_text(ctx.notes_path, page)
-    if boundary == "rollback":
-        safefs.write_text(ctx.notes_path, page, before + "\n[Új](new.md)\n")
-        original_restore = correction.restore
-        def stop(repo, root):
-            original_restore(repo, root)
-            raise KeyboardInterrupt()
-        monkeypatch.setattr(correction, "restore", stop)
-        with pytest.raises(KeyboardInterrupt):
-            fix_scope.rollback(ctx, task, steps.CheckFailed(fix_scope.dependency_items(ctx, root)))
-        monkeypatch.setattr(correction, "restore", original_restore)
-        task = phase.load(task.dir)
+    correction.snapshot(ctx.notes_path, root)
+    task.update(mode="fix", calls=[{"subject": "m"}], correction_before=str(root / "before"))
+    safefs.write_text(ctx.notes_path, page, "Interrupted old work.\n")
+    safefs.write_json(root, "scope-restores.json", [page])
+    safefs.write_json(root, "rollback.json", {"reason": "2.5.0 rollback"})
+    module, name = (correction, "restore") if boundary == "restore" else (phase.Task, "set_phase")
+    original = getattr(module, name)
+    def crash(*args, **kwargs):
+        if boundary != "journal":
+            original(*args, **kwargs)
+        raise KeyboardInterrupt
+    monkeypatch.setattr(module, name, crash)
+    with pytest.raises(KeyboardInterrupt):
         fix_scope.resume(ctx, task)
-        assert task.phase == "figures" and task.get("fix_scope_rolled_back")
-        assert safefs.read_text(ctx.notes_path, page) == before
-    assert len(task.get("scope_owner_notes")) == 1
-    assert task.get("tool_parts")[OTHER] == guard.parts_hash(OLD)
-    assert NEW not in task.get("tool_parts") and NEW not in task.get("tool_hashes")
+    monkeypatch.setattr(module, name, original)
+    task = phase.load(task.dir)
+    fix_scope.resume(ctx, task)
+    assert safefs.read_text(ctx.notes_path, page) == before
+    assert task.phase == "figures" and task.get("fix_scope_rolled_back")
 
 
 def test_p1_scope_is_not_repaired(setup):
@@ -169,7 +146,7 @@ def test_cached_fix_result_restores_scope_before_finish_without_llm(setup, monke
     # This test isolates cached P1 recovery; P4 retries have separate coverage.
     monkeypatch.setattr(correction, "run", lambda ctx, task, *a: task.update(correction_rolled_back=True))
     def content(ctx, task):
-        assert not safefs.is_file(ctx.notes_path, NEW)
+        assert safefs.is_file(ctx.notes_path, NEW)
         errors = check_links(ctx.notes_path, page, safefs.read_text(ctx.notes_path, page))
         if errors:
             raise steps.CheckFailed(errors)
@@ -180,6 +157,6 @@ def test_cached_fix_result_restores_scope_before_finish_without_llm(setup, monke
     monkeypatch.setattr(finish.git_finish, "run", lambda task, *a: task.set_phase("done") or "done")
     run.advance(ctx, task)
     assert task.phase == "done" and not task.data["llm_failures"]
-    assert ("Javítás." in safefs.read_text(ctx.notes_path, page)) != invalid
-    assert bool(task.get("fix_scope_rolled_back")) == invalid
+    assert "Javítás." in safefs.read_text(ctx.notes_path, page)
+    assert not task.get("fix_scope_rolled_back")
     assert relations.inventory(ctx.notes_path)["items"][items[0]["key"]]["status"] == "open"
