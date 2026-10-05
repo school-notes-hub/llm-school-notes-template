@@ -75,10 +75,11 @@ def test_attempt_round_identity(setup):
     assert correction_round.identity(task, 1) == task.run_id + "-fix-a2-r1"
 
 
-@pytest.mark.parametrize("crash", [None, "undo", "undo_partial", "result"])
+@pytest.mark.parametrize("main_writer", [False, True])
+@pytest.mark.parametrize("crash", [None, "undo", "undo_partial", "result", "cleanup"])
 @pytest.mark.parametrize("retry_ok", [False, True])
 @pytest.mark.parametrize("failure_stage", ["invoke", "check"])
-def test_p4_call_failure_preserves_success_and_resumes(setup, monkeypatch, crash, retry_ok, failure_stage):
+def test_p4_call_failure_preserves_success_and_resumes(setup, monkeypatch, crash, retry_ok, failure_stage, main_writer):
     ctx, parent, page = setup
     other = "wiki/n/topic.md"
     safefs.write_text(ctx.notes_path, other, "Before.\n")
@@ -96,6 +97,8 @@ def test_p4_call_failure_preserves_success_and_resumes(setup, monkeypatch, crash
     correction.snapshot(ctx.notes_path, root)
     child = correction.child_task(ctx, parent, root, items)
     child.update(infographic_policy=False)
+    if main_writer:
+        child.update(correction_parent=None)
     monkeypatch.setattr(writer, "write_inputs", lambda *a: None)
     calls = []
     def invoke(ctx, task, k, *args):
@@ -132,12 +135,21 @@ def test_p4_call_failure_preserves_success_and_resumes(setup, monkeypatch, crash
             raise KeyboardInterrupt
         return original_write(target, value)
     monkeypatch.setattr(writer, "write_json", write_json)
+    original_cleanup = correction_calls.cleanup
+    def cleanup(task, k):
+        if crash == "cleanup" and k == 2 and not fired:
+            fired.append(True)
+            raise KeyboardInterrupt
+        original_cleanup(task, k)
+    monkeypatch.setattr(correction_calls, "cleanup", cleanup)
     if crash:
         with pytest.raises(KeyboardInterrupt):
             writer.run_ranges(ctx, child, {})
         child = phase.load(child.dir)
     writer.run_ranges(ctx, child, {})
     writer.run_ranges(ctx, phase.load(child.dir), {})
+    assert not list(child.dir.glob("call-*/before"))
+    assert not child.get("set_aside")
     assert calls.count(1) == 1
     assert calls.count(2) == 2 and calls.count(3) == 1
     assert safefs.read_text(ctx.notes_path, page) == "Success.\n"
@@ -150,6 +162,8 @@ def test_p4_call_failure_preserves_success_and_resumes(setup, monkeypatch, crash
     assert known[report2 + "#R1"]["status"] == ("fixed" if retry_ok else "open")
     assert known[report2 + "#R1"]["repair_attempts"] == 1
     assert known[report3 + "#R1"]["status"] == "fixed"
+    if not retry_ok:
+        assert correction.assigned(ctx, child) == []
 
 
 def test_chain_does_not_reset_on_a_related_page_without_its_own_closure():

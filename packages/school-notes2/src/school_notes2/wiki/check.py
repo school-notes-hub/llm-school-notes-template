@@ -65,8 +65,7 @@ def check_secrets(rel: str, text: str) -> list[dict]:
     for m in CONFLICT.finditer(text):
         out.append(item(rel, line_of(text, m.start()), "unresolved conflict marker"))
     for pattern in SECRET_PATTERNS:
-        m = re.search(pattern, text, re.I)
-        if m:
+        for m in re.finditer(pattern, text, re.I):
             out.append(item(rel, line_of(text, m.start()),
                             f"forbidden secret or machine-path pattern {pattern!r}"))
     return out

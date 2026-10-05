@@ -18,9 +18,11 @@ PREFIXES = ("wiki", "docs", "publication", "tools", ".school-notes")
 
 def all_items(ctx, task):
     from ..figures import migration_gate
-    from . import fix_progress
+    from . import correction_calls, fix_progress
+    deferred = set(task.get("deferred_fix_work", [])) | set(correction_calls.failed_keys(task))
     items = [i for i in files.open_items(ctx.notes_path, "cron")
-             if not migration_gate.concerns(ctx.notes_path, i)]
+             if not migration_gate.concerns(ctx.notes_path, i)
+             and i["file"] + "#" + i["item_id"] not in deferred]
     if task.mode == "interactive" or task.get("mode") == "repair":
         own = {i["file"] + "#" + i["item_id"] for i in task.get("open_review_items", [])}
         report = task.get("inspection_report")
@@ -169,6 +171,7 @@ def apply(ctx, task, root, saved, edits=None):
         from . import correction_chat
         correction_chat.restore_inputs(ctx, task)
     result = saved["result"]
+    task.update(deferred_fix_work=sorted(set(task.get("deferred_fix_work", [])) | set(saved.get("failed_work", []))))
     state = saved.get("tool_state", {})
     if task.get("correction_state_applied") != str(root):
         task.update(**state, correction_state_applied=str(root))
@@ -237,6 +240,7 @@ def validated(ctx, child, root, items, result, edits=None):
     if result["status"] != "done":
         raise BadWork("fix pass asked a blocking question")
     return {"status": "done", "result": result, "warnings": child.get("check_warnings", []),
+            "failed_work": correction_calls.failed_keys(child),
             "tool_state": {k: child.get(k, {}) for k in ("tool_writes", "tool_parts", "tool_hashes")}}
 
 

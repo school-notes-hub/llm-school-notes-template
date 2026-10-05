@@ -24,6 +24,8 @@ def path(ctx):
 
 
 def active(ctx):
+    from ..flows import set_aside
+    set_aside.reconcile(ctx)
     return [v for _, v in sorted(read_json(path(ctx), {}).items()) if not v.get("resolved_at")]
 
 

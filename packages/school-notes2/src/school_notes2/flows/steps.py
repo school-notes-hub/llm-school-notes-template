@@ -159,6 +159,8 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
     fetch = fetch_flow.fetch_json(task, len(task.get("ranges")), grade=ctx.student.grade, repo=ctx.notes_path,
                                   whole_run=True)
     listed = fetch["open_review_items"]
+    from . import correction_calls
+    fetch = correction_calls.successful_fetch(ctx, task, fetch)
     problems = check_result(repo, result, fetch, {(i["file"], i["item_id"]) for i in listed},
                             ctx.cfg.limits.review_closures_per_run, base_content=base_reader(ctx, task),
                             generated=lambda rel: generation_receipts.rights(ctx)(rel))
@@ -203,7 +205,7 @@ def regenerate(ctx: Ctx, task: Task) -> None:
     final_keys(ctx, task)
 
 
-def check_items(ctx: Ctx, task: Task) -> list[dict]:
+def check_items(ctx: Ctx, task: Task, *, record_inherited=False) -> list[dict]:
     """Only author changes incur content checks; generated parts cannot widen the scope."""
     from . import learning
     today = learning.observation_date(task)
@@ -212,7 +214,8 @@ def check_items(ctx: Ctx, task: Task) -> list[dict]:
     from ..repair import check as repair_check
     items = repair_check.problems(ctx, task, paths)
     from . import inherited_check
-    items += inherited_check.classify(ctx, task, wiki_check.check_files(ctx.notes_path, paths, today=today))
+    items += inherited_check.classify(ctx, task, wiki_check.check_files(ctx.notes_path, paths, today=today),
+                                      persist=record_inherited)
     from ..wiki import banners
     items += banners.check_required(ctx.notes_path, paths)
     checks.tool_errors(ctx, task, items)
@@ -221,7 +224,7 @@ def check_items(ctx: Ctx, task: Task) -> list[dict]:
 
 def check_changed(ctx: Ctx, task: Task, *, result: dict | None = None) -> None:
     """Step 5: the mechanical check of the run's changed files."""
-    items = check_items(ctx, task)
+    items = check_items(ctx, task, record_inherited=True)
     errors = wiki_check.errors(items)
     if errors:
         raise CheckFailed(errors)

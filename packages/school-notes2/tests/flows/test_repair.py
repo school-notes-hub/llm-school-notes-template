@@ -133,7 +133,8 @@ def test_repair_protects_related_prose_dates_and_scope(tmp_path, log, monkeypatc
     task.update(mode="repair", base="base", repair_targets=[{"page": topic, "kind": "topic", "related": [rel]}])
     safefs.write_text(ctx.notes_path, rel, old[rel].replace("#old", "#new"))
     assert not check.problems(ctx, task, [rel])
-    assert check.inherited_learning_problems(ctx, task, [rel])
+    from school_notes2.flows import inherited_check
+    assert inherited_check.deferred_lesson(ctx, task, rel)
     safefs.write_text(ctx.notes_path, rel, old[rel].replace("Régi", "Új").replace("Nem ismert", "2026-10-01"))
     safefs.write_text(ctx.notes_path, other, old[other] + "Másik változás.")
     found = check.problems(ctx, task, [rel, other])

@@ -133,9 +133,14 @@ Per-file counts (before verdict suppression) appear in logs and status.
 
 The host and MCP checks compare wiki errors against `task.base`, including link and
 render dependencies read directly from Git. File/message identity ignores line shifts;
-occurrence counts preserve repeated defects and do not excuse an added copy. Inherited
-errors are nonblocking `inherited-check` entries, require no writer warning decision,
-and become deduplicated `hiba` items in the run report. Scope-restored pages equal to
+occurrence counts and matching content must both stay unchanged (or matches disappear).
+Math and marker errors without a location require unchanged file content. Inherited
+errors are nonblocking `inherited-check` entries and require no writer warning decision.
+MCP checks only mark them; the host records defects still present after the writer as
+deduplicated `hiba` items. A retained closed hit reopens the same item with its durable
+repair count; three unsuccessful attempts send it to owner. Invalid base YAML or UTF-8
+leaves all current errors blocking and emits one diagnostic log entry.
+Link-only repair work does not assign old lesson-log defects early. Scope-restored pages equal to
 the base are omitted from changed paths; their remaining inherited defects are still
 recorded. Check failures retain the complete ordered list in `last_check_problems` and
 up to 20 file/line/message records in the error log.
@@ -362,10 +367,16 @@ Open, disputed and owner items retain their chain and round metadata.
 
 Automatic P4 and source-free fixes restore out-of-scope pages before checking the
 retained work. A changed author line linking to a restored page (with or without
-an anchor) rejects that call; P5 also receives `scope-restores.json`. A P4 check failure restores only the current call, retries it once, then leaves its items open and counts one repair attempt. Earlier successful call results remain checkpointed. Only inseparable round results use the full rollback, which consumes no item or figure attempt and gets one replayable retry.
+an anchor) rejects that call; P5 also receives `scope-restores.json`. A check failure in either P1 fix mode or P4 restores only the current call, retries it
+once, then leaves its items open and counts one repair attempt; those failed items wait
+for the next run. Earlier successful call results remain checkpointed. The call snapshot
+is deleted only after its result is durable, also on interrupted cleanup. If the finish
+result cannot be saved, bad-work blocking covers only the failing calls. Only inseparable round results use the full rollback, which consumes no item or figure attempt and gets one replayable retry.
 Two full rollbacks publish the previously accepted work and send one tool-error notice. Other item notices remain suppressed. Only concrete
 errors tied to restored links bypass the bad-work counter. In chat, scope violations
 reject the whole correction and preserve its edits in `rejected.patch`.
+
+A changed release or closure of all blocked work resolves the no-progress incident.
 
 In chat, the first `finish` returns `state: review_items`, the assigned items and
 `fix.txt`; P4 stays `correcting`. The existing session writes its fix and closure

@@ -21,6 +21,8 @@ def send(ctx, notice: Notice) -> bool:
 
 def retry(ctx) -> None:
     from . import incidents
+    from ..flows import set_aside
+    set_aside.reconcile(ctx)
     incidents.restore_pending(ctx)
     _closed_tasks(ctx)
     pending = read_json(path(ctx), {}) or {}

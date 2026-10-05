@@ -1,6 +1,7 @@
-"""Isolate P4 call failures; prior successful calls survive a bounded retry."""
+"""Isolate fix call failures; prior successful calls survive a bounded retry."""
 
 import copy
+import shutil
 
 from ..state import safefs
 from . import correction, steps
@@ -24,6 +25,13 @@ def run(ctx, task, k, invoke):
             steps.checks.record_failure(ctx, task, exc, "correction.call")
             safefs.write_json(root, "failure.json", {
                 "count": (failure or {}).get("count", 0) + 1, "items": exc.items})
+
+
+def cleanup(task, k):
+    """Only a durable result permits deleting the call rollback, including on resume."""
+    root = task.dir / f"call-{k}"
+    if root.exists():
+        shutil.rmtree(root)
 
 
 def restore(ctx, task, root, failure):
@@ -65,4 +73,11 @@ def successful_fetch(ctx, task, supplied):
                                             if (i["file"], i["item_id"]) in items],
             "pending_figures": [e for e in supplied.get("pending_figures", [])
                                            if e["commission"]["id"] in figures],
-            "infographic_pages": [p for p in supplied.get("infographic_pages", []) if p in pages]}
+            **({"infographic_pages": [p for p in supplied["infographic_pages"] if p in pages]}
+               if "infographic_pages" in supplied else {})}
+
+
+def failed_keys(task):
+    calls = task.get("calls", [])
+    return sorted({i["file"] + "#" + i["item_id"] for k in task.get("failed_fix_calls", [])
+                   for i in calls[k - 1].get("open_review_items", [])})

@@ -4,7 +4,6 @@ import re
 
 from ..state import safefs
 from ..wiki import author, frontmatter, markers, pages
-from ..wiki import check as wiki_check
 from ..wiki.check import item
 
 
@@ -96,25 +95,3 @@ def coverage(result, fetch):
         return [item(".school-notes/result.json", None,
                      "repair: shortening a lesson log requires item coverage and checks")]
     return []
-
-
-def inherited_learning_problems(ctx, task, paths):
-    """A link-only adjustment cannot force the separate lesson-log rewrite forward."""
-    if task.get("mode") != "repair" or task.get("queue_only"):
-        return set()
-    from ..flows.steps import base_of
-    from ..wiki.author import part
-    target = task.get("repair_targets")[0]
-    if target["kind"] in ("lesson-notes", "chapter-summary", "review"):
-        return set()
-    inherited = set()
-    for rel in sorted(set(paths) & set(target["related"])):
-        raw = ctx.worktree("notes").run("show", f"{base_of(task)}:{rel}", check=False)
-        if raw.returncode != 0 or not safefs.is_file(ctx.notes_path, rel):
-            continue
-        before, after = raw.stdout.decode(), safefs.read_text(ctx.notes_path, rel)
-        if not _related_equal(before, after):
-            continue
-        old = wiki_check.check_learning(ctx.notes_path, rel, frontmatter.split(before))
-        inherited.update((rel, i["message"]) for i in old)
-    return inherited

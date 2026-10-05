@@ -55,7 +55,7 @@ def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
         task.set_phase("writing", writing_k=k)
         result = read_json(task.dir / f"result-{k}.json")
         if result is None or result["status"] == "question":
-            if task.get("correction_parent") and task.mode != "interactive" and task.get("calls"):
+            if task.get("mode") == "fix" and task.mode != "interactive" and task.get("calls"):
                 from . import correction_calls
                 result = correction_calls.run(ctx, task, k, lambda: _range(ctx, task, k, role, harness, handlers))
             else:
@@ -63,6 +63,9 @@ def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
             from ..figures import infographics
             infographics.remember(task, result, ctx.notes_path)
             write_json(task.dir / f"result-{k}.json", result)
+        if result["status"] == "done":
+            from . import correction_calls
+            correction_calls.cleanup(task, k)
         from . import fix_scope
         fix_scope.recover(ctx, task)
         fix_scope.check_dependencies(ctx, task)

@@ -64,7 +64,8 @@ class Log:
         where = f"{tb.tb_frame.f_code.co_filename}:{tb.tb_lineno}" if tb else ""
         if getattr(exc, "kind", None) == "bad_work" and hasattr(exc, "items"):
             from ..mcp.redact import redact
-            problems = sorted(exc.items, key=lambda i: (i["file"], i.get("line") or 0, i["message"]))
+            from ..flows.checks import ordered
+            problems = ordered(exc.items)
             counts["problems"] = redact([{k: i.get(k) for k in ("file", "line", "message")}
                                           for i in problems[:20]])
         self.event(action, "error", level="error", error_class=getattr(exc, "kind", "program"),

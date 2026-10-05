@@ -37,6 +37,8 @@ def test_old_errors_do_not_block_assigned_page_but_new_errors_do(learning_run, m
     assert answer["ok"] and len(inherited) == 2
     assert all("nem a te feladatod" in i["message"] for i in inherited)
     assert checks.accounting(task, {"status": "done"}) == []
+    assert not inherited_items(ctx)
+    steps.check_changed(ctx, task)
     assert len(inherited_items(ctx)) == 2
     first = safefs.read_bytes(ctx.notes_path, task.get("inspection_report"))
     # Repeated checks, including a reconstructed task, do not duplicate open items.
@@ -133,8 +135,8 @@ def test_new_third_anchor_error_is_not_hidden(learning_run):
     safefs.write_bytes(ctx.notes_path, TOPIC, old + b"\n3. Third?\n")
     with pytest.raises(steps.CheckFailed) as failure:
         steps.check_changed(ctx, task)
-    assert len(failure.value.items) == 1
-    assert len(inherited_items(ctx)) == 2
+    assert len(failure.value.items) == 3
+    assert not inherited_items(ctx)
 
 
 @pytest.mark.parametrize("after", [False, True])
