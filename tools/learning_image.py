@@ -222,7 +222,7 @@ def counted(attempts):
 
 def last_outcome(attempts):
     """The latest attempt that produced or could have produced an image decision."""
-    real = [a for a in attempts if a['state'] not in (FREE_FAILURE, SETTLED)]
+    real = [a for a in attempts if a['state'] != FREE_FAILURE]
     return real[-1] if real else None
 
 
@@ -320,34 +320,70 @@ def finish_response(folder, result, attempt):
     write(folder / 'generation.json', metadata)
 
 
+def job_fingerprint(job):
+    return hashlib.sha256(json.dumps(job, sort_keys=True).encode()).hexdigest()
+
+
+def logical_target(job):
+    return job['learner'] + ':' + job['target'] + ':' + job['role']
+
+
+def generation_job(ledger, job):
+    """Resolve one logical target; variants share its durable attempt list and ID."""
+    logical = logical_target(job)
+    entry = ledger['jobs'].get(job['id'])
+    if entry and entry['logical'] != logical:
+        raise ValueError('Job ID already belongs to another logical target')
+    matches = sorted((e for e in ledger['jobs'].values() if e['logical'] == logical),
+                     key=lambda e: e['id'])
+    if len(matches) > 1:
+        raise ValueError('Multiple jobs for one logical target; reconcile ledger before generation')
+    if matches:
+        entry = matches[0]
+        job = {**job, 'id': entry['id']}
+    changed = bool(entry and entry['fingerprint'] != job_fingerprint(job))
+    if changed:
+        attempts = counted(entry['attempts'])
+        last = attempts[-1] if attempts else None
+        if entry.get('accepted') or not last or last['state'] not in ('rejected', SETTLED):
+            raise ValueError('A képterv csak elutasított vagy lost utolsó próba után módosítható; '
+                             'elfogadott vagy ítéletre váró képnél őrizd meg a korábbi tervet.')
+    return job, changed
+
+
+def current_attempts(entry):
+    start = entry['variants'][-1]['first_attempt'] if entry.get('variants') else 1
+    return [a for a in entry['attempts'] if a['number'] >= start]
+
+
 def run_generate(config, job_path, repair=None, transport=None):
     job, repo = load_job(config, job_path)
     if transport is None:
         api_key(config)  # Missing credentials are a preflight failure, not an unknown paid attempt.
     transport = transport or api_call
-    fingerprint = hashlib.sha256(json.dumps(job, sort_keys=True).encode()).hexdigest()
-    logical = job['learner'] + ':' + job['target'] + ':' + job['role']
     with locked(config) as (state, ledger_path, ledger):
-        for other in ledger['jobs'].values():
-            if other['logical'] == logical and other['id'] != job['id']:
-                raise ValueError('Logical target already registered; resume its original ID')
+        job, changed = generation_job(ledger, job)
+        fingerprint = job_fingerprint(job)
+        logical = logical_target(job)
         entry = ledger['jobs'].get(job['id'])
-        if entry and entry['fingerprint'] != fingerprint:
-            raise ValueError('Job changed; use repair instructions, not a reset')
         if entry and entry.get('accepted'):
             return {'state': 'accepted', 'reused': True, **entry['accepted']}
         # Any unknown charge blocks the whole request, including other jobs.
         for other in ledger['jobs'].values():
             if any(a['state'] == 'unknown' or a.get('cost_usd') is None for a in other['attempts']):
                 raise ValueError('Reconcile pending provider call/cost before new spending')
-        last = last_outcome(entry['attempts']) if entry else None
+        attempts = current_attempts(entry) if entry and not changed else []
+        last = last_outcome(attempts)
+        lost = bool(last and last['state'] == SETTLED)
+        if lost:
+            last = None
         if last and last['state'] == 'generated' and not repair:
             return {'state': 'needs-review', **last, 'folder': str(attempt_folder(config, job, last))}
         if last and (not repair or last['state'] not in ('generated', 'rejected')):
             raise ValueError('Repair requires a generated or rejected candidate and targeted instructions')
         if entry and len(counted(entry['attempts'])) >= int(config.get('max_attempts', 3)):
             raise ValueError('Attempt bound reached; select a usable candidate or request a specific exception')
-        if repair and not last:
+        if repair and not last and not (changed or lost or entry and entry.get('variants')):
             raise ValueError('No initial attempt to repair')
         reserve = money(config['reservation_usd'])
         if not reserve or spent(ledger) + reserve > money(config['max_total_usd']):
@@ -359,6 +395,13 @@ def run_generate(config, job_path, repair=None, transport=None):
             entry = {'id': job['id'], 'learner': job['learner'], 'logical': logical, 'fingerprint': fingerprint, 'attempts': []}
             ledger['jobs'][job['id']] = entry
         attempt_no = len(entry['attempts']) + 1
+        if changed:
+            variants = entry.setdefault('variants', [])
+            variants.append({'id': job['id'] + '~' + str(len(variants) + 2),
+                             'previous': variants[-1]['id'] if variants else job['id'],
+                             'previous_fingerprint': entry['fingerprint'],
+                             'fingerprint': fingerprint, 'first_attempt': attempt_no})
+            entry['fingerprint'] = fingerprint
         folder = state / job['id'] / str(attempt_no)
         folder.mkdir(parents=True, exist_ok=True)
         prompt = compile_prompt(job)
@@ -367,7 +410,7 @@ def run_generate(config, job_path, repair=None, transport=None):
         (folder / 'prompt.txt').write_text(prompt)
         payload = {'model': MODEL, 'prompt': prompt, 'quality': 'high', 'aspect_ratio': job['plan']['aspect_ratio'], 'n': 1}
         write(folder / 'request.json', payload)
-        attempt = {'number': attempt_no, 'state': 'unknown', 'started_at': now(), 'reserved_usd': str(reserve), 'cost_usd': None, 'folder': str(folder.relative_to(state))}
+        attempt = {'number': attempt_no, 'state': 'unknown', 'started_at': now(), 'reserved_usd': str(reserve), 'cost_usd': None, 'folder': str(folder.relative_to(state)), 'fingerprint': fingerprint}
         entry['attempts'].append(attempt)
         write(ledger_path, ledger)  # Durable reservation BEFORE any network activity.
         try:
@@ -390,6 +433,7 @@ def run_generate(config, job_path, repair=None, transport=None):
 def reconcile(config, job_path):
     job, _ = load_job(config, job_path)
     with locked(config) as (_, ledger_path, ledger):
+        job, _ = generation_job(ledger, job)
         attempt = ledger['jobs'][job['id']]['attempts'][-1]
         if attempt['state'] != 'unknown':
             return {'state': attempt['state'], 'no_change': True}
@@ -525,10 +569,11 @@ def preview_publication(config, job_path, infographic=False):
     if not infographic and job['role'] != 'banner':
         raise ValueError('WebP preview is for banners only; precise figures retain their format')
     with locked(config) as (state, ledger_path, ledger):
+        job, _ = generation_job(ledger, job)
         entry = ledger['jobs'][job['id']]
         if entry['fingerprint'] != hashlib.sha256(json.dumps(job, sort_keys=True).encode()).hexdigest():
             raise ValueError('Job changed since generation')
-        attempt = last_outcome(entry['attempts'])
+        attempt = last_outcome(current_attempts(entry))
         if attempt is None or attempt.get('cost_usd') is None or not attempt.get('sha256'):
             raise ValueError('Resolve generation before preview')
         source = attempt_folder(config, job, attempt) / 'image.png'
@@ -549,11 +594,15 @@ def review(config, job_path, review_path):
     if report['decision'] not in ('accepted', 'rejected'):
         raise ValueError('Review must explicitly accept or reject')
     with locked(config) as (state, ledger_path, ledger):
+        # Resolve aliases without allowing an old plan to review a new variant.
+        matches = [e for e in ledger['jobs'].values() if e['logical'] == logical_target(job)]
+        if len(matches) == 1:
+            job = {**job, 'id': matches[0]['id']}
         entry = ledger['jobs'][job['id']]
         fingerprint = hashlib.sha256(json.dumps(job, sort_keys=True).encode()).hexdigest()
         if entry['fingerprint'] != fingerprint:
             raise ValueError('Job changed since generation; review original job')
-        candidates = [a for a in entry['attempts'] if a.get('sha256') == report['sha256']]
+        candidates = [a for a in current_attempts(entry) if a.get('sha256') == report['sha256']]
         if not candidates:
             raise ValueError('Review hash not found among this job attempts')
         attempt = candidates[-1]

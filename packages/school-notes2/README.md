@@ -687,6 +687,13 @@ an owner decision with a suppressed notification. `state/<learner>/figure-rechec
 assignment run IDs before writer input is handed over. Resumes and ranges of the
 same assignment share a receipt; P4 uses its child run ID. Worktree rollback cannot
 reset this limit. These receipts do not consume paid generation attempts.
+After a rejected or lost last paid attempt, a changed image plan opens a linked
+`variants` record (`<job-id>~2`, and so on) inside the same logical ledger entry.
+Attempt numbers and the three-paid-attempt limit stay shared across variants and
+job-ID aliases for `learner:target:role`. Accepted or unreviewed candidates refuse
+plan changes before the saved plan or preview is replaced. Existing rejected jobs
+need no migration; reservation and variant metadata are saved atomically before
+the provider call. A resumed generated variant reuses its preview without spending.
 A generated figure counts a run only with a candidate or a paid host-ledger attempt
 for the same learner/plan since the serialized run's creation. Budget refusals consume
 no attempt. P4 assignments and attempt decisions are checkpointed before continuation.

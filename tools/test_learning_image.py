@@ -315,8 +315,84 @@ class ExecutorTest(unittest.TestCase):
 
     def test_rename_cannot_reset_attempts(self):
         self.generate();self.job['id']='renamed';self.save()
-        with self.assertRaisesRegex(ValueError,'original ID'):self.generate()
+        self.assertEqual(self.generate()['number'], 1)
         self.assertEqual(self.calls,1)
+
+    def test_changed_rejected_plan_and_alias_share_three_attempts(self):
+        result = self.generate()
+        old = dict(self.job)
+        for number in (2, 3):
+            m.review(self.config, self.path, self.report(result, 'rejected'))
+            self.job['id'] = 'alias-' + str(number)
+            self.job['plan']['composition'] = 'Corrected scene ' + str(number)
+            self.save()
+            result = self.generate()
+            self.assertEqual(result['number'], number)
+            self.assertEqual(result['job'], old['id'])
+            self.assertTrue(m.preview_banner(self.config, self.path)['review_required'])
+        m.review(self.config, self.path, self.report(result, 'rejected'))
+        self.job['id'] = 'alias-four'
+        self.job['plan']['composition'] = 'Another correction'
+        self.save()
+        with self.assertRaisesRegex(ValueError, 'Attempt bound'):
+            self.generate()
+        ledger = m.read_ledger(self.config)
+        self.assertEqual(list(ledger['jobs']), [old['id']])
+        self.assertEqual(len(ledger['jobs'][old['id']]['variants']), 2)
+        self.assertEqual(m.spent(ledger), m.money('.3'))
+        self.assertEqual(self.calls, 3)
+
+    def test_changed_plan_while_unreviewed_or_accepted_is_refused(self):
+        result = self.generate()
+        for accepted in (False, True):
+            if accepted:
+                m.review(self.config, self.path, self.report(result))
+            self.job['plan']['composition'] = 'New scene'
+            self.save()
+            with self.assertRaisesRegex(ValueError, 'ítéletre váró'):
+                self.generate()
+            self.job['plan']['composition'] = 'Wide scene'
+            self.save()
+        self.assertEqual(self.calls, 1)
+
+    def test_variant_free_failure_resumes_without_reopening_old_review(self):
+        result = self.generate()
+        m.review(self.config, self.path, self.report(result, 'rejected'))
+        self.job['plan']['composition'] = 'Corrected scene'
+        self.save()
+        def disconnected(*args):
+            raise ConnectionRefusedError()
+        with self.assertRaisesRegex(ValueError, 'without charge'):
+            m.run_generate(self.config, self.path, transport=disconnected)
+        result2 = self.generate()
+        self.assertEqual(result2['number'], 3)
+        with self.assertRaisesRegex(ValueError, 'hash not found'):
+            m.review(self.config, self.path, self.report(result))
+        entry = m.read_ledger(self.config)['jobs'][self.job['id']]
+        self.assertEqual(len(entry['variants']), 1)
+        self.assertEqual(len(m.counted(entry['attempts'])), 2)
+
+    def test_variant_reservation_survives_process_crash(self):
+        result = self.generate()
+        m.review(self.config, self.path, self.report(result, 'rejected'))
+        self.job['plan']['composition'] = 'Corrected scene'
+        self.save()
+        def interrupted(*args):
+            raise KeyboardInterrupt()
+        with self.assertRaises(KeyboardInterrupt):
+            m.run_generate(self.config, self.path, transport=interrupted)
+        entry = m.read_ledger(self.config)['jobs'][self.job['id']]
+        self.assertEqual(entry['attempts'][-1]['state'], 'unknown')
+        self.assertEqual(entry['variants'][-1]['first_attempt'], 2)
+        with self.assertRaisesRegex(ValueError, 'Reconcile'):
+            self.generate()
+        later = datetime.now(timezone.utc) + timedelta(hours=25)
+        m.settle_unknown(self.config, at=later)
+        result = self.generate()
+        self.assertEqual(result['number'], 3)
+        entry = m.read_ledger(self.config)['jobs'][self.job['id']]
+        self.assertEqual(len(entry['variants']), 1)
+        self.assertEqual(len(m.counted(entry['attempts'])), 3)
 
     def test_three_attempt_limit_and_old_best_candidate(self):
         repair=self.root/'repair.txt';repair.write_text('Fix identified issue')

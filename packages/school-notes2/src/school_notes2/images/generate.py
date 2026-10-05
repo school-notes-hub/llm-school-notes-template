@@ -12,7 +12,7 @@ from ..log import Log
 from ..state import safefs
 from . import plans
 from .budget import budget_left, images_lock, unknown_calls
-from .executor import ExecutorError, ExecutorTimeout, call, ensure_ledger
+from .executor import ExecutorError, ExecutorTimeout, call, ensure_ledger, module
 from .settings import ImageSettings
 
 MAX_REPAIR_CHARS = 2000
@@ -42,15 +42,22 @@ def generate(settings: ImageSettings, plan_id: str, repair_note: str | None = No
                     "a prompt képtervsémája szerint (kötelező: role és a felsorolt mezők). "
                     f"Az id, kind, page, purpose a .school-notes/figures/{plan_id}.json "
                     "megbízásba való, nem a képtervbe. Ezután hívd újra az image_generate-et."}
+        ledger = settings.ledger()
+        changed = False
+        if ledger.get("jobs"):
+            try:
+                job, changed = module(settings.script).generation_job(ledger, job)
+            except ValueError as exc:
+                return {"state": "error", "message": str(exc)}
         plans.keep(settings, plan_id)
         job_path = plans.write_job(settings, plan_id, job)
         entry = settings.ledger().get("jobs", {}).get(job["id"], {"attempts": []})
-        if awaiting_review(entry) and not repair_note:
-            attempt = [a for a in entry["attempts"] if a["state"] not in ("failed", "lost")][-1]
+        if not changed and awaiting_review(entry) and not repair_note:
+            attempt = [a for a in entry["attempts"] if a["state"] != "failed"][-1]
             result = {"state": "generated", "number": attempt["number"], "sha256": attempt["sha256"],
                       "cost_usd": attempt.get("cost_usd"),
                       "attempts_left": settings.max_attempts - attempts_used(entry)}
-            return {**result, **_preview(settings, job, result)}
+            return {**result, **_preview(settings, job, result, plan_id)}
         if paid_disabled:
             return {"state": "disabled", "message": "Paid generation is disabled; only an existing unreviewed candidate can be reused."}
         blocked = _blocked(settings, job["id"], repairing=bool(repair_note))
@@ -60,7 +67,7 @@ def generate(settings: ImageSettings, plan_id: str, repair_note: str | None = No
         ensure_ledger(settings, job["target"])
         result = _attempts(settings, job, job_path, repair_note, log, sleep)
         if result["state"] == "generated":
-            result.update(_preview(settings, job, result))
+            result.update(_preview(settings, job, result, plan_id))
         log.event("image.generate", result["state"], target=plan_id,
                   cost_usd=result.get("cost_usd"), attempt=result.get("number"))
         return result
@@ -94,7 +101,7 @@ def exhausted(entry: dict, maximum: int) -> bool:
 
 
 def awaiting_review(entry: dict) -> bool:
-    real = [a for a in entry["attempts"] if a["state"] not in ("failed", "lost")]
+    real = [a for a in entry["attempts"] if a["state"] != "failed"]
     return bool(real) and real[-1]["state"] == "generated"
 
 
@@ -148,10 +155,10 @@ def _last_attempt(settings: ImageSettings, job_id: str) -> dict | None:
     return entry["attempts"][-1] if entry and entry["attempts"] else None
 
 
-def _preview(settings: ImageSettings, job: dict, result: dict) -> dict:
+def _preview(settings: ImageSettings, job: dict, result: dict, plan_id: str | None = None) -> dict:
     """Publication preview + both files under .school-notes/images/ for the LLM to view."""
     command = "preview-banner" if job["role"] == "banner" else "preview-infographic"
-    plan_id = job["id"].removeprefix(f"{settings.learner}-")
+    plan_id = plan_id or job["id"].removeprefix(f"{settings.learner}-")
     preview = call(settings, command, ["--job", str(plans.job_path(settings, plan_id))],
                    job["target"])
     from ..state.files import write_json

@@ -1,5 +1,6 @@
 """Only completion mail survives task completion and process interruption."""
 
+from dataclasses import asdict
 from types import SimpleNamespace
 
 import pytest
@@ -103,3 +104,18 @@ def test_pending_notice_resumes_across_delivery_boundaries(tmp_path, log, monkey
     monkeypatch.setattr(Mailer, "send_once", original)
     next_run(context(tmp_path, log, "barna"), monkeypatch)
     assert len(delivered) == 1 and read_json(pending.path(ctx)) == {}
+
+
+@pytest.mark.parametrize("learner", ["benedek", "barna"])
+def test_legacy_scope_owner_queue_is_drained_without_item_mail(tmp_path, log, monkeypatch, learner):
+    ctx = context(tmp_path, log, learner)
+    owner = Notice(learner, "scope_owner:report:R1", "run", "finish", "owner", "Tétel.", "")
+    completion = Notice(learner, "completion:run:done", "run", "finish", "kész", "Kész.", "")
+    write_json(pending.path(ctx), {n.kind: asdict(n) for n in (owner, completion)})
+    delivered = []
+    monkeypatch.setattr(Mailer, "_deliver", lambda self, msg: delivered.append(msg) or True)
+    next_run(ctx, monkeypatch)
+    next_run(ctx, monkeypatch)
+    assert len(delivered) == 1 and "Kész." in delivered[0].get_content()
+    assert read_json(pending.path(ctx)) == {}
+    assert_suppressed(log, owner.kind)

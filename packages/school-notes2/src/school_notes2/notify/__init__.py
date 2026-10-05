@@ -1,4 +1,4 @@
-"""Content-free completion, incident and exhausted scope-repair mail."""
+"""Content-free completion and incident mail; item notices stay in status."""
 
 import subprocess
 from dataclasses import dataclass
@@ -22,7 +22,7 @@ class Notice:
 
 
 def mailed(notice: Notice) -> bool:
-    if notice.kind.startswith(("error:", "scope_owner:")):
+    if notice.kind.startswith("error:"):
         return True
     return notice.kind.startswith(("completion:", "nightly:")) and notice.kind.split(":")[2:3] in (["done"], ["closed"], ["retry_nightly"])
 

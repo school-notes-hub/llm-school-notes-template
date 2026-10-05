@@ -83,9 +83,11 @@ Acceptance rechecks sources and output hash, copies a versioned final PNG to `wi
 
 A generated candidate (after the author inspects it) or a recorded review rejection permits a targeted repair with `generate --repair /private/repair.txt` on the SAME job. It regenerates from the checked plan plus the concrete correction; it is not an edit API or a promise to preserve pixels. Each repair needs full-image review. At three attempts use the best acceptable candidate by its hash, or keep a suitable old image/text and record the precise unresolved question. A new filename never resets attempts.
 
+After the last paid attempt is rejected or settled as `lost`, the plan may change to address the defects. Generation records a linked variant (`<job-id>~2`, then `~3`, and so on) inside the original ledger entry, with its fingerprint and first attempt number. All variants share the logical target (`learner:target:role`), paid-attempt limit and costs. An accepted or unreviewed last candidate refuses plan changes. Existing rejected jobs resume without migration. Only candidates from the current variant can be reviewed against its plan.
+
 ## Recovery, checks and limitations
 
-* Repeating a generated job returns its pending review; repeating an accepted job with still-current sources returns the accepted receipt, without spending. Renaming the job for the same page/role is rejected.
+* Repeating a generated job returns its pending review; repeating an accepted job with still-current sources returns the accepted receipt, without spending. Another job ID for the same learner/page/role resolves to the original ledger entry and cannot reset its limits.
 * A provider interruption, malformed result or unknown cost blocks further request spending. `reconcile --job ...` can recover from the exact saved provider response after an interrupted local save, without any network call. If no complete response exists, obtain provider billing/output evidence and resolve the recorded attempt; do not invent a zero cost or retry blindly.
 * One lock serializes the ledger and spending; a concurrent process fails clearly. Source versions are checked before generation and acceptance. An out-of-band repository writer must still be coordinated by the caller; the CLI does not lock other agents' git processes.
 * No automatic publication, sharing changes, raw-source upload or paid QA call occurs. Small inline wiki images remain in Git; larger standalone media uses the separately configured Drive delivery path.
@@ -100,7 +102,7 @@ Any agent with repository access and a terminal can follow this guide directly. 
 
 Back up the ledger and attempt artifacts together. Artifact lookup uses `<state_dir>/<job-id>/<attempt-number>`, so a restored complete tree works at a new path. Legacy absolute `folder` values are retained as history, not followed as filesystem authority. New records use relative folder paths. Missing artifacts or unknown charges block recovery rather than granting a fresh attempt. Never change a request ID to evade limits. Keep only one active executor per request.
 
-Do not modify an attempted job to add a language field: its hash must remain stable. Existing jobs without `language` retain Hungarian behavior; new jobs specify their output language. The supported image model remains fixed as documented, independent of unused environment variables.
+Do not modify a pending or accepted job merely to add a language field: its hash must remain stable. A rejected or lost job follows the variant rule above. Existing jobs without `language` retain Hungarian behavior; new jobs specify their output language. The supported image model remains fixed as documented, independent of unused environment variables.
 
 On code rollback, preserve secrets and spending state. Pre-1.13 executors do not understand newly written relative folder fields; do not run them against new state. A rollback after new attempts requires an explicitly reviewed compatibility migration with a preserved original snapshot, not deletion/reset of records.
 

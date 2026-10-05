@@ -1,13 +1,14 @@
 """The final paid candidate needs judgement before owner escalation."""
 
 from decimal import Decimal
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from school_notes2.figures import context, pending
 from school_notes2.flows import correction_figures, review_phases
-from school_notes2.images import generate, judgement
+from school_notes2.images import executor, generate, judgement
 from school_notes2.state import phase, safefs
 from school_notes2.state.files import read_json, write_json
 from school_notes2.wiki.pages import sha256
@@ -98,9 +99,13 @@ def test_free_recheck_never_invokes_generation(repo, make_figure, log, monkeypat
     brief, _ = make_figure(kind="banner")
     config = settings("one", ["rejected", "rejected", "generated"])
     config.worktree, config.lock_path, config.lock_timeout_s = repo, repo.parent / "images.lock", 1
+    config.script = Path(__file__).resolve().parents[4] / "tools/learning_image.py"
+    api = executor.module(config.script)
+    spec = {"id": "one-forces", "learner": "one", "target": "unused", "role": "banner"}
     job = config.ledger()["jobs"]["one-forces"]
+    job.update(id=spec["id"], logical=api.logical_target(spec), fingerprint=api.job_fingerprint(spec))
     job["attempts"][-1].update(number=3, sha256="a" * 64)
-    monkeypatch.setattr(generate.plans, "build_job", lambda *a: {"id": "one-forces", "target": "unused"})
+    monkeypatch.setattr(generate.plans, "build_job", lambda *a: spec)
     monkeypatch.setattr(generate.plans, "keep", lambda *a: None)
     monkeypatch.setattr(generate.plans, "write_job", lambda *a: None)
     monkeypatch.setattr(generate, "_preview", lambda *a: {"preview": "cached.webp"})

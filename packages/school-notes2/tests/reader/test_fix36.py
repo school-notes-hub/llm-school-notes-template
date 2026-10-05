@@ -74,7 +74,7 @@ def test_three_scope_failures_become_owner_once(setup, monkeypatch, learner, mod
         owners = [{"file": items[0]["file"], "item_id": "R1"}] if n == 3 else []
         assert run.owner_items(ctx, task, owners)
         assert run.owner_items(ctx, phase.load(task.dir), owners)
-    assert len(invoked) == 3 and len(delivered) == 1
+    assert len(invoked) == 3 and delivered == []
     assert safefs.read_json(pending.path(ctx).parent, pending.path(ctx).name) == {}
 
 

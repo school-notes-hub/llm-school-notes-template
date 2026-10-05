@@ -76,7 +76,7 @@ def test_nightly_owner_items_are_suppressed_after_reload(tmp_path, log, monkeypa
 @pytest.mark.parametrize("method", ["send", "send_once"])
 @pytest.mark.parametrize("kind", ["needs_owner:notes", "timeout:writer", "quota:codex",
     "lock_held", "figure-pending-migration", "owner_notes:run", "license:figure",
-    "image_exhausted:figure", "review_owner:item", "nightly-empty:today", "nightly-blocked:topic"])
+    "image_exhausted:figure", "review_owner:item", "scope_owner:item", "nightly-empty:today", "nightly-blocked:topic"])
 def test_non_completion_notices_never_reach_msmtp(tmp_path, log, method, kind):
     script, out = fake_msmtp(tmp_path)
     mailer = Mailer(tmp_path / "rc", "owner@example.test", tmp_path / "notify.json", log,
