@@ -134,7 +134,7 @@ def test_t095_rejected_fix_survives_rollback_restart(guarded_session, monkeypatc
     assert b"GIT binary patch" in patch and "Elutasított javítás".encode() in patch
     answer = chat.session_finish(ctx)
     assert answer["state"] == "done" and answer["correction_rolled_back"] is True
-    assert "check found" in answer["reason"]
+    assert "unassigned page" in answer["reason"]
     assert answer["rejected_patch"] == "attempt-1/correction/rejected.patch"
     assert safefs.read_bytes(root, "rejected.patch") == patch
     assert safefs.read_bytes(root, "rejected/wiki/assets/new.bin") == b"\0\xffimage"
@@ -152,9 +152,13 @@ def test_p4_scope_restore_keeps_race_guard(guarded_session, monkeypatch, damage)
         safefs.write_text(ctx.notes_path, "wiki/m/else.md", "scope error")
     answer = chat.session_finish(ctx)
     assert answer["state"] == "done"
-    assert not answer.get("correction_rolled_back", False)
+    assert answer.get("correction_rolled_back", False) == damage
+    if damage:
+        patch = safefs.read_text(task.dir, answer["rejected_patch"])
+        assert "scope error" in patch and "Javítás." in patch
+        assert "Javítás." not in safefs.read_text(ctx.notes_path, page)
     assert not safefs.is_file(ctx.notes_path, "wiki/m/else.md")
-    assert "Javítás." in safefs.read_text(ctx.notes_path, page)
+    assert ("Javítás." in safefs.read_text(ctx.notes_path, page)) != damage
 
 
 @pytest.mark.parametrize("last_result", [True, False])

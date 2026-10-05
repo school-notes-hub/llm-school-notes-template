@@ -68,6 +68,7 @@ def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
             write_json(task.dir / f"result-{k}.json", result)
         from . import fix_scope
         fix_scope.recover(ctx, task)
+        fix_scope.check_dependencies(ctx, task)
         if result["status"] == "question":
             task.update(question=result.get("questions", []))
             return "question"
@@ -193,6 +194,8 @@ def _fix_resume(ctx, task, k):
             return result
     if not count:
         safefs.unlink(ctx.notes_path, ".school-notes/result.json")
+    if count >= 2:
+        raise BadWork("fix call interrupted twice without valid output")
     state[str(k)] = count + 1
     task.update(fix_calls=state)
     return None

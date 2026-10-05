@@ -167,6 +167,13 @@ def owner_items(ctx: Ctx, task: Task, items: list[dict]) -> bool:
     """Mail once per owner item; return True only when all have delivery receipts."""
     delivered = True
     for item in sorted(items, key=lambda i: (i["file"], i["item_id"])):
+        if item in task.get("scope_owner_items", []):
+            sent = owner_notices.send(ctx, Notice(ctx.name, f"scope_owner:{item['file']}:{item['item_id']}",
+                                     task.run_id, "finish", f"{ctx.name}: javítás tulajdonosra vár",
+                                     f"{ctx.name} javítása ({task.run_id}): három sikertelen automatikus próba után "
+                                     "egy tétel tulajdonosi döntésre vár; részletek a status parancsban.", ""))
+            delivered = sent and delivered
+            continue
         sent = owner_notices.send(ctx, Notice(ctx.name, f"review_owner:{item['file']}:{item['item_id']}",
                                task.run_id, "finish", "owner", f"{item['file']} {item['item_id']}: "
                                + item.get("reason", "stayed open five times"),

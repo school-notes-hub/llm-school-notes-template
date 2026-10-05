@@ -151,11 +151,11 @@ def apply(ctx, task, root, saved, edits=None):
         task.update(correction_result={"status": "done"}, correction_rolled_back=True,
                     correction_rollback_reason=saved["reason"], correction_rollback_items=saved.get("items", []),
                     correction_rejected_patch=saved.get("rejected_patch"))
-        if safefs.read_json(root, "scope-restores.json", []):
-            return  # A rejected scope repair leaves the snapshot's items open.
         outcome = files.apply_closure(ctx.notes_path, f"{task.run_id}-fix-a{task.get('attempt', 1)}", [],
                                       task.get("correction_items", []), automatic=task.mode == "cron")
         steps.record_tool_files(task, ctx.notes_path, outcome.written)
+        if safefs.read_json(root, "scope-restores.json", []):
+            task.update(scope_owner_items=outcome.new_owner)
         return
     if task.mode == "interactive":
         from . import correction_chat
@@ -220,6 +220,8 @@ def validated(ctx, child, root, items, result, edits=None):
         raise steps.CheckFailed(problems)
     steps.guard_step(ctx, child)
     steps.check_changed(ctx, child, result=result)
+    from .fix_scope import check_dependencies
+    check_dependencies(ctx, child)
     if result["status"] != "done":
         raise BadWork("fix pass asked a blocking question")
     return {"status": "done", "result": result, "warnings": child.get("check_warnings", []),

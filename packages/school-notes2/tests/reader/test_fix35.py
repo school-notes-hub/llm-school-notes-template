@@ -120,13 +120,14 @@ def test_scope_restore_crash_replays_saved_list_and_full_rollback(setup, monkeyp
     assert not safefs.is_file(ctx.notes_path, NEW)
     assert "Jó javítás." in safefs.read_text(ctx.notes_path, page)
     if boundary == "rollback":
+        safefs.write_text(ctx.notes_path, page, before + "\n[Új](new.md)\n")
         original_restore = correction.restore
         def stop(repo, root):
             original_restore(repo, root)
             raise KeyboardInterrupt()
         monkeypatch.setattr(correction, "restore", stop)
         with pytest.raises(KeyboardInterrupt):
-            fix_scope.rollback(ctx, task, steps.CheckFailed([]))
+            fix_scope.rollback(ctx, task, steps.CheckFailed(fix_scope.dependency_items(ctx, root)))
         monkeypatch.setattr(correction, "restore", original_restore)
         task = phase.load(task.dir)
         fix_scope.resume(ctx, task)

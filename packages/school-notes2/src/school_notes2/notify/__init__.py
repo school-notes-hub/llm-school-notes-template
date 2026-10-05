@@ -1,4 +1,4 @@
-"""Content-free completion and incident mail; all item and quota notices are suppressed."""
+"""Content-free completion, incident and exhausted scope-repair mail."""
 
 import subprocess
 from dataclasses import dataclass
@@ -13,7 +13,7 @@ from ..state.files import read_json, write_json
 @dataclass(frozen=True)
 class Notice:
     student: str
-    kind: str        # stable receipt key; only completion: and nightly: are mailed
+    kind: str        # stable receipt key; mailed() defines the allowed notices
     run_id: str
     step: str
     error_class: str
@@ -22,7 +22,7 @@ class Notice:
 
 
 def mailed(notice: Notice) -> bool:
-    if notice.kind.startswith("error:"):
+    if notice.kind.startswith(("error:", "scope_owner:")):
         return True
     return notice.kind.startswith(("completion:", "nightly:")) and notice.kind.split(":")[2:3] in (["done"], ["closed"], ["retry_nightly"])
 

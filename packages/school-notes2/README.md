@@ -350,6 +350,16 @@ can enter P6 directly when there is nothing to recheck. P5 judges only the close
 items, new hits and changed figures. It never starts another correction pass.
 Open, disputed and owner items retain their chain and round metadata.
 
+Automatic P4 and source-free fixes restore out-of-scope pages before checking the
+retained work. A changed author line linking to a restored page (with or without
+an anchor) rejects the whole fix; P5 also receives `scope-restores.json`. A full
+rollback consumes one durable automatic repair attempt per assigned item, including
+across interrupted rollbacks. The third failure leaves the item with the owner;
+scope rollbacks send one content-free `scope_owner` notice per item through the
+existing delivery receipts. Other item notices remain suppressed. Only concrete
+errors tied to restored links bypass the bad-work counter. In chat, scope violations
+reject the whole correction and preserve its edits in `rejected.patch`.
+
 In chat, the first `finish` returns `state: review_items`, the assigned items and
 `fix.txt`; P4 stays `correcting`. The existing session writes its fix and closure
 result, and the next `finish` applies the same result, scope, path and content gates

@@ -65,6 +65,7 @@ def check_unit(ctx, task, view, unit, closures):
     safefs.write_json(root, "in/assigned.json", assigned)
     safefs.write_json(root, "in/items.json", items)
     safefs.write_json(root, "in/hits.json", inputs.hits(ctx.notes_path, hits))
+    safefs.write_json(root, "in/scope-restores.json", safefs.read_json(before, "scope-restores.json", []))
     receipt = calls.run(ctx.notes_path, view, root, "recheck", assigned, inspection.role(ctx, task), log=ctx.log,
                         allowed_paths=set(unit["pages"]))
     if receipt["status"] == "reviewed":
