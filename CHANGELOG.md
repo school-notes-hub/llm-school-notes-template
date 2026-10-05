@@ -2,6 +2,14 @@
 
 Newest first. Each entry says what changed in the shared files and what an existing wiki must do when it applies the update (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)). A wiki records the version it is on in `PROFILE.md`.
 
+## 1.21.0 - 2026-10-05
+
+- School-notes run (Fixed prompt, result.json): each run has one pass – the writer works, the machine check runs, P5 judges every changed author line once; there are no in-run correction rounds, and findings of the independent check become items for the next run. An undecided item and a `fixed` closure without a text change stay open. Pending figures come in their own writer calls after the text work. `infographic_decisions` and `warnings` are removed; the optional `review_requests` asks the nightly reviewer to look at a page and removes nothing from the review.
+- Writable scope: a page may be renamed or deleted when every link to it is updated; the check reports a link to a missing page.
+- Visual policy: a new topic, summary and subject index gets a banner; a text edit on an existing page never requires one. A writer-drawn SVG or inline Mermaid may be edited directly without a commission; a generated or licensed image keeps its commission and rights record.
+- Catch-up material (Sources and evidence): the tool explains the 📝 mark in one sentence above the lesson table; the index catch-up list opens with one sentence saying what to do and gives each lesson's date and topics from its `lessons` frontmatter. No illness icon or absence wording anywhere.
+- Migration (controller-owned): synchronize the changed instructions through Template updates; no learner content changes.
+
 ## 1.20.1 - 2026-10-05
 
 - School-notes run (Fixed prompt, result.json): calls and page groups describe the work focus, not page permissions; every wiki page may be edited as needed, without unjustified rewrites. P3 reviews all changed pages and P5 judges every changed author line, including changes outside assigned items. A failed machine check is fixed by the writer on the same tree; finished work is not rolled back.
