@@ -20,7 +20,7 @@ desktop.ini
 
 # Tool caches
 __pycache__/
-node_modules/
+node_modules
 package-lock.json
 
 # Python environment (uv)
