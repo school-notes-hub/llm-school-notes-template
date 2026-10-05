@@ -170,3 +170,18 @@ def test_held_release_names_the_amended_commit_without_a_second_mail(tmp_path, m
     from school_notes2.state.files import read_json
     assert read_json(publish._held(ctx)) == {"source": "amended", "reason": "build"}
     assert recorded == []
+
+
+def test_recovered_question_of_an_interrupted_isolated_call_goes_to_the_owner(repo, tmp_path):
+    """Fix-48 review 3: a crash after the writer asked, before the call was recorded as done:
+    the recovered question becomes the same owner items as an answered call, not a stop."""
+    rel = report(repo, ("R1", "R2"))
+    task = asked_task(tmp_path, rel)
+    root = task.dir / "call-1"
+    correction_calls.snapshot(repo, root)
+    safefs.write_json(root, "call.json", {"failures": 0, "running": True, "items": []})
+    question = {"status": "question", "questions": [{"text": "Áthelyezhetem?"}]}
+    result = correction_calls.run(ctx_for(repo), task, 1, lambda: pytest.fail("no new call"), lambda: question)
+    assert result["status"] == "done" and {c["status"] for c in result["review_closure"]} == {"open"}
+    assert task.get("asked_items") == {rel + "#R1": "Áthelyezhetem?", rel + "#R2": "Áthelyezhetem?"}
+    assert safefs.read_json(root, "call.json")["done"]

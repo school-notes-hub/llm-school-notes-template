@@ -68,7 +68,7 @@ def run(ctx, task, k, invoke, recover):
             if candidate is None:
                 state = _failed(ctx, root, state, [], unusable=False)
             else:
-                return _done(root, state, candidate)
+                return _done(root, state, _answered(ctx, task, k, candidate))
     while state["failures"] < LIMIT:
         safefs.write_json(root, "call.json", {**state, "running": True})
         try:
@@ -93,10 +93,7 @@ def run(ctx, task, k, invoke, recover):
             safefs.write_json(root, "call.json", {**state, "running": False})
             raise
         else:
-            if result.get("status") == "question" and isolated(task):
-                ctx.log.event("writer.call_question", call=k, questions=result.get("questions", []))
-                return _done(root, state, asked_result(task, k, result.get("questions", [])))
-            return _done(root, state, result)
+            return _done(root, state, _answered(ctx, task, k, result))
     candidate = safefs.read_json(root, "candidate.json") if safefs.is_file(root, "candidate-kept.json") else None
     if candidate is not None and not state.get("unusable"):
         from . import machine_findings
@@ -111,6 +108,15 @@ def run(ctx, task, k, invoke, recover):
         raise NeedsOwner(f"the writer call failed twice; {kept}",
                          todo="continue the run in `school-notes chat`", details={"items": state["items"][:20]})
     return _done(root, state, failed_result(task, k, "A hívás kétszer sikertelen volt; a tétel nyitva maradt."))
+
+
+def _answered(ctx, task, k, result):
+    """An isolated call's question puts its items to the owner (also when an interrupted
+    call's result is recovered), so the run neither stops nor asks it again."""
+    if result.get("status") == "question" and isolated(task):
+        ctx.log.event("writer.call_question", call=k, questions=result.get("questions", []))
+        return asked_result(task, k, result.get("questions", []))
+    return result
 
 
 def _unusable(items):

@@ -73,6 +73,7 @@ def test_25x_fix_round_with_applied_closures_finishes_with_one_recheck(tmp_path,
     assert run_flow.run(ctx) == 0, ctx.cfg.log_path.read_text()[-3000:]
     done = phase.load(task.dir)
     assert done.phase == "done" and done.get("recheck_all") and done.get("closures_applied")
+    assert done.get("inspection_result")["review_closure"] == []  # P5 does not judge them again
     assert f"Run-Id: {task.run_id}" in show(origin, "main")
     # Every change of the run was rechecked once against the base (P5).
     assert list((done.dir / "attempt-1" / "recheck").iterdir())
@@ -93,3 +94,46 @@ def test_25x_fix_round_with_applied_closures_finishes_with_one_recheck(tmp_path,
     assert any(e["action"] == "finish.closures_kept" for e in events)
     restored = [p for e in events if e["action"] == "writer.protected_restored" for p in e.get("pages", [])]
     assert not [p for p in restored if p.startswith("docs/")], restored
+
+
+def test_25x_content_pending_round_applies_its_closures_and_finishes(tmp_path, monkeypatch, local_origin):
+    """Fix-48 review 1: 2.5.1 stopped with `content_pending` (its content steps failed before
+    the closures were applied) and went to `correcting`. 2.6.0 applies those closures – a
+    round-1 `disagree` among them – once, P5 judges them, and the run is committed."""
+    ctx, origin, drive, package = probe_world(tmp_path, monkeypatch, "benedek", None)
+    drive.items[package]["parents"] = ["not-ready"]          # a fix run: no new material
+    from school_notes2.flows import finish
+    monkeypatch.setattr(finish, "_build", lambda ctx, task, commit: {"commit": commit,
+                                                                      "output": str(task.dir / "stub-build")})
+    task = interrupted_run(ctx, monkeypatch, steps, "content_steps")
+    assert task.get("mode") == "fix"
+    repo = ctx.notes_path
+    first = writer.merge(writer.results(task))["review_closure"]
+    keys = [c["file"] + "#" + c["item_id"] for c in first]
+    assert len(keys) == 2 and {c["status"] for c in first} == {"fixed"}
+    # The writer disagreed with the first item (round 1); its result is saved, never applied.
+    disagree = {"file": first[0]["file"], "item_id": first[0]["item_id"], "status": "disagree",
+                "note": "A mondat a tankönyv szerint helyes."}
+    for k in range(1, len(task.get("ranges")) + 1):
+        saved = json.loads((task.dir / f"result-{k}.json").read_text())
+        saved["review_closure"] = [disagree if (c["file"], c["item_id"]) == (disagree["file"], disagree["item_id"])
+                                   else c for c in saved.get("review_closure", [])]
+        write_json(task.dir / f"result-{k}.json", saved)
+    before = {rel: safefs.read_text(repo, rel) for rel in sorted({k.rsplit("#", 1)[0] for k in keys})}
+    assert all(f"## Végrehajtva ({task.run_id})" not in text for text in before.values())
+    task.set_phase("correcting", content_pending=True, correction_round=1, review_complete=False)
+
+    no_discard(monkeypatch)
+    assert run_flow.run(ctx) == 0, ctx.cfg.log_path.read_text()[-3000:]
+    done = phase.load(task.dir)
+    assert done.phase == "done" and done.get("recheck_all") and done.data["needs_owner"] is None
+    assert f"Run-Id: {task.run_id}" in show(origin, "main")
+    # The closures were applied once, under the run's own section, and P5 judged them.
+    for rel in before:
+        assert show(origin, f"main:{rel}").count(f"## Végrehajtva ({task.run_id})") == 1
+    items = relations.inventory(repo)["items"]
+    assert items[keys[0]]["status"] == "disagree" and items[keys[0]]["response"]["verdict"] == "accept"
+    assert items[keys[1]]["status"] == "fixed"
+    events = [json.loads(line) for line in ctx.cfg.log_path.read_text().splitlines()]
+    assert not any(e["action"] == "finish.closures_kept" for e in events)
+    assert not done.get("closures_applied")

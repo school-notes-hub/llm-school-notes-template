@@ -127,6 +127,12 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
     except CheckFailed as exc:
         problems += exc.items
     result = merged_result(ctx, task)
+    if task.get("closures_applied"):
+        # A resumed 2.5.x correction round: these closures and their attempts were applied
+        # and rechecked then, under the round's identity. They are neither applied nor
+        # judged again (P5 rechecks the changed pages only).
+        ctx.log.event("finish.closures_kept", closures=len(result.get("review_closure", [])))
+        result = {**result, "review_closure": []}
     repo = ctx.notes_path
     fetch = fetch_flow.fetch_json(task, len(task.get("ranges")), grade=ctx.student.grade, repo=ctx.notes_path,
                                   whole_run=True)
@@ -155,10 +161,7 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
     _record_writes(task, repo, whole=[], parts=parts)
     new_pages.record(ctx, task)  # Lesson type is supplied by machine.write_lesson_notes.
     if task.get("closures_applied"):
-        # A resumed 2.5.x correction round: these closures and their attempts were applied
-        # then, under the round's identity; applying them again would count twice.
-        outcome = review_files.ClosureOutcome()
-        ctx.log.event("finish.closures_kept", closures=len(result.get("review_closure", [])))
+        outcome = review_files.ClosureOutcome()  # applying them again would count twice
     else:
         outcome = review_files.apply_closure(repo, task.run_id, result.get("review_closure", []),
                                              listed, ctx.cfg.limits.owner_after_open,

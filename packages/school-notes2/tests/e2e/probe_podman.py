@@ -21,7 +21,8 @@ if out:
                                           "expected": "Jó irány."}], "text_mismatch": [], "relates_to": None}
             for f in assigned["figures"]], "owner_notes": []}
     elif "items" in assigned:
-        value = {"items": [{"key": i["key"], "severity": "hiba", "verdict": "ok" if second else "not-ok",
+        value = {"items": [{"key": i["key"], "severity": "hiba",
+                            "verdict": ("accept" if i.get("status") == "disagree" else "ok") if second else "not-ok",
                             "answer": "A magyarázat helyes." if second else "A magyarázat hiányos."}
                            for i in assigned["items"]], "findings": [], "owner_notes": []}
     else:
