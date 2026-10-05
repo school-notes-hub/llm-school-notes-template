@@ -2,6 +2,11 @@
 
 Newest first. Each entry says what changed in the shared files and what an existing wiki must do when it applies the update (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)). A wiki records the version it is on in `PROFILE.md`.
 
+## 1.19.3 - 2026-10-05
+
+- Learning images (Learning image execution): after a rejected or lost image the plan may be changed; the tool generates it as a linked job version, and all versions of one target share the three paid attempts. A plan awaiting a verdict or already accepted stays unchanged.
+- Migration (controller-owned): synchronize the changed instructions through Template updates; no learner content changes.
+
 ## 1.19.2 - 2026-10-05
 
 - Pending notices (run module): only a pending figure, a continuing (`draft`) topic and a new reader page from a v2 writer run that was never reviewed show a notice; review items never do.
