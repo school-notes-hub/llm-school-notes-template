@@ -7,8 +7,8 @@ from functools import wraps
 import sys
 import time
 
-from ..log import TZ
-from ..notify import Notice
+from ..log import TZ, now_iso
+from ..state.files import write_json
 from ..state.lock import StudentLock
 
 TIMING = ContextVar("school_notes_timing", default=None)
@@ -34,8 +34,9 @@ def admission(ctx, kind, *, manual=False):
                   f"{holder.get('since', 'ismeretlen időpont')} óta; próbáld újra a kör vége után.",
                   file=sys.stderr)
         if holder.get("since") and (datetime.now(TZ) - datetime.fromisoformat(holder["since"])).total_seconds() > 43200:
-            ctx.mailer.send(Notice("VM", "lock_held", "", kind, "zár",
-                                   "A kör vagy a chat 12 órája fut.", "Ellenőrizd a futó munkát; a zárat nem törjük fel."))
+            from . import last_error, context
+            for name in ctx.cfg.students:
+                last_error.record(context.make(ctx.cfg, name), kind, "lock_held")
         yield False
         return
     token = VM_HELD.set(True)
@@ -73,20 +74,34 @@ def entry(kind, *, manual=False):
                     before = {t.run_id: t.data for t in tasks}
                     started = time.monotonic()
                     timing = TIMING.set((started, {t.run_id: t.get("active_seconds", 0) for t in tasks}))
+                    active_path = ctx.cfg.state_dir / ctx.name / "active.json"
                     successful = False
                     try:
+                        write_json(active_path, {"kind": kind, "started": now_iso(),
+                                               "baseline": {t.run_id: t.get("active_seconds", 0) for t in tasks}})
                         result = fn(ctx, *args, **kwargs)
                         successful = result in (None, 0)
                         return result
+                    except Exception as exc:
+                        from . import last_error
+                        last_error.record(ctx, kind, getattr(exc, "kind", "program"), exc)
+                        raise
                     finally:
                         try:
+                            if successful and kind in ("run", "nightly", "repair", "chat", "owner"):
+                                # A completed task proves recovery; a skipped/empty step does not.
+                                completed = phase.all_tasks(ctx.task_root(), ctx.name)
+                                if any(t.phase == "done" and before.get(t.run_id) != t.data for t in completed):
+                                    from . import last_error
+                                    last_error.clear(ctx)
                             if kind in ("run", "nightly", "repair", "chat", "owner", "clear"):
                                 operational_report.ended(ctx, kind, started, before, successful=successful)
                         except Exception as exc:
                             ctx.log.error("report.failed", exc)
-                            ctx.mailer.send(Notice(ctx.name, "report_failed:" + kind, "", kind,
-                                                   "program", str(exc), "Ellenőrizd a futásnaplót."))
+                            from . import last_error
+                            last_error.record(ctx, "report_failed", "report_failed", exc)
                         finally:
+                            active_path.unlink(missing_ok=True)
                             TIMING.reset(timing)
         return wrapped
     return decorate

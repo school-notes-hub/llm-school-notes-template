@@ -94,3 +94,30 @@ def test_a_python_without_tomllib_gets_a_plain_message(tmp_path):
     assert done.returncode != 0 and "Traceback" not in done.stderr
     assert "python3 >= 3.11 (tomllib) is required" in done.stderr
     assert not (tmp_path / "srv/state").exists()
+
+
+def test_install_waits_for_round_vm_lock_before_taking_learner_locks(tmp_path):
+    import fcntl
+    import select
+    vm = tmp_path / "srv/state/operations/vm/lock"
+    vm.parent.mkdir(parents=True)
+    with vm.open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        env = {**os.environ, "SN_ROOT": str(tmp_path / "srv"), "SN_LEARNERS": "benedek barna",
+               "SN_TEMPLATE": str(tmp_path / "missing-template")}
+        proc = subprocess.Popen(["bash", str(INSTALL), "v9.9.9"], env=env,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            assert select.select([proc.stdout], [], [], 5)[0]
+            assert proc.stdout.readline().strip() == "waiting for the VM lock ..."
+            assert proc.poll() is None
+            assert not (tmp_path / "srv/state/benedek/lock").exists()
+            fcntl.flock(lock, fcntl.LOCK_UN)
+            stdout, stderr = proc.communicate(timeout=10)
+            assert proc.returncode != 0  # No template clone; never contacts a remote.
+            assert "waiting for the lock of benedek" in stdout
+            assert "waiting for the lock of barna" in stdout
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.communicate()

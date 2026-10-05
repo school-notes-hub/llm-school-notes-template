@@ -1,7 +1,7 @@
 """T-125 streaks persist per learner/role, independently of individual runs."""
 
 from ..log import now_iso
-from ..notify import Notice, pending
+from ..notify import incidents
 from ..state.files import read_json, write_json
 
 ROLES = ("writer", "reader", "figure-review", "figure", "reviewer")
@@ -48,18 +48,15 @@ def record(ctx, run):
     events.append({"role": role, **value})
     write_json(ctx.cfg.state_dir / ctx.name / "timeout-events.json", events)
     ctx.log.event("llm.timeout", "stopped" if count >= 2 else "retry", role=role, **value)
-    message = ("A munka megállt; dönts az időkorlátról." if count >= 2 else
-               "A munka a következő alkalommal újra próbálkozik.")
-    pending.send(ctx, Notice(ctx.name, f"timeout:{role}:{value['at']}:{run.run_id}:{run.label}:{count}",
-                                run.run_id, role, "időtúllépés",
-                                f"{value['at']}: {run.label}, {run.role.timeout_s} s. {message}",
-                                f"Állítsd be az időkorlátot; school-notes status --clear {ctx.name} {role} --continue"))
+    incidents.record(ctx, "timeout", role, role=role,
+                     scope="timeout:" + role + (":" + run.label if role == "reviewer" else ""), run_id=run.run_id)
     return count
 
 
 def success(ctx, run):
     state = read_json(path(ctx), {})
     role = role_name(run.role_name)
+    incidents.resolve(ctx, "timeout:" + role + (":" + run.label if role == "reviewer" else ""))
     state[role] = {"count": 0, "suspended": False, "at": now_iso()}
     if role == "reviewer":
         state.setdefault("reviewer_units", {})[run.label] = {"count": 0, "suspended": False}
@@ -67,6 +64,9 @@ def success(ctx, run):
 
 
 def clear(ctx, role):
+    for incident in incidents.active(ctx):
+        if incident["scope"] == "timeout:" + role or incident["scope"].startswith("timeout:" + role + ":"):
+            incidents.resolve(ctx, incident["scope"])
     state = read_json(path(ctx), {})
     state.pop(role, None)
     if role == "reviewer":

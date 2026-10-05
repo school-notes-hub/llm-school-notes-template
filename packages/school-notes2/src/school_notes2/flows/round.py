@@ -3,7 +3,6 @@
 from datetime import datetime
 
 from ..log import TZ
-from ..notify import Notice
 from ..state import phase
 from ..state.files import read_json, write_json
 from . import context, nightly, operation, run
@@ -56,10 +55,12 @@ def _cycle(cfg, contexts, started):
                 _step(ctx, kind, action, started, state, path, cache)
             except Exception as exc:
                 ctx.log.error("round.step", exc, step=kind)
-                ctx.mailer.send(Notice(ctx.name, "round_step:" + kind, "", kind, "program",
-                                       str(exc), "Ellenőrizd a futásnaplót; a többi tanuló feldolgozása folytatódik."))
+                from . import last_error
+                last_error.record(ctx, kind, "round_step", exc)
     state.update(status="done", finished=now().isoformat())
     write_json(path, state)
+    from .status_text import snapshot
+    snapshot(cfg)
 
 
 def _step(ctx, kind, action, started, state, path, cache):

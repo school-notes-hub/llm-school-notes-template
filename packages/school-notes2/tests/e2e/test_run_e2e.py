@@ -135,6 +135,8 @@ def test_hourly_run_end_to_end(world, monkeypatch):
     note = show(origin, "main:wiki/proba/2026-10-02-teszt-jegyzet.md")
     assert "type: lesson-notes" in note and "content_sha256" in note and "drive_folder: Óra 1" in note
     assert "grade: 9" in note
+    origins = json.loads(show(origin, "main:docs/review/new-pages.json"))
+    assert origins == {"wiki/proba/2026-10-02-teszt-jegyzet.md": task.run_id}
     # The configured school year reaches the writer: fetch.json and the prompt's yardstick.
     work = ctx.notes_path
     assert json.loads(work.with_name(f"{work.name}-fetch-learner.json").read_text()) == {"grade": 9}

@@ -95,8 +95,8 @@ def test_timeout_streak_not_bad_work_success_resets_and_clear(world, monkeypatch
         assert bool(task.data["needs_owner"]) == (count == 2)
         assert task.data["llm_failures"] == 0
         assert timeouts.counter(ctx, call)["count"] == count
-    assert not notices
-    assert_suppressed(ctx.log, "timeout:writer:")
+    assert len(notices) == 1
+    assert "időtúllépés (jegyzetíró)" in notices[0].get_content()
     clear.clear(ctx, "writer", "continue")
     assert not phase.load(task.dir).data["needs_owner"]
     with operation.scope(ctx), pytest.raises(launch.TimedOut):

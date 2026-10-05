@@ -1,6 +1,7 @@
 """Rebase conflicts (plan 6.7): generated files are resolved, content stays for the owner."""
 
 import fnmatch
+import json
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -10,6 +11,7 @@ from ..state import safefs
 from .run import Git
 
 FULLY_GENERATED = ("publication/public.json",)
+VERDICT_RECORDS = ("docs/review/verdicts.json",)
 WITH_GENERATED_BLOCKS = ("wiki/index.md", "wiki/*/index.md", "docs/review/index.md")
 REVIEW_REPORTS = ("docs/review/*-review.md", "docs/review/*-review-*.md", "docs/review/*-run.md")
 ORIGIN_LABEL = "origin/main (kívülről)"
@@ -36,6 +38,9 @@ def resolve(wt: Git, run_id: str, empty_blocks) -> Outcome:
             wt.run("checkout", "--theirs", "--", path)
             wt.run("add", "--", path)
             resolved.append(path)
+        elif path in VERDICT_RECORDS and _merge_verdicts(wt, path):
+            wt.run("add", "--", path)
+            resolved.append(path)
         elif _matches(path, REVIEW_REPORTS) and _merge_review(wt, path):
             wt.run("add", "--", path)
             resolved.append(path)
@@ -46,6 +51,32 @@ def resolve(wt: Git, run_id: str, empty_blocks) -> Outcome:
             _relabel(wt, path, run_id)
             content.append(path)
     return Outcome(resolved, content)
+
+
+def merge_verdict_records(origin: list, own: list) -> list:
+    """Union of both sides' verdict records; per (role, file, id, key) the later `at` wins."""
+    merged = {}
+    for record in [*origin, *own]:
+        ident = (record.get("role"), record.get("file"), record.get("id"), record.get("key"))
+        if ident not in merged or str(record.get("at", "")) >= str(merged[ident].get("at", "")):
+            merged[ident] = record
+    return sorted(merged.values(), key=lambda r: (r["file"], r.get("key", ""), r["role"]))
+
+
+def _merge_verdicts(wt: Git, path: str) -> bool:
+    """`docs/review/verdicts.json` is tool output: both sides' verdicts are kept (a night's
+    verdicts on origin and this run's reader verdicts never contradict for the same key)."""
+    versions = _stages(wt, path)
+    if versions is None:
+        return False
+    try:
+        origin, own = (json.loads(v.decode("utf-8") or "[]") for v in versions[1:])
+    except ValueError:
+        return False
+    if not isinstance(origin, list) or not isinstance(own, list):
+        return False
+    safefs.write_json(wt.work_tree, path, merge_verdict_records(origin, own))
+    return True
 
 
 def _matches(path: str, patterns: tuple[str, ...]) -> bool:

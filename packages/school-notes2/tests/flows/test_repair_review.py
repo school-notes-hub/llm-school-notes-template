@@ -26,7 +26,7 @@ def test_rejected_command_preserves_existing_run(tmp_path, log, monkeypatch, mod
         task.mark_needs_owner("decision", "continue", "needs_owner")
     before = task.path.read_bytes()
     assert repair.repair(ctx, topic=topic, build_queue=build_queue) == 1
-    assert task.path.read_bytes() == before and not mailed
+    assert task.path.read_bytes() == before and len(mailed) == 1
 
 
 @pytest.mark.parametrize("target", ["missing", "lesson", "summary"])
@@ -37,7 +37,7 @@ def test_invalid_target_creates_no_task(tmp_path, log, monkeypatch, target):
     ctx.lock = lambda: SimpleNamespace(acquire=lambda *a: None, release=lambda: None)
     monkeypatch.setattr(repair.setup, "ensure", lambda _: None)
     assert repair.repair(ctx, topic=f"wiki/m/{target}.md") == 1
-    assert phase.all_tasks(tmp_path, ctx.name) == [] and not mailed
+    assert phase.all_tasks(tmp_path, ctx.name) == [] and len(mailed) == 1
     assert run._may_run(ctx, None)
 
 

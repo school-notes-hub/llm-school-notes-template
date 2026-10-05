@@ -7,7 +7,7 @@ from ..reader import calls, inputs, report, units, verdicts
 from ..review import relations, scope
 from ..review.topic_result import apply_item
 from ..state import safefs
-from ..wiki import source_refs
+from ..wiki import author, frontmatter, source_refs
 from . import correction_figures, inspection_runtime as inspection, steps
 
 
@@ -39,10 +39,11 @@ def check_unit(ctx, task, view, unit, closures):
         before = task.dir / "fix-before"
     def old(page):
         return safefs.read_text(before, "before/" + page) if safefs.is_file(before, "before/" + page) else ""
-    inputs.prepare(ctx.notes_path, view, unit, root / "in", old, targeted=True)
-    items = []
+    items, reports = [], {}
     for c in closures:
-        detail = relations.details(safefs.read_text(ctx.notes_path, c["file"]), c["item_id"])
+        if c["file"] not in reports:
+            reports[c["file"]] = frontmatter.split(safefs.read_text(ctx.notes_path, c["file"]))
+        detail = relations.details(reports[c["file"]], c["item_id"])
         if detail.get("file") in unit["pages"]:
             items.append({**detail, **c, "key": c["file"] + "#" + c["item_id"]})
     hits = []
@@ -54,14 +55,16 @@ def check_unit(ctx, task, view, unit, closures):
         if hit["file"] in unit["pages"] and hit["id"] not in previous_ids:
             by_id.setdefault(hit["id"], hit)
     hits = sorted(by_id.values(), key=lambda h: (h["file"], h.get("line") or 0, h["id"]))
+    changed_lines = any(author.part(old(p)) != author.part(safefs.read_text(ctx.notes_path, p))
+                        for p in unit["pages"])
+    if not items and not hits and not changed_lines:
+        return {"unit": unit, "status": "not_checked"}
+    inputs.prepare(ctx.notes_path, view, unit, root / "in", old, targeted=True)
     assigned = {"items": [{"key": i["key"], "status": i["status"]} for i in items],
                 "hits": [h["id"] for h in hits]}
     safefs.write_json(root, "in/assigned.json", assigned)
     safefs.write_json(root, "in/items.json", items)
     safefs.write_json(root, "in/hits.json", inputs.hits(ctx.notes_path, hits))
-    changed_lines = any(scope.changed(old(p), safefs.read_text(ctx.notes_path, p)) for p in unit["pages"])
-    if not items and not hits and not changed_lines:
-        return {"unit": unit, "status": "not_checked"}
     receipt = calls.run(ctx.notes_path, view, root, "recheck", assigned, inspection.role(ctx, task), log=ctx.log,
                         allowed_paths=set(unit["pages"]))
     if receipt["status"] == "reviewed":

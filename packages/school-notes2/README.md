@@ -12,7 +12,7 @@ It does every mechanical step; the LLM runs in a container and asks for mechanic
 | `school-notes repair <learner> --queue [--no-push]` | build/reorder the private repair queue and SVG inventory, without an LLM | `repair/queue.py` |
 | `school-notes nightly <learner>` | nightly: review of `claude-reviewed..main`, report commit, atomic push | `flows/nightly.py`, `review/` |
 | `school-notes chat <learner> [codex\|claude]` | the owner's session in the same container; `fetch`/`finish` through MCP | `flows/chat.py`, `flows/handlers.py`, `flows/session.py` |
-| `school-notes status [<learner>]` | local state; `--clear <learner> notes\|review\|publish --continue\|--discard` | `flows/status.py`, `flows/clear.py` |
+| `school-notes status [<learner>]` | short Hungarian local state (`--details` keeps the full view); `--clear <learner> notes\|review\|publish --continue\|--discard` | `flows/status.py`, `flows/clear.py` |
 | `school-notes setup <learner>` | bare clones and the three durable worktrees, once | `flows/setup.py` |
 | `school-notes fetch\|finish <learner>` | the MCP operations, from the host shell | `cli.py` |
 | `school-notes verify-tasks` | the installer checks that this release can read every open task | `cli.py` |
@@ -24,7 +24,7 @@ It does every mechanical step; the LLM runs in a container and asks for mechanic
 |---|---|
 | `config.py` | reads and validates `~/.config/school-notes/config.toml` |
 | `state/` | `phase.json` (task folder), the per-learner lock, error classes, atomic writes |
-| `log/`, `notify/` | JSONL log; e-mail through `msmtp`, one short sentence per run closure |
+| `log/`, `notify/` | JSONL log; e-mail through `msmtp`, one sentence per success or unresolved error |
 | `git/` | the only Git caller (`run.py`), bare clones, work branch, `finish` G0–G9, conflicts, discard |
 | `drive/` | listing, readiness, download, move (built on `tools/drive_media.py`) |
 | `sources/` | order, photo and PDF preparation, hashes, duplicates, batching |
@@ -421,7 +421,7 @@ A failing learner step is logged; later learners still run.
 An empty successful night also consumes today's review slot. Finishing an older
 night does not consume today’s new review.
 The lock is inherited by detached MCP jobs and is never forcibly broken. A busy
-lock older than twelve hours is logged through the suppressed notification path.
+lock older than twelve hours records one incident per affected learner.
 
 Weekly quota probes use the role's home in a short container without a model call:
 Codex app-server JSON-RPC and Claude OAuth usage. Only the weekly window counts.
@@ -453,17 +453,32 @@ its crash retry budget.
 Unit 5 replaces the original capped nightly range with topic calls, while retaining
 this scheduler, quota gate and timeout policy.
 
-Processing invocations accumulate active elapsed time (quota-wait hours do not
-count). Every terminal notes run and nonempty nightly review sends one short Hungarian
-sentence: learner, run mode, start and end date/time, status, and a safe error-class
-label when owner intervention is needed. No JSON, learner content, paths or owner
-notes enter the message. Detailed outcomes remain in the private `report.json`.
-The common `Mailer.send` / `send_once` gate suppresses all other notification kinds
-as `notify.suppressed`, including timeouts, quotas, locks, migration, licenses and
-individual owner items. Empty nights send no mail. A no-push branch that has not
-closed sends no completion mail. Failed delivery stays in the durable queue.
-Repeated finish/report calls share a receipt; continuing an owner-stopped run advances
-a persisted closure generation, so the next closure may send one new message.
+Processing invocations accumulate active elapsed time; idle hours are excluded. A
+successful notes run or nonempty nightly review sends one Hungarian sentence with
+start/end time and work minutes; after continuation it describes the resumed segment.
+Errors send one immediate content-free sentence describing the failure and who acts.
+`state/<learner>/incidents.json` keeps the unresolved error's durable identity; repeated
+rounds and the terminal report do not repeat it. Recovery closes the identity, so a
+new failure can mail again. Pre-task errors and publish-task errors use the same path.
+`pending-owner-notices.json` and `notify-once.json` recover interrupted delivery. As
+with any SMTP handoff, a crash after server acceptance but before the local receipt
+can repeat delivery; the tool cannot atomically commit a receipt at the mail server.
+Item, image, license and quota notices remain suppressed. Discard is not a successful
+completion. Free-form questions are never assumed content-free: only approved safe
+operational sentences are quoted, otherwise the mail refers to the private session.
+
+`school-notes status` shows current work, today's runs, unresolved failures and
+responsibility, queue sizes and the remaining daily/monthly image budget in Hungarian.
+`--details` keeps the full former view; `--json` keeps the structured details. Every
+completed round atomically saves the short view to `state/allapot.txt`. A broken learner
+state is reported without hiding the other learners. Installation takes the VM lock
+before learner locks and retains them through the atomic release switch.
+Review inventory parses each report once; nightly closure batches changes by report,
+using `CSafeLoader` when available. Machine-only changes without items or hits do not
+start recheck. `review.finalize`, `review.final_keys`, `review.close` and
+`review.topic_input` log durations, including failed invocations. Repair's link-only
+comparison ignores separator differences only at removed/generated notice positions;
+it still compares against the current upstream after rebase and protects all prose.
 No new phase or model call is introduced.
 The VM verification/deployment,
 T-144 owner gate and cron installation are outside this repository change.
@@ -653,3 +668,31 @@ for the same learner/plan since the serialized run's creation. Budget refusals c
 no attempt. P4 assignments and attempt decisions are checkpointed before continuation.
 The mandatory generated-header gate covers touched topics, chapter summaries and
 subject indexes; unassigned and exhausted pending header markers remain valid.
+
+The real-gap notice policy shows pending figures and drafts. A page-review notice
+applies only to a never-reviewed reader page (`topic`, `lesson-notes`, `summary`,
+`review`) created by a v2 writer run. `docs/review/new-pages.json` records that origin;
+Legacy, home, index and info pages never receive a page-review notice. Stale reader
+verdicts retain a `reader-history` record (not a valid verdict).
+`docs/review/notice-policy.json` marks a one-time whole-wiki refresh; local verdict history
+recovers reviews deleted by older releases. The refresh only removes notices. Published
+figures awaiting nightly review have no notice. Notice-only changes leave author keys and nightly scope unchanged; inherited
+browser defects become durable warnings in `status`. Print chapters and PDFs omit
+only notices marked by the tool.
+
+Fix/repair calls receive `fetch.json.infographic_pages`. Each assigned topic needs a
+`result.json.infographic_decisions` entry: `{page, figure_id}` for a generated infographic
+commission, or `{page, reason}` for no new infographic. The tool stores the decision in
+`docs/review/infographic-decisions.json`, keyed by normalized author content; generated
+blocks and whitespace do not invalidate it. A changed set of `##` headings or at
+least 30% new author words requires a new decision; P4 reuses decisions made in its
+parent run. Package writers also record their decisions. Runs created before this
+contract never acquire it on retry. At most two new infographic commissions fit in a
+run; pending figures reserve their remaining paid attempts before new work. The normal
+image budget and pending pipeline apply. Browser link failures retain the referring page
+and target; an author-changed target routes both pages to the writer instead of classifying the referring tool output as a bug.
+
+Pre-task prerequisites, setup, round-step, report and prolonged-lock failures persist
+in `state/<learner>/last-error.json` with a timestamp and one safe Hungarian sentence.
+`status` shows the record and the common incident path mails it once; a successfully completed run clears it.
+Nightly restores the caller’s logger even after interruption.

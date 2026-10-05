@@ -39,6 +39,8 @@ Checklista
 
 Kimenet és befejezés
 
-Egyetlen JSON: `pages[{file, verdict: ok|changes, first_glance}]`, `findings[{id: F-1, file, quote, category, problem, suggestion, relates_to, new_evidence?}]`, `owner_notes[]`. Minden kiosztott oldalhoz pontosan egy ítélet kell; a nincs lelet is kifejezett üres lista. Kategóriák: forráskötött, olvasói lyuk, nem tananyag, privát utalás, felépítés, nyelvezet, kép–szöveg, banner, kérdés. Leletenként: pontos idézet → mit nem ért vagy mit ért félre az olvasó → a legkisebb javítás, lehetőleg kész szövegként. A `relates_to` null, kérdés-/döntésazonosító vagy teljes docs/review/<fájl>.md#R<n> kulcs; döntésnél a `new_evidence` kötelező. Bizonytalanságot leletként jelezz, ne találj ki tényt.
+Egyetlen JSON: `pages[{file, verdict: ok|changes, first_glance}]`, `findings[{id: F-1, file, quote, category, problem, suggestion, relates_to, new_evidence?}]`, `owner_notes[]`. Minden kiosztott oldalhoz pontosan egy ítélet kell; a nincs lelet is kifejezett üres lista. Kategóriák: forráskötött, olvasói lyuk, nem tananyag, privát utalás, felépítés, nyelvezet, kép–szöveg, banner, ábra, kérdés. Leletenként: pontos idézet → mit nem ért vagy mit ért félre az olvasó → a legkisebb javítás, lehetőleg kész szövegként. A `relates_to` null, kérdés-/döntésazonosító vagy teljes docs/review/<fájl>.md#R<n> kulcs; döntésnél a `new_evidence` kötelező. Bizonytalanságot leletként jelezz, ne találj ki tényt.
 Ha az `/in/format-error.json` létezik, az előző kimenet gépi hibáját is javítsd. Nincs korlátlan újrapróbálkozás.
+Hiányzó áttekintő ábrát jelezz `ábra` kategóriájú leletként ott, ahol egy infografika többet tanítana a szövegnél; célzott módban ezt is csak a kiosztott javítás és a megváltozott sorok hatókörén belül vizsgáld.
+
 {output_instruction}

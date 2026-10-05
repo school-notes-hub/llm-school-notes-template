@@ -108,8 +108,9 @@ def test_vm_lock_shared_with_direct_entries_and_alert(cfg, monkeypatch):
     def run(ctx):
         called.append(1)
     assert run(ctx) == 0
-    assert not called and not messages
-    assert_suppressed(ctx.log, "lock_held")
+    assert not called and len(messages) == len(cfg.students)
+    assert all(read_json(cfg.state_dir / name / "last-error.json")["class"] == "lock_held"
+               for name in cfg.students)
     lock.release()
     assert operation.vm_lock(cfg).probe()
 

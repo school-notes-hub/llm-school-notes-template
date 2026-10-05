@@ -5,6 +5,7 @@ recorded phase; a blocking question and a content conflict continue only in `cha
 
 from .. import VERSION
 from ..git import discard as git_discard
+from ..notify import incidents
 from ..log import now_iso, today
 from ..review import close as review_close
 from ..state import phase
@@ -26,6 +27,7 @@ def clear(ctx: Ctx, kind: str, action: str) -> str:
         task_kind = "review" if kind == "reviewer" else "notes"
         task = phase.open_task(ctx.task_root(), ctx.name, task_kind)
         if kind in ("writer", "reviewer") and task is not None and (task.data.get("needs_owner") or {}).get("class") == "timeout":
+            incidents.resolve(ctx, "task:" + task.run_id)
             task.clear_needs_owner()
             task.update(blocked_topics=[], timeout_day=None)
         return f"{kind}: az időtúllépési felfüggesztés feloldva"
@@ -38,8 +40,10 @@ def clear(ctx: Ctx, kind: str, action: str) -> str:
         if task.get("stuck"):
             # The owner raised the reviewer timeout: the marker closes, next night retries.
             task.data["closed"] = True
+            incidents.resolve(ctx, "task:" + task.run_id)
             task.clear_needs_owner()
             return f"{task.run_id}: a következő éjszaka újra próbálja (emelt időkorláttal)"
+        incidents.resolve(ctx, "task:" + task.run_id)
         task.clear_needs_owner()
         return f"{task.run_id}: folytatható a(z) {task.phase} fázistól"
     lock = ctx.lock()
@@ -67,6 +71,7 @@ def discard(ctx: Ctx, task: phase.Task) -> None:
     elif task.kind == "review" and task.phase not in ("prepared", "reviewing"):
         raise NeedsOwner("a reviewed range is being closed; it cannot be discarded",
                          todo="`--continue` instead")
+    incidents.resolve(ctx, "task:" + task.run_id)
     task.data["closed"] = True
     task.data["needs_owner"] = None
     task.save()

@@ -16,7 +16,7 @@ def test_preview_quote_belongs_to_figure_and_has_no_section_notice(setup):
     mapped = report.figure_quote(ctx.notes_path, f)
     assert mapped["figure_id"] == "f" and not report.locate(ctx.notes_path, mapped)["unlocated"]
     text = safefs.read_text(ctx.notes_path, page)
-    assert not notices._placements(text, [mapped], [], [], page, False)
+    assert not notices._placements(text, [], page, False)
 
 
 def test_target_scope_only_changed_lines():

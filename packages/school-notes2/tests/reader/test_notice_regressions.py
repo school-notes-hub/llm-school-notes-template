@@ -6,7 +6,7 @@ import pytest
 
 from school_notes2.flows import correction, inspection
 from school_notes2.figures import pending
-from school_notes2.reader import calls, notices, report, units, verdicts
+from school_notes2.reader import new_pages, calls, notices, report, units, verdicts
 from school_notes2.review import generated, relations
 from school_notes2.state import phase, safefs
 from school_notes2.wiki import drafts, frontmatter, lesson_log, markers
@@ -46,6 +46,7 @@ def refresh_twice(repo, page):
 @pytest.mark.parametrize("reason", ["missing", "unlocated", "draft"])
 def test_page_notice_moves_after_banner_and_description(setup, wrapped, reason):
     ctx, _, page = setup
+    safefs.write_json(ctx.notes_path, new_pages.PATH, {page: "v2-run"})
     banner = markers.wrap("figure-banner", BANNER) if wrapped else BANNER
     old = markers.wrap("pending", notices.PAGE)
     text = META + "# Téma\n\n" + old + "\n" + old + "\n" + banner + "\nBevezetés.\n"
@@ -57,6 +58,9 @@ def test_page_notice_moves_after_banner_and_description(setup, wrapped, reason):
     if reason == "unlocated":
         legacy_items(ctx.notes_path, page, ["nincs ilyen mondat"], unlocated=True)
     result = refresh_twice(ctx.notes_path, page)
+    if reason == "unlocated":
+        assert "⏳" not in result
+        return
     expected = drafts.NOTICE if reason == "draft" else notices.PAGE
     assert result.count(expected) == 1
     assert result.index(markers.OPEN.format(name="pending")) > result.index(DESCRIPTION)
@@ -66,6 +70,7 @@ def test_page_notice_moves_after_banner_and_description(setup, wrapped, reason):
 
 def test_vm_nested_duplicates_are_removed_and_authored_items_keep_notices(setup):
     ctx, _, page = setup
+    safefs.write_json(ctx.notes_path, new_pages.PATH, {page: "v2-run"})
     name = "pending-section-7b79e662bcc8"
     old = markers.wrap(name, notices.SECTION)
     body = ("# Téma\n\n" + markers.wrap("pending", notices.PAGE) + "\n" + BANNER + "\n"
@@ -77,10 +82,10 @@ def test_vm_nested_duplicates_are_removed_and_authored_items_keep_notices(setup)
     legacy_items(ctx.notes_path, page, ["Jegyzetlista", "Jegyzetlista", "Órabevezető",
                                        "Pótolandó anyagok", "Az óra kézzel írt magyarázata."])
     result = refresh_twice(ctx.notes_path, page)
-    assert result.count(notices.SECTION) == 1
+    assert result.count(notices.SECTION) == 0
     assert notices.SECTION not in markers.read(result, "notes")
     assert "* Jegyzetlista" in markers.read(result, "notes")
-    assert result.index("# 🗓️ Órák") < result.index(notices.SECTION) < result.index("Órabevezető")
+    assert "Órabevezető" in result
     assert result.index(notices.PAGE) > result.index(DESCRIPTION)
     assert "pending-section-7b79e662bcc8" not in result
 
@@ -103,9 +108,8 @@ def test_generated_heading_gets_one_notice_after_its_block(setup):
     accept(ctx.notes_path, page)
     legacy_items(ctx.notes_path, page, ["Kézi szöveg.", "Kézi szöveg."])
     result = refresh_twice(ctx.notes_path, page)
-    assert result.count(notices.SECTION) == 1 and notices.PAGE not in result
+    assert result.count(notices.SECTION) == 0 and notices.PAGE not in result
     assert markers.read(result, "notes") == markers.read(text, "notes")
-    assert result.index(notices.SECTION) > result.index(markers.CLOSE)
     assert verdicts.valid(ctx.notes_path, page) is not None
 
 
@@ -117,13 +121,14 @@ def test_same_heading_in_distinct_sections_and_authored_quote_not_lost(setup):
     accept(ctx.notes_path, page)
     legacy_items(ctx.notes_path, page, ["Ismételt mondat.", "Másik mondat."])
     result = refresh_twice(ctx.notes_path, page)
-    assert result.count(notices.SECTION) == 2
+    assert result.count(notices.SECTION) == 0
     assert notices.SECTION not in markers.read(result, "notes")
     assert notices.PAGE not in result
 
 
 def test_priority_and_disappearing_notices_preserve_author_key(setup):
     ctx, _, page = setup
+    safefs.write_json(ctx.notes_path, new_pages.PATH, {page: "v2-run"})
     original = frontmatter.set_keys(META + "<!-- image: banner -->\n\n# Rész\n\nMondat.\n", {"status": "draft"})
     safefs.write_text(ctx.notes_path, page, original)
     key = units.page_key(ctx.notes_path, page)
@@ -202,7 +207,7 @@ def test_tool_feedback_and_page_verdict_resume_without_duplicate_or_writer_work(
     assert verdicts.valid(ctx.notes_path, page)["verdict"] == ("changes" if mixed else "ok")
     notices_text = refresh_twice(ctx.notes_path, page)
     assert notices.PAGE not in notices_text
-    assert notices_text.count(notices.SECTION) == int(mixed)
+    assert notices.SECTION not in notices_text
     assert "Sablonhiba" not in notices_text
     before = safefs.read_bytes(ctx.notes_path, path)
     inspection.inspect(ctx, phase.load(task.dir))
@@ -231,6 +236,7 @@ def test_notice_write_interruption_resumes_byte_identically(setup, monkeypatch):
     text = META + BANNER + "\n# Rész\n\nSzöveg.\n"
     for path in (page, second):
         safefs.write_text(ctx.notes_path, path, text)
+    safefs.write_json(ctx.notes_path, new_pages.PATH, {p: "writer-run" for p in (page, second)})
     original = safefs.write_text
     fired = []
     def crash(repo, path, value):
@@ -281,5 +287,6 @@ def test_heading_directly_before_generated_block_keeps_notice_before_block(setup
     accept(ctx.notes_path, page)
     legacy_items(ctx.notes_path, page, ["Kézi mondat."])
     result = refresh_twice(ctx.notes_path, page)
-    assert result.index("# Rész") < result.index(notices.SECTION) < result.index(markers.OPEN.format(name="notes"))
+    assert notices.SECTION not in result
+    assert result.index("# Rész") < result.index(markers.OPEN.format(name="notes"))
     assert verdicts.valid(ctx.notes_path, page) is not None

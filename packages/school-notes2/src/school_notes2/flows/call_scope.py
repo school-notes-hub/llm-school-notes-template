@@ -35,8 +35,11 @@ def retry(ctx, task, items):
         for item in items:
             name = located[item["file"]]
             k = next((n for n, c in enumerate(assigned, 1) if name and c["subject"] == name), None)
-            if not name and item["file"].startswith("wiki/"):
+            if item["file"] == ".school-notes/result.json" or (not name and item["file"].startswith("wiki/")):
                 k = 1  # Same fallback as the original subjectless/asset assignment.
+            if k is None and item.get("kind") == "browser-link":
+                target_subject = calls.subject(item.get("target", ""))
+                k = next((n for n, c in enumerate(assigned, 1) if c["subject"] == target_subject), None)
             if k is None:
                 unassigned.append(item)
             else:
@@ -48,7 +51,11 @@ def retry(ctx, task, items):
     if not pending or task.get("skip_writer"):
         raise SnError("finish failed without a writer assignment", details={"items": items})
     # Persist before invalidating checkpoints. Resume repeats only unfinished calls.
+    paths = set(task.get("retry_link_pages", []))
+    paths.update(p for i in items if i.get("kind") == "browser-link"
+                 for p in (i["file"], i.get("target")) if p)
     task.set_phase("writing", writing_k=pending[0], retry_calls=pending, retry_items=groups,
+                   retry_link_pages=sorted(paths),
                    attempt=task.get("attempt", 1) + 1, review_complete=False)
     invalidate(task)
 
@@ -63,6 +70,8 @@ def invalidate(task):
 
 def write_check(ctx, task, k):
     from . import steps
+    # Upgrade already queued retries before consuming their old per-call items.
+    task.update(retry_link_pages=link_pages(task))
     pending = dict(task.get("retry_items", {}))
     items = pending.pop(str(k), None)
     if items is None:
@@ -70,3 +79,10 @@ def write_check(ctx, task, k):
     steps.write_check_items(ctx, current(ctx, task, items, k))
     if pending != task.get("retry_items", {}):
         task.update(retry_items=pending)
+
+
+def link_pages(task):
+    paths = set(task.get("retry_link_pages", []))
+    paths.update(p for items in task.get("retry_items", {}).values() for i in items
+                 if i.get("kind") == "browser-link" for p in (i["file"], i.get("target")) if p)
+    return sorted(paths)

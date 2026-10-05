@@ -34,7 +34,8 @@ def test_repair_trial_commits_only_locally_then_finish_resumes(world, monkeypatc
         safefs.write_text(ctx.notes_path, "wiki/proba/elso.md", before + "\nTovábbi tárgyi magyarázat.\n")
         safefs.write_text(ctx.notes_path, "wiki/log.md", "# Napló\n\n* **Update**: Javítás.\n")
         return {"status": "done", "owner_notes": ["Kihagyott lépés, indok, javaslat."],
-                "figures": pending_banner(ctx, "wiki/proba/elso.md")}
+                "figures": pending_banner(ctx, "wiki/proba/elso.md"),
+                "infographic_decisions": [{"page": "wiki/proba/elso.md", "reason": "A szöveg elegendő."}]}
     monkeypatch.setattr(writer, "_call", write)
     assert repair.repair(ctx, topic="wiki/proba/elso.md", no_push=True) == 0, ctx.cfg.log_path.read_text()[-3000:]
     task = phase.open_task(ctx.task_root(), ctx.name, "notes")
@@ -110,7 +111,8 @@ def test_new_packages_precede_queue_and_next_run_repairs_one_item(world, monkeyp
             return original(ctx, task, k, *args)
         rel = task.get("repair_topic")
         safefs.write_text(ctx.notes_path, rel, safefs.read_text(ctx.notes_path, rel) + "\nÚj magyarázat.\n")
-        return {"status": "done", "figures": pending_banner(ctx, rel)}
+        return {"status": "done", "figures": pending_banner(ctx, rel),
+                "infographic_decisions": [{"page": rel, "reason": "A szöveg elegendő."}]}
     monkeypatch.setattr(writer, "_call", write)
     assert run.run(ctx) == 0, ctx.cfg.log_path.read_text()[-3000:]
     assert invoked == ["cron"]

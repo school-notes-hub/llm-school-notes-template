@@ -130,8 +130,8 @@ def test_first_learner_exception_does_not_starve_others(cfg, monkeypatch, failur
     scheduler.round(cfg)
     assert [(k, n) for k, n in calls if n != "third"][:4] == [
         (k, n) for k in ("nightly", "run") for n in ("first", "second")]
-    assert not delivered
-    assert_suppressed(context.make(cfg, failing, console=False).log)
+    assert len(delivered) == (2 if failure in ("before", "action") else 1)
+    assert read_json(cfg.state_dir / failing / "last-error.json")["class"] in ("program", "round_step", "report_failed")
     if failure in ("due", "before", "action"):
         assert "third" not in read_json(cfg.state_dir / "round.json")["nightly_started"]
     assert operation.TIMING.get() is None
@@ -205,7 +205,14 @@ def test_terminal_summaries_have_stable_receipts(world, monkeypatch, kind, termi
         task.save()
     for _ in range(2):
         operational_report.ended(ctx, "nightly" if kind == "review" else "run", 0, {task.run_id: True})
-    assert len(delivered) == 1
+    assert len(delivered) == int(terminal != "closed")
+    if terminal == "closed":
+        assert read_json(ctx.mailer.state.with_name("notify-once.json"), []) == []
+        return
+    if terminal == "needs_owner":
+        receipts = read_json(ctx.mailer.state.with_name("notify-once.json"))
+        assert len(receipts) == 1 and receipts[0].startswith(ctx.name + ":error:")
+        return
     prefix = "nightly" if kind == "review" else "completion"
     assert read_json(ctx.mailer.state.with_name("notify-once.json")) == [
         f"{ctx.name}:{prefix}:{task.run_id}:{terminal}"]
@@ -250,8 +257,8 @@ def test_vm_quota_and_lock_notice_logs_have_vm_identity(world, monkeypatch):
     finally:
         lock.release()
     events = [json.loads(line) for line in ctx.cfg.log_path.read_text().splitlines()]
-    assert {e["action"] for e in events} >= {"quota.read", "notify.suppressed", "round.skip"}
-    assert all(e["student"] == "VM" for e in events)
+    assert {e["action"] for e in events} >= {"quota.read", "operation.last_error", "round.skip"}
+    assert all(e["student"] == "VM" for e in events if e["action"] not in ("operation.last_error", "notify.mail_once"))
 
 
 @pytest.mark.parametrize("result", [None, 0])

@@ -150,7 +150,7 @@ def test_failed_figure_is_operational_only_and_notice_clears(tmp_path, log, monk
     figure_waiting.apply(repo, result["pending"])
     verdicts.record(repo, [{"file": page, "verdict": "ok"}], {page: units.page_key(repo, page)}, "fake", "now")
     notices.refresh(repo, [page])
-    assert notices.FIGURE in safefs.read_text(repo, page)
+    assert notices.FIGURE not in safefs.read_text(repo, page)
     assert not relations.inventory(repo)["items"]
     assert figure_waiting.active(repo) == result["pending"]
     spec = result["pending"][0]["spec"]

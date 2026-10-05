@@ -102,7 +102,7 @@ lessons:
       assert.match(payload.pages.find(p => p.path === 'wiki/tananyag/tema.md').html, /Melyik jelölést használjuk/);
       assert.match(print, /Nyilvános hivatkozás/);
       assert.match(print, /Melyik jelölést használjuk/);
-      assert.match(print, /⏳ Ez a téma az órán folytatódik/);
+      assert.doesNotMatch(print, /⏳/);
       assert.match(payload.pages.find(p => p.path === 'wiki/tananyag/ora.md').html, /📎 Füzet: 2026\. 09\. 29\./);
       assert.match(print, /A polisz \(prezentáció\)/);
       assert.match(print, /🔖 Tankönyv: 2\. lecke/);

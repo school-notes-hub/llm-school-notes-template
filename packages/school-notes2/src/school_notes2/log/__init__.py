@@ -1,5 +1,6 @@
 """JSONL log (plan 8.6): one object per line, a short readable line on the console."""
 
+from contextlib import contextmanager
 import json
 import sys
 import time
@@ -76,3 +77,14 @@ class Timer:
     def __exit__(self, *exc):
         self.s = time.monotonic() - self.start
         return False
+
+
+@contextmanager
+def duration(log, action):
+    """Measure even interrupted steps; never include their content in the event."""
+    started, outcome = time.monotonic(), "error"
+    try:
+        yield
+        outcome = "ok"
+    finally:
+        log.event(action, outcome, duration_s=time.monotonic() - started)

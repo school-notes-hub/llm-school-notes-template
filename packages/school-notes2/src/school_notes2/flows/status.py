@@ -9,6 +9,7 @@ from ..git import workbranch
 from ..images import pending as image_pending
 from ..figures import requests as figure_requests, licenses
 from ..log import TZ
+from ..notify import incidents
 from ..review import files as review_files
 from ..sources import cards
 from ..state.errors import NeedsOwner
@@ -33,6 +34,9 @@ def summary(ctx: Ctx) -> dict:
     tasks = phase.all_tasks(ctx.task_root(), ctx.name)
     return {
         "learner": ctx.name,
+        "incidents": incidents.active(ctx),
+        "last_error": read_json(ctx.cfg.state_dir / ctx.name / "last-error.json"),
+        "browser_warnings": [{"run_id": t.run_id, **i} for t in tasks for i in t.get("browser_warnings", [])],
         "vm_lock": vm_state,
         "round": round_state,
         "quota": read_json(ctx.cfg.state_dir / "quota.json", {}),
@@ -176,6 +180,13 @@ def render(data: dict) -> str:
                        ("license_error", "licencadat javítandó"), ("nightly_state", "éjszakai témakörök")):
         if data.get(key):
             lines.append(label + ": " + json.dumps(data[key], ensure_ascii=False, sort_keys=True))
+    if data.get("last_error"):
+        error = data["last_error"]
+        lines.append(f"utolsó hiba ({error['at']}): {error['message']}")
+    for error in data.get("incidents", []):
+        lines.append(f"nyitott hiba ({error['at']}): {error['message']}")
+    for warning in data.get("browser_warnings", []):
+        lines.append(f"böngészős figyelmeztetés ({warning['run_id']}): {warning['file']}: {warning['message']}")
     lock = data["lock"]
     lines.append(f"zár: {'foglalt – ' + str(lock.get('kind')) + ' óta ' + str(lock.get('since')) if lock['held'] else 'szabad'}")
     for t in data["open"]:

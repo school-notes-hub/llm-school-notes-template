@@ -75,7 +75,7 @@ def test_all_mutators_and_restoration_preserve_legacy(repo, make_figure, log, mo
     task.update(inspection_figures=[{"brief": brief, "candidate": {"state": "failed"}, "attempted": True}])
     monkeypatch.setattr(review_phases.steps, "generate_all", lambda *a: None)
     monkeypatch.setattr(review_phases.steps, "record_tool_files", lambda *a: None)
-    monkeypatch.setattr(review_phases.notices, "refresh", lambda *a: [])
+    monkeypatch.setattr(review_phases.notices, "refresh", lambda *a, **kw: [])
     review_phases.finalize(ctx, task)
     assert safefs.read_bytes(repo, pending.PATH) == before
     assert not list((repo / "docs/review").glob("*.md")) if (repo / "docs/review").exists() else True

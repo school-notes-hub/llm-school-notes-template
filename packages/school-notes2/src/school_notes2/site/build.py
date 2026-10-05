@@ -71,7 +71,7 @@ def existing(task_dir: Path, commit: str) -> BuildRecord | None:
 
 
 def build(git: Git, commit: str, task_dir: Path, renderer: Renderer, *, changed: list[str] | None,
-          log: Log) -> BuildRecord:
+          log: Log, browser_filter=None) -> BuildRecord:
     """Build and check the public site of `commit` into `<task>/build`.
 
     `changed` lists the wiki paths changed since the last publish; the browser check visits
@@ -91,7 +91,12 @@ def build(git: Git, commit: str, task_dir: Path, renderer: Renderer, *, changed:
         _render(renderer, src, out, task_dir / "last-updated.json")
         payload = read_json(out / "payload.json")
         only = None if changed is None else pages_to_check(changed, [p["path"] for p in payload["pages"]])
-        _browser_check(renderer, out, payload, only)
+        try:
+            _browser_check(renderer, out, payload, only)
+        except BuildContentError as exc:
+            problems = browser_filter(exc.problems) if browser_filter else exc.problems
+            if problems:
+                raise BuildContentError(problems) from None
         _check_public(renderer, out, payload)
     shutil.rmtree(src, ignore_errors=True)
     record = {"commit": commit, "duration_s": round(t.s, 1), "pages": len(payload["pages"])}
@@ -216,19 +221,22 @@ def _browser_check(r: Renderer, out: Path, payload: dict, only: list[str] | None
 
 def _browser_problems(errors: list[dict]) -> list[dict]:
     """One problem per page; errors without a page (search, print) name the config file."""
-    seen: dict[str, dict] = {}
+    seen = {}
     for err in errors:
         file = err.get("path") or CONFIG
-        if file in seen:
-            continue
         kinds = [k for k in ("brokenImages", "missingAnchors", "duplicates") if err.get(k)]
         if err.get("overflow"):
             kinds.append(f"overflow at {err.get('width')}px")
         if err.get("h1", 1) != 1:
             kinds.append("not exactly one H1")
         what = ", ".join(kinds) or err.get("error") or "browser check failed"
-        seen[file] = {"file": file, "line": None, "message": f"public build: {what}"}
-    return list(seen.values())
+        problem = {"file": file, "line": None, "message": f"public build: {what}"}
+        if err.get("link"):
+            problem["message"] += ": " + err["link"]
+            if err.get("target"):
+                problem.update(kind="browser-link", target=err["target"])
+        seen[(file, problem["message"])] = problem
+    return [seen[key] for key in sorted(seen)]
 
 
 def _check_public(r: Renderer, out: Path, payload: dict) -> None:

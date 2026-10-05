@@ -11,8 +11,9 @@ from ..wiki import decisions, frontmatter
 from ..wiki.pages import CODE_FENCE, links, resolve, wiki_pages
 
 
-def details(text: str, item_id: str) -> dict:
-    page = frontmatter.split(text)
+def details(text: str | frontmatter.Page, item_id: str) -> dict:
+    from .files import parse_report
+    page = parse_report(text) if isinstance(text, str) else text
     result = dict(page.meta.get("item_details", {}).get(item_id, {}))
     if "file" not in result:  # Existing reports have only a location in their heading.
         match = re.search(r"^### " + re.escape(item_id) + r" [–-] (wiki/[^\s:]+)(?::\d+)?\s*$", page.body, re.M)
@@ -38,13 +39,13 @@ def page_ids(repo: Path, rel: str) -> tuple[set[str], set[str]]:
     return questions, confirmed
 
 
-def closure_problems(repo: Path, closure: dict) -> list[str]:
+def closure_problems(repo: Path, closure: dict, *, page=None) -> list[str]:
     rel, key, status = closure["file"], closure["item_id"], closure["status"]
     if status == "disagree" and not closure.get("note", "").strip():
         return ["disagree requires a nonempty note"]
     if not safefs.is_file(repo, rel):
         return []  # check_result reports missing files.
-    record = details(safefs.read_text(repo, rel), key)
+    record = details(page if page is not None else safefs.read_text(repo, rel), key)
     if record["round"] == 2 and status not in ("fixed", "question", "open"):
         return ["round: 2 can close only as fixed or question"]
     if status not in ("question", "settled"):
@@ -96,10 +97,12 @@ def inventory(repo: Path) -> dict:
             pages[rel] = {"questions": sorted(q), "decisions": sorted(d)}
     items = {}
     for path in files.review_files(repo):
-        text = safefs.read_text(repo, path.relative_to(repo).as_posix())
-        for key, status in (files.read_items(repo, path) or {}).items():
+        page = files.read_report(repo, path)
+        if page is None or not isinstance(page.meta.get("items"), dict):
+            continue
+        for key, status in page.meta["items"].items():
             full = f"{path.relative_to(repo).as_posix()}#{key}"
-            items[full] = {**details(text, key), "status": status}
+            items[full] = {**details(page, key), "status": status}
     return {"pages": pages, "items": dict(sorted(items.items()))}
 
 

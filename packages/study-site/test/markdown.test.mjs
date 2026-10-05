@@ -94,3 +94,38 @@ test('the footnote list has a visible heading', async () => {
   assert.match(out.html, /<section data-footnotes="" class="footnotes"><h2 id="user-content-footnote-label">Források<\/h2>/);
   assert.doesNotMatch(out.html, /sr-only/);
 });
+
+
+test('web keeps real-gap notices while print and PDF chapters omit every pending notice', async () => {
+  const { renderMarkdown, printSection } = await import('../lib/markdown.mjs');
+  const source = '# Tananyag\n\n⏳ Ehhez a részhez ábra készül.\n\n⏳ Ezt az oldalt még ellenőrizzük.\n\n⏳ Ez a téma az órán folytatódik; a jegyzet az eddig tanult részt tartalmazza.\n\nMegtanulható állítás.\n';
+  const marked = source.replace(/(^⏳.*$)/gm, '<!-- school-notes:generated pending -->\n$1\n<!-- /school-notes:generated -->');
+  const rendered = await renderMarkdown(marked);
+  assert.match(rendered.html, /⏳/);
+  const print = await printSection(rendered.html, 'p-');
+  assert.doesNotMatch(print.html + print.answers, /⏳/);
+  assert.match(print.html, /Megtanulható állítás/);
+});
+
+
+test('cross-page accented anchor failures identify both source pages and the target', async () => {
+  const { linkProblems } = await import('../lib/browser-links.mjs');
+  const { renderMarkdown } = await import('../lib/markdown.mjs');
+  const anchor = '2-dia---a-földművelés-térképe';
+  const target = await renderMarkdown(`# Téma\n\n<a id="${anchor}"></a>\n`);
+  assert.ok(target.html.includes(`id="${anchor}"`));
+  const link = `http://localhost/jegyzet/tema/#${encodeURIComponent(anchor)}`;
+  const pages = [{path:'wiki/t/tema.md',url:'/jegyzet/tema/'}];
+  const problems = linkProblems(link, new Set(['wiki/t/b.md','wiki/t/a.md']), pages, 'http://localhost', {error:'Missing cross-page fragment'});
+  assert.deepEqual(problems.map(p => [p.path,p.target]), [
+    ['wiki/t/a.md','wiki/t/tema.md'], ['wiki/t/b.md','wiki/t/tema.md']]);
+  assert.ok(problems.every(p => p.link === link));
+});
+
+
+test('print preserves an authored hourglass paragraph', async () => {
+  const { printSection, renderMarkdown } = await import('../lib/markdown.mjs');
+  const rendered = await renderMarkdown('# Idő\n\n⏳ Mérd meg az időt!\n');
+  const print = await printSection(rendered.html, 'p-');
+  assert.match(print.html, /⏳ Mérd meg az időt!/);
+});

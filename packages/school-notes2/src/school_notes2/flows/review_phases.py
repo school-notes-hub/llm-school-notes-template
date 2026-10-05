@@ -1,7 +1,8 @@
 """P2–P6, one forward-only pass per attempt; no model call after finalization."""
 
+from ..log import duration
 from ..figures import insert, pending, migration_gate
-from ..reader import notices, report, verdicts
+from ..reader import notice_migration, notices, report, verdicts
 from ..review import relations
 from ..state import safefs
 from ..state.errors import WaitingQuota
@@ -46,6 +47,11 @@ def _advance(ctx, task, notify, edits):
 
 
 def finalize(ctx, task, edits=None):
+    with duration(ctx.log, "review.finalize"):
+        return _finalize(ctx, task, edits)
+
+
+def _finalize(ctx, task, edits=None):
     repo, written, owners = ctx.notes_path, [], []
     for state in task.get("inspection_figures", []):
         brief = state["brief"]
@@ -81,13 +87,14 @@ def finalize(ctx, task, edits=None):
     if owners:
         path = task.get("inspection_report")
         written.append(report.append(repo, path, owners, [], "figures"))
-    written += notices.refresh(repo, _notice_pages(ctx, task))
+    written += refresh_notices(ctx, task, _notice_pages(ctx, task))
     steps.record_tool_files(task, repo, written)
     steps.generate_all(ctx, task)
 
 
 def _notice_pages(ctx, task):
     pages = {p for u in task.get("inspection_units", []) for p in u["pages"]}
+    pages.update(s["brief"]["page"] for s in task.get("inspection_figures", []))
     path = task.get("inspection_report")
     if path:
         pages.update(i["file"] for key, i in relations.inventory(ctx.notes_path)["items"].items()
@@ -96,13 +103,18 @@ def _notice_pages(ctx, task):
 
 
 def final_keys(ctx, task):
+    with duration(ctx.log, "review.final_keys"):
+        return _final_keys(ctx, task)
+
+
+def _final_keys(ctx, task):
     """G4 regeneration and final G5 check: invalidate only, never call a reviewer."""
     from . import learning
     learning.migrate(ctx, task)
     stale = verdicts.invalidate(ctx.notes_path)
     pages = {r["file"] for r in stale}
     pages.update(_notice_pages(ctx, task))
-    written = notices.refresh(ctx.notes_path, sorted(pages)) if task.get("review_complete") else []
+    written = refresh_notices(ctx, task, sorted(pages))
     # Notices may change pages after step 6 (also in an earlier, interrupted call):
     # public.json must describe the pages as they are. Idempotent: no write without a change.
     steps.write_public(ctx, task)
@@ -111,3 +123,12 @@ def final_keys(ctx, task):
                            ([verdicts.PATH] if safefs.is_file(ctx.notes_path, verdicts.PATH) else []))
     ctx.log.event("review.final_keys", invalidated=len(stale))
     return stale
+
+
+def refresh_notices(ctx, task, pages):
+    from . import journal
+    journal.settle(ctx, task)
+    write = lambda path, text: journal.write(ctx, task, path, text, whole=not path.startswith("wiki/"))
+    git = ctx.worktree("notes") if safefs.exists(ctx.notes_path, ".git") else None
+    written = notice_migration.refresh(ctx.notes_path, git=git, write=write)
+    return written + notices.refresh(ctx.notes_path, pages, write=write)

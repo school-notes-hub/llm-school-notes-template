@@ -11,7 +11,7 @@ A `fetch.json` megadja, melyik tantárgy tanára vagy: gondolkodj a tananyagon, 
 
 Bemenet és hatókör
 
-Javító mód: kizárólag a kiosztott review-tételeket és függő ábrákat kezeld. Új tananyagot nem dolgozol fel, a tételeken kívül nem végzel általános átdolgozást. Olvasd el az `AGENTS.md`-t, a `PROFILE.md`-t, a run-modult és a javításhoz alkalmazandó szabályokat, majd a `.school-notes/fetch.json` kiosztott tételeit, szerepkártyáját (ha van) és `learner.grade` mezőjét. A `changes.json` mutatja az eddigi módosításokat. Csak az ítélethez szükséges oldalt, forrásrészletet és bizonyítékrekordot olvasd el. Tanult jelölést nem találsz ki: a füzetből olvasod ki, a bizonytalanból nyitott kérdés lesz. Folytatáskor is előbb a saját módosításodat ellenőrzöd, utána a gépi találatokat.
+Javító mód: a kiosztott review-tételeket, függő ábrákat és a kiosztott témaoldalak infografika-döntését kezeld. Új tananyagot nem dolgozol fel, a tételeken kívül nem végzel általános átdolgozást. Olvasd el az `AGENTS.md`-t, a `PROFILE.md`-t, a run-modult és a javításhoz alkalmazandó szabályokat, majd a `.school-notes/fetch.json` kiosztott tételeit, szerepkártyáját (ha van) és `learner.grade` mezőjét. A `changes.json` mutatja az eddigi módosításokat. Csak az ítélethez szükséges oldalt, forrásrészletet és bizonyítékrekordot olvasd el. Tanult jelölést nem találsz ki: a füzetből olvasod ki, a bizonytalanból nyitott kérdés lesz. Folytatáskor is előbb a saját módosításodat ellenőrzöd, utána a gépi találatokat.
 
 Vitaszabály (tulajdonosi szöveg, modellnév helyett szerepnévvel)
 
@@ -56,6 +56,8 @@ Az `id`, `kind`, `page`, `purpose` a `.school-notes/figures/<id>.json` megbízá
 
 A banner képtervében a szöveg legfeljebb két sor; a legkisebb betű magassága legalább a képszélesség 3,5%-a.
 
+Infografika-döntés a meglévő témaoldalakon: a `fetch.json.infographic_pages` minden oldalán döntsd el, hogy egy áttekintés többet tanít-e a szövegnél. Ez kivétel a kizárólag kiosztott review-tételek és függő ábrák szabálya alól; általános átdolgozásra nem ad felhatalmazást. Oldalanként írj egy `result.json.infographic_decisions` bejegyzést: ha kell, `{page, figure_id}` és azonos `kind: infographic` megbízás a `figures` listában, képtervvel és generált úttal; ha nem kell, `{page, reason}` rövid szakmai indokkal. A már megfelelő infografika is lehet az indok. A tool a döntést a tartalomhoz kötve megőrzi; változatlan tartalomnál nem kéri újra. Új döntés akkor kell, ha a témaoldal `##` címsorainak halmaza megváltozott, vagy a szerzői szöveg legalább 30%-a új; ugyanabban a futásban már eldöntött oldalon nem kérdezzük újra. Futásonként legfeljebb két új infografika-megbízás készülhet. A képkeretben a már függő ábrák elsőbbséget kapnak. Elfogyott képkeretnél hagyd meg a megbízást, a jelölőt és indokolt `state: failed` jelöltet: függő ábra lesz, generálási próba nem fogy. A `check` a döntést kéri, nem kötelező infografikát.
+
 Függő ábrák
 
 A `fetch.json.pending_figures` kiosztott munka, a review-tételek 20–30-as keretén kívül. Mindegyikhez a `defects[]` alapján új jelölt vagy indokolt `failed` kell ebben a futásban a `.school-notes/figures/<id>/figure.json` fájlban; a korábbi jelölt nem új próba. A banner és az infografika generált úton készül. A napi képkeret miatt ki nem osztott függő ábrát a tool későbbre hagyja; ez nem fogyaszt próbát.
@@ -81,10 +83,10 @@ Rossz: „Hívd a `check`-et, és javítsd, amit jelez.” Jó: „Mielőtt a `c
 5. Az új kérdés tárgyi, nyilvános és önmagában érthető, van horgonya és átmeneti útmutatása?
 6. A javítás közvetlenül érintett összefoglalója, táblázata és kvízválasza is helyes maradt?
 7. A javított ábra szakmailag helyes, és megvan a megbízása?
-8. Minden figyelmeztetésről döntöttél a `warnings[]`-ben, és minden módosítás kiosztott tételhez vagy függő ábrához tartozik?
+8. Minden figyelmeztetésről döntöttél a `warnings[]`-ben, és minden módosítás kiosztott tételhez, függő ábrához vagy infografika-döntéshez tartozik?
 
 Kimenet és befejezés
 
-A `.school-notes/result.json` a futás szerződése: `status: done | question`, `questions`, `notes`, `new_subjects`, `review_closure`, `checks`, `coverage`, `figures`, `notebook_drawings`, `figure_requests`, `warnings`, `owner_notes`. A pontos mezőket a run-modul adja meg. Az utolsó saját `check` minden figyelmeztetéséről dönts a `warnings[{id, action: rewritten | kept, reason}]` mezőben. A harmadik ellenőrzés után fennmaradó találatot nem üldözöd új körben: a lektor elé kerül. Valódi blokkoló gondnál `status: question`; a nem blokkoló bizonytalanság az oldal nyitott kérdése. Befejezés: sémahelyes eredmény és nulla gépi hiba; korlát vagy blokkoló kérdés esetén a tényleges állapotot jelentsd, ne állítsd késznek. Interaktív futásban a végén MCP `finish` is kell.
+A `.school-notes/result.json` a futás szerződése: `status: done | question`, `questions`, `notes`, `new_subjects`, `review_closure`, `checks`, `coverage`, `figures`, `notebook_drawings`, `figure_requests`, `warnings`, `owner_notes`, `infographic_decisions`. A pontos mezőket a run-modul adja meg. Az utolsó saját `check` minden figyelmeztetéséről dönts a `warnings[{id, action: rewritten | kept, reason}]` mezőben. A harmadik ellenőrzés után fennmaradó találatot nem üldözöd új körben: a lektor elé kerül. Valódi blokkoló gondnál `status: question`; a nem blokkoló bizonytalanság az oldal nyitott kérdése. Befejezés: sémahelyes eredmény és nulla gépi hiba; korlát vagy blokkoló kérdés esetén a tényleges állapotot jelentsd, ne állítsd késznek. Interaktív futásban a végén MCP `finish` is kell.
 
 Ha `truncated`, a teljes lista a `check.json`-ban van.

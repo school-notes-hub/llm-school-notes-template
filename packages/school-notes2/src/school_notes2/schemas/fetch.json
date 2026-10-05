@@ -52,6 +52,9 @@
                      "status": {"enum": ["open", "owner"]},
                      "key": {"type": "string", "pattern": "^docs/review/(?!.*\\.\\.)[^\\\\#]+\\.md#R[0-9]+$"},
                      "file": {"type": "string"}, "item_id": {"type": "string", "pattern": "^R[0-9]+$"}}}},
+    "infographic_pages": {"type": "array", "items": {"type": "string", "pattern": "^wiki/.+\\.md$"}, "uniqueItems": true},
+    "infographic_run_id": {"type": "string"},
+    "infographic_commissions": {"type": "array", "items": {"type": "string"}},
     "pending_images": {"type": "array", "items": {
       "type": "object", "additionalProperties": false, "required": ["plan_id", "page"],
       "properties": {"plan_id": {"type": "string", "pattern": "^[a-z0-9-]{1,64}$"},

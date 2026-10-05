@@ -11,7 +11,7 @@ from .test_notice_regressions import BANNER, META, accept, legacy_items, refresh
 
 
 @pytest.mark.parametrize("placement", ["section", "generated", "header"])
-def test_nightly_notice_uses_shared_priority_and_stays_outside_blocks(setup, placement):
+def test_nightly_waiting_never_creates_a_notice(setup, placement):
     ctx, _, page = setup
     repo = ctx.notes_path
     section = "# Rész\n\n"
@@ -27,17 +27,15 @@ def test_nightly_notice_uses_shared_priority_and_stays_outside_blocks(setup, pla
         accept(repo, page)
         legacy_items(repo, page, ["Mondat."])
     result = refresh_twice(repo, page)
-    assert result.count("⏳") == 1 and notices.FIGURE in result
+    assert "⏳" not in result
     assert units.page_key(repo, page) == key
     if placement == "generated":
         assert markers.read(result, "notes") == section
-        assert result.index(notices.FIGURE) > result.index(markers.CLOSE)
-    if placement == "header":
-        assert result.index(notices.FIGURE) > result.index("observed: Áttekintés.")
     safefs.write_json(repo, figure_waiting.PATH, [])
     result = refresh_twice(repo, page)
     assert notices.FIGURE not in result
-    assert (notices.PAGE if placement == "header" else notices.SECTION) in result
+    assert notices.PAGE not in result
+    assert notices.SECTION not in result
 
 
 def test_license_notice_is_idempotent_and_clears_without_invalidating_verdict(setup):

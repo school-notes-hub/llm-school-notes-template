@@ -4,7 +4,7 @@ from dataclasses import replace
 
 from ..figures.render import Renderer
 from ..llm import launch
-from ..log import now_iso
+from ..log import duration, now_iso
 from ..notify import Notice, pending
 from ..reader.units import slug
 from ..review import night_figures, topic_call, topic_input, topic_result, topics
@@ -49,7 +49,8 @@ def _topic(ctx, task, unit, configured, harness, repo, work):
     folder = task.dir / "nightly" / slug(topic)
     data = safefs.read_json(folder, "input-receipt.json")
     if data is None:
-        data = topic_input.prepare(repo, work, task, unit, folder / "in")
+        with duration(ctx.log, "review.topic_input"):
+            data = topic_input.prepare(repo, work, task, unit, folder / "in")
         safefs.write_json(folder, "input-receipt.json", data)
     call = launch.RoleRun(ctx.name, task.run_id, "reviewer", configured, harness,
                           ctx.image_tag(), launch.Mounts(), folder / "out/review.json", "nightly", folder,

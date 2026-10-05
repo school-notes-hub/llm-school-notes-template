@@ -85,7 +85,9 @@ def test_session_review_handoff_real_guard_and_git_finish(world, monkeypatch):
     # A local clarification leaves the lesson-log's required title intact.
     text = safefs.read_text(ctx.notes_path, page).replace("[Első]", "[Első téma]")
     safefs.write_text(ctx.notes_path, page, text)
-    safefs.write_json(ctx.notes_path, ".school-notes/result.json", {"status": "done", "review_closure": [
+    safefs.write_json(ctx.notes_path, ".school-notes/result.json", {"status": "done",
+        "infographic_decisions": [{"page": p, "reason": "A szöveg elegendő."} for p in
+            safefs.read_json(ctx.notes_path, ".school-notes/fetch.json")["infographic_pages"]], "review_closure": [
         {"file": i["file"], "item_id": i["item_id"], "status": "fixed", "note": "Pontosítva"} for i in assigned]})
     checked = handlers.build(ctx).check()
     assert checked["ok"], checked

@@ -5,7 +5,7 @@ import time
 from ..figures.review import verdict_for
 from ..log import now_iso
 from ..mcp.redact import redact
-from ..notify import Notice, pending
+from ..notify import Notice, incidents, pending
 from ..reader import verdicts
 from ..review import relations
 from ..state import phase, safefs
@@ -77,13 +77,23 @@ def completed(ctx, task, report, duration, *, finishing=False):
     notes += task.get("correction_result", {}).get("owner_notes", []) + report.get("owner_notes", [])
     report["owner_notes"] = list(dict.fromkeys(notes))
     receipt = terminal(task)
+    is_terminal = bool(receipt)
+    if receipt == "needs_owner":
+        incidents.task_error(ctx, task)
+        receipt = None
+    elif receipt == "closed":
+        receipt = None
+    elif receipt == "done":
+        incidents.resolve(ctx, "task:" + task.run_id)
+        if incidents.blocks_completion(ctx, task):
+            receipt = None
     # A resumed owner stop is a new closure; retries keep the same receipt.
     notice_key = completion_key(task, receipt) if receipt else None
     notices = task.get("completion_notices", {})
     choice = "completion" if receipt else None
     if choice and notices.get(notice_key) != choice:
         task.update(completion_notices={**notices, notice_key: choice})
-    if choice == "completion":
+    if is_terminal:
         try:
             report.update(details(ctx, task))
         except Exception:
@@ -101,7 +111,7 @@ def completed(ctx, task, report, duration, *, finishing=False):
 
 
 # label and possessive form for the one-sentence mail
-MODES = {"run": ("jegyzetfutás", "jegyzetfutása"), "fix": ("javító futás", "javító futása"),
+MODES = {"publish": ("kiadási futás", "kiadási futása"), "run": ("jegyzetfutás", "jegyzetfutása"), "fix": ("javító futás", "javító futása"),
          "repair": ("javítási futás", "javítási futása"), "chat": ("interaktív munkamenet", "interaktív munkamenete"),
          "nightly": ("éjszakai review", "éjszakai review-ja")}
 STATES = {"done": "kész", "closed": "lezárva", "needs_owner": "elakadt, rád vár"}
@@ -113,9 +123,13 @@ def subject(name, mode, receipt):
 
 def sentence(name, mode, task, receipt, *, ended=None):
     """One sentence: who, what, when it started and ended, and how it ended."""
-    started = task.data.get("created", "")[:16].replace("T", " ")
+    resumed = task.get("resumed_at")
+    started = (resumed or task.data.get("created", ""))[:16].replace("T", " ")
     ended = (ended or now_iso())[:16].replace("T", " ")
-    text = f"{name.capitalize()} {mode[1]} {started}-kor indult, {ended}-kor ért véget, állapota: {STATES.get(receipt, receipt)}"
+    worked = round(max(0, (task.get("active_seconds") or 0) - (task.get("active_at_resume") or 0)) / 60)
+    verb = "folytatódott" if resumed else "indult"
+    text = (f"{name.capitalize()} {mode[1]} {started}-kor {verb}, {ended}-kor ért véget "
+            f"({worked} perc munka), állapota: {STATES.get(receipt, receipt)}")
     owner = task.data.get("needs_owner") or {}
     if receipt == "needs_owner":
         # Raw exception messages may contain source content, JSON or paths.
@@ -146,6 +160,12 @@ def ended(ctx, kind, started, before, *, successful=True):
     task.update(active_seconds=max(task.get("active_seconds", 0), baseline + elapsed))
     if not terminal(task):
         return
+    if task.phase == "done" and not task.get("ended_at"):
+        task.update(ended_at=now_iso())
+    if task.data.get("needs_owner"):
+        incidents.task_error(ctx, task)
+    elif task.phase == "done":
+        incidents.resolve(ctx, "task:" + task.run_id)
     if task.kind == "review":
         review = read_json(task.dir / "review.json", {})
         report = {"időpont": now_iso(), "időtartam_s": task.get("active_seconds"), "tartomány": [task.get("base"), task.get("T")],
@@ -158,6 +178,8 @@ def ended(ctx, kind, started, before, *, successful=True):
                   "keretállapot": read_json(ctx.cfg.state_dir / "quota.json", {}), "tokenek": _metrics(task)}
         write_json(task.dir / "report.json", redact(report))
         receipt = terminal(task)
+        if receipt != "done" or incidents.blocks_completion(ctx, task):
+            return
         pending.send(ctx, Notice(ctx.name, f"nightly:{task.run_id}:{completion_key(task, receipt)}", task.run_id, "nightly",
                                  subject(ctx.name, MODES["nightly"], receipt),
                                  sentence(ctx.name, MODES["nightly"], task, receipt), ""))

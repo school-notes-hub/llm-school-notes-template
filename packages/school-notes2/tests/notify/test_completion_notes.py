@@ -105,7 +105,7 @@ def test_owner_stop_and_resumed_completion_each_send_one_short_mail(tmp_path, lo
         ctx.lock = lambda: StudentLock(ctx.cfg.state_dir, learner)
         monkeypatch.setattr(clear.git_discard, "discard", lambda *a: None)
         assert "eldobva" in clear.clear(ctx, "notes", "discard")
-        assert len(delivered) == 2  # The real CLI path must deliver before any later run.
+        assert len(delivered) == 1  # The error was already delivered; discard is not success.
         assert "nincs nyitott" in clear.clear(ctx, "notes", "discard")
     else:
         task.set_phase("committed" if ending == "finish" else "done")
@@ -113,7 +113,7 @@ def test_owner_stop_and_resumed_completion_each_send_one_short_mail(tmp_path, lo
         report.completion(ctx, task)
     operational_report.ended(ctx, "run", 0, {task.run_id: True})
     operational_report.ended(ctx, "run", 0, {task.run_id: True})
-    assert len(delivered) == (1 if ending == "finish" else 2)
+    assert len(delivered) == (2 if ending == "done" else 1)
     assert all(note not in msg.get_content() for msg in delivered for note in ("N1", "N2"))
     assert read_json(task.dir / "report.json")["owner_notes"] == ["N2: új megjegyzés.", "N1: első megjegyzés."]
 

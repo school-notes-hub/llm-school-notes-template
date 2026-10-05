@@ -3,7 +3,7 @@
 import re
 
 from ..state import safefs
-from ..wiki import frontmatter, pages
+from ..wiki import author, frontmatter, markers, pages
 from ..wiki import check as wiki_check
 from ..wiki.check import item
 
@@ -35,7 +35,7 @@ def problems(ctx, task, paths):
         if any(a not in after for a in anchors):
             out.append(item(rel, None, "repair: preserve existing anchors"))
         if rel != target["page"] and target["kind"] not in ("lesson-notes", "chapter-summary", "review"):
-            if _without_links(part(before)) != _without_links(part(after)):
+            if not _related_equal(before, after):
                 out.append(item(rel, None, "repair: related lesson logs and summaries allow only link adjustments"))
     return out
 
@@ -49,9 +49,42 @@ def _protected(key, value):
     return value
 
 
-def _without_links(text):
+def _related_equal(before, after):
+    """Ignore only separator changes at a generated notice's former/current position."""
+    old, new = (_linkless(author.part(text)) for text in (before, after))
+    old_lines, old_gaps = _lines(old.body)
+    new_lines, new_gaps = _lines(new.body)
+    if old.meta != new.meta or old_lines != new_lines:
+        return False
+    allowed = set()
+    for text in (before, after):
+        for start, _, name in markers.spans(text):
+            if markers.is_notice(name):
+                prefix = frontmatter.split(author.part(text[:start])).body
+                allowed.add(len(_lines(prefix)[0]))
+    return all(old_gaps.get(i, 0) == new_gaps.get(i, 0) or i in allowed
+               for i in old_gaps.keys() | new_gaps.keys())
+
+
+def _linkless(text):
     # Link labels are prose and stay intact; only their destinations may change.
-    return pages.LINK.sub(lambda m: m[0].replace(m["target"], "<target>"), text)
+    return frontmatter.split(pages.LINK.sub(lambda m: m[0].replace(m["target"], "<target>"), text))
+
+
+def _lines(body):
+    lines, gaps, fence = [], {}, None
+    for line in body.splitlines():
+        mark = re.match(r"^ {0,3}(`{3,}|~{3,})", line)
+        if mark:
+            if fence is None:
+                fence = mark[1]
+            elif mark[1][0] == fence[0] and len(mark[1]) >= len(fence):
+                fence = None
+        if line.strip() or fence:
+            lines.append(line)
+        else:
+            gaps[len(lines)] = gaps.get(len(lines), 0) + 1
+    return lines, gaps
 
 
 def coverage(result, fetch):
@@ -80,7 +113,7 @@ def inherited_learning_problems(ctx, task, paths):
         if raw.returncode != 0 or not safefs.is_file(ctx.notes_path, rel):
             continue
         before, after = raw.stdout.decode(), safefs.read_text(ctx.notes_path, rel)
-        if _without_links(part(before)) != _without_links(part(after)):
+        if not _related_equal(before, after):
             continue
         old = wiki_check.check_learning(ctx.notes_path, rel, frontmatter.split(before))
         inherited.update((rel, i["message"]) for i in old)

@@ -137,7 +137,7 @@ def test_finish_returns_all_subject_errors_and_reuses_other_checkpoints(tmp_path
     assert phase.load(task.dir).get("writing_k") == 4
 
 
-@pytest.mark.parametrize("rel", [".school-notes/result.json", "publication/public.json",
+@pytest.mark.parametrize("rel", ["publication/public.json",
                                  "docs/review/report.md", "tools/subjects.json"])
 def test_unassignable_finish_error_is_program_error_without_writer_strike(tmp_path, rel):
     ctx, task = task_context(tmp_path)

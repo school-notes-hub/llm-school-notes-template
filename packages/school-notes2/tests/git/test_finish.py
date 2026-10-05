@@ -202,6 +202,34 @@ def test_generated_only_conflicts_resolve_without_owner(env):
     assert "regenerated" in show
 
 
+def test_verdict_records_conflict_keeps_both_sides_without_owner(env):
+    """A night's verdicts on origin and this run's reader verdicts both survive the rebase."""
+    import json
+    night = {"role": "reader", "file": "wiki/b.md", "key": "k2", "verdict": "ok", "at": "2026-10-05T05:00:00+02:00"}
+    mine = {"role": "reader", "file": "wiki/a.md", "key": "k1", "verdict": "ok", "at": "2026-10-04T23:50:00+02:00"}
+    env.other_push("docs/review/verdicts.json", "[]\n", message="base")
+    repos.fetch(env.bare, 60)
+    task = env.start_run()
+    path = env.path / "docs/review/verdicts.json"
+    path.write_text(json.dumps([mine], indent=2) + "\n")
+    hooks = env.hooks(lambda: None)
+    hooks.message = fixed_message(task)
+    finish.g1_commit(task, env.wt, hooks, {})
+    env.other_push("docs/review/verdicts.json", json.dumps([night], indent=2) + "\n")
+    assert finish.run(task, env.wt, hooks, T, {}) == "done"
+    show = subprocess.run(["git", f"--git-dir={env.origin}", "show", "main:docs/review/verdicts.json"],
+                          capture_output=True, text=True).stdout
+    assert [r["file"] for r in json.loads(show)] == ["wiki/a.md", "wiki/b.md"]
+
+
+def test_verdict_record_merge_keeps_the_later_verdict_for_the_same_key():
+    from school_notes2.git.conflicts import merge_verdict_records
+    old = {"role": "reader", "file": "wiki/a.md", "key": "k", "verdict": "changes", "at": "2026-10-04T10:00"}
+    new = {**old, "verdict": "ok", "at": "2026-10-05T10:00"}
+    assert merge_verdict_records([new], [old]) == [new]
+    assert merge_verdict_records([old], [new]) == [new]
+
+
 def test_edit_during_interactive_finish_stops_before_commit(env):
     task = env.start_run(mode="interactive")
     (env.path / "wiki/a.md").write_text("x\n")
@@ -446,8 +474,9 @@ def test_t154_final_keys_on_rebased_commit_before_build(env):
         assert "changed first" in committed and "changed last" in committed
         checked.append(verdicts.invalidate(env.path))
     def build(commit):
-        assert safefs.read_json(env.path, verdicts.PATH) == []
-        assert env.wt.out("show", commit + ":" + verdicts.PATH).strip() == "[]"
+        assert verdicts.valid(env.path, page) is None
+        assert verdicts.ever_reviewed(env.path, page)
+        assert '"reader-history"' in env.wt.out("show", commit + ":" + verdicts.PATH)
         return {"commit": commit}
     hooks.final_keys, hooks.build = final_keys, build
     assert finish.run(task, env.wt, hooks, T, {}) == "done"

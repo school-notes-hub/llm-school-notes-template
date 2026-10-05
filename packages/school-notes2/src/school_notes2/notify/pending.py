@@ -20,6 +20,8 @@ def send(ctx, notice: Notice) -> bool:
 
 
 def retry(ctx) -> None:
+    from . import incidents
+    incidents.restore_pending(ctx)
     pending = read_json(path(ctx), {}) or {}
     for key in sorted(pending):
         _deliver(ctx, pending, key)

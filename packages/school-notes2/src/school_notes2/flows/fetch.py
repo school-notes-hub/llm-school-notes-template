@@ -16,7 +16,7 @@ from ..git import repos, workbranch
 from ..git.run import with_retries
 from ..images import pending as image_pending
 from ..images import plans as image_plans
-from ..log import today
+from ..log import now_iso, today
 from ..review import files as review_files
 from ..schemas import validate
 from ..sources import calls, cards, naming
@@ -56,7 +56,7 @@ def _scan(ctx: Ctx, drive, mode: str) -> list[Package]:
             return []
         raise
     write_json(ctx.cfg.state_dir / ctx.name / "last-run.json",
-               {"at": today(), **inv.summary()})
+               {"at": now_iso(), **inv.summary(), "ready_ids": sorted(p.id for p in inv.ready)})
     return inv.ready
 
 
@@ -260,6 +260,13 @@ def fetch_json(task: Task, k: int, *, grade: int, whole_run: bool = False, repo=
     if repo is not None:
         from . import licensing
         data["approved_figure_requests"] = licensing.for_fetch(repo, data)
+        from ..figures import infographics
+        if task.get("infographic_policy"):
+            run_id = task.get("correction_parent", task.run_id)
+            data["infographic_run_id"] = run_id
+            data["infographic_commissions"] = task.get("infographic_commissions", [])
+            pages = infographics.assigned(repo, data) if data["mode"] in ("fix", "repair") else []
+            data["infographic_pages"] = infographics.needed(repo, pages, run_id)
     validate("fetch", data)
     return data
 

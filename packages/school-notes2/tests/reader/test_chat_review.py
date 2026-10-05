@@ -36,7 +36,9 @@ def session(setup, monkeypatch):
 
 def submit(ctx, task, status="fixed"):
     path = phase.load(task.dir).get("inspection_report")
-    result = {"status": "done", "review_closure": [
+    supplied = safefs.read_json(ctx.notes_path, ".school-notes/fetch.json")
+    result = {"status": "done", "infographic_decisions": [{"page": p, "reason": "A szöveg elegendő."}
+              for p in supplied.get("infographic_pages", [])], "review_closure": [
         {"file": path, "item_id": "R1", "status": status, "note": "Szakmai indok"}]}
     safefs.write_json(ctx.notes_path, ".school-notes/result.json", result)
     return result

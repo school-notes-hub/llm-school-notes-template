@@ -69,6 +69,8 @@ def _settle(ctx: Ctx, task: phase.Task, ask, say) -> bool:
             return False
     if task.get("question"):
         # 5.3: the session answers the question for range k; the run stays a cron run.
+        from ..notify import incidents
+        incidents.resolve(ctx, "task:" + task.run_id)
         task.clear_needs_owner()
         return True
     if task.mode == "cron":
@@ -77,6 +79,8 @@ def _settle(ctx: Ctx, task: phase.Task, ask, say) -> bool:
             return False
         task.data["mode"] = "interactive"
     if stop:
+        from ..notify import incidents
+        incidents.resolve(ctx, "task:" + task.run_id)
         task.clear_needs_owner()
     task.save()
     return True

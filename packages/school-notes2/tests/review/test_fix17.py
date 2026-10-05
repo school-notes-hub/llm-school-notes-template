@@ -128,7 +128,7 @@ def test_export_error_and_reviewer_notes_share_one_section(tmp_path, repos, log,
     assert len(notes) == 2 and all(text.count(n) == 1 for n in notes)
     assert files.read_items(repos.wt_path, repos.wt_path / reports[0]) == {"R1": "owner"}
     assert task.get("notify_owner_items")[0]["item_id"] == "R1"
-    assert "⏳" in safefs.read_text(repos.wt_path, "wiki/a.md")
+    assert "⏳" not in safefs.read_text(repos.wt_path, "wiki/a.md")
 
 
 @pytest.mark.parametrize("origin", ["findings", "hits", "figure_findings"])

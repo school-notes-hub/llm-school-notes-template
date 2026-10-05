@@ -20,6 +20,7 @@ def test_whole_lifecycle_one_mail_despite_45_owner_items(tmp_path, log, monkeypa
     task.data["created"] = "2026-10-04T23:00:00+02:00"
     task.save()
     monkeypatch.setattr(operational_report, "now_iso", lambda: "2026-10-05T01:05:00+02:00")
+    monkeypatch.setattr(operational_report.time, "monotonic", lambda: 0)
     mode = "nightly" if kind == "review" else "run"
     for stage in (("writing", "inspecting", "review_ready") if kind == "notes" else ("reviewing", "reviewed", "closing")):
         task.set_phase(stage)
@@ -39,7 +40,7 @@ def test_whole_lifecycle_one_mail_despite_45_owner_items(tmp_path, log, monkeypa
     assert len(delivered) == 1
     body = delivered[0].get_content().strip()
     assert body == (f"{learner.capitalize()} " + ("éjszakai review-ja" if kind == "review" else "jegyzetfutása") +
-                    " 2026-10-04 23:00-kor indult, 2026-10-05 01:05-kor ért véget, állapota: kész.")
+                    " 2026-10-04 23:00-kor indult, 2026-10-05 01:05-kor ért véget (0 perc munka), állapota: kész.")
     assert "Titkos" not in body and "wiki/" not in body and "{" not in body
     assert read_json(pending.path(ctx)) == {}
 
@@ -149,4 +150,18 @@ def test_discarded_owner_stopped_night_gets_one_new_closure(tmp_path, log, monke
     assert len(delivered) == 1
     assert "eldobva" in clear.clear(ctx, "review", "discard")
     assert "nincs nyitott" in clear.clear(ctx, "review", "discard")
-    assert len(delivered) == 2 and "lezárva" in delivered[-1].get_content()
+    assert len(delivered) == 1  # Discard does not repeat the incident mail.
+
+
+def test_resumed_run_mail_reports_only_the_resumed_segment(tmp_path):
+    """Owner 2026-10-05: a run stopped at 00:03 and resumed at 08:57 is not a 10-hour run."""
+    from school_notes2.flows import operational_report
+    from school_notes2.state import phase as phase_mod
+    task = phase_mod.create(tmp_path, "benedek", "notes", "cron", "prepared")
+    task.update(mode="repair", active_seconds=3833)
+    task.mark_needs_owner("check failed", "repair the tool", "program")
+    task.clear_needs_owner()
+    task.update(active_seconds=3833 + 120)
+    text = operational_report.sentence("benedek", operational_report.MODES["repair"], task, "done",
+                                       ended="2026-10-05T09:01:00+02:00")
+    assert "-kor folytatódott, 2026-10-05 09:01-kor ért véget (2 perc munka), állapota: kész." in text

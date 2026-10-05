@@ -52,6 +52,12 @@ closed() {
 
 hold_locks() {
     # Keep every learner's lock for the whole install: no run sees a half-switched release.
+    # Same order as round/chat: VM first, then learners. Hold across the symlink switch.
+    mkdir -p "$ROOT/state/operations/vm"
+    exec 19>>"$ROOT/state/operations/vm/lock"
+    echo "waiting for the VM lock ..."
+    flock 19
+    LOCK_FDS+=(19)
     local fd=20
     for learner in $LEARNERS; do
         mkdir -p "$ROOT/state/$learner"

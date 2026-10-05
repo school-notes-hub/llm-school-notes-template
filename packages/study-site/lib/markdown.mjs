@@ -28,6 +28,7 @@ schema.attributes.code = [...(schema.attributes.code || []), ['className', /^lan
 schema.attributes.div = [...(schema.attributes.div || []), ['className', 'math', 'math-display']];
 schema.attributes.span = [...(schema.attributes.span || []), ['className', 'math', 'math-inline']];
 schema.attributes.details = ['open'];
+schema.attributes.p = [...(schema.attributes.p || []), ['className', 'study-pending']];
 // The input never supplies executable HTML, CSS, embeds or arbitrary IDs/classes.
 // Footnote IDs are prefixed by rehype-sanitize, including their references.
 
@@ -167,6 +168,22 @@ function fixFootnotes(tree) {
   }
 }
 
+function generatedNotices(tree) {
+  // Only the tool's Markdown markers designate export-excluded notices.
+  visit(tree, node => {
+    if (!node.children) return;
+    const stack = [];
+    for (const child of node.children) {
+      const open = child.type === 'html' && child.value.trim().match(/^<!-- school-notes:generated ([a-z0-9-]+) -->$/);
+      if (open) stack.push(open[1]);
+      else if (child.type === 'html' && child.value.trim() === '<!-- /school-notes:generated -->') stack.pop();
+      else if (child.type === 'paragraph' && stack.some(name => /^pending(?:$|-section-|-figure-)/.test(name))) {
+        child.data = { ...child.data, hProperties: { ...child.data?.hProperties, className: ['study-pending'] } };
+      }
+    }
+  });
+}
+
 export async function renderMarkdown(source, { resolveUrl, mermaid, pageId = '', footnoteLabel = 'Források', publicView = false } = {}) {
   const split = splitMarkdown(source);
   const { metadata, body } = split;
@@ -175,7 +192,7 @@ export async function renderMarkdown(source, { resolveUrl, mermaid, pageId = '',
   const sanitizedIds = new Map();
   const audit = { title, formulas: [], mermaid: [], labels: [], links: [], images: [] };
   const processor = unified().use(remarkParse).use(remarkGfm).use(remarkMath)
-    .use(() => tree => { if (publicView) publicMarkdown(tree); })
+    .use(() => tree => { generatedNotices(tree); if (publicView) publicMarkdown(tree); })
     // The footnote list gets a visible heading (no sr-only class), so it never reads as part of
     // the section above it.
     .use(remarkRehype, { allowDangerousHtml: true, footnoteLabel, footnoteLabelProperties: {} })
@@ -336,6 +353,11 @@ export async function printSection(html, prefix) {
   // Prefix all IDs/references before combining independently rendered pages.
   const answers = [];
   const processor = unified().use(rehypeRaw).use(() => tree => {
+    visit(tree, 'element', (node, index, parent) => {
+      if (node.tagName === 'p' && node.properties.className?.includes('study-pending')) {
+        parent.children.splice(index, 1); return index;
+      }
+    });
     visit(tree, 'element', (node, index, parent) => {
       if (node.properties.id) node.properties.id = prefix + node.properties.id;
       if (String(node.properties.href || '').startsWith('#')) node.properties.href = '#' + prefix + node.properties.href.slice(1);

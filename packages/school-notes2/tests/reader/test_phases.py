@@ -176,7 +176,7 @@ def test_real_fix_call_assignment_and_targeted_recheck(setup, monkeypatch, statu
         seen.append(k)
         if status == "fixed":
             safefs.write_text(ctx.notes_path, page, safefs.read_text(ctx.notes_path, page) + "\nA gravitáció miatt.\n")
-        result = {"status": "done", "review_closure": [{"file": item["file"], "item_id": "R1",
+        result = {"status": "done", "infographic_decisions": [{"page": page, "reason": "A szöveg elegendő."}], "review_closure": [{"file": item["file"], "item_id": "R1",
                                                        "status": status, "note": "Szakmai indok"}]}
         safefs.write_json(ctx.notes_path, ".school-notes/result.json", result)
         return result
@@ -284,7 +284,7 @@ def test_open_section_notice_is_byte_stable(setup, monkeypatch):
     before = safefs.read_text(ctx.notes_path, page)
     notices.refresh(ctx.notes_path, [page])
     assert safefs.read_text(ctx.notes_path, page) == before
-    assert notices.SECTION.strip() in before
+    assert notices.SECTION.strip() not in before
 
 
 def test_fix_resume_never_adopts_previous_writer_result(setup, monkeypatch):

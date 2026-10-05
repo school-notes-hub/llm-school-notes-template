@@ -32,6 +32,11 @@ def check_result(repo: Path, result: dict, fetch: dict, open_items: set[tuple[st
     out += check_checks(repo, result, fetch)
     from ..repair import check as repair_check
     out += repair_check.coverage(result, fetch)
+    from ..figures import infographics
+    try:
+        out += infographics.check(repo, result, fetch)
+    except (ValueError, OSError) as exc:
+        out.append(item(RESULT, None, f"infographic_decisions: {exc}"))
     return out
 
 

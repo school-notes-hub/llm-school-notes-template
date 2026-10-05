@@ -142,6 +142,6 @@ def test_missing_figure_close_resume_keeps_operational_state_and_status(tmp_path
     assert repos.remote("main") == report
     assert not relations.inventory(repos.wt_path)["items"]
     assert figure_waiting.active(repos.wt_path)
-    assert notices.FIGURE in safefs.read_text(repos.wt_path, "wiki/a.md")
+    assert notices.FIGURE not in safefs.read_text(repos.wt_path, "wiki/a.md")
     nightly.fetch(repos.repo, 60)
     assert status._nightly_state(ctx)["pending_figures"]

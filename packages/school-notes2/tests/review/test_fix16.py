@@ -8,7 +8,7 @@ from school_notes2.llm import guard, launch, timeouts
 from school_notes2.reader import notices
 from school_notes2.review import close, figure_waiting, night_figures, topics
 from school_notes2.state import phase, safefs
-from school_notes2.wiki import public
+from school_notes2.wiki import public, markers
 from tests.review.test_night_figures import png
 from tests.conftest import record_render
 from tests.review.test_topics import IDENT, context, good, prepare
@@ -21,7 +21,7 @@ def test_nightly_public_refresh_survives_close_crash(tmp_path, repos, log, monke
     text = "# A\n\nTananyag.\n"
     repos.commit({page: text})
     # The H manifest is current, but the nightly page verdict removes a notice.
-    notices.refresh(repos.laptop, [page])
+    safefs.write_text(repos.laptop, page, text + "\n" + markers.wrap("pending", notices.PAGE))
     public.write(repos.laptop, lambda _: None)
     repos.commit({page: safefs.read_text(repos.laptop, page),
                   "publication/public.json": safefs.read_text(repos.laptop, "publication/public.json")})
@@ -84,7 +84,7 @@ def test_missing_figure_retried_after_suspension_and_next_night(tmp_path, repos,
     close.close(first, repos.repo, repos.wt, IDENT)
     assert topics.load(repos.wt_path)["done_topics"] == []
     assert figure_waiting.active(repos.wt_path)
-    assert notices.FIGURE in safefs.read_text(repos.wt_path, page)
+    assert notices.FIGURE not in safefs.read_text(repos.wt_path, page)
     marker = repos.remote("claude-reviewed")
     # A suspended role never invokes a harness and still does not mark the topic done.
     if suspended:

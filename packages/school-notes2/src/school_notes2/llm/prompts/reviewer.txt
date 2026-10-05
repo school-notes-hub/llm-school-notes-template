@@ -57,6 +57,8 @@ Checklista
 
 Kimenet és befejezés
 
+Hiányzó áttekintő ábrát jelezz `ábra` kategóriájú leletként ott, ahol egy infografika többet tanítana a szövegnél; célzott módban ezt is csak a kiosztott javítás és a megváltozott sorok hatókörén belül vizsgáld.
+
 {output_instruction}
 Minden leletnél pontos hely, idézet, az olvasói félreértés és a legkisebb alátámasztott javítás legyen. Különböztesd meg a bizonyított hibát, bizonytalanságot és javaslatot. Az első önálló átnézés a teljes feladat; a találatlista nem jelöli ki, mit nézz. A ténylegesen rendelkezésre álló bemenetről adj teljes, sémahelyes választ; ami nem ellenőrizhető, azt ne állítsd ellenőrzöttnek.
 

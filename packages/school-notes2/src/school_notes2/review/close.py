@@ -5,9 +5,11 @@ R is committed on a detached HEAD in the review worktree on top of the fresh ori
 """
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 from typing import Callable
 
+from ..log import duration
 from ..evidence import records
 from ..git.run import Git, classify, failure_text
 from ..state import phase, safefs
@@ -114,12 +116,20 @@ def _finish(task: phase.Task, repo: Git, r: str, m: str) -> tuple[str, str]:
 
 def close(task: phase.Task, repo: Git, wt: Git, ident: Identity, t: Timeouts = Timeouts(),
           fetch_pages: list[dict] | None = None) -> tuple[str, str]:
+    with duration(repo.log, "review.close"):
+        return _close_report(task, repo, wt, ident, t, fetch_pages)
+
+
+def _close_report(task, repo, wt, ident, t, fetch_pages):
     """Write the report, index and evidence; commit R; push main=R, claude-reviewed=M."""
     review = load_review(task)
     base, head, end = task.get("base"), task.get("H"), task.get("T")
     if task.get("topic_review") and not task.get("topic_results") and not task.get("all_topics_done"):
         from . import topic_result, topics
-        if public.dumps(topic_result.state(task)) == topics.text(repo, head, topics.STATE):
+        from ..reader import notice_migration
+        policy = json.loads(topics.text(repo, head, notice_migration.PATH) or "{}")
+        if (policy.get("policy") == notice_migration.POLICY and
+                public.dumps(topic_result.state(task)) == topics.text(repo, head, topics.STATE)):
             return _finish(task, repo, head, base)
 
     def write(worktree: Path) -> list[str]:
@@ -137,7 +147,7 @@ def close(task: phase.Task, repo: Git, wt: Git, ident: Identity, t: Timeouts = T
         extra = []
         if task.get("topic_review"):
             from . import topic_result
-            extra, closure_owners, notes = topic_result.apply(task, worktree, ident, log=repo.log)
+            extra, closure_owners, notes = topic_result.apply(task, worktree, ident, log=repo.log, git=wt)
             owners += closure_owners
             notes = [" ".join(n.split()) for n in notes if n not in review.get("owner_notes", [])]
             if notes:

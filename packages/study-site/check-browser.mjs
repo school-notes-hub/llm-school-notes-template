@@ -2,6 +2,7 @@
 // Integration checks against a built site; no source modification or installation.
 import fs from 'node:fs/promises';
 import { chromium } from 'playwright';
+import { linkProblems } from './lib/browser-links.mjs';
 const [address, payloadPath, executablePath, reportPath, searchQuery, onlyPath] = process.argv.slice(2);
 if (!reportPath) throw new Error('check-browser.mjs ORIGIN PAYLOAD CHROMIUM REPORT.json [QUERY] [ONLY.json]');
 const payload = JSON.parse(await fs.readFile(payloadPath, 'utf8'));
@@ -10,7 +11,7 @@ const only = onlyPath ? new Set(JSON.parse(await fs.readFile(onlyPath, 'utf8')))
 const checked = only ? payload.pages.filter(p => only.has(p.path)) : payload.pages;
 const browser = await chromium.launch({ executablePath });
 const report = { pages: [], errors: [], search: null };
-const localLinks = new Set();
+const localLinks = new Map();
 try {
   const page = await browser.newPage();
   for (const theme of ['light', 'dark']) {
@@ -39,14 +40,17 @@ try {
         report.pages.push({ url: entry.url, path: entry.path, theme, width, ...result });
         if (theme === 'light' && width === 1440) {
           const links = await page.locator('a[href]').evaluateAll(a => a.map(e => e.href));
-          for (const link of links) if (link.startsWith(address + '/')) localLinks.add(link);
+          for (const link of links) if (link.startsWith(address + '/')) {
+            if (!localLinks.has(link)) localLinks.set(link, new Set());
+            localLinks.get(link).add(entry.path);
+          }
         }
         if (response.status() !== 200 || result.h1 !== 1 || result.brokenImages.length || result.missingAnchors.length || result.duplicates.length || result.overflow || !result.inlineSvgDisplay) report.errors.push({ url: entry.url, path: entry.path, theme, width, ...result });
       }
     }
   }
   const fetched = new Map();
-  for (const link of localLinks) {
+  for (const [link, sources] of [...localLinks].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
     const url = new URL(link);
     const fragment = decodeURIComponent(url.hash.slice(1)); url.hash = '';
     if (!fetched.has(url.href)) {
@@ -54,10 +58,11 @@ try {
       fetched.set(url.href, { status: response.status(), type: response.headers()['content-type'] || '', text: (response.headers()['content-type'] || '').includes('text/html') ? await response.text() : '' });
     }
     const result = fetched.get(url.href);
-    if (result.status !== 200) report.errors.push({ link, status: result.status });
+    const linkError = detail => report.errors.push(...linkProblems(link, sources, payload.pages, address, detail));
+    if (result.status !== 200) linkError({ status: result.status });
     else if (fragment && result.type.includes('text/html')) {
       const exists = await page.evaluate(({ html, id }) => !!new DOMParser().parseFromString(html, 'text/html').getElementById(id), { html: result.text, id: fragment });
-      if (!exists) report.errors.push({ link, error: 'Missing cross-page fragment' });
+      if (!exists) linkError({ error: 'Missing cross-page fragment' });
     }
   }
   report.checkedLinks = localLinks.size;

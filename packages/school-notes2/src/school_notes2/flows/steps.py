@@ -162,12 +162,14 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
     if wiki_check.errors(problems):
         raise CheckFailed(problems)
     check_changed(ctx, task, result=result)  # Validate author text before any tool stamp.
+    from ..reader import new_pages
     by, at = _writer_label(ctx), now_iso()
     parts = machine.write_lesson_notes(repo, result.get("notes", []), fetch,
                                        ctx.student.grade, by, at)
-    parts += machine.stamp_generated(repo, changed_paths(ctx, task), by, at)
+    parts += machine.stamp_generated(repo, sorted(llm_snapshot(ctx, task)), by, at)
     machine.add_subjects(repo, result.get("new_subjects", []), _drive_names(task))
     _record_writes(task, repo, whole=[], parts=parts)
+    new_pages.record(ctx, task)  # Lesson type is supplied by machine.write_lesson_notes.
     check_changed(ctx, task, result=result)
     outcome = review_files.apply_closure(repo, task.run_id, result.get("review_closure", []),
                                          listed, ctx.cfg.limits.owner_after_open)
@@ -177,6 +179,8 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
     from . import licensing
     licensing.refresh(ctx, task, result, fetch["pages"])
     generation_receipts.refresh(ctx, task)
+    from ..figures import infographics
+    infographics.record(ctx, task, result)
     generate_all(ctx, task)
     return Prepared(result, result["status"] == "question", outcome.new_owner)
 

@@ -1,8 +1,4 @@
-"""E-mail notices (plan 8.4, owner 2026-10-05): one short mail per finished run, nothing else.
-
-Only the end-of-run summaries (`completion:` and `nightly:` kinds) are mailed; every other
-notice is logged as `notify.suppressed` and stays visible in `school-notes status`. A notice
-never carries note content, photos or personal data. An msmtp failure is only logged."""
+"""Content-free completion and incident mail; all item and quota notices are suppressed."""
 
 import subprocess
 from dataclasses import dataclass
@@ -25,11 +21,13 @@ class Notice:
     todo: str
 
 
-RUN_KINDS = ("completion:", "nightly:")
+RUN_KINDS = ("completion:", "nightly:", "error:")
 
 
 def mailed(notice: Notice) -> bool:
-    return notice.kind.startswith(RUN_KINDS)
+    if notice.kind.startswith("error:"):
+        return True
+    return notice.kind.startswith(("completion:", "nightly:")) and notice.kind.split(":")[2:3] == ["done"]
 
 
 @dataclass(frozen=True)

@@ -102,4 +102,8 @@ def generate(ctx, task, plan_id, note):
         if plan_id not in assigned or note:
             return {"state": "disabled", "message": "Repair uses free local figures; paid generation is disabled."}
         return image_generate.generate(ctx.image_settings(), plan_id, log=ctx.log, paid_disabled=True)
+    from ..figures import infographics
+    blocked = infographics.generation_gate(ctx, task, plan_id, note)
+    if blocked:
+        return blocked
     return image_generate.generate(ctx.image_settings(), plan_id, note, log=ctx.log)

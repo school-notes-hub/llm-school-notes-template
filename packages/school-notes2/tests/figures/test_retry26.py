@@ -92,7 +92,7 @@ def test_free_rechecks_stop_after_two_assignments_and_resume_once(repo, make_fig
     first.update(inspection_figures=[{"brief": brief, "candidate": {"state": "failed"}, "attempted": False}])
     monkeypatch.setattr(review_phases.steps, "generate_all", lambda *a: None)
     monkeypatch.setattr(review_phases.steps, "record_tool_files", lambda *a: None)
-    monkeypatch.setattr(review_phases.notices, "refresh", lambda *a: [])
+    monkeypatch.setattr(review_phases.notices, "refresh", lambda *a, **kw: [])
     for _ in range(2):
         review_phases.finalize(ctx, phase.load(first.dir))
         assert correction_figures.assignable(ctx, pending.load(repo)) == []
@@ -125,11 +125,11 @@ def test_gate_logs_new_runtime_and_nightly_commissions_without_mutation(repo, ma
     task.update(inspection_figures=[{"brief": brief, "candidate": {"state": "failed"}, "attempted": False}])
     monkeypatch.setattr(review_phases.steps, "generate_all", lambda *a: None)
     monkeypatch.setattr(review_phases.steps, "record_tool_files", lambda *a: None)
-    monkeypatch.setattr(review_phases.notices, "refresh", lambda *a: [])
+    monkeypatch.setattr(review_phases.notices, "refresh", lambda *a, **kw: [])
     review_phases.finalize(ctx, task)
     assert rejected.apply(repo, [{"commission": {"id": "retry-z"}}, {"commission": {"id": "retry-a"}}], log=log) == []
     events = [json.loads(line) for line in log.main.read_text().splitlines()]
-    assert [(e["action"], e["target"]) for e in events] == [
+    assert [(e["action"], e["target"]) for e in events if e["action"] != "review.finalize"] == [
         ("figure.migration_dropped", fid) for fid in ("new", "retry-a", "retry-z")]
     assert safefs.read_bytes(repo, pending.PATH) == before
     assert not safefs.is_file(repo, migration_gate.MARK)

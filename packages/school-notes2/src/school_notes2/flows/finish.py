@@ -145,11 +145,12 @@ def _build(ctx: Ctx, task: Task, commit: str) -> dict:
         changed = None          # the browser check then visits every page
     try:
         record = site_build.build(ctx.bare(), commit, task.dir, renderer(ctx), changed=changed,
-                                  log=ctx.log)
+                                  log=ctx.log, browser_filter=lambda items: checks.browser_warnings(ctx, task, items))
     except site_build.BuildContentError as exc:
-        steps.write_check_items(ctx, exc.problems)
-        checks.tool_errors(ctx, task, exc.problems)
-        raise steps.CheckFailed(exc.problems) from None
+        problems = checks.build_dependencies(ctx, task, exc.problems)
+        steps.write_check_items(ctx, problems)
+        checks.tool_errors(ctx, task, problems)
+        raise steps.CheckFailed(problems) from None
     return {"commit": record.commit, "output": str(record.output),
             "duration_s": record.duration_s}
 

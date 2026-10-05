@@ -110,11 +110,14 @@ def tool_errors(ctx, task, items: list[dict]) -> None:
         from .steps import llm_snapshot
         authored = llm_snapshot(ctx, task)
         # A metadata stamp does not transfer ownership of the author's prose.
-        found = [i for i in found if i["file"] in task.get("tool_writes", {})
-                 or i["file"] not in authored]
+        found = [i for i in found if not (i.get("kind") == "browser-link" and i.get("target") in authored)
+                 and (i["file"] in task.get("tool_writes", {}) or i["file"] not in authored)]
     if found:
-        raise SnError("check failed on unchanged tool output", details={"items": found},
+        exc = SnError("check failed on unchanged tool output", details={"items": found},
                       todo="repair the tool; do not ask the writer to change generated output")
+        from ..notify import incidents
+        incidents.record(ctx, "program", "check", task=task, exc=exc)
+        raise exc
 
 
 def after_writer(ctx, task, result: dict, items: list[dict]) -> list[dict]:
@@ -124,3 +127,51 @@ def after_writer(ctx, task, result: dict, items: list[dict]) -> list[dict]:
                 if i.get("severity") == "warning"]
     task.update(check_warnings=warnings)
     return warnings
+
+
+def build_dependencies(ctx, task, items):
+    """A changed link target and its referring page go back to the same repair round."""
+    if not any(i.get("kind") == "browser-link" and i.get("target") for i in items):
+        return ordered(items)
+    from . import steps
+    authored = steps.llm_snapshot(ctx, task)
+    out = list(items)
+    for problem in items:
+        target = problem.get("target")
+        if problem.get("kind") == "browser-link" and target in authored and target != problem["file"]:
+            out.append({**problem, "file": target,
+                        "message": f"{problem['file']}: {problem['message']}"})
+    return ordered(out)
+
+
+def browser_warnings(ctx, task, items):
+    """Only notice-only edits excuse an inherited browser defect, never a changed target."""
+    import re
+    from . import steps
+    from ..wiki import markers
+    base = steps.base_reader(ctx, task)
+    notice_only = set()
+    for page in steps.changed_paths(ctx, task):
+        if not page.endswith(".md") or not safefs.is_file(ctx.notes_path, page):
+            continue
+        old = base(page)
+        if old is None:
+            continue
+        old = old.decode("utf-8", "replace")
+        new = safefs.read_text(ctx.notes_path, page)
+        if not any(markers.is_notice(name) for text in (old, new) for _, _, name in markers.spans(text)):
+            continue
+        def clean(text):
+            names = {name for _, _, name in markers.spans(text) if markers.is_notice(name)}
+            return re.sub(r"\n{2,}", "\n\n", markers.remove(text, names)).strip()
+        if old != new and clean(old) == clean(new):
+            notice_only.add(page)
+    changed = set(steps.changed_paths(ctx, task)) - notice_only
+    warnings = [{**i, "severity": "warning"} for i in items
+                if i["file"] in notice_only and i.get("target") not in changed]
+    if warnings:
+        saved = task.get("browser_warnings", [])
+        saved = ordered([dict(i) for i in {str(sorted(i.items())): i for i in saved + warnings}.values()])
+        task.update(browser_warnings=saved)
+        ctx.log.event("site.browser_warning", "warning", items=warnings)
+    return [i for i in items if {**i, "severity": "warning"} not in warnings]

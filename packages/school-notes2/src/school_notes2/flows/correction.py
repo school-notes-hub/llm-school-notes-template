@@ -11,7 +11,7 @@ from ..state.errors import BadWork, Transient, WaitingQuota
 from ..wiki import frontmatter
 from . import correction_figures, generation_receipts
 from .correction_figures import changed_figures
-from . import checks, handlers, inspection, steps, writer
+from . import call_scope, checks, handlers, inspection, steps, writer
 
 PREFIXES = ("wiki", "docs", "publication", "tools", ".school-notes")
 
@@ -159,6 +159,8 @@ def apply(ctx, task, root, saved, edits=None):
         task.update(**state, correction_state_applied=str(root))
     from . import licensing
     licensing.refresh(ctx, task, result, task.get("pages", []))
+    from ..figures import infographics
+    infographics.record(ctx, task, result)
     generation_receipts.refresh(ctx, task)
     outcome = files.apply_closure(ctx.notes_path, f"{task.run_id}-fix-a{task.get('attempt', 1)}", result.get("review_closure", []),
                                   task.get("correction_items", []), ctx.cfg.limits.owner_after_open)
@@ -190,7 +192,8 @@ def apply_figures(ctx, task, root, saved):
 
 def validated(ctx, child, root, items, result):
     """Both writers enter the same result, scope, path and content gates."""
-    check_scope(ctx, root, items, [e["commission"]["page"] for e in child.get("pending_figures", [])])
+    check_scope(ctx, root, items, [e["commission"]["page"] for e in child.get("pending_figures", [])]
+                + call_scope.link_pages(child))
     problems = checks.accounting(child, result)
     if problems:
         raise steps.CheckFailed(problems)

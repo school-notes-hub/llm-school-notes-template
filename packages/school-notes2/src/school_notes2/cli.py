@@ -47,6 +47,7 @@ def _parser() -> argparse.ArgumentParser:
     status = sub.add_parser("status")
     status.add_argument("learner", nargs="?")
     status.add_argument("--json", action="store_true")
+    status.add_argument("--details", action="store_true")
     status.add_argument("--clear", nargs=2, metavar=("LEARNER", "KIND"))
     action = status.add_mutually_exclusive_group()
     action.add_argument("--continue", dest="action", action="store_const", const="continue")
@@ -157,6 +158,11 @@ def _status(cfg, args, context) -> int:
         print(result)
         return 0
     learners = [args.learner] if args.learner else list(cfg.students)
+    if not args.json and not args.details:
+        from .flows import status_text
+        print("\n\n".join(status_text.overview(context.make(cfg, name, console=False))
+                          for name in learners))
+        return 0
     data = [status.summary(context.make(cfg, name, console=False)) for name in learners]
     print(json.dumps(data, ensure_ascii=False, indent=2) if args.json
           else "\n\n".join(status.render(d) for d in data))

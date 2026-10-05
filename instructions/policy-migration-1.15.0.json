@@ -13,9 +13,9 @@
       "heading": "Wiki structure",
       "destination": "instructions/wiki-structure.md",
       "source_sha256": "91416c932747a9e5a95b2c27ba7babf2ac8229afd251016b069bc5c142cb0b98",
-      "migrated_sha256": "e25d18199f1d1b35d506befcb386347691f341f83852921c814d12e4493ce17c",
+      "migrated_sha256": "4a668e77fb3c6b9bced9b72167feebda22b8db73ba0fe9d1e608abb41ec3bb78",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
-      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.16.2: the public view leaves out links and citations of private files and the grade prefix; 1.17.0: lesson-log body and source pointer; topic-only banner, banner reuse/style and private footnotes; 1.17.0 (neutral template): undated-lesson range placeholders, banner yardstick is the youngest main reader in PROFILE Audience; 1.18.0: public footnote layering, export never carries decisions/markers/log, image rights tied to output SHA-256; 1.18.1: the tool compiles formulas at build, the writer runs no renderer"
+      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.16.2: the public view leaves out links and citations of private files and the grade prefix; 1.17.0: lesson-log body and source pointer; topic-only banner, banner reuse/style and private footnotes; 1.17.0 (neutral template): undated-lesson range placeholders, banner yardstick is the youngest main reader in PROFILE Audience; 1.18.0: public footnote layering, export never carries decisions/markers/log, image rights tied to output SHA-256; 1.18.1: the tool compiles formulas at build, the writer runs no renderer; 1.19.2: a multi-lesson log may use the plural heading"
     },
     {
       "heading": "Principles",

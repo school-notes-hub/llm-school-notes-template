@@ -23,6 +23,12 @@ def on_error(exc: BaseException, *, task: Task | None, student: str, step: str, 
     if kind == "program":
         log.event("traceback", "error", level="error",
                   message="".join(traceback.format_exception(exc))[-4000:])
+    if task is None or isinstance(exc, Prerequisite):
+        from .operation import CURRENT
+        from . import last_error
+        current = CURRENT.get()
+        if current:
+            last_error.record(current[0], step, kind, exc)
     if isinstance(exc, Prerequisite):
         _mail(mailer, student, f"prerequisite:{step}", task, step, exc)
         return kind
@@ -31,6 +37,12 @@ def on_error(exc: BaseException, *, task: Task | None, student: str, step: str, 
             _mail(mailer, student, f"{kind}:{step}", None, step, exc)
         return kind
     task.record_error(kind, str(exc))
+    from .operation import CURRENT
+    from ..notify import incidents
+    current = CURRENT.get()
+    if current and kind != "timeout":  # Role timeouts own their cross-run incident.
+        incidents.record(current[0], kind, step, task=task, exc=exc)
+
     if isinstance(exc, WaitingQuota):
         if task.phase != "waiting_quota":
             task.set_phase("waiting_quota", quota_phase=task.phase)
@@ -60,6 +72,10 @@ def on_error(exc: BaseException, *, task: Task | None, student: str, step: str, 
 
 def on_success(task: Task) -> None:
     """A successful invocation ends the retry streak (8.1: a passing second hour)."""
+    from .operation import CURRENT
+    from ..notify import incidents
+    if CURRENT.get() and task.phase == "done":
+        incidents.resolve(CURRENT.get()[0], "task:" + task.run_id)
     if task.data["retries"]:
         task.data["retries"] = 0
         task.save()

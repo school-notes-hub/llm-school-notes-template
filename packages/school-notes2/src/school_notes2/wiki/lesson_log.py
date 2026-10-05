@@ -9,6 +9,7 @@ from .pages import CODE_FENCE, COMMENT, LINK, read_page, resolve
 
 BLOCK = "lesson-sources"
 TITLE = "Mit tanultunk ezen az órán"
+PLURAL_TITLE = "Mit tanultunk ezeken az órákon"
 
 
 def is_lesson(rel: str, meta: dict) -> bool:
@@ -103,7 +104,8 @@ def header_end(text: str) -> int:
 def form_problems(repo: Path, rel: str, body: str, meta: dict) -> list[str]:
     """Only structure is mechanical; subject matter and coverage stay with the writer."""
     visible = COMMENT.sub("", CODE_FENCE.sub("", body))
-    heading = re.search(r"^# " + TITLE + r"\s*$", visible, re.M)
+    titles = [TITLE, PLURAL_TITLE] if len(meta.get("lessons", [])) > 1 else [TITLE]
+    heading = re.search(r"^# (?:" + "|".join(titles) + r")\s*$", visible, re.M)
     if not heading:
         return [f"lesson log needs '# {TITLE}' with 3-8 top-level `*`/`-` bullets, "
                 "each linking `<topic>.md#<section>`"]

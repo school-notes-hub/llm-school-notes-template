@@ -24,6 +24,7 @@ def nightly(ctx: Ctx) -> int:
         ctx.log.event("nightly.skip", "locked", target=str(lock.holder()))
         return 0
     task = None
+    original_log = ctx.log
     try:
         setup.ensure(ctx)
         tasks = [t for t in phase.all_tasks(ctx.task_root(), ctx.name) if t.kind == "review"]
@@ -54,6 +55,7 @@ def nightly(ctx: Ctx) -> int:
                         mailer=ctx.mailer)
         return 1
     finally:
+        ctx.log = original_log
         lock.release()
 
 

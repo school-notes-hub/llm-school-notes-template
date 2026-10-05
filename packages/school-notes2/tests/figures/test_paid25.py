@@ -30,19 +30,19 @@ def test_unreviewed_last_image_gets_free_recheck(repo, make_figure, learner, pai
     assert not entry["owner_required"]
 
 
-def test_third_unreviewed_run_resumes_without_owner(repo, make_figure, monkeypatch):
+def test_third_unreviewed_run_resumes_without_owner(repo, make_figure, monkeypatch, log):
     brief, _ = make_figure(kind="banner")
     for rid in ("one", "two"):
         pending.record(repo, brief, rid, [], attempted=True)
     config = settings("one", ["rejected", "rejected", "generated"])
     config.daily_usd = Decimal(0)
-    ctx = SimpleNamespace(notes_path=repo, image_settings=lambda: config,
+    ctx = SimpleNamespace(notes_path=repo, log=log, image_settings=lambda: config,
                           name="one", cfg=SimpleNamespace(state_dir=repo.parent / "state"))
     task = phase.create(repo.parent, "one", "notes", "cron", "review_ready")
     task.update(inspection_figures=[{"brief": brief, "candidate": {"state": "candidate"}, "attempted": True}])
     monkeypatch.setattr(review_phases.steps, "generate_all", lambda *a: None)
     monkeypatch.setattr(review_phases.steps, "record_tool_files", lambda *a: None)
-    monkeypatch.setattr(review_phases.notices, "refresh", lambda *a: [])
+    monkeypatch.setattr(review_phases.notices, "refresh", lambda *a, **kw: [])
     for _ in range(2):
         review_phases.finalize(ctx, phase.load(task.dir))
     entry = pending.load(repo)[0]

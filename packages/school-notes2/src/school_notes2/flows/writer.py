@@ -59,6 +59,8 @@ def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
             except steps.CheckFailed as exc:
                 steps.write_check_items(ctx, exc.items)
                 raise
+            from ..figures import infographics
+            infographics.remember(task, result, ctx.notes_path)
             write_json(task.dir / f"result-{k}.json", result)
         if result["status"] == "question":
             task.update(question=result.get("questions", []))
@@ -115,7 +117,7 @@ def merge(results_: list[dict]) -> dict:
     notes: dict[str, set] = {}
     closures: dict[tuple, dict] = {}
     lists = ("questions", "new_subjects", "checks", "owner_notes", "figures",
-             "notebook_drawings", "figure_requests", "warnings", "coverage")
+             "notebook_drawings", "figure_requests", "warnings", "coverage", "infographic_decisions")
     merged = {"status": "done", **{key: [] for key in lists}}
     for r in results_:
         if r["status"] == "question":
@@ -130,6 +132,8 @@ def merge(results_: list[dict]) -> dict:
     merged["review_closure"] = [closures[k] for k in sorted(closures)]
     warnings = {w["id"]: w for w in merged["warnings"]}
     merged["warnings"] = [warnings[k] for k in sorted(warnings)]
+    decisions = {d["page"]: d for d in merged["infographic_decisions"]}
+    merged["infographic_decisions"] = [decisions[p] for p in sorted(decisions)]
     return merged
 
 

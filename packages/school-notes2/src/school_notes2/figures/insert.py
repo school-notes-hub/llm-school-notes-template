@@ -119,9 +119,9 @@ def invalidated(repo: Path) -> list[dict]:
                 current = context.verdict_key(repo, record["commission"], record["candidate"])
         except (OSError, ValueError):
             current = None
-        if current != record["key"]:
+        if current != record.get("key", ""):
             stale.append(record)
-    return sorted(stale, key=lambda r: (r["file"], r["key"]))
+    return sorted(stale, key=lambda r: (r["file"], r.get("key", "")))
 
 
 def removed(repo: Path, record: dict) -> bool:

@@ -63,7 +63,7 @@ def test_context_finding_has_section_notice_and_separate_assignment_flag(setup, 
     task.set_phase("review_ready")
     review_phases.advance(ctx, task, lambda _: None)
     text = safefs.read_text(ctx.notes_path, other)
-    assert notices.SECTION in text and notices.PAGE not in text
+    assert notices.SECTION not in text and notices.PAGE not in text
     assert task.phase == "finishing"
     review_phases.finalize(ctx, phase.load(task.dir))
     review_phases.final_keys(ctx, phase.load(task.dir))
@@ -232,7 +232,7 @@ def test_final_notices_leave_public_json_current(setup, monkeypatch):
     from school_notes2.wiki import public
     ctx, task, page = setup
     steps.write_public(ctx, task)
-    def refresh(repo, pages):
+    def refresh(repo, pages, **kwargs):
         safefs.write_text(repo, page, safefs.read_text(repo, page) + "\n" + notices.PAGE + "\n")
         return [page]
     monkeypatch.setattr(review_phases.notices, "refresh", refresh)
@@ -252,7 +252,7 @@ def test_final_keys_repairs_public_json_after_an_interrupted_notice(setup, monke
     ctx, task, page = setup
     steps.write_public(ctx, task)
     safefs.write_text(ctx.notes_path, page, safefs.read_text(ctx.notes_path, page) + "\n" + notices.PAGE + "\n")
-    monkeypatch.setattr(review_phases.notices, "refresh", lambda repo, pages: [])
+    monkeypatch.setattr(review_phases.notices, "refresh", lambda repo, pages, **kwargs: [])
     task.update(review_complete=True)
     review_phases.final_keys(ctx, task)
     repo = ctx.notes_path

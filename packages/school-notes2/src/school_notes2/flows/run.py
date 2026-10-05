@@ -41,6 +41,8 @@ def run(ctx: Ctx) -> int:
         _prerequisites(ctx, task)
         if task is None:
             task = _new_task(ctx)
+        from . import last_error
+        last_error.clear(ctx, "run")  # Prerequisites and Drive listing succeeded, even without new work.
         if task is None:
             publish.catch_up(ctx)
             return 0
@@ -129,9 +131,10 @@ def advance(ctx: Ctx, task: Task) -> None:
                              todo=f"answer it in `school-notes chat {ctx.name}`",
                              details={"questions": task.get("question", [])})
     if task.get("mode") == "fix" and not task.get("review_complete"):
-        from . import correction
+        from . import correction, call_scope
         correction.check_scope(ctx, task.dir / "fix-before", task.get("open_review_items", []),
-                               [e["commission"]["page"] for e in task.get("pending_figures", [])])
+                               [e["commission"]["page"] for e in task.get("pending_figures", [])]
+                               + call_scope.link_pages(task))
     try:
         finish_flow.finish(ctx, task, notify_owner_items=lambda items: owner_items(ctx, task, items))
     except steps.CheckFailed as exc:
@@ -197,4 +200,8 @@ def _other_limit_h(ctx: Ctx) -> float:
 
 def _daily(ctx: Ctx, kind: str, run_id: str, message: str, todo: str) -> None:
     ctx.log.event("run.skip", kind, target=run_id)
-    ctx.mailer.send(Notice(ctx.name, kind, run_id, "run", "stopped", message, todo))
+    if kind == "lock_held":
+        from . import last_error
+        last_error.record(ctx, "run", kind)
+    else:
+        ctx.mailer.send(Notice(ctx.name, kind, run_id, "run", "stopped", message, todo))

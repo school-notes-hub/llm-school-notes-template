@@ -13,7 +13,7 @@ FENCE = re.compile(r"\A---\n(?:(.*?)\n)?---\n", re.S)     # also an empty `---\n
 TOP_KEY = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*):")
 
 
-class Loader(yaml.SafeLoader):
+class Loader(getattr(yaml, "CSafeLoader", yaml.SafeLoader)):
     """Keep YAML 1.2 words such as the decision key `on` as strings."""
 
 
@@ -74,9 +74,9 @@ def dump_value(key: str, value) -> str:
     return f"{key}: {_flow(value)}"
 
 
-def set_keys(text: str, values: dict, remove: tuple[str, ...] = ()) -> str:
+def set_keys(text: str | Page, values: dict, remove: tuple[str, ...] = ()) -> str:
     """Set (or add at the end) the given top-level keys; other blocks stay byte-identical."""
-    page = split(text)
+    page = split(text) if isinstance(text, str) else text
     kept = []
     seen = set()
     for key, chunk in blocks(page.raw_meta) if page.has_fm else []:

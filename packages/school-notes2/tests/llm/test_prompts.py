@@ -77,7 +77,7 @@ def test_fix_has_no_ingest_or_whole_page_assignment():
                    'az új órát oda építsd be', 'Az órai jegyzetoldal rövid',
                    'az egész oldalon', 'Minden füzethibát javítottál'):
         assert ingest not in text
-    assert 'kizárólag a kiosztott review-tételeket és függő ábrákat kezeld' in text
+    assert 'a kiosztott review-tételeket, függő ábrákat és a kiosztott témaoldalak infografika-döntését kezeld' in text
     assert 'Tételen kívüli sort figyelmeztetés miatt sem írsz át' in text
     assert '`coverage[]`' in text
 
@@ -160,3 +160,10 @@ def test_writer_requires_own_svg_source_and_tool_render_for_raster(role):
 def test_targeted_nightly_instruction_is_not_an_owner_quote():
     line = next(line for line in prompt("reviewer", grade=9).splitlines() if line.startswith("Célzott mód"))
     assert "„" not in line and "”" not in line
+
+
+@pytest.mark.parametrize('role', ['reader-1', 'reviewer'])
+def test_infographic_review_instruction_precedes_output_contract(role):
+    text = (argv.Path(argv.__file__).with_name('prompts') / (role + '.txt')).read_text()
+    assert text.index('Hiányzó áttekintő ábrát') < text.index('{output_instruction}')
+    assert 'ábra' in text[text.index('Hiányzó áttekintő ábrát'):text.index('{output_instruction}')]

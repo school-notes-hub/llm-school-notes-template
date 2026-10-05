@@ -126,14 +126,14 @@ def test_finalization_marks_paid_exhaustion_with_one_notice(repo, make_figure, l
     cfg = SimpleNamespace(state_dir=repo.parent / "state")
     sent = []
     monkeypatch.setattr(Mailer, "_deliver", lambda self, message: sent.append(message) or True)
-    ctx = SimpleNamespace(name="one", notes_path=repo, cfg=cfg,
+    ctx = SimpleNamespace(name="one", notes_path=repo, cfg=cfg, log=log,
         image_settings=lambda: settings("one", ["rejected"] * 3),
         mailer=Mailer(repo / "unused", "test@example.test", cfg.state_dir / "notify.json", log))
     task = phase.create(repo.parent, "one", "notes", "cron", "review_ready")
     task.update(inspection_figures=[{"brief": brief, "candidate": {"state": "failed"}, "attempted": True}])
     monkeypatch.setattr(review_phases.steps, "generate_all", lambda *a: None)
     monkeypatch.setattr(review_phases.steps, "record_tool_files", lambda *a: None)
-    monkeypatch.setattr(review_phases.notices, "refresh", lambda *a: [])
+    monkeypatch.setattr(review_phases.notices, "refresh", lambda *a, **kw: [])
     for _ in range(2):
         review_phases.finalize(ctx, phase.load(task.dir))
     stored = pending.load(repo)[0]

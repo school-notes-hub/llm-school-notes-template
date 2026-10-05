@@ -4,6 +4,8 @@ The frontmatter (`reviewer`, `range`, `items`, `status`) is machine-only. The bo
 once from review.json and never rewritten; closures are appended as `## Végrehajtva (<run>)`.
 """
 
+from copy import deepcopy
+from functools import lru_cache
 import json
 import re
 from dataclasses import dataclass, field
@@ -154,13 +156,28 @@ def _num(item_id: str) -> int:
     return int(ITEM_NUM.fullmatch(item_id).group(1))
 
 
-def read_items(repo: Path, path: Path) -> dict | None:
-    """The `items` map of a v2 review file; None for files without it (v1 files, index)."""
+@lru_cache(maxsize=32)
+def _parsed_report(text):
+    # Content keys cannot go stale on a rebase or a same-size rewrite.
+    return fm.split(text)
+
+
+def parse_report(text):
+    # Callers may mutate their document; never expose the cached object itself.
+    return deepcopy(_parsed_report(text))
+
+
+def read_report(repo: Path, path: Path):
     try:
-        meta = fm.split(_read(repo, path)).meta
+        return parse_report(_read(repo, path))
     except (ValueError, OSError):
         return None
-    items = meta.get("items")
+
+
+def read_items(repo: Path, path: Path) -> dict | None:
+    """The `items` map of a v2 review file; None for files without it (v1 files, index)."""
+    page = read_report(repo, path)
+    items = page.meta.get("items") if page else None
     return items if isinstance(items, dict) else None
 
 
@@ -174,12 +191,16 @@ def open_items(repo: Path, mode: str) -> list[dict]:
     wanted = (OPEN,) if mode == "cron" else (OPEN, OWNER)
     found = []
     for path in review_files(repo):
-        items = read_items(repo, path) or {}
+        page = read_report(repo, path)
+        if page is None or not isinstance(page.meta.get("items"), dict):
+            continue
+        items = page.meta["items"]
         rel = path.relative_to(repo).as_posix()
-        found += [{"file": rel, "item_id": i, "key": f"{rel}#{i}", "status": items[i],
-                   "round": relations.details(_read(repo, path), i)["round"],
-                   "chain": relations.details(_read(repo, path), i)["chain"]} for i in sorted(items, key=_num)
-                  if items[i] in wanted and (mode != "cron" or relations.details(_read(repo, path), i)["chain"] == 0)]
+        for i in sorted(items, key=_num):
+            detail = relations.details(page, i)
+            if items[i] in wanted and (mode != "cron" or detail["chain"] == 0):
+                found.append({"file": rel, "item_id": i, "key": f"{rel}#{i}", "status": items[i],
+                              "round": detail["round"], "chain": detail["chain"]})
     return found
 
 
@@ -227,7 +248,7 @@ def _apply_one(repo: Path, path: Path, run_id: str, closures: dict, listed: list
     page = fm.split(text)
     body, items = _without_own_section(page.body, dict(page.meta["items"]), run_id)
     for item_id, c in closures.items():
-        problems = relations.closure_problems(repo, c)
+        problems = relations.closure_problems(repo, c, page=page)
         if problems:
             raise ClosureError("; ".join(problems))
         if item_id not in items:
@@ -247,7 +268,7 @@ def _apply_one(repo: Path, path: Path, run_id: str, closures: dict, listed: list
         entries.append((item_id, status, note))
         if status in (FIXED, DISAGREE, "question", "settled"):
             items[item_id] = status
-            record = relations.details(text, item_id)
+            record = relations.details(page, item_id)
             record.pop("recheck", None)
             details[item_id] = record
     body = body.rstrip("\n") + "\n\n" + _done_section(run_id, entries, before)

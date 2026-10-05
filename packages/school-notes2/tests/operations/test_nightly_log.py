@@ -42,10 +42,14 @@ def test_nightly_logs_use_own_task_after_notes_and_resume(cfg, monkeypatch, stud
     monkeypatch.setattr(nightly, "_review", review)
     monkeypatch.setattr(nightly, "_close", close)
     if saved_phase != "reviewed":
+        previous_log = ctx.log
         with pytest.raises(KeyboardInterrupt):
             nightly.nightly(ctx)
+        assert ctx.log is previous_log
         ctx.log = ctx.log.bind(run_id="another-notes-run")
+    previous_log = ctx.log
     assert nightly.nightly(ctx) == 0
+    assert ctx.log is previous_log
     tasks = phase.all_tasks(ctx.task_root(), student)
     assert len(tasks) == 1 and tasks[0].phase == "done"
     events = [json.loads(line) for line in cfg.log_path.read_text().splitlines()]

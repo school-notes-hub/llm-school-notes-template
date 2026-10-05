@@ -86,6 +86,9 @@ class Task:
     def clear_needs_owner(self) -> None:
         if self.data.get("needs_owner"):
             self.data["data"]["completion_generation"] = self.get("completion_generation", 0) + 1
+            # The next run mail reports only the resumed segment (owner, 2026-10-05).
+            self.data["data"]["resumed_at"] = now_iso()
+            self.data["data"]["active_at_resume"] = self.get("active_seconds", 0)
         self.data["needs_owner"] = None
         self.data["retries"] = 0
         self.data["llm_failures"] = 0
@@ -110,6 +113,8 @@ def create(root: Path, student: str, kind: str, mode: str, phase: str,
             "phase": phase, "created": now_iso(), "updated": now_iso(), "data": {},
             "retries": 0, "llm_failures": 0, "finish_task": None, "needs_owner": None,
             "last_error": None}
+    if kind == "notes":
+        data["data"]["infographic_policy"] = True
     task = Task(folder, data)
     task.save()
     return task
