@@ -20,13 +20,16 @@ def run(ctx, task):
         try:
             learning.validate(ctx, task)
         except steps.CheckFailed as exc:
+            # Unparseable content stays for the next bounded writer round. The skipped round's
+            # changes and closures wait durably for the next P5: it measures from the oldest
+            # unchecked round start (fix-45b).
+            task.update(p5_before=str(before_root(task)), p5_closures=pending_closures(task))
             machine_findings.record(ctx, task, exc.items)
-            return  # Unparseable content stays for the next bounded writer round.
+            return
         changed = correction_figures.changed_figures(ctx, task)
         view = root / f"recheck-view-r{correction_round.number(task)}"
         inputs.preview(repo, view, [s["brief"] for s in task.get("inspection_figures", [])], inspection.render(ctx, task))
-        closures = [c for c in task.get("correction_result", {}).get("review_closure", [])
-                    if c["status"] in ("fixed", "disagree")]
+        closures = pending_closures(task)
         grouped = page_units(ctx, task, closures, changed)
         checked = [check_unit(ctx, task, view, u, closures) for u in grouped]
         receipts = dict(task.get("inspection_receipts", {}))
@@ -39,7 +42,26 @@ def run(ctx, task):
                 receipts[brief["id"]] = inspection.figure_review.for_figure(receipt, brief["id"])
         saved = {"units": checked, "receipts": receipts}
         safefs.write_json(root, correction_round.p5(task), saved)
+    if task.get("p5_before") or task.get("p5_closures"):
+        task.update(p5_before=None, p5_closures=[])  # The stored P5 saw every earlier round.
     apply(ctx, task, saved)
+
+
+def before_root(task):
+    """The tree P5 measures from: a skipped round's start until a P5 is stored, else this round's."""
+    if task.get("p5_before"):
+        return Path(task.get("p5_before"))
+    if task.get("mode") == "fix" and correction_round.number(task) == 1:
+        return task.dir / "fix-before"
+    return Path(task.get("correction_assignment_root") or correction_round.root(task))
+
+
+def pending_closures(task):
+    """The writer's closures of every round since the last stored P5; a later round's closure wins."""
+    current = [c for c in task.get("correction_result", {}).get("review_closure", [])
+               if c["status"] in ("fixed", "disagree")]
+    keys = {(c["file"], c["item_id"]) for c in current}
+    return [c for c in task.get("p5_closures", []) if (c["file"], c["item_id"]) not in keys] + current
 
 
 def page_units(ctx, task, closures=(), changed=()):
@@ -52,11 +74,9 @@ def page_units(ctx, task, closures=(), changed=()):
 
 def check_unit(ctx, task, view, unit, closures):
     root = correction_round.reader(task, units.slug(unit["topic"]))
-    # The round's own pre-edit tree: P3 (or an earlier P5) already judged older changes,
-    # so a round re-reads only what this round changed, on every page (fix-45).
-    before = Path(task.get("correction_assignment_root") or correction_round.root(task))
-    if task.get("mode") == "fix" and correction_round.number(task) == 1:
-        before = task.dir / "fix-before"
+    # The pre-edit tree of the oldest round no stored P5 has seen: P3 (or an earlier P5)
+    # already judged older changes; every changed line since then is re-read (fix-45, fix-45b).
+    before = before_root(task)
     def old(page):
         return safefs.read_text(before, "before/" + page) if safefs.is_file(before, "before/" + page) else ""
     items, reports = [], {}

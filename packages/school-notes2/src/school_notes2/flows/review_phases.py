@@ -69,6 +69,15 @@ def _advance(ctx, task, notify, edits):
                 task.set_phase("correcting", correction_round=n + 1, content_pending=False)
                 return _advance(ctx, task, notify, edits)
             task.update(content_pending=False)
+        if task.get("p5_before"):
+            # A skipped P5 left changes unchecked: no publication before the independent recheck.
+            from . import learning
+            try:
+                learning.validate(ctx, task)
+            except steps.CheckFailed as exc:
+                return machine_errors_remain(ctx, task, exc)
+            task.set_phase("rechecking")
+            return _advance(ctx, task, notify, edits)
         finalize(ctx, task, edits)
         items = relations.inventory(ctx.notes_path)["items"]
         notify([{"file": k.rsplit("#", 1)[0], "item_id": k.rsplit("#", 1)[1]}
