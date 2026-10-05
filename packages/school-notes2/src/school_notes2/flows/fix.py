@@ -3,7 +3,7 @@
 from ..git import repos, workbranch
 from ..figures import pending, migration_gate
 from ..log import today
-from ..review import files
+from ..review import files, repair_migration
 from ..sources import calls
 from ..state import phase, safefs
 from . import correction, correction_figures, steps
@@ -29,7 +29,7 @@ def next_task(ctx):
     was_owner = {e["commission"]["id"] for e in entries if e["owner_required"]}
     waiting = correction_figures.assignable(ctx, entries)
     owners = [e for e in entries if e["owner_required"] and e["commission"]["id"] not in was_owner]
-    if not items and not waiting and not owners:
+    if not items and not waiting and not owners and not next(repair_migration.updates(ctx.notes_path), None):
         return None
     task = phase.create(ctx.task_root(), ctx.name, "notes", "cron", "moved")
     task.update(mode="fix", base=base, preparation_base=base, open_review_items=items,
@@ -42,6 +42,11 @@ def prepare(ctx, task):
         return
     workbranch.start(ctx.worktree("notes"), task.run_id, task.get("base"), interactive=False)
     workbranch.reset_workdir(ctx.notes_path)
+    from . import learning
+    learning.migrate(ctx, task)
+    # Reopened legacy items join this first repair run, after the journaled migration.
+    reviews = [i for i in files.open_items(ctx.notes_path, "cron") if not migration_gate.concerns(ctx.notes_path, i)]
+    task.update(open_review_items=calls.select_reviews(reviews, ctx.cfg.limits.review_closures_per_run, repo=ctx.notes_path))
     written = correction_figures.persist_owners(ctx, task.get("figure_owners", []))
     steps.record_tool_files(task, ctx.notes_path, written)
     image_subjects = [{"plan_id": e["commission"]["id"], "page": e["commission"]["page"]}

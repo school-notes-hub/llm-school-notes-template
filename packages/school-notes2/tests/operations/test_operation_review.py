@@ -205,10 +205,9 @@ def test_terminal_summaries_have_stable_receipts(world, monkeypatch, kind, termi
         task.save()
     for _ in range(2):
         operational_report.ended(ctx, "nightly" if kind == "review" else "run", 0, {task.run_id: True})
-    assert len(delivered) == int(terminal != "closed")
+    assert len(delivered) == 1
     if terminal == "closed":
-        assert read_json(ctx.mailer.state.with_name("notify-once.json"), []) == []
-        return
+        assert "elvetve; a munkája nem került ki" in delivered[0].get_content()
     if terminal == "needs_owner":
         receipts = read_json(ctx.mailer.state.with_name("notify-once.json"))
         assert len(receipts) == 1 and receipts[0].startswith(ctx.name + ":error:")

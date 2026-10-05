@@ -119,9 +119,9 @@ def test_closure_only_assigns_topic_and_fix_origin(tmp_path, repos, report_after
     assert unit["mode"] == "targeted" and data["items"][0]["fix_commit"]
     answer = {"key": "docs/review/old.md#R1", "verdict": "not-ok", "answer": "Hibás javítás."}
     _, owner = topic_result.apply_item(repos.wt_path, data["items"][0], answer)
-    assert owner["item_id"] == "R1"
+    assert owner is None
     meta = frontmatter.split((repos.wt_path / "docs/review/old.md").read_text()).meta
-    assert meta["items"]["R1"] == "owner" and meta["item_details"]["R1"]["chain"] == 1
+    assert meta["items"]["R1"] == "open" and meta["item_details"]["R1"]["chain"] == 1
 
 
 def test_blame_chain_even_full_mode_and_missing_quote(tmp_path, repos):

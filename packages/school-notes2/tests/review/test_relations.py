@@ -173,7 +173,7 @@ def test_related_dispute_never_reborn_and_chain_is_tool_owned(tmp_path, report, 
     if status == "disagree":
         assert meta["items"] == {} and "## Függő" in new.read_text()
     else:
-        assert meta["items"] == {"R1": "owner"}
+        assert meta["items"] == {"R1": "open"}
         assert meta["item_details"]["R1"]["chain"] == 1
         assert meta["item_details"]["R1"]["origin"] == "nightly"
     for key, value in [("origin", "reader"), ("chain", 0), ("unlocated", True)]:

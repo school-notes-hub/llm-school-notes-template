@@ -27,7 +27,7 @@ def test_quiet_close_does_not_create_another_night(tmp_path, repos, log, monkeyp
 
 @pytest.mark.parametrize("mode", ["targeted", "full"])
 @pytest.mark.parametrize("quote", ["Missing quote.", "Duplicate."])
-def test_unlocated_fix_finding_is_owner(tmp_path, repos, mode, quote):
+def test_unlocated_fix_finding_stays_open(tmp_path, repos, mode, quote):
     repos.commit({"wiki/a.md": "# A\n\nOld.\n"})
     repos.commit({"wiki/a.md": "# A\n\nDuplicate.\n\nDuplicate.\n"}, FIX)
     if mode == "full":
@@ -41,7 +41,7 @@ def test_unlocated_fix_finding_is_owner(tmp_path, repos, mode, quote):
     value = topic_result.assemble(task, repos.repo, repos.wt_path)
     path = files.write_review(repos.wt_path, IDENT.date, value, "fake", "a", "b")
     item = relations.inventory(repos.wt_path)["items"][path.relative_to(repos.wt_path).as_posix() + "#R1"]
-    assert item["status"] == "owner" and item["chain"] == 1 and item["unlocated"]
+    assert item["status"] == "open" and item["chain"] == 1 and item["unlocated"]
 
 
 def test_markdown_second_search_retains_blame_line(tmp_path, repos):
@@ -62,7 +62,7 @@ def test_relates_to_chain_cannot_be_lowered(tmp_path, state, inherited):
               "chain": 0, "relates_to": "docs/review/old.md#R1"}]}
     path = files.write_review(tmp_path, IDENT.date, value, "fake", "a", "b")
     item = relations.inventory(tmp_path)["items"][path.relative_to(tmp_path).as_posix() + "#R1"]
-    assert item["status"] == "owner" and item["chain"] == 1
+    assert item["status"] == "open" and item["chain"] == 1
 
 
 @pytest.mark.parametrize("error", [Prerequisite, NeedsOwner])

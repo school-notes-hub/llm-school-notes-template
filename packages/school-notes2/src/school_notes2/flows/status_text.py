@@ -51,7 +51,8 @@ def collect(ctx, now=None):
     drive = read_json(ctx.cfg.state_dir / ctx.name / "last-run.json", {})
     return {"name": ctx.name, "now": now, "held": held, "holder": lock.holder(), "live": live,
             "current": current, "today": today, "errors": sorted(errors, key=lambda e: (e["at"], e["message"])),
-            "items": len(items), "figures": len(pending),
+            "items": sum(i["status"] == "open" for i in items),
+            "owner_items": sum(i["status"] == "owner" for i in items), "figures": len(pending),
             "drive": drive_count(drive, tasks), "budget": remaining(ctx)}
 
 
@@ -108,7 +109,7 @@ def render(data):
     for t in data["today"]:
         started = t.get("resumed_at") or t.data["created"]
         end = t.get("ended_at") or (t.data.get("needs_owner") or {}).get("at") or (t.data["updated"] if t.phase == "done" or t.data.get("closed") else "")
-        result = "elakadt" if t.data.get("needs_owner") else "lezárt" if t.data.get("closed") else "kész" if t.phase == "done" else "vár" if not data["held"] or t != task else "fut"
+        result = "elakadt" if t.data.get("needs_owner") else operational_report.STATES[operational_report.terminal(t)] if t.data.get("closed") else "kész" if t.phase == "done" else "vár" if not data["held"] or t != task else "fut"
         work = minutes(t, data["live"] if t == task and data["held"] else None, now)
         runs.append(f"{clock(started)}–{clock(end)} {work} p {result}")
     lines.append("  Mai futások: " + ("; ".join(runs) or "nincs") + ".")
@@ -117,6 +118,7 @@ def render(data):
     if not data["errors"]:
         lines.append("  Nyitott hiba: nincs.")
     lines.append(f"  Sorok: {data['items']} nyitott tétel, {data['figures']} függő ábra, {data['drive']} Drive-csomag.")
+    lines.append(f"  Tulajdonosi döntésre vár: {data.get('owner_items', 0)} review-tétel.")
     lines.append(f"  Képkeret: {data['budget']}.")
     return "\n".join(lines)
 

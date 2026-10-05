@@ -22,6 +22,7 @@ def send(ctx, notice: Notice) -> bool:
 def retry(ctx) -> None:
     from . import incidents
     incidents.restore_pending(ctx)
+    _closed_tasks(ctx)
     pending = read_json(path(ctx), {}) or {}
     for key in sorted(pending):
         _deliver(ctx, pending, key)
@@ -64,3 +65,21 @@ def _legacy_summary(ctx, notice):
     labels = report.MODES.get(mode, report.MODES["run"])
     return replace(notice, error_class=report.subject(ctx.name, labels, receipt),
                    message=report.sentence(ctx.name, labels, task, receipt, ended=ended), todo="")
+
+
+def _closed_tasks(ctx):
+    """Recover a clear interrupted after saving the outcome but before queuing mail."""
+    from ..flows import operational_report as report
+    from ..state import phase
+    for task in phase.all_tasks(ctx.task_root(), ctx.name):
+        if not task.data.get("closed") or not task.get("closure_reason") or task.get("closure_notice_delivered"):
+            continue
+        receipt = report.terminal(task)
+        mode = "nightly" if task.kind == "review" else task.get("mode", "run")
+        labels = report.MODES.get(mode, report.MODES["run"])
+        prefix = "nightly" if task.kind == "review" else "completion"
+        notice = Notice(ctx.name, f"{prefix}:{task.run_id}:{report.completion_key(task, receipt)}", task.run_id,
+                        "finish", report.subject(ctx.name, labels, receipt),
+                        report.sentence(ctx.name, labels, task, receipt), "")
+        if send(ctx, notice):
+            task.update(closure_notice_delivered=True)

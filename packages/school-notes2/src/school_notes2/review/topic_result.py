@@ -6,7 +6,7 @@ from ..reader import notice_migration, notices, report, verdicts
 from ..reader.units import page_key
 from ..state import safefs
 from ..wiki import frontmatter, public
-from . import figure_waiting, files, relations, scope, topics, warnings
+from . import attempts, figure_waiting, files, relations, scope, topics, warnings
 
 
 def chain(repo, head, finding, *, fix_touched=False):
@@ -173,7 +173,7 @@ def apply_items(work, answers):
                     raise files.ClosureError("only an unanswered round-1 disagreement accepts a response")
                 detail["response"] = {"verdict": verdict, "answer": answer["answer"]}
                 if verdict == "keep":
-                    page.meta["items"][item_id], detail["round"] = "open", 2
+                    page.meta["items"][item_id], detail["round"] = attempts.failed_status(detail), 2
                 page.body = page.body.rstrip() + f"\n\n## Válasz ({item_id})\n\n{verdict}: {' '.join(answer['answer'].split())}\n"
             else:
                 if original["status"] == "fixed" and detail.get("recheck"):
@@ -181,9 +181,9 @@ def apply_items(work, answers):
                 detail["recheck" if original["status"] == "fixed" else "nightly"] = {
                     "verdict": verdict, "answer": answer["answer"]}
                 if verdict == "not-ok":
-                    detail["chain"] = int(original.get("fix_commit", False))
-                    page.meta["items"][item_id] = "owner" if detail["chain"] else "open"
-                    if detail["chain"]:
+                    detail["chain"] = max(detail["chain"], int(original.get("fix_commit", False)))
+                    page.meta["items"][item_id] = attempts.failed_status(detail)
+                    if page.meta["items"][item_id] == "owner":
                         owners.append({"file": rel, "item_id": item_id, "reason": answer["answer"]})
             page.meta.setdefault("item_details", {})[item_id] = detail
             changed = True

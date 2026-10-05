@@ -172,7 +172,8 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
     new_pages.record(ctx, task)  # Lesson type is supplied by machine.write_lesson_notes.
     check_changed(ctx, task, result=result)
     outcome = review_files.apply_closure(repo, task.run_id, result.get("review_closure", []),
-                                         listed, ctx.cfg.limits.owner_after_open)
+                                         listed, ctx.cfg.limits.owner_after_open,
+                                         automatic=task.mode == "cron" and task.get("mode") == "fix")
     evidence = records.append(repo, records.from_writer(result.get("checks", [])),
                               run_id=task.run_id, checker=by, at=at, fetch_pages=fetch["pages"])
     _record_writes(task, repo, whole=outcome.written + evidence, parts=[])

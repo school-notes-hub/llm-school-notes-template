@@ -82,7 +82,7 @@ def _finalize(ctx, task, edits=None):
         written += [pending.PATH, migration_gate.MARK]
         if entry["owner_required"] and entry["runs"] >= 3 and not exhausted:
             owners.append({"file": brief["page"], "quote": f"<!-- figure: {brief['id']} -->",
-                           "figure_id": brief["id"], "category": "kép–szöveg", "origin": "figure", "chain": 1, "relates_to": None,
+                           "owner_status": "owner", "figure_id": brief["id"], "category": "kép–szöveg", "origin": "figure", "chain": 1, "relates_to": None,
                            "problem": "Az ábramegbízás három futás után is függőben van.", "suggestion": ""})
     if owners:
         path = task.get("inspection_report")

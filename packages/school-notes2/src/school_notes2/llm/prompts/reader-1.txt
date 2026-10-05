@@ -44,3 +44,4 @@ Ha az `/in/format-error.json` létezik, az előző kimenet gépi hibáját is ja
 Hiányzó áttekintő ábrát jelezz `ábra` kategóriájú leletként ott, ahol egy infografika többet tanítana a szövegnél; célzott módban ezt is csak a kiosztott javítás és a megváltozott sorok hatókörén belül vizsgáld.
 
 {output_instruction}
+Valódi tulajdonosi döntést igénylő forrásellentmondást `forrásellentmondás` kategóriával jelezz; a szakmailag egyértelműen javítható hibát a tárgyának megfelelő kategóriával add meg. Meglévő kérdéshez, döntéshez vagy tételhez továbbra is a `relates_to` mezővel kapcsolódj.

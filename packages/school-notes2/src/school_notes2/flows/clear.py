@@ -39,6 +39,7 @@ def clear(ctx: Ctx, kind: str, action: str) -> str:
             return "kérdés vagy tartalmi ütközés: csak `school-notes chat`-ben folytatható"
         if task.get("stuck"):
             # The owner raised the reviewer timeout: the marker closes, next night retries.
+            task.data["data"].update(closure_reason="retry_nightly", ended_at=now_iso())
             task.data["closed"] = True
             incidents.resolve(ctx, "task:" + task.run_id)
             task.clear_needs_owner()
@@ -60,7 +61,7 @@ def discard(ctx: Ctx, task: phase.Task) -> None:
     if task.kind == "notes":
         bundle = git_discard.discard(ctx.worktree("notes"), task.run_id,
                                      ctx.cfg.root / "archive" / ctx.name)
-        task.update(bundle=str(bundle) if bundle else None)
+        task.update(bundle=str(bundle) if bundle else task.get("bundle"))
     elif task.kind == "review" and task.get("stuck"):
         role, _ = ctx.cfg.role("reviewer")
         ident = review_close.Identity(ctx.name, f"{role.model}/{role.effort}", VERSION, today(),
@@ -72,6 +73,7 @@ def discard(ctx: Ctx, task: phase.Task) -> None:
         raise NeedsOwner("a reviewed range is being closed; it cannot be discarded",
                          todo="`--continue` instead")
     incidents.resolve(ctx, "task:" + task.run_id)
+    task.data["data"].update(closure_reason="discarded", ended_at=now_iso())
     task.data["closed"] = True
     task.data["needs_owner"] = None
     task.save()

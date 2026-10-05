@@ -2,7 +2,7 @@
 
 import re
 
-from ..review import files, generated, relations, warnings
+from ..review import attempts, files, generated, relations, warnings
 from ..state import safefs
 from ..wiki import frontmatter
 
@@ -71,7 +71,7 @@ def reopen(repo, key, answer):
         return rel
     record.update(origin="recheck", recheck={"verdict": "not-ok", "answer": answer})
     details[item_id] = record
-    items = {**page.meta["items"], item_id: "open"}
+    items = {**page.meta["items"], item_id: attempts.failed_status(record)}
     safefs.write_text(repo, rel, frontmatter.set_keys(text, {
         "items": items, "item_details": details, "status": files.compute_status(items)}))
     return rel
@@ -97,8 +97,9 @@ def append(repo, path, findings, notes, label):
         number += 1
         key = f"R{number}"
         chain = max(finding.get("chain", 0), relations.chain(finding, known))
-        items[key] = "owner" if chain else status
+        items[key] = finding.get("owner_status", status)
         details[key] = {"file": finding["file"], "round": 1, "chain": chain,
+                        **attempts.inherited(finding, known),
                         "origin": finding["origin"], "category": finding["category"],
                         "relates_to": finding.get("relates_to"),
                         "unlocated": unlocated or finding["unlocated"],

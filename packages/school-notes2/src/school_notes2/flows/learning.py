@@ -100,11 +100,13 @@ def _metadata_problems(rel: str, text: str, repo=None, banner_reader=read_page) 
 def migrate(ctx: Ctx, task: Task) -> None:
     """Replay-safe hotfix bookkeeping, before assignment or generated-page writes."""
     from ..reader import verdicts
-    from ..review import generated
+    from ..review import generated, repair_migration
     journal.settle(ctx, task)
     records = verdicts.rekeyed(ctx.notes_path)
     if records is not None:
         journal.write(ctx, task, verdicts.PATH, json.dumps(records, ensure_ascii=False, indent=2) + "\n", whole=True)
+    for rel, text in repair_migration.updates(ctx.notes_path):
+        journal.write(ctx, task, rel, text, whole=True)
     for rel, text in generated.owner_updates(ctx.notes_path):
         journal.write(ctx, task, rel, text, whole=True)
 

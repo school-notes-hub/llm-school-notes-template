@@ -126,7 +126,10 @@ def chain(finding: dict, known: dict) -> int:
 
 def route(finding: dict, known: dict) -> tuple[str, bool]:
     """Return (open/owner/pending, unlocated), never silently drop unknown references."""
+    from . import attempts
     ref = finding.get("relates_to")
+    if attempts.decision(finding, known):
+        return "owner", False
     if ref is None:
         return "open", False
     page = known["pages"].get(finding["file"], {})
@@ -138,7 +141,7 @@ def route(finding: dict, known: dict) -> tuple[str, bool]:
     if other:
         if other["status"] in ("open", "owner", "question", "disagree"):
             return "pending", False
-        return ("owner" if chain(finding, known) else "open"), False
+        return attempts.failed_status(other), False
     return "open", True
 
 
@@ -176,7 +179,8 @@ def reply(repo: Path, key: str, verdict: str, answer: str) -> str:
     record["response"] = response
     items = dict(page.meta["items"])
     if verdict == "keep":
-        items[item_id], record["round"] = "open", 2
+        from . import attempts
+        items[item_id], record["round"] = attempts.failed_status(record), 2
     records[item_id] = record
     body = text.rstrip() + f"\n\n## Válasz ({item_id})\n\n{verdict}: {' '.join(answer.split())}\n"
     safefs.write_text(repo, rel, frontmatter.set_keys(body, {

@@ -118,3 +118,29 @@ def test_fix_may_edit_the_page_whose_description_an_index_finding_quotes(tmp_pat
     safefs.write_text(repo, "wiki/s/other.md", pages["wiki/s/other.md"] + "Változás.\n")
     with pytest.raises(BadWork, match="unassigned page"):
         correction.check_scope(SimpleNamespace(notes_path=repo), snapshot, items)
+
+
+@pytest.mark.parametrize("learner", ["one", "two"])
+def test_legacy_owner_only_starts_fix_and_migrates_before_assignment(tmp_path, log, monkeypatch, learner):
+    from school_notes2.wiki import frontmatter
+    ctx, page, _ = context(tmp_path, log, monkeypatch)
+    ctx.name = learner
+    wt = ctx.worktree("notes")
+    original = wt.run
+    wt.run = lambda *a, **kw: None if a[0] == "switch" else original(*a, **kw)
+    ctx.worktree = lambda _: wt
+    ctx.bare = lambda: wt
+    ctx.cfg.limits = SimpleNamespace(max_agents=3, review_closures_per_run=20, fix_runs_per_day=6)
+    ctx.cfg.timeouts = SimpleNamespace(fetch_s=1)
+    monkeypatch.setattr(fix.repos, "fetch", lambda *a: None)
+    path = files.write_review(ctx.notes_path, "2026-10-04", {"verdict": "changes", "findings": [
+        {"id": "R1", "file": page, "problem": "Hiba.", "chain": 1}]}, "r", "a", "b")
+    path.write_text(frontmatter.set_keys(path.read_text(), {"items": {"R1": "owner"}, "repair_policy": 0}))
+    task = fix.next_task(ctx)
+    assert task is not None and task.get("open_review_items") == []
+    fix.prepare(ctx, task)
+    supplied = fetch.fetch_json(task, 1, grade=9)
+    assert supplied["open_review_items"][0]["item_id"] == "R1"
+    assert supplied["open_review_items"][0]["chain"] == 1
+    assert not task.get("skip_writer")
+    assert path.relative_to(ctx.notes_path).as_posix() in task.get("tool_writes")

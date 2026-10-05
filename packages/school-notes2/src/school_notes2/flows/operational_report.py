@@ -1,6 +1,7 @@
 """Private operational summaries; only currently available mechanical facts."""
 
 import time
+from pathlib import Path
 
 from ..figures.review import verdict_for
 from ..log import now_iso
@@ -66,7 +67,7 @@ def terminal(task):
     if task.data.get("needs_owner"):
         return "needs_owner"
     if task.data.get("closed"):
-        return "closed"
+        return "retry_nightly" if task.get("closure_reason") == "retry_nightly" else "closed"
     return "done" if task.phase == "done" else None
 
 
@@ -80,8 +81,6 @@ def completed(ctx, task, report, duration, *, finishing=False):
     is_terminal = bool(receipt)
     if receipt == "needs_owner":
         incidents.task_error(ctx, task)
-        receipt = None
-    elif receipt == "closed":
         receipt = None
     elif receipt == "done":
         incidents.resolve(ctx, "task:" + task.run_id)
@@ -114,7 +113,7 @@ def completed(ctx, task, report, duration, *, finishing=False):
 MODES = {"publish": ("kiadási futás", "kiadási futása"), "run": ("jegyzetfutás", "jegyzetfutása"), "fix": ("javító futás", "javító futása"),
          "repair": ("javítási futás", "javítási futása"), "chat": ("interaktív munkamenet", "interaktív munkamenete"),
          "nightly": ("éjszakai review", "éjszakai review-ja")}
-STATES = {"done": "kész", "closed": "lezárva", "needs_owner": "elakadt, rád vár"}
+STATES = {"done": "kész", "closed": "elvetve", "retry_nightly": "éjszaka újrapróbálja", "needs_owner": "elakadt, rád vár"}
 
 
 def subject(name, mode, receipt):
@@ -125,11 +124,15 @@ def sentence(name, mode, task, receipt, *, ended=None):
     """One sentence: who, what, when it started and ended, and how it ended."""
     resumed = task.get("resumed_at")
     started = (resumed or task.data.get("created", ""))[:16].replace("T", " ")
-    ended = (ended or now_iso())[:16].replace("T", " ")
+    ended = (ended or task.get("ended_at") or now_iso())[:16].replace("T", " ")
     worked = round(max(0, (task.get("active_seconds") or 0) - (task.get("active_at_resume") or 0)) / 60)
     verb = "folytatódott" if resumed else "indult"
     text = (f"{name.capitalize()} {mode[1]} {started}-kor {verb}, {ended}-kor ért véget "
             f"({worked} perc munka), állapota: {STATES.get(receipt, receipt)}")
+    if receipt == "closed":
+        text = f"{name.capitalize()} {mode[1]} {started}-kor {verb}, {ended}-kor elvetve; a munkája nem került ki"
+        if task.get("bundle"):
+            text += f", archívumban van ({Path(task.get('bundle')).name})"
     owner = task.data.get("needs_owner") or {}
     if receipt == "needs_owner":
         # Raw exception messages may contain source content, JSON or paths.
@@ -178,7 +181,7 @@ def ended(ctx, kind, started, before, *, successful=True):
                   "keretállapot": read_json(ctx.cfg.state_dir / "quota.json", {}), "tokenek": _metrics(task)}
         write_json(task.dir / "report.json", redact(report))
         receipt = terminal(task)
-        if receipt != "done" or incidents.blocks_completion(ctx, task):
+        if receipt not in ("done", "closed", "retry_nightly") or (receipt == "done" and incidents.blocks_completion(ctx, task)):
             return
         pending.send(ctx, Notice(ctx.name, f"nightly:{task.run_id}:{completion_key(task, receipt)}", task.run_id, "nightly",
                                  subject(ctx.name, MODES["nightly"], receipt),

@@ -150,7 +150,8 @@ def test_discarded_owner_stopped_night_gets_one_new_closure(tmp_path, log, monke
     assert len(delivered) == 1
     assert "eldobva" in clear.clear(ctx, "review", "discard")
     assert "nincs nyitott" in clear.clear(ctx, "review", "discard")
-    assert len(delivered) == 1  # Discard does not repeat the incident mail.
+    assert len(delivered) == 2  # The discard explains a different terminal outcome.
+    assert "elvetve; a munkája nem került ki" in delivered[-1].get_content()
 
 
 def test_resumed_run_mail_reports_only_the_resumed_segment(tmp_path):

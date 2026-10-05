@@ -150,8 +150,8 @@ questions and decisions of their embedding pages, excluding links in code blocks
 Existing question/open-item and disagreement references go to the pending section,
 decisions to owner, unknown references
 to unlocated. A decision reference without new evidence is invalid reviewer output.
-The tool inherits the related item's chain; findings about fixed/settled items escalate to
-chain 1 and owner. Owner-item notifications pass through the common mail gate and
+The tool inherits the related item's chain and automatic repair count. Chain 1 stays
+open; only a real decision or a third unsuccessful automatic repair goes to owner. Owner-item notifications pass through the common mail gate and
 are logged as `notify.suppressed`; their state remains visible in `status`.
 The durable handoff completes after suppression, including across closing restarts.
 Invalid or stale responses are dropped and logged. Completion mail enters the private
@@ -463,8 +463,9 @@ new failure can mail again. Pre-task errors and publish-task errors use the same
 `pending-owner-notices.json` and `notify-once.json` recover interrupted delivery. As
 with any SMTP handoff, a crash after server acceptance but before the local receipt
 can repeat delivery; the tool cannot atomically commit a receipt at the mail server.
-Item, image, license and quota notices remain suppressed. Discard is not a successful
-completion. Free-form questions are never assumed content-free: only approved safe
+Item, image, license and quota notices remain suppressed. Discard sends its own one-sentence outcome: its work was not published, and the
+archive bundle name is included when one exists. A closed night awaiting retry says
+“éjszaka újrapróbálja”. A saved clear outcome recovers delivery after a crash. Free-form questions are never assumed content-free: only approved safe
 operational sentences are quoted, otherwise the mail refers to the private session.
 
 `school-notes status` shows current work, today's runs, unresolved failures and
@@ -575,8 +576,8 @@ quotes remain `unlocated` items. Every new finding is located at H; Git blame de
 was last changed by a fix commit, in full and targeted mode alike. A second search
 strips inline Markdown while preserving blame line numbers. An unlocated quote inherits
 chain 1 when a fix commit touched the topic range; related items always retain the
-maximum inherited chain. Such a nightly finding, or nightly `not-ok` on an unchecked fix closure, goes to
-owner with chain 1. The fix run's P3 recheck follows P5 instead: `not-ok` reopens
+maximum inherited chain. Such a nightly finding keeps chain 1 and stays open for repair.
+Nightly and reader `not-ok` verdicts escalate only after three automatic repair attempts. The fix run's P3 recheck follows P5 instead: `not-ok` reopens
 with unchanged chain and `origin: recheck`; new errors stay open. The fix scope uses the pre-edit unit, including related
 lessons, summaries and image embedding pages. Textbook inputs contain printed-page
 excerpts selected through the book index; ambiguous or unavailable references are
@@ -696,3 +697,19 @@ Pre-task prerequisites, setup, round-step, report and prolonged-lock failures pe
 in `state/<learner>/last-error.json` with a timestamp and one safe Hungarian sentence.
 `status` shows the record and the common incident path mails it once; a successfully completed run clears it.
 Nightly restores the caller’s logger even after interruption.
+
+Automatic review repairs persist `repair_attempts` and sorted `repair_runs` per item.
+A completed automatic fix assignment counts once, including an unchanged item or a
+rolled-back P4; resuming that assignment never adds another attempt. A third `fixed`
+closure remains fixed unless a reader/nightly `not-ok` verdict rejects it. Related
+findings inherit the consumed budget. Interactive closures do not consume it.
+`category: forrásellentmondás` and confirmed-decision references go directly to owner;
+item notifications stay suppressed, and status shows one owner-item count.
+
+The journaled chain-policy migration runs before notes assignment. Legacy chain-1
+owner items reopen with zero attempts except genuine decisions/tool defects; migrated
+pending-figure owner records settle with “elavult: a függő ábra újra sorban van” when
+the matching commission is queued again. Independent figure exhaustion stays under
+the existing figure policy. `repair_policy` marks each migrated report, so replay or
+rebase does not reset counters. A tool-only fix can persist migration without writer
+work, and review metadata alone does not create a nightly topic.

@@ -126,8 +126,8 @@ def test_export_error_and_reviewer_notes_share_one_section(tmp_path, repos, log,
     assert text.count("## Tulajdonosi észrevételek") == 1
     notes = safefs.read_json(task.dir, "review.json")["owner_notes"]
     assert len(notes) == 2 and all(text.count(n) == 1 for n in notes)
-    assert files.read_items(repos.wt_path, repos.wt_path / reports[0]) == {"R1": "owner"}
-    assert task.get("notify_owner_items")[0]["item_id"] == "R1"
+    assert files.read_items(repos.wt_path, repos.wt_path / reports[0]) == {"R1": "open"}
+    assert task.get("notify_owner_items") == []
     assert "⏳" not in safefs.read_text(repos.wt_path, "wiki/a.md")
 
 
@@ -163,5 +163,5 @@ def test_nightly_routes_generated_findings_before_blame(tmp_path, repos, origin)
     assert finding["reported_file"] == "wiki/index.md"
     assert finding["chain"] == 1 and not finding["unlocated"]
     report = files.write_review(repos.wt_path, IDENT.date, result, "fake", "a", "b")
-    assert files.read_items(repos.wt_path, report) == {"R1": "owner"}
+    assert files.read_items(repos.wt_path, report) == {"R1": "open"}
     assert topic_result.assemble(phase.load(task.dir), repos.repo, repos.wt_path) == result

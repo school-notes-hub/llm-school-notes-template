@@ -26,7 +26,7 @@ def all_items(ctx, task):
     selected = [{"file": path, "item_id": key, "status": status,
                  "round": relations.details(text, key)["round"],
                  "chain": relations.details(text, key)["chain"], "key": path + "#" + key}
-                for key, status in items.items() if status == "open" and relations.details(text, key)["chain"] == 0
+                for key, status in items.items() if status == "open"
                 and (not relations.details(text, key).get("outside_assignment")
                      or relations.details(text, key).get("file") in pages)]
     return selected
@@ -149,6 +149,9 @@ def apply(ctx, task, root, saved, edits=None):
         task.update(correction_result={"status": "done"}, correction_rolled_back=True,
                     correction_rollback_reason=saved["reason"], correction_rollback_items=saved.get("items", []),
                     correction_rejected_patch=saved.get("rejected_patch"))
+        outcome = files.apply_closure(ctx.notes_path, f"{task.run_id}-fix-a{task.get('attempt', 1)}", [],
+                                      task.get("correction_items", []), automatic=task.mode == "cron")
+        steps.record_tool_files(task, ctx.notes_path, outcome.written)
         return
     if task.mode == "interactive":
         from . import correction_chat
@@ -163,7 +166,8 @@ def apply(ctx, task, root, saved, edits=None):
     infographics.record(ctx, task, result)
     generation_receipts.refresh(ctx, task)
     outcome = files.apply_closure(ctx.notes_path, f"{task.run_id}-fix-a{task.get('attempt', 1)}", result.get("review_closure", []),
-                                  task.get("correction_items", []), ctx.cfg.limits.owner_after_open)
+                                  task.get("correction_items", []), ctx.cfg.limits.owner_after_open,
+                                  automatic=task.mode == "cron")
     steps.record_tool_files(task, ctx.notes_path, outcome.written)
     apply_figures(ctx, task, root, saved)
 

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from ..state import safefs
 from ..wiki import frontmatter as fm
-from . import relations
+from . import attempts, relations
 
 REVIEW_DIR = Path("docs/review")
 OPEN, OWNER, FIXED, DISAGREE = "open", "owner", "fixed", "disagree"
@@ -107,7 +107,7 @@ def render_body(date: str, review: dict, frm: str, to: str) -> str:
 
 def _with_frontmatter(body: str, reviewer: str, frm: str, to: str, items: dict) -> str:
     values = {"reviewer": reviewer, "range": {"from": frm, "to": to}, "items": items,
-              "status": compute_status(items)}
+              "status": compute_status(items), "repair_policy": 1}
     return fm.set_keys("\n" + body, values)
 
 
@@ -127,8 +127,9 @@ def write_review(repo: Path, date: str, review: dict, reviewer: str, frm: str, t
             continue
         chain = max(f.get("chain", 0), relations.chain(f, known))
         active.append(f)
-        items[f["id"]] = "owner" if chain else status
+        items[f["id"]] = status
         records[f["id"]] = {"file": f["file"], "round": 1, "chain": chain,
+                            **attempts.inherited(f, known),
                             "origin": f.get("origin", "nightly"), "category": f.get("category"),
                             "relates_to": f.get("relates_to"), "unlocated": unlocated or f.get("unlocated", False),
                             **{k: f[k] for k in ("quote", "hit_id", "figure_id", "outside_assignment") if k in f}}
@@ -198,7 +199,7 @@ def open_items(repo: Path, mode: str) -> list[dict]:
         rel = path.relative_to(repo).as_posix()
         for i in sorted(items, key=_num):
             detail = relations.details(page, i)
-            if items[i] in wanted and (mode != "cron" or detail["chain"] == 0):
+            if items[i] in wanted:
                 found.append({"file": rel, "item_id": i, "key": f"{rel}#{i}", "status": items[i],
                               "round": detail["round"], "chain": detail["chain"]})
     return found
@@ -241,7 +242,7 @@ def _without_own_section(body: str, items: dict, run_id: str) -> tuple[str, dict
 
 
 def _apply_one(repo: Path, path: Path, run_id: str, closures: dict, listed: list[str],
-               owner_after: int) -> list[str]:
+               owner_after: int, automatic: bool) -> list[str]:
     """Update one file; returns its newly-owner items. Repeating it for the same run
     replaces that run's section (the closures may have changed since)."""
     text = _read(repo, path)
@@ -266,14 +267,19 @@ def _apply_one(repo: Path, path: Path, run_id: str, closures: dict, listed: list
         if c:
             note = " ".join(filter(None, [note, c.get("question_id"), c.get("decision_id")]))
         entries.append((item_id, status, note))
+        record = dict(details.get(item_id, relations.details(page, item_id)))
+        if automatic and item_id in before:
+            attempts.record(record, run_id)
+        details[item_id] = record
         if status in (FIXED, DISAGREE, "question", "settled"):
             items[item_id] = status
-            record = relations.details(page, item_id)
             record.pop("recheck", None)
             details[item_id] = record
     body = body.rstrip("\n") + "\n\n" + _done_section(run_id, entries, before)
     counts = open_counts(body)
-    new_owner = [i for i, s in items.items() if s == OPEN and counts.get(i, 0) >= owner_after]
+    new_owner = [i for i, s in items.items() if s == OPEN and (
+        attempts.failed_status(details[i]) == OWNER if "repair_attempts" in details.get(i, {})
+        else counts.get(i, 0) >= owner_after)]
     for item_id in new_owner:
         items[item_id] = OWNER
     new_text = fm.set_keys(f"---\n{page.raw_meta}\n---\n{body}",
@@ -284,7 +290,7 @@ def _apply_one(repo: Path, path: Path, run_id: str, closures: dict, listed: list
 
 
 def apply_closure(repo: Path, run_id: str, closures: list[dict], listed: list[dict],
-                  owner_after: int = 5) -> ClosureOutcome:
+                  owner_after: int = 5, *, automatic: bool = False) -> ClosureOutcome:
     """Apply the merged `review_closure` and the fetch.json item list (plan 4.7, 5.7)."""
     by_file: dict[str, dict] = {}
     for c in closures:
@@ -299,7 +305,7 @@ def apply_closure(repo: Path, run_id: str, closures: list[dict], listed: list[di
                 or read_items(repo, path) is None:
             raise ClosureError(f"{rel}: not a review file with items")
         owners = _apply_one(repo, path, run_id, by_file.get(rel, {}), listed_by_file.get(rel, []),
-                            owner_after)
+                            owner_after, automatic)
         outcome.written.append(rel)
         outcome.new_owner += [{"file": rel, "item_id": i} for i in owners]
     return outcome
