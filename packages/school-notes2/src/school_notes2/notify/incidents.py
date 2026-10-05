@@ -27,7 +27,17 @@ def active(ctx):
     return [v for _, v in sorted(read_json(path(ctx), {}).items()) if not v.get("resolved_at")]
 
 
+HELD = {"unchecked": "egy változás független ellenőrzése nem futott le; a következő futás újraellenőrzi, "
+                     "addig nem kerül ki semmi; nincs teendőd",
+        "build": "a kiadás előtti ellenőrzés olyan hibát talált, amelyből nem lett javítási tétel; a jegyzetek "
+                 "mentve, a kontroller ellenőrzi; részletek: school-notes status {name} --details",
+        "public": "egy kép jogcíme hiányzik, vagy a kép nem adható ki; a jegyzetek mentve, a következő futás "
+                  "tételként kapja; részletek: school-notes status {name} --details"}
+
+
 def wording(name, kind, step, *, task=None, exc=None, role=None):
+    if kind == "publish_held":
+        return "a kiadás visszatartva: " + HELD.get(step, HELD["build"]).format(name=name)
     prefix = "a telepítés ellenőrzést igényel: " if step == "install" else "a futás megállt: "
     return prefix + _reason(name, kind, step, task=task, exc=exc, role=role)
 

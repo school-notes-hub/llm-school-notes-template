@@ -162,6 +162,7 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
     from . import licensing
     licensing.refresh(ctx, task, result, fetch["pages"])
     generation_receipts.refresh(ctx, task)
+    generation_receipts.refresh_svgs(ctx, task)
     generate_all(ctx, task)
     if problems or dropped:
         from . import machine_findings
@@ -174,8 +175,10 @@ def content_steps(ctx: Ctx, task: Task) -> Prepared:
 def usable(ctx: Ctx, task: Task, result: dict, fetch: dict, listed: list[dict]) -> tuple[dict, list[str]]:
     """Keep every valid part of the result; an invalid or unproven part is left out.
 
-    An invalid closure, or a `fixed` closure whose page text did not change (R6), leaves its
-    item open. Invalid evidence checks and new-subject entries are dropped and logged."""
+    An invalid closure leaves its item open. A `fixed` closure whose page text did not change
+    (R6) leaves it open too, but counts as a repair attempt, so the attempt brake takes the
+    item to the owner instead of parking it forever. Invalid evidence checks and new-subject
+    entries are dropped and logged."""
     from ..review.relations import closure_problems, inventory
     repo, dropped = ctx.notes_path, []
     known = inventory(repo)["items"]
@@ -191,6 +194,8 @@ def usable(ctx: Ctx, task: Task, result: dict, fetch: dict, listed: list[dict]) 
         page = known.get(c["file"] + "#" + c["item_id"], {}).get("file")
         if c["status"] == "fixed" and page and safefs.is_file(repo, page) and read(page) == safefs.read_bytes(repo, page):
             dropped.append(f"review_closure {c['file']}#{c['item_id']}: fixed without a text change; stays open")
+            closures.append({"file": c["file"], "item_id": c["item_id"], "status": "open", "attempt": True,
+                             "note": "fixed without a text change; stays open"})
             continue
         closures.append(c)
     seqs = {p["seq"] for p in fetch["pages"]}
@@ -273,18 +278,28 @@ def generate_all(ctx: Ctx, task: Task) -> None:
 
 def write_public(ctx: Ctx, task: Task) -> None:
     """publication/public.json from the pages as they are now; every later page write
-    (e.g. the final ⏳ notices) must call it again, or the site build sees a stale hash."""
+    (e.g. the final ⏳ notices) must call it again, or the site build sees a stale hash.
+
+    A refused asset (no rights record, a source copy) goes back to a session; in cron it
+    becomes an item for the next run, public.json stays as it was and G5 holds the release."""
     repo = ctx.notes_path
     try:
-        value = public.build(repo, public.either(public.render_rights(repo),
-                                                public.media_receipt_rights(repo), public.writer_svg_rights(repo)))
+        value = public.build(repo, public.either(public.render_rights(repo), public.media_receipt_rights(repo),
+                                                public.writer_svg_rights(repo)))
         text = public.dumps(value)
         if not safefs.is_file(repo, "publication/public.json") or safefs.read_text(repo, "publication/public.json") != text:
             journal.write(ctx, task, "publication/public.json", text, whole=True)
+        if task.get("public_problems"):
+            task.update(public_problems=None)
     except public.PublicError as exc:
         problems = [wiki_check.item(p, None, exc.reason) for p in exc.paths]
         checks.tool_errors(ctx, task, problems)
-        raise CheckFailed(problems)
+        if task.mode == "interactive":
+            raise CheckFailed(problems)
+        from . import machine_findings
+        machine_findings.record(ctx, task, problems)
+        task.update(public_problems=checks.ordered(problems))
+        ctx.log.event("finish.public_held", "warning", problems=problems[:20])
 
 
 def write_check_items(ctx: Ctx, items: list[dict]) -> None:

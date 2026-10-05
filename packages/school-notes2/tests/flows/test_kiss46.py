@@ -18,7 +18,9 @@ TEXT = "---\ntitle: Téma\ntype: topic\n---\n# Téma\n\nRégi mondat.\n"
 
 
 @pytest.fixture
-def call(tmp_path, log):
+def call(tmp_path, log, monkeypatch):
+    # The call's own files are judged by the guard and the check (needs Git); none here.
+    monkeypatch.setattr(correction_calls, "_file_problems", lambda ctx, task: [])
     repo = tmp_path / "repo"
     repo.mkdir()
     safefs.write_text(repo, PAGE, TEXT)
@@ -89,17 +91,33 @@ def test_blocking_error_fixed_in_the_continuation_keeps_everything(call):
 
 @pytest.mark.parametrize("valid", [True, False])
 def test_invalid_output_retries_once_and_keeps_other_work(call, valid):
+    """Futás-review 4: a missing or schema-invalid result.json never undoes the wiki edits;
+    the second attempt sees the error in check.json, the items stay open."""
     ctx, task, rel = call
-    attempts = []
+    attempts, seen = [], []
     def invoke():
         attempts.append(1)
+        seen.append(safefs.read_json(ctx.notes_path, ".school-notes/check.json"))
         edit(ctx)
         safefs.write_text(ctx.notes_path, ".school-notes/result.json", '{"status": "done"}' if valid else "nem json")
-        raise BadWork("schema")
+        raise BadWork("result.json: 'status' is a required property")
     result = run_call(ctx, task, invoke)
     assert len(attempts) == 2 and result["review_closure"][0]["status"] == "open"
-    # A valid result.json was not unusable output: the call's files stay.
-    assert ("Új, kész mondat." in safefs.read_text(ctx.notes_path, PAGE)) is valid
+    assert "Új, kész mondat." in safefs.read_text(ctx.notes_path, PAGE)  # kept in both cases
+    assert seen[1][0]["file"] == ".school-notes/result.json" and "required property" in seen[1][0]["message"]
+
+
+def test_invalid_result_with_a_secret_in_the_files_is_undone(call, monkeypatch):
+    """Rollback stays only for unusable files: a secret, metadata, markers, the path guard."""
+    ctx, task, rel = call
+    monkeypatch.setattr(correction_calls, "_file_problems",
+                        lambda ctx, task: [item(PAGE, 8, f"{SECRET_MESSAGE} 'ghp_'", kind=BLOCKING)])
+    def invoke():
+        edit(ctx, "ghp_" + "a" * 36)
+        raise BadWork("no result.json")
+    result = run_call(ctx, task, invoke)
+    assert safefs.read_text(ctx.notes_path, PAGE) == TEXT
+    assert result["review_closure"][0]["status"] == "open"
 
 
 def test_timeout_leaves_items_open_and_the_run_goes_on(call):
@@ -180,7 +198,8 @@ def test_program_error_or_bad_work_never_discards_the_tree(cfg, monkeypatch, err
     assert task.phase == "writing" and task.data["needs_owner"] and not task.get("set_aside")
     assert not run._may_run(ctx, task)
     version[0] = "2.6.1"
-    assert run._may_run(ctx, task) == (isinstance(error, RuntimeError))
+    # A program stop and a (2.5.x) bad-work stop are both released by the next release.
+    assert run._may_run(ctx, task)
 
 
 def test_machine_findings_are_recorded_before_each_write(call, monkeypatch):

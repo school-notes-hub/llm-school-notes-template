@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 
-from . import frontmatter, markers
+from . import markers
 from .decisions import valid_date
 from .pages import CODE_FENCE, COMMENT, LINK, read_page, resolve
 
@@ -67,18 +67,13 @@ def plain(text: str) -> str:
 
 def after_header(text: str, name: str, body: str) -> str:
     """A tool block is replaced where it is (also an empty one the writer left), or put at
-    the fixed place right after the frontmatter."""
+    its fixed place (`markers.fixed_place`)."""
     text = markers.clean_nested_notices(text)
     if name in markers.names(text):
         return markers.replace(text, name, body)
     if not body:
         return text
     return markers.at_fixed_place(text, name, body)
-
-
-def header_end(text: str) -> int:
-    """The fixed place of tool blocks: the first line after the frontmatter."""
-    return len(text) - len(frontmatter.split(text).body)
 
 
 def form_problems(repo: Path, rel: str, body: str, meta: dict, *, read=read_page) -> list[str]:

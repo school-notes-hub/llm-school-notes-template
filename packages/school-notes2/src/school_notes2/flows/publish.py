@@ -50,7 +50,12 @@ def _start(ctx: Ctx):
     site_publish.fetch_gh_pages(site, ctx.log, fetch_s=ctx.cfg.timeouts.fetch_s,
                                 ls_remote_s=ctx.cfg.timeouts.ls_remote_s)
     main = repos.rev(bare, "refs/remotes/origin/main")
-    if read_json(_held(ctx), {}).get("source") == main:
+    from . import unchecked
+    if unchecked.load(ctx):
+        ctx.log.event("site.publish_held", "warning", target=main, reason="unchecked")
+        return None  # An unchecked change never goes out; the next run rechecks it.
+    held = read_json(_held(ctx), {})
+    if held.get("source") == main and held.get("reason") != "unchecked":
         return None  # This commit's build already failed on content; wait for a new one.
     needed, why = site_publish.publish_needed(bare, site, main, VERSION)
     ctx.log.event("site.publish_needed", "yes" if needed else "no", target=why)
@@ -71,7 +76,7 @@ def _advance(ctx: Ctx, task) -> None:
             # Publication waits; the notes run that pushed this commit recorded the
             # problems as items, and a later clean build publishes everything.
             ctx.log.event("site.publish_held", "warning", target=task.get("source"), problems=exc.problems[:20])
-            write_json(_held(ctx), {"source": task.get("source")})
+            hold(ctx, task.get("source"), "build")
             task.data["closed"] = True
             task.save()
             return
@@ -88,8 +93,27 @@ def _advance(ctx: Ctx, task) -> None:
                              push_s=ctx.cfg.timeouts.push_s,
                              ls_remote_s=ctx.cfg.timeouts.ls_remote_s)
         task.set_phase("done")
+        released(ctx)
         finish_flow.check_live(ctx, Path(build["output"]), build["commit"])
 
 
 def _held(ctx: Ctx):
     return ctx.cfg.state_dir / ctx.name / "publish-held.json"
+
+
+def hold(ctx: Ctx, source: str, reason: str, *, notify: bool = True) -> None:
+    """The release waits (`unchecked`, `build` or `public`); the notes commit is pushed anyway.
+    `held` shows in the status; the owner gets one mail per held episode (`publish_held`)."""
+    if not ctx.student.publish:
+        return
+    write_json(_held(ctx), {"source": source, "reason": reason})
+    if notify:
+        from ..notify import incidents
+        incidents.record(ctx, "publish_held", reason, scope="publish-held")
+
+
+def released(ctx: Ctx) -> None:
+    """A publication went out: the held state and its incident end."""
+    from ..notify import incidents
+    _held(ctx).unlink(missing_ok=True)
+    incidents.resolve(ctx, "publish-held")

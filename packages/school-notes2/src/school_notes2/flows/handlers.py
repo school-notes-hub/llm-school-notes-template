@@ -72,19 +72,21 @@ def check(ctx: Ctx, task) -> dict:
             checks.record_failure(ctx, task, exc, "check.refresh")
             problems += exc.items
     if metadata_valid:
-        problems += public_problems(ctx.notes_path, generation_receipts.rights(ctx))
+        problems += public_problems(ctx.notes_path, generation_receipts.rights(ctx),
+                                    generation_receipts.changed_svgs(ctx, task))
     problems = checks.identify(problems, ctx.notes_path)
     steps.write_check_items(ctx, problems)
     checks.tool_errors(ctx, task, problems)
     return checks.response(problems)
 
 
-def public_problems(repo, generated=lambda _: None) -> list[dict]:
+def public_problems(repo, generated=lambda _: None, svgs=()) -> list[dict]:
     """What finish's public.json step would refuse (a new image with no rights record, a copy
-    of a source photo), reported now, so the writer fixes it in the same call."""
+    of a source photo), reported now, so the writer fixes it in the same call. The SVGs the
+    run changed (`svgs`) get their provenance receipt in finish."""
     try:
         public.build(repo, public.either(public.render_rights(repo), public.media_receipt_rights(repo), generated,
-                                         public.writer_svg_rights(repo)))
+                                         public.writer_svg_rights(repo, svgs)))
     except public.PublicError as exc:
         return [wiki_check.item(p, None, exc.reason) for p in exc.paths]
     return []

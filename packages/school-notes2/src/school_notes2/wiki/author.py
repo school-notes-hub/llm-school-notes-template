@@ -23,3 +23,24 @@ def part(text: str, *, legacy_notices=False) -> str:
     except Exception:  # noqa: BLE001 - unreadable frontmatter: compare the whole text
         return text
     return frontmatter.strip_keys(text, machine.machine_keys(meta))
+
+
+def tool_lines(text: str) -> set[int]:
+    """1-based numbers of the lines the tool owns: generated blocks (banner, 📎, ⏳, indexes)
+    and machine frontmatter keys. Every other line is the author's. Shared by the recheck and
+    the nightly triage: a finding on a tool line is an owner note, never an item."""
+    lines = set()
+    for start, end, _ in markers.spans(text):
+        lines.update(range(text.count("\n", 0, start) + 1, text.count("\n", 0, end) + 2))
+    try:
+        page = frontmatter.split(text)
+    except Exception:  # noqa: BLE001 - unreadable frontmatter: only the blocks are known
+        return lines
+    if page.has_fm and page.raw_meta:
+        keys, n = machine.machine_keys(page.meta), 2  # line 1 is the opening fence
+        for key, chunk in frontmatter.blocks(page.raw_meta):
+            size = chunk.count("\n") + 1
+            if key in keys:
+                lines.update(range(n, n + size))
+            n += size
+    return lines

@@ -176,10 +176,10 @@ def media_receipt_rights(repo: Path) -> RightsLookup:
     return media(repo)
 
 
-def writer_svg_rights(repo: Path) -> RightsLookup:
-    """A writer-drawn SVG is authored (6b); the last fallback after every receipt."""
+def writer_svg_rights(repo: Path, current=()) -> RightsLookup:
+    """A writer-drawn SVG with a provenance receipt is authored (6b); the last fallback."""
     from .rights import writer_svgs
-    return writer_svgs(repo)
+    return writer_svgs(repo, current)
 
 
 def render_rights(repo: Path) -> RightsLookup:

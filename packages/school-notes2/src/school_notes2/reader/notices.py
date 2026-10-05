@@ -4,7 +4,7 @@ import re
 
 from ..figures import commissions, pending, requests
 from ..state import safefs
-from ..wiki import drafts, frontmatter, lesson_log, markers
+from ..wiki import drafts, frontmatter, markers
 from . import verdicts, new_pages
 
 PAGE = "⏳ Ezt az oldalt még ellenőrizzük.\n"
@@ -27,9 +27,13 @@ def refresh(repo, pages, *, write=None, remove_only=False):
         names = {name for _, _, name in markers.spans(text)
                  if markers.is_notice(name)}
         existing = {markers.read(text, name) for name in names}
-        text = markers.remove(text, names)
         page_notice = new_pages.eligible(repo, page) and not verdicts.ever_reviewed(repo, page)
-        placements = _placements(text, waiting, page, page_notice)
+        wanted = PAGE if page_notice else drafts.NOTICE if frontmatter.split(text).meta.get("status") == "draft" else None
+        # An unchanged page notice stays where it is (also a 2.5.1 placement): no needless edit.
+        kept = {"pending"} if wanted is not None and markers.names(text).count("pending") == 1 \
+            and markers.read(text, "pending") == wanted else set()
+        text = markers.remove(text, names - kept)
+        placements = _placements(text, waiting, page, page_notice and not kept, not kept)
         for cut, (_, name, body) in sorted(placements.items(), reverse=True):
             # The one-time refresh only takes notices away, except a continuing topic's own
             # notice: the owner's "real gap" rule always shows it (a draft may have carried
@@ -43,16 +47,16 @@ def refresh(repo, pages, *, write=None, remove_only=False):
     return written
 
 
-def _placements(text, waiting, page, page_notice):
+def _placements(text, waiting, page, page_notice, draft_notice=True):
     placements = {}
     def add(cut, priority, name, body):
         cut = markers.outside(text, cut)
         candidate = (priority, name, body)
         placements[cut] = min(placements.get(cut, candidate), candidate)
     if page_notice:
-        add(lesson_log.header_end(text), 1, "pending", PAGE)
-    elif frontmatter.split(text).meta.get("status") == "draft":
-        add(lesson_log.header_end(text), 4, "pending", drafts.NOTICE)
+        add(markers.fixed_place(text, "pending"), 1, "pending", PAGE)
+    elif draft_notice and frontmatter.split(text).meta.get("status") == "draft":
+        add(markers.fixed_place(text, "pending"), 4, "pending", drafts.NOTICE)
     _figure_placements(text, waiting, page, add)
     return placements
 

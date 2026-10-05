@@ -286,3 +286,28 @@ def test_wait_until_live_is_only_a_warning(env):
                                         fetch=lambda url: next(answers), sleep=lambda s: None)
     assert not site_publish.wait_until_live("https://x/publish.json", "abc", env.log, timeout_s=0,
                                             fetch=lambda url: b"{}", sleep=lambda s: None)
+
+
+def test_a_deleted_page_or_image_makes_the_browser_check_visit_every_page(env):
+    """Védelmek-review blocker: an unchanged page may link the deleted one; its error must
+    hold the release, so after a deletion every page is checked (no link search)."""
+    env.push({"wiki/gazd/2026-09-25-ora-jegyzet.md": "# Óra\n\nOVERFLOW link a törölt oldalra\n"})
+    main = env.main()
+    env.build(main, changed=["wiki/gazd/tema.md"], name="changed-only")  # the linking page is not visited
+    with pytest.raises(BadWork) as caught:
+        env.build(main, changed=["wiki/gazd/torolt.md"], name="deleted")
+    assert [p["file"] for p in caught.value.problems] == ["wiki/gazd/2026-09-25-ora-jegyzet.md"]
+    assert site_build.deleted(["wiki/assets/gazd/kep.png"], env.tmp / "nowhere")
+
+
+def test_a_renamed_page_lists_its_old_path_too(env):
+    record = env.build(env.main())
+    env.publish(record)
+    site_publish.fetch_gh_pages(env.site, env.log)
+    clone = env.tmp / "rename"
+    subprocess.run(["git", "clone", "-q", str(env.origin), str(clone)], check=True, env=ENV)
+    subprocess.run(["git", "-C", str(clone), "mv", "wiki/gazd/tema.md", "wiki/gazd/uj-tema.md"], check=True, env=ENV)
+    subprocess.run(["git", "-C", str(clone), "commit", "-qm", "rename"], check=True, env=ENV)
+    subprocess.run(["git", "-C", str(clone), "push", "-q", "origin", "main"], check=True, env=ENV)
+    assert site_publish.changed_since_publish(env.bare, env.site, env.main()) == [
+        "wiki/gazd/tema.md", "wiki/gazd/uj-tema.md"]

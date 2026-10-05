@@ -168,9 +168,22 @@ def notes_block(subject: Subject) -> str:
     return "# 📝 Jegyzetek\n\n" + "\n".join(list_line(p) for p in pages) + "\n"
 
 
+REQUIRED_SUBJECT_BLOCKS = ("chapters", "lessons", "review", "notes")
+
+
+def with_blocks(text: str, names: tuple[str, ...]) -> str:
+    """A required index block the author removed comes back, empty, at the fixed place:
+    the end of the page, in canonical order; the refresh then fills it."""
+    missing = [n for n in names if n not in markers.names(text)]
+    if not missing:
+        return text
+    return text.rstrip("\n") + "\n\n" + "".join(markers.wrap(n, "") for n in missing)
+
+
 def subject_index(repo: Path, slug: str) -> str:
-    """The subject index text with every generated block refreshed."""
-    text = markers.clean_nested_notices(read_text(repo, f"wiki/{slug}/index.md"))
+    """The subject index text with every generated block refreshed (and present)."""
+    text = with_blocks(markers.clean_nested_notices(read_text(repo, f"wiki/{slug}/index.md")),
+                       REQUIRED_SUBJECT_BLOCKS)
     subject = load_subject(repo, slug)
     bodies = {"chapters": chapters_block(subject), "lessons": lessons_block(subject),
               "review": review_block(subject), "notes": notes_block(subject)}
@@ -220,6 +233,8 @@ def root_block(repo: Path) -> str:
 
 def root_index(repo: Path) -> str:
     text = markers.clean_nested_notices(read_text(repo, "wiki/index.md"))
+    if subject_order(repo):  # An uninitialized wiki has no subjects and no block yet.
+        text = with_blocks(text, ("subjects",))
     if "subjects" in markers.names(text):
         text = markers.replace(text, "subjects", root_block(repo))
     return text

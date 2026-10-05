@@ -123,8 +123,34 @@ def wrap(name: str, body: str) -> str:
     return OPEN.format(name=name) + "\n" + body + CLOSE + "\n"
 
 
-def at_fixed_place(text: str, name: str, body: str) -> str:
-    """Insert a tool block on the first line after the frontmatter (I6)."""
+ORDER = {"lesson-banner": 0, "lesson-sources": 1}   # then the ⏳ notices (2)
+
+
+def rank(name: str) -> int:
+    return ORDER.get(name, 2 if is_notice(name) else 3)
+
+
+def fixed_place(text: str, name: str) -> int:
+    """Where a new tool block goes (I6): right after the page title when the body's first
+    non-empty line is a `# ` heading, else right after the frontmatter; then past the tool
+    blocks already standing there whose canonical rank (banner → 📎 → ⏳) is not higher."""
     from . import frontmatter
     cut = len(text) - len(frontmatter.split(text).body)
+    title = re.match(r"(?:[ \t]*\n)*# [^\n]*(?:\n|$)", text[cut:])
+    if title:
+        cut += title.end()
+    for start, end, other in spans(text):
+        if start < cut:
+            continue
+        if text[cut:start].strip() or rank(other) > rank(name):
+            break
+        # Past the block and its separator, as `remove` and the author-part strip count it,
+        # so adding the new block never changes the author text.
+        cut = end + len(re.match(r"\n{0,2}", text[end:])[0])
+    return cut
+
+
+def at_fixed_place(text: str, name: str, body: str) -> str:
+    """Insert a tool block at its fixed place (see `fixed_place`)."""
+    cut = fixed_place(text, name)
     return text[:cut] + "\n" + wrap(name, body) + "\n" + text[cut:]

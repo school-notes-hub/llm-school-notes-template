@@ -95,8 +95,9 @@ def test_bad_repair_stops_with_the_work_kept_and_queue_untouched(tmp_path, log, 
     original = safefs.read_bytes(ctx.notes_path, queue.PATH)
     task = repair.start(ctx, topic=topic)
     repair.prepare(ctx, task)
+    from school_notes2.git import discard
     discarded = []
-    monkeypatch.setattr(failure.discard, "discard", lambda *args: discarded.append(1))
+    monkeypatch.setattr(discard, "discard", lambda *args: discarded.append(1))
     assert failure.handle(ctx, task, BadWork("bad output"))
     assert task.phase != "done" and not task.get("set_aside") and task.data["needs_owner"]
     assert discarded == []

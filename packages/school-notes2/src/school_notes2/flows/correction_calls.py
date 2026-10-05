@@ -1,15 +1,16 @@
 """One writer call with one failure counter; a failed call never takes other work with it.
 
-After a failure the writer continues once on its own files with the error list. Only output
-that is still unusable after that (an invalid result.json, a secret, metadata or block
-markers the tool cannot process) is undone, from the call's pre-call bytes. Other remaining
+After a failure the writer continues once on its own files with the error list (check.json,
+also a result.json schema error). Only output that is still unusable after that – a secret,
+metadata or block markers the tool cannot process, a path-guard violation – is undone, from
+the call's pre-call bytes. A missing or invalid result.json never undoes the wiki edits: the
+call's items stay open and the content check and the recheck judge the files. Other remaining
 errors become items for the next run and the call's work is kept. A call that failed twice
 leaves its items open; the rest of the run goes on."""
 
 import shutil
 
 from ..llm import launch
-from ..schemas import validate
 from ..state import safefs
 from ..state.errors import BadWork, WaitingQuota
 from . import steps
@@ -60,8 +61,9 @@ def run(ctx, task, k, invoke, recover):
             state = _failed(ctx, root, state, exc.items, unusable=_unusable(exc.items))
             if not state["unusable"]:
                 safefs.write_json(root, "candidate-kept.json", True)
-        except (BadWork, ValueError):
-            state = _failed(ctx, root, state, [], unusable=True)
+        except (BadWork, ValueError) as exc:
+            items = [_result_error(exc)] + _file_problems(ctx, task)
+            state = _failed(ctx, root, state, items, unusable=_unusable(items))
         else:
             if candidate is None:
                 state = _failed(ctx, root, state, [], unusable=False)
@@ -78,7 +80,8 @@ def run(ctx, task, k, invoke, recover):
                 safefs.write_json(root, "candidate-kept.json", True)
         except (BadWork, ValueError) as exc:
             ctx.log.event("writer.call_failed", reason=str(exc)[:300], call=k)
-            state = _failed(ctx, root, state, [], unusable=_invalid_output(ctx))
+            items = [_result_error(exc)] + _file_problems(ctx, task)
+            state = _failed(ctx, root, state, items, unusable=_unusable(items))
         except launch.TimedOut as exc:
             if not isolated(task) or exc.details.get("suspended") or exc.details.get("count", 0) >= 2:
                 safefs.write_json(root, "call.json", {**state, "running": False})
@@ -101,9 +104,11 @@ def run(ctx, task, k, invoke, recover):
         return _done(root, state, candidate)
     if not isolated(task):
         from ..state.errors import NeedsOwner
-        # A continued run starts this call afresh, on the kept files.
+        # A continued run starts this call afresh, on the files as they are now.
         safefs.write_json(root, "call.json", {**state, "failures": 0, "running": False})
-        raise NeedsOwner("the writer call failed twice; its files are kept",
+        kept = ("its unusable output was undone (secret, metadata, block markers or path guard); "
+                "its other files are as before the call") if state.get("unusable") else "its files are kept"
+        raise NeedsOwner(f"the writer call failed twice; {kept}",
                          todo="continue the run in `school-notes chat`", details={"items": state["items"][:20]})
     return _done(root, state, failed_result(task, k, "A hívás kétszer sikertelen volt; a tétel nyitva maradt."))
 
@@ -113,12 +118,22 @@ def _unusable(items):
     return bool(blocking(items))
 
 
-def _invalid_output(ctx):
-    try:
-        validate("result", safefs.read_json(ctx.notes_path, ".school-notes/result.json"))
-    except ValueError:
-        return True
-    return False
+def _file_problems(ctx, task):
+    """The call's files are judged on their own when its result.json is unusable: only a
+    blocking problem among them (secret, metadata, markers, path guard) undoes them."""
+    problems = []
+    for operation in (lambda: steps.guard_step(ctx, task), lambda: steps.check_changed(ctx, task)):
+        try:
+            operation()
+        except steps.CheckFailed as exc:
+            problems += exc.items
+    return problems
+
+
+def _result_error(exc):
+    """The result.json problem, in check.json form, for the writer's second attempt."""
+    from ..wiki.check import item
+    return item(".school-notes/result.json", None, f"result.json: {exc}"[:2000])
 
 
 def _failed(ctx, root, state, items, *, unusable):

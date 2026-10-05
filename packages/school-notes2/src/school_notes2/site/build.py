@@ -90,7 +90,7 @@ def build(git: Git, commit: str, task_dir: Path, renderer: Renderer, *, changed:
         write_json(task_dir / "last-updated.json", dates)
         _render(renderer, src, out, task_dir / "last-updated.json")
         payload = read_json(out / "payload.json")
-        only = None if changed is None else pages_to_check(changed, [p["path"] for p in payload["pages"]])
+        only = None if changed is None or deleted(changed, src) else pages_to_check(changed, [p["path"] for p in payload["pages"]])
         try:
             _browser_check(renderer, out, payload, only)
         except BuildContentError as exc:
@@ -142,6 +142,12 @@ def last_updated(git: Git, commit: str) -> dict[str, str]:
     if dates:
         dates["wiki/index.md"] = max(dates.values(), key=lambda d: datetime.fromisoformat(d))
     return dates
+
+
+def deleted(changed: list[str], src: Path) -> bool:
+    """A wiki page or image that is gone: any unchanged page may link it, so every page is
+    checked (a mechanical rule, no link search here)."""
+    return any(p.startswith("wiki/") and not (src / p).is_file() for p in changed)
 
 
 def pages_to_check(changed: list[str], pages: list[str]) -> list[str]:

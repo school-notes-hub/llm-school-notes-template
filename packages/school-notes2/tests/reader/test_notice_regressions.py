@@ -42,7 +42,8 @@ def refresh_twice(repo, page):
 @pytest.mark.parametrize("wrapped", [False, True])
 @pytest.mark.parametrize("reason", ["missing", "unlocated", "draft"])
 def test_page_notice_goes_to_the_fixed_place_after_frontmatter(setup, wrapped, reason):
-    """I6: the tool's notice is placed after the frontmatter, never by reading the header."""
+    """I6 and védelmek-review 3: the tool's notice goes to its fixed place – right after the
+    page title when the body starts with one – never above the title the learner reads."""
     ctx, _, page = setup
     safefs.write_json(ctx.notes_path, new_pages.PATH, {page: "v2-run"})
     banner = markers.wrap("figure-banner", BANNER) if wrapped else BANNER
@@ -61,7 +62,7 @@ def test_page_notice_goes_to_the_fixed_place_after_frontmatter(setup, wrapped, r
         return
     expected = drafts.NOTICE if reason == "draft" else notices.PAGE
     assert result.count(expected) == 1
-    assert result.index(markers.OPEN.format(name="pending")) < result.index("# Téma")
+    assert result.index("# Téma") < result.index(markers.OPEN.format(name="pending"))
     assert result.index(expected) < result.index("Bevezetés.")
     assert markers.read(result, "figure-banner") == BANNER if wrapped else BANNER in result
 
@@ -84,7 +85,8 @@ def test_vm_nested_duplicates_are_removed_and_authored_items_keep_notices(setup)
     assert notices.SECTION not in markers.read(result, "notes")
     assert "* Jegyzetlista" in markers.read(result, "notes")
     assert "Órabevezető" in result
-    assert result.index(notices.PAGE) < result.index("# Téma")
+    # An unchanged page notice stays where it stood (here: right after the title).
+    assert result.index("# Téma") < result.index(notices.PAGE) < result.index(BANNER)
     assert "pending-section-7b79e662bcc8" not in result
 
 

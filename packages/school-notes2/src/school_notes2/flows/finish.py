@@ -38,6 +38,7 @@ def _finish(ctx, task, notify_owner_items):
     start = _snapshot(ctx, task)
     edits = {"replacements": []} if task.mode == "interactive" else None
     from . import review_phases
+    review_phases.resume_legacy_round(task)
     if task.phase in ("prepared", "writing", "finishing") and not task.get("review_complete"):
         prepared = steps.content_steps(ctx, task)
         notify_owner_items(prepared.new_owner)
@@ -124,7 +125,14 @@ def renderer(ctx: Ctx) -> site_build.Renderer:
 
 def _build(ctx: Ctx, task: Task, commit: str) -> dict:
     """G5. A content problem holds the publication and becomes an item for the next run;
-    the notes commit itself is kept and pushed (no rollback, no new attempt)."""
+    the notes commit itself is kept and pushed (no rollback, no new attempt). A change whose
+    independent check did not run, or a public.json the gate refused, holds it too."""
+    from . import publish, unchecked
+    for reason, held in (("unchecked", unchecked.load(ctx)), ("public", task.get("public_problems"))):
+        if held:
+            ctx.log.event("site.build_held", "warning", reason=reason)
+            publish.hold(ctx, commit, reason)
+            return {"commit": commit, "held": True, "reason": reason}
     site = ctx.worktree("site")
     try:
         site_publish.fetch_gh_pages(site, ctx.log, fetch_s=ctx.cfg.timeouts.fetch_s,
@@ -142,7 +150,10 @@ def _build(ctx: Ctx, task: Task, commit: str) -> dict:
         machine_findings.record(ctx, task, problems)
         task.update(build_problems=problems)
         ctx.log.event("site.build_held", "warning", problems=problems[:20])
-        return {"commit": commit, "held": True}
+        # Without an item for the writer nothing would ever lift the hold: tell the owner.
+        items = [p for p in problems if p["file"].startswith("wiki/") and p.get("severity", "error") == "error"]
+        publish.hold(ctx, commit, "build", notify=not items)
+        return {"commit": commit, "held": True, "reason": "build"}
     return {"commit": record.commit, "output": str(record.output),
             "duration_s": record.duration_s}
 
@@ -161,6 +172,8 @@ def _publish(ctx: Ctx, task: Task, record: dict) -> None:
         fetch_s=ctx.cfg.timeouts.fetch_s, push_s=ctx.cfg.timeouts.push_s,
         ls_remote_s=ctx.cfg.timeouts.ls_remote_s)
     task.update(published=published.commit)
+    from . import publish
+    publish.released(ctx)
     check_live(ctx, Path(record["output"]), record["commit"])
 
 

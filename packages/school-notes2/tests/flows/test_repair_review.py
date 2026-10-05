@@ -60,7 +60,8 @@ def test_pre_upgrade_failed_handoff_hold_can_finish_without_creating_absent_queu
     repair.prepare(ctx, task)
     # Persisted pre-upgrade handoffs still resume through their original queue path.
     task.set_phase("moved", repair_failed=True)
-    monkeypatch.setattr(failure.discard, "discard", lambda *a: None)
+    from school_notes2.git import discard
+    monkeypatch.setattr(discard, "discard", lambda *a: pytest.fail("a pre-upgrade handoff discards nothing"))
     real = failure.write_item
     def crash(ctx, task):
         real(ctx, task)

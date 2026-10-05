@@ -52,8 +52,8 @@ def body(repo: Path, page: str, meta: dict, *, read=read_page) -> str:
 
 
 def update(repo: Path, page: str, text: str) -> str:
-    """The tool's banner block: replaced in place, or put at the fixed place right after
-    the frontmatter. The writer's own lines are never replaced (E7)."""
+    """The tool's banner block: replaced in place, or put at its fixed place
+    (`markers.fixed_place`). The writer's own lines are never replaced (E7)."""
     meta = frontmatter.split(text).meta
     value = body(repo, page, meta)
     if BLOCK in markers.names(text):

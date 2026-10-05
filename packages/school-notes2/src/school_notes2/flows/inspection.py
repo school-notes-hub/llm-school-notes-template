@@ -84,6 +84,8 @@ def inspect(ctx, task):
     from . import recheck
     root = folder(task)
     saved = safefs.read_json(root, RECEIPT)
+    if saved is None and not rechecking(task):
+        saved = legacy_receipt(root)
     if saved is None:
         view = root / "reader-view"
         inputs.preview(ctx.notes_path, view, [s["brief"] for s in task.get("inspection_figures", [])], render(ctx, task))
@@ -91,17 +93,46 @@ def inspect(ctx, task):
         if rechecking(task):
             saved = {"recheck": recheck.run(ctx, task, view), "receipts": receipts, "notes": figure_notes}
         else:
-            findings, notes, pages = inspect_readers(ctx, task, view)
-            saved = {"findings": findings, "notes": notes + figure_notes, "pages": pages, "receipts": receipts}
+            findings, notes, pages, unread = inspect_readers(ctx, task, view)
+            saved = {"findings": findings, "notes": notes + figure_notes, "pages": pages, "receipts": receipts,
+                     "unread": unread, "recheck": recheck.run(ctx, task, view, carried_only=True)}
         safefs.write_json(root, RECEIPT, saved)
-    if "recheck" in saved:
+    if rechecking(task):
         recheck.apply(ctx, task, saved)
     else:
         _apply(ctx, task, saved)
+        if saved.get("recheck"):  # Pages an earlier run could not check (`unchecked`).
+            recheck.apply(ctx, task, {"recheck": saved["recheck"], "receipts": saved["receipts"]})
+    _carry_unchecked(ctx, task, saved)
+
+
+def legacy_receipt(root):
+    """A 2.5.1 reader receipt (`p3.json`) of this attempt is used, not read again. A 2.5.1
+    fix-run receipt holds rechecks in the old format and is not; those pages are rechecked."""
+    old = safefs.read_json(root, "p3.json")
+    if old is None or old.get("fixes"):
+        return None
+    return {"findings": old.get("findings", []), "notes": old.get("notes", []), "pages": old.get("pages", []),
+            "receipts": old.get("receipts", {}), "unread": [], "recheck": []}
+
+
+def _carry_unchecked(ctx, task, saved):
+    """A page whose check did not run holds the release and is rechecked by the next run."""
+    from . import unchecked
+    from ..wiki.pages import wiki_pages
+    entries = saved.get("recheck", [])
+    failed = {e["page"]: e.get("base") or task.get("base") for e in entries if e["status"] not in ("reviewed", "unchanged")}
+    failed.update({p: task.get("base") for p in saved.get("unread", [])})
+    checked = {e["page"] for e in entries if e["status"] in ("reviewed", "unchanged")}
+    checked.update(p["file"] for p in saved.get("pages", []))
+    checked.update(set(unchecked.load(ctx)) - set(wiki_pages(ctx.notes_path)))  # deleted since
+    unchecked.update(ctx, task, failed, checked)
+    if failed:
+        task.update(unchecked_pages=sorted(failed))
 
 
 def inspect_readers(ctx, task, view):
-    findings, notes, pages = [], [], []
+    findings, notes, pages, unread = [], [], [], []
     changed = set(task.get("inspection_changed", []))
     figured = {s["brief"]["page"] for s in task.get("inspection_figures", []) if figure_changed(ctx, task, s)}
     for unit in task.get("inspection_units", []):
@@ -117,7 +148,8 @@ def inspect_readers(ctx, task, view):
         findings += result["findings"]
         notes += result["notes"]
         pages += result["pages"]
-    return findings, notes, pages
+        unread += result.get("unread", [])
+    return findings, notes, pages, sorted(unread)
 
 
 def inspect_figures(ctx, task):
@@ -145,7 +177,10 @@ def _reader(ctx, task, view, unit):
     assigned = inputs.prepare(repo, view, unit, root / "pass1/in", lambda p: old_text(ctx, task, p))
     first = calls.run(repo, view, root / "pass1", "reader-1", assigned, role(ctx, task), log=ctx.log)
     if first["status"] != "reviewed":
-        return {"findings": [], "notes": [], "pages": []}
+        ctx.log.event("reader.not_checked", "warning", pages=unit["pages"], reason=first.get("reason", "")[:200])
+        return {"findings": [], "pages": [], "unread": unit["pages"],
+                "notes": [f"Az olvasó-lektor nem futott le ({', '.join(unit['pages'])}): {first.get('reason', '')}; "
+                          "a kiadás visszatartva, a következő futás újraellenőrzi."]}
     review = first["review"]
     safefs.write_json(repo, f".school-notes/reader/{root.name}/pass1.json", review)
     return {"findings": [{**f, "origin": "reader"} for f in review["findings"]], "notes": review["owner_notes"],
@@ -160,11 +195,14 @@ def _apply(ctx, task, saved):
         return
     model = role(ctx, task).role
     from . import journal
+    from ..wiki import frontmatter
     journal.settle(ctx, task)
     write = lambda repo, rel, text: journal.write(ctx, task, rel, text, whole=True)
-    if safefs.is_file(ctx.notes_path, path):
+    existing = frontmatter.split(safefs.read_text(ctx.notes_path, path)).meta if safefs.is_file(ctx.notes_path, path) else None
+    if existing is not None and existing.get("reviewer") == "check":
+        # The run report was opened by the machine-check items; a replay finds its label.
         report.append(ctx.notes_path, path, findings, notes, f"reader-{task.get('attempt', 1)}", write=write)
-    else:
+    else:  # Our own earlier write (also a 2.5.1 one) is kept as it is: write() is a no-op then.
         report.write(ctx.notes_path, path, findings, notes, f"{model.model}/{model.effort}", task.get("base"),
                      task.data["created"], write=write)
     for page in pages:

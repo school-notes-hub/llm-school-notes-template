@@ -69,8 +69,12 @@ def prepare(repo: Path, view: Path, unit: dict, folder: Path, old_text, *, targe
                       "questions": [] if targeted else questions,
                       "decisions": frontmatter.split(text).meta.get("decisions", []),
                       "items": {} if targeted else ids.get("items", {}),
-                      "diff": "".join(difflib.unified_diff(old_text(page).splitlines(True),
-                                                        text.splitlines(True), fromfile=page, tofile=page))})
+                      # A recheck's line numbers are the repository text's (as in `changed_lines`),
+                      # never the preview's; the reader's full pass sees the preview.
+                      "diff": "".join(difflib.unified_diff(
+                          old_text(page).splitlines(True),
+                          (safefs.read_text(repo, page) if targeted else text).splitlines(True),
+                          fromfile=page, tofile=page))})
     safefs.write_json(folder, "assigned.json", assigned)
     safefs.write_json(folder, "pages.json", pages)
     return assigned

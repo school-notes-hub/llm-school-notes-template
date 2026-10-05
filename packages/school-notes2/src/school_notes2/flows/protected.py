@@ -83,7 +83,7 @@ def restore(ctx, task):
 
 
 def restore_parts(current, old):
-    if current is None:  # A removed page is a writer check error; do not undo it.
+    if current is None:  # Removing a page is the writer's choice; links to it are checked.
         return current
     try:
         text = current.decode("utf-8")
@@ -104,8 +104,9 @@ def restore_parts(current, old):
     chunks += [chunk for k, chunk in originals.items() if k not in seen]
     if any(previous.meta.get(k) != page.meta.get(k) for k in keys):
         text = "---\n" + "\n".join(chunks) + "\n---\n" + page.body
-    # A block keeps the writer's position; only its bytes come back. A removed block is
-    # not re-placed by the tool (its position is author text): the guard asks the writer.
+    # A block keeps the writer's position; only its bytes come back. A removed block is not
+    # put back here: the step that owns it regenerates it at its fixed place (indexes in
+    # `generate`, banner, 📎 and ⏳ blocks in their refresh).
     blocks = {m['name']: m[0] for m in markers.BLOCK.finditer(source)}
     text = markers.BLOCK.sub(lambda match: blocks.get(match['name'], ""), text)
     return text.encode()

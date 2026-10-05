@@ -86,7 +86,9 @@ def _may_run(ctx: Ctx, task: Task | None) -> bool:
         return False
     if task is not None and task.data.get("needs_owner"):
         owner = task.data["needs_owner"]
-        if owner["class"] == "program" and owner.get("release") != policy.release(ctx):
+        # A tool error, and a 2.5.x bad-work stop (now a warning or an item), are released by
+        # the next tool release; the kept work then continues.
+        if owner["class"] in ("program", "bad_work") and owner.get("release") != policy.release(ctx):
             task.clear_needs_owner()
     if task is not None and task.data.get("needs_owner"):
         ctx.log.event("run.skip", "needs_owner", target=task.run_id)
@@ -132,10 +134,8 @@ def advance(ctx: Ctx, task: Task) -> None:
     licenses.preflight(ctx.notes_path)
     if task.phase == "waiting_quota":
         task.set_phase(task.get("quota_phase"))
-    if task.phase in ("correcting", "rechecking"):
-        # 2.5.x in-run correction rounds no longer exist: their files stay and every
-        # change of the run is rechecked once; open items wait for the next run.
-        task.set_phase("inspecting", recheck_all=True)
+    from . import review_phases
+    review_phases.resume_legacy_round(task)
     if task.get("mode") == "fix":
         from . import fix
         fix.prepare(ctx, task)

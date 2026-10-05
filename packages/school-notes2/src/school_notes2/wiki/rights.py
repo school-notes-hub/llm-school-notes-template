@@ -75,14 +75,31 @@ def media(repo: Path):
     return lookup
 
 
-def writer_svgs(repo):
+SVG_RECEIPTS = "docs/evidence/media/writer-svg.json"
+
+
+def writer_svgs(repo, current=()):
+    """A writer-drawn SVG is authored (6b) only with a provenance receipt: its exact bytes
+    were created or changed in a writer's run (path, sha256, run id; written by the tool,
+    the writer cannot write `docs/`). `current` lists the SVGs changed in the run under way,
+    for the writer's own check before the receipt exists. An SVG already published with
+    these bytes keeps its recorded rights (`lookup`)."""
+    data = safefs.read_json(repo, SVG_RECEIPTS, {}) if safefs.is_file(repo, SVG_RECEIPTS) else {}
+    recorded = {(e.get("path"), e.get("sha256")) for e in data.get("svgs", []) if isinstance(e, dict)}
+    current = set(current)
+
     def lookup(rel):
-        return ("authored", "writer-svg") if writer_svg(repo, rel) else None
+        if not writer_svg(repo, rel):
+            return None
+        if rel in current or (rel, sha256(repo, rel)) in recorded:
+            return "authored", SVG_RECEIPTS
+        return None
     return lookup
 
 
 def writer_svg(repo, rel):
-    """A writer-drawn SVG is authored (6b), unless it embeds another image or data."""
+    """An SVG under wiki/assets that embeds no other image or data (a raster inside an SVG
+    keeps the commission and review gate)."""
     if not rel.startswith("wiki/assets/") or not rel.endswith(".svg") or not safefs.is_file(repo, rel):
         return False
     text = safefs.read_text(repo, rel, errors="replace").lower()

@@ -52,11 +52,9 @@ def test_priority_is_new_packages_then_fix_then_repair(monkeypatch):
     assert run._new_task(ctx) == "new-task" and seen == ["fix"]
 
 
-@pytest.mark.parametrize("saved", ["figures", "correcting", "rechecking"])
-def test_one_pass_per_run_without_correction_rounds(tmp_path, monkeypatch, saved):
-    """#9/R1–R7: figures → one independent check → finalize; open findings wait for the next
-    run. A 2.5.x task in a correction round rechecks everything once and goes on."""
-    task = phase.create(tmp_path, "one", "notes", "cron", saved)
+def test_one_pass_per_run_without_correction_rounds(tmp_path, monkeypatch):
+    """#9/R1–R7: figures → one independent check → finalize; open findings wait for the next run."""
+    task = phase.create(tmp_path, "one", "notes", "cron", "figures")
     task.update(mode="fix")
     seen = []
     monkeypatch.setattr(review_phases.inspection, "prepare", lambda *a: seen.append("figures"))
@@ -64,8 +62,32 @@ def test_one_pass_per_run_without_correction_rounds(tmp_path, monkeypatch, saved
     monkeypatch.setattr(review_phases, "finalize", lambda *a: seen.append("finalize"))
     monkeypatch.setattr(review_phases.relations, "inventory", lambda *a: {"items": {}})
     review_phases.advance(SimpleNamespace(notes_path=tmp_path), task, lambda *a: None)
-    expected = ["figures", ("inspect", None)] if saved == "figures" else [("inspect", True)]
-    assert task.phase == "finishing" and seen == expected + ["finalize"]
+    assert task.phase == "finishing" and seen == ["figures", ("inspect", None), "finalize"]
+
+
+@pytest.mark.parametrize("saved", ["correcting", "rechecking", "waiting_quota"])
+def test_legacy_correction_round_goes_through_the_content_steps_once_more(tmp_path, monkeypatch, saved):
+    """Futás-review blocker: a 2.5.1 task stopped in a correction round (also with
+    `content_pending`, also waiting for quota) runs the content steps on its kept files –
+    closures, lesson notes, stamps, evidence, check – and then rechecks every change once."""
+    from school_notes2.flows import finish
+    task = phase.create(tmp_path, "one", "notes", "cron", saved)
+    task.update(mode="fix", content_pending=True, review_complete=True, writing_k=2, ranges=[[1, 1]],
+                quota_phase="correcting" if saved == "waiting_quota" else None)
+    seen = []
+    monkeypatch.setattr(finish.steps, "content_steps",
+                        lambda ctx, task: seen.append(("content", task.phase)) or SimpleNamespace(new_owner=[], question=False, result={}))
+    monkeypatch.setattr(review_phases, "advance", lambda ctx, task, *a: seen.append(("check", task.get("recheck_all"))) or task.set_phase("finishing"))
+    monkeypatch.setattr(finish, "_snapshot", lambda *a, **kw: {})
+    monkeypatch.setattr(finish.git_finish, "run", lambda task, *a: "done")
+    monkeypatch.setattr("school_notes2.flows.repair.complete", lambda *a: None)
+    monkeypatch.setattr("school_notes2.flows.report.completion", lambda *a: None)
+    ctx = SimpleNamespace(notes_path=tmp_path, worktree=lambda _: None, cfg=SimpleNamespace(
+        limits=SimpleNamespace(max_agents=3), timeouts=SimpleNamespace(fetch_s=1, push_s=1, ls_remote_s=1)))
+    monkeypatch.setattr("school_notes2.figures.licenses.preflight", lambda *a: None)
+    finish.finish(ctx, task, notify_owner_items=lambda items: None)
+    assert seen == [("content", "writing"), ("check", True)]
+    assert task.get("writing_k") == 2  # past the last range: no writer starts
 
 
 @pytest.mark.parametrize("learner", ["one", "two"])

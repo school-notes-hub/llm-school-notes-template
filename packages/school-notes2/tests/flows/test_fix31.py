@@ -26,11 +26,13 @@ def test_empty_recheck_skips_machine_metadata_only(tmp_path, monkeypatch, author
     before = "---\ntype: topic\ngenerated: {at: yesterday}\n---\n# Téma\n\nÁllítás.\n"
     after = before.replace("yesterday", "today") + ("Másik állítás.\n" if author_change else "")
     safefs.write_text(repo, page, after)
-    ctx = SimpleNamespace(notes_path=repo, log=None)
+    ctx = SimpleNamespace(notes_path=repo, log=None, name="barna", cfg=SimpleNamespace(state_dir=tmp_path / "state"))
     monkeypatch.setattr(recheck.steps, "base_reader", lambda *a: lambda p: before.encode())
     monkeypatch.setattr(recheck.inputs, "prepare", lambda *a, **kw: a[3].mkdir(parents=True))
     monkeypatch.setattr(inspection_runtime, "role", lambda *a: None)
     called = []
     monkeypatch.setattr(recheck.calls, "run", lambda *a, **kw: called.append(1) or {"status": "not_checked"})
-    recheck.check_page(ctx, task, view, page, [])
+    entry = recheck.check_page(ctx, task, view, page, [])
     assert len(called) == int(author_change)
+    # Nothing to check is its own status; a failed call is `not_checked` (it holds the release).
+    assert entry["status"] == ("not_checked" if author_change else "unchanged")

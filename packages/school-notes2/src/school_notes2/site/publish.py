@@ -166,7 +166,8 @@ def changed_since_publish(private: Git, site: Git, main: str) -> list[str] | Non
     last = (record or {}).get("source_commit")
     if not last or not private.ok("cat-file", "-e", f"{last}^{{commit}}"):
         return None
-    return private.out("diff", "--name-only", "--no-ext-diff", "--no-textconv", last, main,
+    # --no-renames: a renamed page lists its old path too (gone → every page is checked).
+    return private.out("diff", "--name-only", "--no-renames", "--no-ext-diff", "--no-textconv", last, main,
                        "--", "wiki").split()
 
 

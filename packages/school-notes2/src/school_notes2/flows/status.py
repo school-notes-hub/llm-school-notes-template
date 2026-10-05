@@ -58,6 +58,7 @@ def summary(ctx: Ctx) -> dict:
         "cards": _cards(ctx.notes_path),
         "parked": _parked(ctx),
         "publish_held": read_json(ctx.cfg.state_dir / ctx.name / "publish-held.json", {}),
+        "unchecked": read_json(ctx.cfg.state_dir / ctx.name / "unchecked.json", {}),
         "references_without_map": _unmapped(ctx.notes_path),
         "pack_mb": _pack_mb(ctx.cfg.bare(ctx.name)),
         "log": str(ctx.cfg.log_path),
@@ -194,7 +195,12 @@ def render(data: dict) -> str:
     if data.get("parked"):
         lines.append("24 órára félretett munka (nem haladt): " + ", ".join(data["parked"]))
     if data.get("publish_held"):
-        lines.append(f"kiadás visszatartva (build-hiba, tétel lett belőle): {data['publish_held'].get('source', '')[:12]}")
+        reason = {"unchecked": "ellenőrizetlen változás", "public": "kép jogcíme"}.get(
+            data["publish_held"].get("reason"), "build-hiba")
+        lines.append(f"kiadás visszatartva ({reason}): {data['publish_held'].get('source', '')[:12]}")
+    if data.get("unchecked"):
+        lines.append("ellenőrizetlen oldal (a következő futás újraellenőrzi, addig nincs kiadás): "
+                     + ", ".join(sorted(data["unchecked"])))
     lock = data["lock"]
     lines.append(f"zár: {'foglalt – ' + str(lock.get('kind')) + ' óta ' + str(lock.get('since')) if lock['held'] else 'szabad'}")
     for t in data["open"]:

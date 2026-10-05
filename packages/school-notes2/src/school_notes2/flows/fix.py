@@ -21,7 +21,8 @@ def next_task(ctx):
     owners = [e for e in entries if e["owner_required"] and e["commission"]["id"] not in was_owner]
     items, waiting = fix_progress.available(ctx, items, waiting)
     waiting = fix_progress.runnable_images(ctx, waiting)
-    if not owners and not items and not waiting:
+    from . import unchecked
+    if not owners and not items and not waiting and not unchecked.startable(ctx):
         return None  # A pending bookkeeping migration alone never starts a run (R5).
     task = phase.create(ctx.task_root(), ctx.name, "notes", "cron", "moved")
     task.update(mode="fix", base=base, preparation_base=base, open_review_items=items,

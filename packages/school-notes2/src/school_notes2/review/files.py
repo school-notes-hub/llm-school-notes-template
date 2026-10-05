@@ -265,8 +265,9 @@ def _apply_one(repo: Path, path: Path, run_id: str, closures: dict, listed: list
             note = " ".join(filter(None, [note, c.get("question_id"), c.get("decision_id")]))
         entries.append((item_id, status, note))
         record = dict(details.get(item_id, relations.details(page, item_id)))
-        if automatic and item_id in before and status in (FIXED, DISAGREE):
-            attempts.record(record, run_id)  # Only a real writer attempt counts (Fable 8).
+        if automatic and item_id in before and (status in (FIXED, DISAGREE) or c and c.get("attempt")):
+            # Only a real writer attempt counts (Fable 8); a `fixed` without a text change is one (R6).
+            attempts.record(record, run_id)
         details[item_id] = record
         if status in (FIXED, DISAGREE, "question", "settled"):
             items[item_id] = status

@@ -124,6 +124,12 @@ STATES = {"no_progress": "a javító futás nem haladt; a munka félretéve; a k
 def state_text(receipt, task=None):
     if receipt == "set_aside" and task and task.get("set_aside_reason") == "bad_work":
         return "a jegyzetíró kétszer hibás kimenetet adott; a futás félretéve; a kontroller ellenőrzi; a többi munka megy"
+    if receipt == "done" and task is not None:
+        failed, calls = task.get("failed_fix_calls", []), task.get("calls") or []
+        if task.get("no_change") and calls and len(failed) >= len(calls):
+            return "a javító hívások nem jártak sikerrel; nem változott semmi, a tételek nyitva maradtak"
+        if (task.get("build") or {}).get("held"):
+            return "kész, kiadás visszatartva"
     return STATES.get(receipt, receipt)
 
 

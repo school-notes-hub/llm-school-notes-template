@@ -51,7 +51,8 @@ def test_recovered_prerequisite_clears_even_when_task_needs_owner(cfg, monkeypat
     sent = []
     ctx.mailer = recording_mailer(cfg.state_dir, ctx.log, monkeypatch, sent)
     task = phase.create(ctx.task_root(), learner, "notes", "cron", "writing")
-    task.mark_needs_owner("writer failed", "fix", "bad_work")
+    # An owner decision (a pre-2.6 bad-work stop would be released by the new release).
+    task.mark_needs_owner("the writer asked a blocking question", "answer it", "needs_owner")
     last_error.record(ctx, "run", "prerequisite", Prerequisite("Podman failed"))
     monkeypatch.setattr(run.setup, "ensure", lambda _: None)
     monkeypatch.setattr(run, "_settle_images", lambda _: None)

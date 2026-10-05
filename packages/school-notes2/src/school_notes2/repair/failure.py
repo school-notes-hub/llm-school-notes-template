@@ -2,7 +2,6 @@
 
 from contextlib import nullcontext
 
-from ..git import discard, repos
 from ..notify import Notice
 from ..notify import pending
 from ..review.repair_migration import POLICY
@@ -22,13 +21,9 @@ def handle(ctx, task, exc) -> bool:
 
 
 def restore(ctx, task):
+    """A pre-upgrade failed handoff: the topic goes to the owner; nothing is discarded."""
     if not task.get("repair_failed"):
         return
-    if not task.get("repair_discarded"):
-        bundle = discard.discard(ctx.worktree("notes"), task.run_id, ctx.cfg.root / "archive" / ctx.name)
-        task.update(repair_discarded=True, repair_bundle=str(bundle) if bundle else None,
-                    base=repos.rev(ctx.worktree("notes"), "refs/remotes/origin/main"),
-                    tool_writes={}, tool_parts={}, tool_hashes={}, learning_pending=None)
     data = queue.load(ctx.notes_path)
     for item in data["items"]:
         if item["page"] == task.get("repair_topic"):

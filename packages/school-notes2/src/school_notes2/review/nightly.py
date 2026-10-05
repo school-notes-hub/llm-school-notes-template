@@ -16,14 +16,14 @@ from ..git import repos
 from ..git.run import Git, with_retries
 from ..state import phase, safefs
 from ..state.errors import NeedsOwner, Transient
-from ..wiki import markers
+from ..wiki import author
 from . import relations
 
 MARKER_REF = "refs/remotes/origin/claude-reviewed"
 MAIN_REF = "refs/remotes/origin/main"
 ACTIVE = ("reviewed", "closing", "pushing")
 REQUEST = "School-Notes-Review-Request: "
-HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+HUNK = re.compile(r"^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 
 
 def fetch(repo: Git, timeout: float) -> None:
@@ -50,24 +50,39 @@ def wiki_diff(repo: Git, base: str, head: str) -> str:
 
 
 def added_lines(patch: str) -> dict[str, set[int]]:
-    """New-side line numbers of the `+` lines per file, read from Git's own hunk headers."""
-    found, path, line = {}, None, 0
+    """New-side line numbers of the `+` lines per file, read from Git's own hunk headers.
+    The header's line counts say where a hunk ends, so an added line that itself starts
+    with `++ ` or `-- ` is never taken for a file header."""
+    found, path, line, old_left, new_left = {}, None, 0, 0, 0
     for text in patch.splitlines():
+        if old_left > 0 or new_left > 0:
+            if text.startswith("\\"):
+                continue
+            if text.startswith("+"):
+                if path is not None:
+                    found.setdefault(path, set()).add(line)
+                line, new_left = line + 1, new_left - 1
+            elif text.startswith("-"):
+                old_left -= 1
+            else:
+                line, old_left, new_left = line + 1, old_left - 1, new_left - 1
+            continue
         if text.startswith("+++ "):
-            path = text[6:] if text.startswith("+++ b/") else None
+            path = _diff_path(text[4:])
             continue
         hunk = HUNK.match(text)
         if hunk:
-            line = int(hunk[1])
-            continue
-        if path is None or text.startswith(("--- ", "diff ", "index ", "\\")):
-            continue
-        if text.startswith("+"):
-            found.setdefault(path, set()).add(line)
-            line += 1
-        elif not text.startswith("-"):
-            line += 1
+            line = int(hunk[2])
+            old_left = int(hunk[1]) if hunk[1] is not None else 1
+            new_left = int(hunk[3]) if hunk[3] is not None else 1
     return found
+
+
+def _diff_path(name: str) -> str | None:
+    """`b/<path>`, or Git's C-quoted `"b/<path>"` for a name with special characters."""
+    if name.startswith('"') and name.endswith('"'):
+        name = re.sub(r'\\(["\\])', r"\1", name[1:-1])
+    return name[2:] if name.startswith("b/") else None
 
 
 def commits(repo: Git, base: str, head: str) -> list[dict]:
@@ -139,18 +154,14 @@ def triage(review: dict, patch: str, work: Path) -> tuple[list[dict], list[str]]
     added = added_lines(patch)
     items, notes = [], list(review["owner_notes"])
     for f in sorted(review["findings"], key=lambda f: f["id"]):
+        f = {**f, "file": f["file"].removeprefix("/work/")}  # /work is the worktree root
         lines = safefs.read_text(work, f["file"]) if safefs.is_file(work, f["file"]) else ""
-        tool = any(start <= _offset(lines, f["line"]) < end for start, end, _ in markers.spans(lines))
+        tool = f["line"] in author.tool_lines(lines)
         if f["severity"] == "hiba" and f["line"] in added.get(f["file"], set()) and not tool:
             items.append(f)
         else:
             notes.append(f"{f['file']}:{f['line']}: {f['problem']}" + (f" → {f['suggestion']}" if f.get("suggestion") else ""))
     return items, list(dict.fromkeys(" ".join(n.split()) for n in notes))
-
-
-def _offset(text: str, line: int) -> int:
-    rows = text.splitlines(keepends=True)
-    return sum(len(r) for r in rows[:max(0, line - 1)])
 
 
 def pending_close(tasks: list[phase.Task]) -> phase.Task | None:
