@@ -2,6 +2,7 @@
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -26,6 +27,11 @@ def synthetic(tmp_path):
     tree = tmp_path / "seed-files"
     tree.mkdir()
     contents = learner_files()
+    # The real learner info pages have a body: the renderer moves the H1 into
+    # the page shell, leaving only a zero-height anchor for a title-only stub.
+    contents["wiki/a-projektrol.md"] = (
+        "# A projektről\n\n## Mi ez az oldal?\n\n"
+        "A jegyzetek tantárgyak és témák szerint segítik a tanulást és az ismétlést.\n")
     contents["wiki/masik/index.md"] = contents["wiki/proba/index.md"].replace("Próba", "Másik")
     contents["wiki/masik/tema.md"] = contents["wiki/proba/elso.md"].replace("Első", "Másik")
     contents["tools/subjects.json"] = json.dumps({"subjects": {
@@ -83,6 +89,7 @@ def probe_world(tmp_path, monkeypatch, learner, bundle):
     site_seed.mkdir()
     site = make_origin(site_seed, {"README.md": "site\n"})
     cfg = config.parse({"root": str(tmp_path / "srv"), "secrets_dir": str(tmp_path / "secrets"),
+        **({"browser": os.environ["CHROMIUM_EXECUTABLE"]} if os.environ.get("CHROMIUM_EXECUTABLE") else {}),
         "email_to": "probe@example.test", "git": {"name": "Probe", "email": "probe@example.test"},
         "release_dir": str(TEMPLATE), "students": {learner: {"repo": str(origin), "repo_key": "/nonexistent",
         "site_repo": str(site), "site_key": "/nonexistent", "drive_root": root, "grade": 9}},
@@ -175,8 +182,10 @@ def scenario(tmp_path, monkeypatch, learner, mode, bundle=None, *, render=True):
     assert not (ctx.notes_path / "wiki/probe-unassigned.md").exists()
     assert "Run-Id: " + task.run_id in show(origin, "main")
     if render:
-        assert (task.dir / "build/build.json").is_file()
-        assert (task.dir / "build/browser-report.json").is_file()
+        # The tool removes the build folder after the run; the log keeps the browser-checked build.
+        events = [json.loads(line) for line in (task.dir / "run.log").read_text().splitlines()]
+        builds = [e for e in events if e["action"] == "site.build" and e["outcome"] == "ok"]
+        assert builds and builds[-1]["checked"] == builds[-1]["pages"] > 0
     else:
         assert len(builds) == 1
     receipts = list(task.dir.glob("attempt-1/reader/*/recheck-r2/receipt.json"))
@@ -199,6 +208,31 @@ def scenario(tmp_path, monkeypatch, learner, mode, bundle=None, *, render=True):
 @pytest.mark.parametrize("mode", ["package", "fix"])
 def test_synthetic_completion(tmp_path, monkeypatch, local_origin, learner, mode):
     scenario(tmp_path, monkeypatch, learner, mode)
+
+
+def test_synthetic_public_pages_have_body(tmp_path):
+    synthetic(tmp_path)
+    repo = tmp_path / "seed-files"
+    public_config = json.loads((repo / "publication/public.json").read_text())
+    # Exercise the real HTML build without Chromium. PDF generation and browser
+    # checks remain mandatory in test_synthetic_completion above.
+    for collection in public_config["collections"]:
+        collection["pdf"] = False
+        collection.pop("group", None)
+    config_path = tmp_path / "html-public.json"
+    write_json(config_path, public_config)
+    output = tmp_path / "build"
+    proc = subprocess.run(["node", str(TEMPLATE / "packages/study-site/cli.mjs"), "build",
+        "--repo", str(repo), "--config", str(config_path), "--output", str(output)],
+        capture_output=True, text=True, timeout=120,
+        env={**os.environ, "ASTRO_TELEMETRY_DISABLED": "1"})
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    payload = json.loads((output / "payload.json").read_text())
+    assert "wiki/a-projektrol.md" in {p["path"] for p in payload["pages"]}
+    for page in payload["pages"]:
+        html = (output / "site" / page["route"] / "index.html").read_text()
+        body = re.search(r'<div[^>]*class="[^"]*study-content[^"]*"[^>]*>(.*?)</div>', html, re.S)
+        assert body and re.sub(r"<[^>]+>", "", body[1]).strip(), page["path"]
 
 
 @pytest.mark.skipif(not os.environ.get("SN_PROBE"), reason="SN_PROBE bundle directory not provided")
