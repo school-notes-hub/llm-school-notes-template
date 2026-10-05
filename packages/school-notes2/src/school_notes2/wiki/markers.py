@@ -121,3 +121,10 @@ def wrap(name: str, body: str) -> str:
     if body and not body.endswith("\n"):
         body += "\n"
     return OPEN.format(name=name) + "\n" + body + CLOSE + "\n"
+
+
+def at_fixed_place(text: str, name: str, body: str) -> str:
+    """Insert a tool block on the first line after the frontmatter (I6)."""
+    from . import frontmatter
+    cut = len(text) - len(frontmatter.split(text).body)
+    return text[:cut] + "\n" + wrap(name, body) + "\n" + text[cut:]

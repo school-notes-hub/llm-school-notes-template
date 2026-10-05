@@ -71,16 +71,6 @@ def test_only_committed_image_locations(tmp_path):
         records.append(tmp_path, records.from_writer(bad), run_id="r", checker="c", at="T")
 
 
-def test_reviewer_figures(tmp_path):
-    setup(tmp_path)
-    figs = [{"file": "wiki/assets/abra.svg", "page": "wiki/gazdasag/x.md", "verdict": "hibás",
-             "checks": {"felirat": False}, "observed": "A felirat hiányzik."}]
-    written = records.append(tmp_path, records.from_reviewer(figs), run_id="review-1",
-                             checker="opus-5.5/high", at="2026-10-04T03:20:00+02:00")
-    text = (tmp_path / written[0]).read_text(encoding="utf-8")
-    assert "Döntés: hibás" in text and '{"felirat": false}' in text
-
-
 @pytest.mark.parametrize("image", ["../outside.jpg", "/etc/passwd", "wiki/assets/nincs.png", 7])
 def test_bad_images_are_refused(tmp_path, image):
     setup(tmp_path)

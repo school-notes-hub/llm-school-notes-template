@@ -27,8 +27,9 @@ def test_empty_night_then_daytime_commit_waits_until_next_day(cfg, repos, monkey
     monkeypatch.setattr(scheduler, "now", lambda: clock)
     monkeypatch.setattr(scheduler.run, "run", lambda c: 0)
     def night(ctx):
-        selected = review.select(repos.repo, fetch_timeout=10)
-        calls.append((ctx.name, selected))
+        review.fetch(repos.repo, 10)
+        base, head = review.rev(repos.repo, review.MARKER_REF), review.rev(repos.repo, review.MAIN_REF)
+        calls.append((ctx.name, head if base != head else None))
         return 0
     monkeypatch.setattr(scheduler.nightly, "nightly", night)
     scheduler.round(cfg)
@@ -39,7 +40,7 @@ def test_empty_night_then_daytime_commit_waits_until_next_day(cfg, repos, monkey
     assert calls == [(name, None) for name in cfg.students]
     clock = clock.replace(day=5, hour=4)
     scheduler.round(cfg)
-    assert [(name, selected.head) for name, selected in calls[3:]] == [
+    assert [(name, selected) for name, selected in calls[3:]] == [
         (name, head) for name in cfg.students]
 
 
@@ -68,8 +69,7 @@ def test_same_day_continuation_consumes_today(cfg, monkeypatch):
 @pytest.mark.parametrize("role,work", [
     ("reviewer", "az éjszakai review"), ("writer", "a jegyzetírás"),
     ("fix", "a jegyzetírás"), ("figure", "a jegyzetírás"),
-    ("reader", "a jegyzet lektorálása"), ("reader-1", "a jegyzet lektorálása"),
-    ("reader-2", "a jegyzet lektorálása"), ("recheck", "a jegyzet lektorálása"),
+    ("reader", "a jegyzet lektorálása"), ("reader-1", "a jegyzet lektorálása"), ("recheck", "a jegyzet lektorálása"),
     ("figure-review", "a jegyzet lektorálása"),
 ])
 def test_quota_error_names_the_work_without_mail(world, role, work):

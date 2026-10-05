@@ -15,7 +15,7 @@ from ..state.errors import NeedsOwner, Prerequisite
 from ..state.phase import Task
 from . import fetch as fetch_flow
 from . import finish as finish_flow
-from . import handlers, policy, prereq, publish, setup, steps, writer
+from . import handlers, policy, prereq, publish, setup, writer
 from .context import Ctx
 from .operation import entry
 
@@ -33,9 +33,6 @@ def run(ctx: Ctx) -> int:
         owner_notices.retry(ctx)
         _settle_images(ctx)
         task = phase.open_task(ctx.task_root(), ctx.name, "notes")
-        from . import set_aside
-        if set_aside.resume(ctx, task):
-            return 1
         from . import last_error
         from ..state.files import read_json
         previous = read_json(ctx.cfg.state_dir / ctx.name / "last-error.json", {})
@@ -88,9 +85,8 @@ def _may_run(ctx: Ctx, task: Task | None) -> bool:
         ctx.log.event("run.skip", "transient_wait", target=task.run_id)
         return False
     if task is not None and task.data.get("needs_owner"):
-        from .set_aside import release
         owner = task.data["needs_owner"]
-        if owner["class"] == "program" and owner.get("release") != release(ctx):
+        if owner["class"] == "program" and owner.get("release") != policy.release(ctx):
             task.clear_needs_owner()
     if task is not None and task.data.get("needs_owner"):
         ctx.log.event("run.skip", "needs_owner", target=task.run_id)
@@ -133,47 +129,27 @@ def _new_task(ctx: Ctx) -> Task | None:
 def advance(ctx: Ctx, task: Task) -> None:
     """Drive a cron notes task from its recorded phase to `done` (8.2)."""
     from ..figures import licenses
-    from . import writer_identity
-    writer_identity.ensure(ctx, task)
     licenses.preflight(ctx.notes_path)
     if task.phase == "waiting_quota":
         task.set_phase(task.get("quota_phase"))
+    if task.phase in ("correcting", "rechecking"):
+        # 2.5.x in-run correction rounds no longer exist: their files stay and every
+        # change of the run is rechecked once; open items wait for the next run.
+        task.set_phase("inspecting", recheck_all=True)
     if task.get("mode") == "fix":
         from . import fix
         fix.prepare(ctx, task)
-        from . import fix_scope
-        fix_scope.resume(ctx, task)
     elif task.get("mode") == "repair":
         from . import repair
         repair.prepare(ctx, task)
     else:
         fetch_flow.advance(ctx, task, lambda: fetch_flow.drive_client(ctx))
     if task.phase in ("prepared", "writing") and not task.get("skip_writer"):
-        if _write(ctx, task) == "question":
+        if writer.run_ranges(ctx, task, handlers.build(ctx, task.dir)) == "question":
             raise NeedsOwner("the writer asked a blocking question",
                              todo=f"answer it in `school-notes chat {ctx.name}`",
                              details={"questions": task.get("question", [])})
-    if task.get("mode") == "fix" and not task.get("review_complete"):
-        from . import fix_scope
-        if task.phase in ("prepared", "writing"):
-            fix_scope.recover(ctx, task)
-    try:
-        finish_flow.finish(ctx, task, notify_owner_items=lambda items: owner_items(ctx, task, items))
-    except steps.CheckFailed as exc:
-        from . import call_scope
-        if not task.get("review_complete") and task.phase not in ("correcting", "rechecking", "review_ready"):
-            call_scope.retry(ctx, task, exc.items)
-        raise
-
-
-def _write(ctx, task):
-    from . import fix_scope
-    try:
-        return writer.run_ranges(ctx, task, handlers.build(ctx, task.dir))
-    except steps.CheckFailed as exc:
-        if not fix_scope.rollback(ctx, task, exc):
-            raise
-        return "done"
+    finish_flow.finish(ctx, task, notify_owner_items=lambda items: owner_items(ctx, task, items))
 
 
 def owner_items(ctx: Ctx, task: Task, items: list[dict]) -> bool:

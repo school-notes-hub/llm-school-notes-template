@@ -4,7 +4,6 @@
   "additionalProperties": false,
   "required": [
     "items",
-    "hits",
     "owner_notes"
   ],
   "properties": {
@@ -47,51 +46,6 @@
         }
       }
     },
-    "hits": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "hit_id",
-          "verdict",
-          "reason",
-          "severity",
-          "item_key"
-        ],
-        "properties": {
-          "hit_id": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "\\S"
-          },
-          "verdict": {
-            "enum": [
-              "hiba",
-              "megengedett",
-              "téves"
-            ]
-          },
-          "reason": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "\\S"
-          },
-          "severity": {
-            "enum": [
-              "hiba",
-              "javaslat"
-            ]
-          },
-          "item_key": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
-      }
-    },
     "owner_notes": {
       "type": "array",
       "items": {
@@ -108,6 +62,7 @@
         "required": [
           "id",
           "file",
+          "line",
           "quote",
           "category",
           "problem",
@@ -125,6 +80,10 @@
             "type": "string",
             "minLength": 1,
             "pattern": "\\S"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
           },
           "quote": {
             "type": "string",

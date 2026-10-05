@@ -1,142 +1,98 @@
-"""P5: every changed author line, closures, new warning hits and figures."""
+"""P5: one independent recheck of every author-changed page of the run, against the base.
 
-from pathlib import Path
+The reviewer judges the run's closures (fixed: ok/not-ok, disagree: accept/keep) and names
+the file and line of each new finding. A learning-blocking finding on a changed line is an
+item for the next run (chain +1, deeper than three goes to the owner); everything else is an
+owner note. No page is skipped: the comparison is always the run's base, never a round."""
 
 from ..review.severity import is_error
-from ..figures import inputs as figure_inputs
-from ..reader import calls, inputs, report, units, verdicts
-from ..review import relations, scope
-from ..review.topic_result import apply_item
+from ..reader import calls, inputs, report, units
+from ..review import relations
+from ..review.relations import apply_item
 from ..state import safefs
-from ..wiki import author, frontmatter, source_refs
-from . import correction_figures, correction_round, inspection_runtime as inspection, steps
+from ..wiki import author, frontmatter
+from ..wiki.pages import wiki_pages
+from . import inspection_runtime as runtime, steps
 
 
-def run(ctx, task):
-    root, repo = inspection.folder(task), ctx.notes_path
-    saved = safefs.read_json(root, correction_round.p5(task))
-    if saved is None:
-        from . import learning, machine_findings
-        try:
-            learning.validate(ctx, task)
-        except steps.CheckFailed as exc:
-            machine_findings.record(ctx, task, exc.items)
-            return  # Unparseable content stays for the next bounded writer round.
-        changed = correction_figures.changed_figures(ctx, task)
-        view = root / f"recheck-view-r{correction_round.number(task)}"
-        inputs.preview(repo, view, [s["brief"] for s in task.get("inspection_figures", [])], inspection.render(ctx, task))
-        closures = [c for c in task.get("correction_result", {}).get("review_closure", [])
-                    if c["status"] in ("fixed", "disagree")]
-        grouped = page_units(ctx, task, closures, changed)
-        checked = [check_unit(ctx, task, view, u, closures) for u in grouped]
-        receipts = dict(task.get("inspection_receipts", {}))
-        for name, batch in figure_inputs.batches(repo, changed):
-            label = f"recheck-r{correction_round.number(task)}-" + name
-            if correction_round.number(task) == 1 and (root / "figure-review" / ("recheck-" + name)).exists():
-                label = "recheck-" + name
-            receipt = inspection.figures(ctx, task, batch, label)
-            for brief in batch:
-                receipts[brief["id"]] = inspection.figure_review.for_figure(receipt, brief["id"])
-        saved = {"units": checked, "receipts": receipts}
-        safefs.write_json(root, correction_round.p5(task), saved)
-    apply(ctx, task, saved)
+def closures(task):
+    return [c for c in (task.get("inspection_result") or {}).get("review_closure", [])
+            if c["status"] in ("fixed", "disagree")]
 
 
-def page_units(ctx, task, closures=(), changed=()):
-    affected = sorted(steps.llm_snapshot(ctx, task))
-    groups = units.collect(ctx.notes_path, affected, closures, changed)
-    pages = sorted({p for unit in groups for p in unit["pages"]})
-    return [{"topic": p, "pages": [p], "context": [], "keys": {p: units.page_key(ctx.notes_path, p)}}
-            for p in pages]
+def pages(ctx, task, closed):
+    known = relations.inventory(ctx.notes_path)["items"]
+    published = set(wiki_pages(ctx.notes_path))
+    found = {p for p in steps.llm_snapshot(ctx, task) if p in published}
+    found.update(known.get(c["file"] + "#" + c["item_id"], {}).get("file", "") for c in closed)
+    found.update(s["brief"]["page"] for s in task.get("inspection_figures", []))
+    return sorted(found & published)
 
 
-def check_unit(ctx, task, view, unit, closures):
-    root = correction_round.reader(task, units.slug(unit["topic"]))
-    # The round's own pre-edit tree: P3 (or an earlier P5) already judged older changes,
-    # so a round re-reads only what this round changed, on every page (fix-45).
-    before = Path(task.get("correction_assignment_root") or correction_round.root(task))
-    if task.get("mode") == "fix" and correction_round.number(task) == 1:
-        before = task.dir / "fix-before"
-    def old(page):
-        return safefs.read_text(before, "before/" + page) if safefs.is_file(before, "before/" + page) else ""
-    items, reports = [], {}
-    for c in closures:
+def run(ctx, task, view):
+    closed = closures(task)
+    return [check_page(ctx, task, view, page, closed) for page in pages(ctx, task, closed)]
+
+
+def check_page(ctx, task, view, page, closed):
+    from .inspection import old_text
+    repo = ctx.notes_path
+    root = runtime.folder(task) / "recheck" / units.slug(page)
+    old = old_text(ctx, task, page)
+    reports, items = {}, []
+    for c in closed:
         if c["file"] not in reports:
-            reports[c["file"]] = frontmatter.split(safefs.read_text(ctx.notes_path, c["file"]))
+            reports[c["file"]] = frontmatter.split(safefs.read_text(repo, c["file"]))
         detail = relations.details(reports[c["file"]], c["item_id"])
-        if detail.get("file") in unit["pages"]:
+        if detail.get("file") == page:
             items.append({**detail, **c, "key": c["file"] + "#" + c["item_id"]})
-    hits = []
-    for page in unit["pages"]:
-        hits += source_refs.scan(page, safefs.read_text(ctx.notes_path, page), old(page))
-    previous_ids = {h["id"] for h in task.get("check_warnings", [])}
-    by_id = {h["id"]: h for h in hits}
-    for hit in task.get("correction_warnings", []):
-        if hit["file"] in unit["pages"] and hit["id"] not in previous_ids:
-            by_id.setdefault(hit["id"], hit)
-    hits = sorted(by_id.values(), key=lambda h: (h["file"], h.get("line") or 0, h["id"]))
-    changed_lines = any(author.part(old(p)) != author.part(safefs.read_text(ctx.notes_path, p))
-                        for p in unit["pages"])
-    if not items and not hits and not changed_lines:
-        return {"unit": unit, "status": "not_checked"}
-    inputs.prepare(ctx.notes_path, view, unit, root / "in", old, targeted=True)
-    assigned = {"items": [{"key": i["key"], "status": i["status"]} for i in items],
-                "hits": [h["id"] for h in hits]}
+    figures = [s for s in task.get("inspection_figures", []) if s["brief"]["page"] == page]
+    if not items and not figures and author.part(old) == author.part(safefs.read_text(repo, page)):
+        return {"page": page, "status": "not_checked"}
+    unit = {"topic": page, "pages": [page], "context": [], "keys": {page: units.page_key(repo, page)}}
+    inputs.prepare(repo, view, unit, root / "in", lambda _: old, targeted=True)
+    assigned = {"pages": [{"file": page}], "items": [{"key": i["key"], "status": i["status"]} for i in items]}
     safefs.write_json(root, "in/assigned.json", assigned)
     safefs.write_json(root, "in/items.json", items)
-    safefs.write_json(root, "in/hits.json", inputs.hits(ctx.notes_path, hits))
-    receipt = calls.run(ctx.notes_path, view, root, "recheck", assigned, inspection.role(ctx, task), log=ctx.log,
-                        allowed_paths=set(unit["pages"]))
-    if receipt["status"] == "reviewed":
-        safefs.write_json(ctx.notes_path, f".school-notes/reader/{root.parent.name}/recheck-r{correction_round.number(task)}.json", receipt["review"])
-    prior = [v for p in unit["pages"] if (v := verdicts.valid(before / "before", p)) is not None]
-    return {"unit": unit, "hits": hits, "items": items, "prior_pages": prior,
-            "before": str(before / "before"), **receipt}
+    receipt = calls.run(repo, view, root, "recheck", assigned, runtime.role(ctx, task), log=ctx.log,
+                        allowed_paths={page})
+    return {"page": page, "items": items, "old": old, **receipt}
 
 
 def apply(ctx, task, saved):
-    written, findings, notes = [], [], []
-    known = relations.inventory(ctx.notes_path)["items"]
-    sources = [i for entry in saved["units"] for i in entry.get("items", [])]
-    for entry in saved["units"]:
+    repo, written, findings, notes = ctx.notes_path, [], [], list(saved.get("notes", []))
+    known = relations.inventory(repo)["items"]
+    for entry in saved["recheck"]:
         if entry["status"] != "reviewed":
+            if entry["status"] != "not_checked":
+                notes.append(f"A visszaellenőrzés nem futott le ({entry['page']}): {entry.get('reason', '')}")
             continue
         review = entry["review"]
-        written += _items(ctx.notes_path, review["items"])
-        new = report.list_findings(ctx.notes_path, entry["hits"], review["hits"])
-        before = Path(entry.get("before", str(inspection.folder(task) / "correction/before")))
-        def old(page):
-            return safefs.read_text(before, page) if safefs.is_file(before, page) else ""
-        new += review.get("findings", [])
-        new = [report.figure_quote(ctx.notes_path, f) for f in new]
+        written += _items(repo, review["items"])
+        new = [report.figure_quote(repo, f) for f in review.get("findings", [])]
         advice = [f for f in new if not is_error(f)]
-        new = [f for f in new if is_error(f)]
-        new, outside = scope.partition(new, old, lambda p: safefs.read_text(ctx.notes_path, p), entry.get("unit", {}).get("pages", [f["file"] for f in new]))
-        new, feedback, _ = report.prepare(ctx.notes_path, new + advice, outside)
-        corrected = {i["key"]: i for i in entry.get("items", [])}
-        for finding in new:
+        changed = inputs.changed(entry.get("old", ""), safefs.read_text(repo, entry["page"]))
+        corrected = {i["key"] for i in entry.get("items", [])}
+        for finding in (report.locate(repo, f) for f in new if is_error(f)):
             key = finding.get("item_key")
             if key in corrected:
-                written.append(report.reopen(ctx.notes_path, key,
-                    f"{finding['file']}: {finding['quote']} — {finding['problem']}"))
-            else:
-                depth = source_chain(known, entry, finding, sources) + 1
-                findings.append({**finding, "origin": "recheck", "relates_to": None, "chain": depth,
+                written.append(report.reopen(repo, key, f"{finding['file']}: {finding['quote']} — {finding['problem']}"))
+            elif finding["line"] in changed:
+                depth = 1 + max((known.get(i["key"], {}).get("chain", 0) for i in entry.get("items", [])), default=0)
+                findings.append({**finding, "origin": "recheck", "relates_to": finding.get("relates_to"), "chain": depth,
                                  **({"owner_status": "owner"} if depth > 3 else {})})
-        notes += review["owner_notes"] + feedback
-        _carry_verdicts(ctx, task, entry, new)
-    notes += [note for fid in sorted(saved["receipts"])
-              for note in saved["receipts"][fid].get("review", {}).get("owner_notes", [])]
+            else:
+                notes.append(f"Nem változott sor ({finding['file']}:{finding['line'] or '?'}): {finding['problem']}")
+        _, notes = report.advice_notes(advice, notes + review["owner_notes"])
     notes = sorted(set(notes))
     if findings or notes:
-        path = report_path(ctx, task)
-        label = f"recheck-{task.get('attempt', 1)}"
-        labels = frontmatter.split(safefs.read_text(ctx.notes_path, path)).meta.get("supplements", [])
-        if correction_round.number(task) != 1 or label not in labels:
-            label += f"-r{correction_round.number(task)}"
-        written.append(report.append(ctx.notes_path, path, findings, notes, label))
+        from . import journal
+        journal.settle(ctx, task)
+        write = lambda repo_, rel, text: journal.write(ctx, task, rel, text, whole=True)
+        path = report_path(ctx, task, write)
+        written.append(report.append(repo, path, findings, notes, f"recheck-{task.get('attempt', 1)}", write=write))
     task.update(inspection_receipts=saved["receipts"], recheck_owner_notes=notes)
-    steps.record_tool_files(task, ctx.notes_path, written + [verdicts.PATH, "docs/review/warning-verdicts.json"])
+    steps.record_tool_files(task, repo, written)
 
 
 def _items(repo, items):
@@ -153,35 +109,10 @@ def _items(repo, items):
     return written
 
 
-def _carry_verdicts(ctx, task, entry, new):
-    review = entry["review"]
-    # A targeted result only carries forward an existing full reader verdict.
-    originals = {p["file"]: p for p in task.get("reader_pages", []) + entry.get("prior_pages", [])}
-    for page in sorted(originals.keys() & set(entry.get("unit", {}).get("pages", originals))):
-        own = {i["key"] for i in entry["items"] if i.get("file") == page or
-               relations.details(safefs.read_text(ctx.notes_path, i["file"]), i["item_id"]).get("file") == page}
-        judged = [i for i in review["items"] if i["key"] in own]
-        new_on_page = any(page in (f["file"], f.get("reported_file")) for f in new if is_error(f))
-        if all(i["verdict"] in ("ok", "accept") for i in judged) and not new_on_page:
-            open_items = any(i.get("file") == page and i["status"] in ("open", "owner")
-                             for i in relations.inventory(ctx.notes_path)["items"].values())
-            verdicts.record(ctx.notes_path, [{"file": page, "verdict": "changes" if open_items else "ok"}],
-                            {page: units.page_key(ctx.notes_path, page)}, entry["model"], task.data["created"])
-
-
-def report_path(ctx, task):
+def report_path(ctx, task, write=None):
     path = task.get("inspection_report")
     if path is None:
         path = f"docs/review/{task.data['created'][:10]}-{task.run_id}-run.md"
-        report.write(ctx.notes_path, path, [], [], "recheck", task.get("base"), task.data["created"])
+        report.write(ctx.notes_path, path, [], [], "recheck", task.get("base"), task.data["created"], write=write)
         task.update(inspection_report=path)
     return path
-
-
-def source_chain(known, entry, finding, sources=()):
-    """A new error inherits depth, never another item's spent repair attempts."""
-    sources = [{**known.get(i["key"], {}), **i} for i in entry.get("items", []) or sources]
-    # Closure.file names the report; the inventory retains the learning-page path.
-    own = [i for i in sources if known.get(i["key"], {}).get("file", i.get("file"))
-           in (finding["file"], finding.get("reported_file"))]
-    return max((i.get("chain", 0) for i in own or sources), default=0)

@@ -38,7 +38,6 @@ def summary(ctx: Ctx) -> dict:
         "completion": completion(ctx, tasks=tasks, held=not ctx.lock().probe()),
         "incidents": incidents.active(ctx),
         "last_error": read_json(ctx.cfg.state_dir / ctx.name / "last-error.json"),
-        "browser_warnings": [{"run_id": t.run_id, **i} for t in tasks for i in t.get("browser_warnings", [])],
         "vm_lock": vm_state,
         "round": round_state,
         "quota": read_json(ctx.cfg.state_dir / "quota.json", {}),
@@ -57,14 +56,20 @@ def summary(ctx: Ctx) -> dict:
         "wiki_open_questions": _open_questions(ctx.notes_path),
         "drafts": _drafts(ctx.notes_path),
         "cards": _cards(ctx.notes_path),
-        "source_ref_counts": next((t.get("source_ref_counts", {}) for t in reversed(tasks)
-                                   if t.kind == "notes"), {}),
-        "public_footnote_counts": next((t.get("public_footnote_counts", {}) for t in reversed(tasks)
-                                        if t.kind == "notes"), {}),
+        "parked": _parked(ctx),
+        "publish_held": read_json(ctx.cfg.state_dir / ctx.name / "publish-held.json", {}),
         "references_without_map": _unmapped(ctx.notes_path),
         "pack_mb": _pack_mb(ctx.cfg.bare(ctx.name)),
         "log": str(ctx.cfg.log_path),
     }
+
+
+def _parked(ctx: Ctx) -> list[str]:
+    from .fix_progress import parked
+    try:
+        return sorted(parked(ctx))
+    except (OSError, ValueError):
+        return []
 
 
 def _lock(ctx: Ctx) -> dict:
@@ -78,7 +83,6 @@ def _task(t: phase.Task) -> dict:
     return {"kind": t.kind, "mode": t.get("mode", t.mode), "no_push": bool(t.get("no_push")), "run_id": t.run_id, "phase": t.phase,
             "age_h": _age_h(t.data["created"]), "packages": len(t.get("packages", [])),
             "retries": t.data["retries"], "llm_failures": t.data["llm_failures"],
-            "source_ref_counts": t.get("source_ref_counts", {}),
             "quota_phase": t.get("quota_phase"), "blocked_topics": t.get("blocked_topics", []),
             "last_error": t.data.get("last_error"), "questions": t.get("question", [])}
 
@@ -179,7 +183,7 @@ def render(data: dict) -> str:
     lines = [f"== {data['learner']}"] + data.get("completion", [])
     for key, label in (("vm_lock", "VM-zár"), ("round", "kör"), ("quota", "heti keret"), ("timeouts", "T-125"), ("figure_requests", "licenckérelmek"),
                        ("approved_figure_requests", "engedélyezve, beillesztésre vár"),
-                       ("license_error", "licencadat javítandó"), ("nightly_state", "éjszakai témakörök")):
+                       ("license_error", "licencadat javítandó"), ("nightly_state", "éjszakai review")):
         if data.get(key):
             lines.append(label + ": " + json.dumps(data[key], ensure_ascii=False, sort_keys=True))
     if data.get("last_error"):
@@ -187,8 +191,10 @@ def render(data: dict) -> str:
         lines.append(f"utolsó hiba ({error['at']}): {error['message']}")
     for error in data.get("incidents", []):
         lines.append(f"nyitott hiba ({error['at']}): {error['message']}")
-    for warning in data.get("browser_warnings", []):
-        lines.append(f"böngészős figyelmeztetés ({warning['run_id']}): {warning['file']}: {warning['message']}")
+    if data.get("parked"):
+        lines.append("24 órára félretett munka (nem haladt): " + ", ".join(data["parked"]))
+    if data.get("publish_held"):
+        lines.append(f"kiadás visszatartva (build-hiba, tétel lett belőle): {data['publish_held'].get('source', '')[:12]}")
     lock = data["lock"]
     lines.append(f"zár: {'foglalt – ' + str(lock.get('kind')) + ' óta ' + str(lock.get('since')) if lock['held'] else 'szabad'}")
     for t in data["open"]:
@@ -242,14 +248,11 @@ def _permissions(repo):
 
 
 def _nightly_state(ctx):
-    from ..review import figure_waiting, topics
+    """The nightly review state is the claude-reviewed marker; no topic bookkeeping."""
     from ..git import repos
-    wt = ctx.worktree("review")
     try:
-        head = repos.rev(wt, "refs/remotes/origin/main")
-        state = topics.read_state(ctx.bare(), head)
-        state["pending_figures"] = json.loads(topics.text(ctx.bare(), head, figure_waiting.PATH) or "[]")
-        state["blocked_topics"] = topics.unblocked(state.get("blocked_topics", []), ctx.cfg.state_dir, ctx.name)
-        return state
-    except (OSError, ValueError):
+        wt = ctx.worktree("review")
+        return {"reviewed": repos.rev(wt, "refs/remotes/origin/claude-reviewed")[:12],
+                "main": repos.rev(wt, "refs/remotes/origin/main")[:12]}
+    except Exception:  # noqa: BLE001 - status never fails on a missing ref
         return {}

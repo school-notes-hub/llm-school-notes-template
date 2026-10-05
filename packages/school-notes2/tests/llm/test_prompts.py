@@ -4,7 +4,7 @@ import pytest
 
 from school_notes2.llm import argv
 
-ROLES = ['writer', 'fix', 'reviewer', 'figure-review', 'reader-1', 'reader-2', 'recheck']
+ROLES = ['writer', 'fix', 'reviewer', 'figure-review', 'reader-1', 'recheck']
 
 
 def prompt(role, mode='file', grade=9):
@@ -55,17 +55,16 @@ def test_nightly_uses_current_output_contract_without_transcription_goal():
     assert '/out/review.json' in file_text and '/out/review.json' not in stdout_text
     assert '{output_instruction}' not in file_text
     assert 'az átírás hűségét a fotóhoz' not in file_text
-    assert 'A tantárgy tanáraként nézd át a teljes témakört:' in file_text
-    assert 'A tételek nem jelölik ki, mit nézz: amiről nincs tétel, azt is te találod meg.' in file_text
-    assert 'A tankönyvet és a tanári anyagot ne nézd át önmagukban.' in file_text
+    assert 'Te döntöd el a diffből, mi tartalmi (szerzői) változás, és mit akarsz ellenőrizni.' in file_text
+    assert 'Tétel csak a diffben szereplő szerzői változás tanulást akadályozó hibájából lesz' in file_text
     assert 'Magad nem kérdezel a családtól' in file_text
     assert 'family_questions' not in file_text
     assert 'relates_to' in file_text
     for text in (file_text, stdout_text):
-        assert 'suggestion, category, relates_to' in text
-        assert '`assigned.json`, `diff.patch`, `input.json`' in text
+        assert 'file, line, quote, problem, suggestion, category, relates_to' in text
+        assert '`diff.patch`' in text and '`commits.json`' in text and '`review-requests.json`' in text
         assert '`items[{severity: hiba | javaslat, key, verdict, answer}]`' in text
-        assert 'még válasz nélküli `fixed` és `disagree` lezárásokról' in text
+        assert 'hits' not in text and 'input.json' not in text
         assert 'amit a mai kimenet nem tud külön ítéletként rögzíteni' not in text
     with pytest.raises(ValueError):
         prompt('unknown')
@@ -77,7 +76,7 @@ def test_fix_has_no_ingest_or_whole_page_assignment():
                    'az új órát oda építsd be', 'Az órai jegyzetoldal rövid',
                    'az egész oldalon', 'Minden füzethibát javítottál'):
         assert ingest not in text
-    assert 'a kiosztott review-tételeket, függő ábrákat és a kiosztott témaoldalak infografika-döntését kezeld' in text
+    assert 'a kiosztott review-tételeket és függő ábrákat kezeld' in text
     assert 'Bármely wiki-oldalt szerkesztheted' in text
     assert 'minden változásodat független ellenőrző nézi' in text
     assert '`coverage[]`' in text
@@ -165,8 +164,9 @@ def test_targeted_nightly_instruction_is_not_an_owner_quote():
     assert "School-Notes" not in text or "új anyag" in text
 
 
-@pytest.mark.parametrize('role', ['reader-1', 'reviewer'])
-def test_infographic_review_instruction_precedes_output_contract(role):
+@pytest.mark.parametrize('role', ['reader-1', 'reviewer', 'recheck'])
+def test_reviewers_are_not_asked_to_request_overview_figures(role):
+    """Fable 9: no reviewer prompt asks for a missing overview figure; findings name a line."""
     text = (argv.Path(argv.__file__).with_name('prompts') / (role + '.txt')).read_text()
-    assert text.index('Hiányzó áttekintő ábrát') < text.index('{output_instruction}')
-    assert 'ábra' in text[text.index('Hiányzó áttekintő ábrát'):text.index('{output_instruction}')]
+    assert 'Hiányzó áttekintő ábrát' not in text
+    assert '`line`' in text or 'file, line' in text

@@ -36,42 +36,23 @@ def finish(ctx: Ctx, task: Task, *, notify_owner_items) -> str | dict:
 def _finish(ctx, task, notify_owner_items):
     wt = ctx.worktree("notes")
     start = _snapshot(ctx, task)
-    edits = {"restores": [], "replacements": []} if task.mode == "interactive" else None
+    edits = {"replacements": []} if task.mode == "interactive" else None
     from . import review_phases
     if task.phase in ("prepared", "writing", "finishing") and not task.get("review_complete"):
-        try:
-            prepared = steps.content_steps(ctx, task)
-        except steps.CheckFailed as exc:
-            from . import machine_findings
-            result = steps.merged_result(ctx, task)
-            machine_findings.record(ctx, task, exc.items)
-            prepared = steps.Prepared(result, result["status"] == "question", [])
-            task.update(content_pending=True, inspection_changed=task.get("inspection_changed",
-                        sorted(steps.llm_snapshot(ctx, task))))
+        prepared = steps.content_steps(ctx, task)
         notify_owner_items(prepared.new_owner)
         if prepared.question:
             raise NeedsOwner("the writer asked a blocking question",
                              todo="answer it in `school-notes chat`",
                              details={"questions": prepared.result.get("questions", [])})
-        task.set_phase("correcting" if task.get("content_pending") else "figures", inspection_result=prepared.result,
-                       correction_rolled_back=bool(task.get("fix_scope_rolled_back")),
-                       correction_rollback_reason=task.get("correction_rollback_reason") if task.get("fix_scope_rolled_back") else None,
-                       correction_rollback_items=[], correction_rejected_patch=None,
+        task.set_phase("figures", inspection_result=prepared.result,
                        attempt=task.get("attempt", 1), max_agents=task.get("max_agents", ctx.cfg.limits.max_agents))
     if task.phase in (*review_phases.PHASES, "waiting_quota"):
-        reviewing = (task.get("quota_phase") if task.phase == "waiting_quota" else task.phase) in ("figures", "inspecting")
-        handoff = review_phases.advance(ctx, task, notify_owner_items, edits)
-        if handoff is not None:
-            if reviewing and start != _snapshot(ctx, task, start):
-                raise git_finish.EditedDuringFinish("files changed before correction handoff")
-            return handoff
+        review_phases.advance(ctx, task, notify_owner_items, edits)
     elif task.get("rebase") == "conflict":
         steps.guard_step(ctx, task)
         steps.regenerate(ctx, task)
     from . import repair, report
-    if task.phase == "finishing" and task.get("content_pending"):
-        steps.content_steps(ctx, task)  # No commit/publication with remaining machine errors.
-        task.update(content_pending=False)
     if task.phase == "finishing":
         repair.complete(ctx, task)
     hooks = git_finish.Hooks(
@@ -86,10 +67,6 @@ def _finish(ctx, task, notify_owner_items):
         extra_paths=("references",) if task.mode == "interactive" else ())
     t = git_finish.Timeouts(ctx.cfg.timeouts.fetch_s, ctx.cfg.timeouts.push_s,
                             ctx.cfg.timeouts.ls_remote_s)
-    for before, after in (edits or {}).get("restores", []):
-        if start != before:
-            raise git_finish.EditedDuringFinish("files changed before correction rollback")
-        start = after
     for page, before, after in (edits or {}).get("replacements", []):
         if start.get(page) != before:
             raise git_finish.EditedDuringFinish("files changed before figure replacement")
@@ -146,7 +123,8 @@ def renderer(ctx: Ctx) -> site_build.Renderer:
 
 
 def _build(ctx: Ctx, task: Task, commit: str) -> dict:
-    """G5. A content error goes back to the writer through check.json (8.1 bad work)."""
+    """G5. A content problem holds the publication and becomes an item for the next run;
+    the notes commit itself is kept and pushed (no rollback, no new attempt)."""
     site = ctx.worktree("site")
     try:
         site_publish.fetch_gh_pages(site, ctx.log, fetch_s=ctx.cfg.timeouts.fetch_s,
@@ -156,13 +134,15 @@ def _build(ctx: Ctx, task: Task, commit: str) -> dict:
         ctx.log.event("site.changed_since_publish", "error", message=str(exc)[:200])
         changed = None          # the browser check then visits every page
     try:
-        record = site_build.build(ctx.bare(), commit, task.dir, renderer(ctx), changed=changed,
-                                  log=ctx.log, browser_filter=lambda items: checks.browser_warnings(ctx, task, items))
+        record = site_build.build(ctx.bare(), commit, task.dir, renderer(ctx), changed=changed, log=ctx.log)
     except site_build.BuildContentError as exc:
-        problems = checks.build_dependencies(ctx, task, exc.problems)
-        steps.write_check_items(ctx, problems)
+        problems = checks.ordered(exc.problems)
         checks.tool_errors(ctx, task, problems)
-        raise steps.CheckFailed(problems) from None
+        from . import machine_findings
+        machine_findings.record(ctx, task, problems)
+        task.update(build_problems=problems)
+        ctx.log.event("site.build_held", "warning", problems=problems[:20])
+        return {"commit": commit, "held": True}
     return {"commit": record.commit, "output": str(record.output),
             "duration_s": record.duration_s}
 
@@ -196,9 +176,10 @@ def message(ctx: Ctx, task: Task) -> str:
     role, _ = ctx.cfg.role("writer")
     title = _log_title(ctx, task) or f"{task.run_id}, {_count(ctx, task)} fájl"
     import json
-    material = ""
-    if task.mode != "interactive" and task.get("mode") not in ("fix", "repair"):
-        material = "School-Notes-Material: " + json.dumps(task.get("inspection_changed", []), ensure_ascii=False) + "\n"
+    from . import writer
+    requests = writer.merge(writer.results(task, required=False)).get("review_requests", []) if task.get("ranges") else []
+    # The writer's request for a targeted nightly check travels unchanged with the commit.
+    material = ("School-Notes-Review-Request: " + json.dumps(requests, ensure_ascii=False) + "\n") if requests else ""
     return (f"notes({ctx.name}): {title}\n\nRun-Id: {task.run_id}\nKind: notes\n"
             f"Tool: school-notes {VERSION}\nWriter: {role.model}/{role.effort}\n"
             f"School-Notes-Run: {task.get('mode') or ('chat' if task.mode == 'interactive' else 'run')}\n" + material)

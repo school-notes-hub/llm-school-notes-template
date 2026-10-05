@@ -1,6 +1,6 @@
 import time
 
-from school_notes2.review import files, relations, topic_result
+from school_notes2.review import files, relations
 from school_notes2.state import safefs
 from school_notes2.wiki import frontmatter
 
@@ -41,10 +41,10 @@ def test_batch_closure_parses_once_and_replay_is_identical(tmp_path, monkeypatch
         return original(text)
     monkeypatch.setattr(frontmatter, "split", split)
     answers = [({"status": "fixed"}, {"severity": "hiba", "key": f"{rel}#R{i}", "verdict": "ok", "answer": "Javítva."}) for i in range(300)]
-    assert topic_result.apply_items(tmp_path, answers) == ([rel], [])
+    assert relations.apply_items(tmp_path, answers) == ([rel], [])
     assert len(calls) == 1
     before = safefs.read_bytes(tmp_path, rel)
-    assert topic_result.apply_items(tmp_path, answers) == ([], [])
+    assert relations.apply_items(tmp_path, answers) == ([], [])
     assert safefs.read_bytes(tmp_path, rel) == before
 
 
@@ -52,23 +52,21 @@ def test_measured_steps_log_duration_even_on_failure(tmp_path, log, monkeypatch)
     import json
     from types import SimpleNamespace
     import pytest
-    from school_notes2.flows import review_phases, night_topics
+    from school_notes2.flows import review_phases
     from school_notes2.review import close
     def broken(*a, **kw):
         raise ValueError("injected")
     monkeypatch.setattr(review_phases, "_finalize", broken)
     monkeypatch.setattr(review_phases, "_final_keys", broken)
     monkeypatch.setattr(close, "_close_report", broken)
-    monkeypatch.setattr(night_topics.topic_input, "prepare", broken)
     ctx = SimpleNamespace(log=log)
     task = SimpleNamespace(dir=tmp_path)
     for action in (lambda: review_phases.finalize(ctx, task), lambda: review_phases.final_keys(ctx, task),
-                   lambda: close.close(task, ctx, None, None),
-                   lambda: night_topics._topic(ctx, task, {"topic": "wiki/a.md"}, None, None, None, None)):
+                   lambda: close.close(task, ctx, None, None)):
         with pytest.raises(ValueError, match="injected"):
             action()
     events = [json.loads(line) for line in log.main.read_text().splitlines()]
-    assert {e["action"] for e in events} == {"review.finalize", "review.final_keys", "review.close", "review.topic_input"}
+    assert {e["action"] for e in events} == {"review.finalize", "review.final_keys", "review.close"}
     assert all(e["duration_s"] >= 0 and e["outcome"] == "error" for e in events)
 
 

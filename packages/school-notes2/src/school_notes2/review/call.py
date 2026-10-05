@@ -13,13 +13,10 @@ from . import relations
 
 def check(value, assigned, work):
     validate("nightly", value)
-    exact(value["pages"], assigned["pages"], "file")
     exact(value["items"], [i["key"] for i in assigned["items"]], "key")
-    exact(value["hits"], assigned["hits"], "hit_id")
     states = {i["key"]: i["status"] for i in assigned["items"]}
     for item in value["items"]:
-        allowed = {"fixed": ("ok", "not-ok"), "disagree": ("accept", "keep"),
-                   "open": ("open", "resolved"), "owner": ("open", "resolved")}[states[item["key"]]]
+        allowed = {"fixed": ("ok", "not-ok"), "disagree": ("accept", "keep")}[states[item["key"]]]
         if item["verdict"] not in allowed:
             raise ValueError("item verdict does not match assigned status")
     exact(value["findings"], {f["id"] for f in value["findings"]}, "id")
@@ -30,10 +27,7 @@ def check(value, assigned, work):
         decisions = known["pages"].get(finding["file"], {}).get("decisions", [])
         if finding.get("relates_to") in decisions and not finding.get("new_evidence", "").strip():
             raise ValueError("decision reference requires new_evidence")
-    for hit in value["hits"]:
-        if hit.get("covered_by") is not None and hit["covered_by"] not in {f["id"] for f in value["findings"]}:
-            raise ValueError("covered_by must name an independent finding")
-    for field, key in (("pages", "file"), ("findings", "id"), ("items", "key"), ("hits", "hit_id")):
+    for field, key in (("findings", "id"), ("items", "key")):
         value[field].sort(key=lambda row: row[key])
     return value
 

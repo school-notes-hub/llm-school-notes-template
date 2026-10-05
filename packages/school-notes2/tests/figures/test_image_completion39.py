@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 from school_notes2.figures import pending
-from school_notes2.flows import correction_figures, fix_progress, image_notices, set_aside
+from school_notes2.flows import correction_figures, fix_progress, image_notices
 from school_notes2.images import plans
 from school_notes2.images.generate import attempts_used
 from school_notes2.state import phase
@@ -27,15 +27,16 @@ def test_image_only_wait_does_not_consume_attempt_or_set_progress_brake(repo, ma
     task = phase.create(repo.parent / "tasks", "one", "notes", "cron", "review_ready")
     task.update(mode="fix", pending_figures=[entry])
     ctx = SimpleNamespace(name="one", notes_path=repo, image_settings=lambda: s,
-                          cfg=SimpleNamespace(state_dir=repo.parent / "state"))
+                          cfg=SimpleNamespace(state_dir=repo.parent / "state"),
+                          log=SimpleNamespace(event=lambda *a, **kw: None))
     assert fix_progress.image_wait(ctx, [entry])
     assert not correction_figures.attempted(ctx, task, brief)
     fix_progress.record(ctx, task)
-    assert not set_aside.path(ctx).exists()
-    task.update(open_review_items=[{"file": "docs/review/old.md", "item_id": "R1"}])
+    assert not fix_progress.parked(ctx)  # An image-only wait is not assigned work.
+    task.update(fix_work=["docs/review/old.md#R1"])
     fix_progress.record(ctx, task)
-    assert "docs/review/old.md#R1" in set_aside.blocked(ctx)
-    set_aside.path(ctx).unlink()
+    assert fix_progress.parked(ctx) == {"docs/review/old.md#R1"}
+    fix_progress.path(ctx).unlink()
     s.monthly_usd = Decimal("10")
     s.ledger()["jobs"].clear()
     assert not fix_progress.image_wait(ctx, [entry])

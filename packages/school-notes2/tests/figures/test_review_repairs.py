@@ -149,8 +149,8 @@ def test_mermaid_reordering_keeps_keys_and_only_new_content_needs_commission(rep
     safefs.write_text(repo, brief["page"], new)
     assert not run(GuardInput(repo, [Change(brief["page"], "modified")], lambda p: old.encode()))
     assert not insert.invalidated(repo)
-    findings = run(GuardInput(repo, [Change(brief["page"], "modified")], lambda p: text.encode()))
-    assert len(findings) == 1 and "Mermaid" in findings[0].message
+    # 6b: a new inline Mermaid needs no commission.
+    assert not run(GuardInput(repo, [Change(brief["page"], "modified")], lambda p: text.encode()))
 
 
 @pytest.mark.parametrize("target", ["force.svg", "https://example.org/a.png", "//example.org/a.png", "data:image/png;base64,eA=="])
@@ -160,8 +160,8 @@ def test_check_refuses_non_asset_images(repo, target):
 
 def test_guard_covers_changed_images_outside_assets(repo, make_figure):
     brief, _ = make_figure()
-    asset = "wiki/physics/force.svg"
-    safefs.write_text(repo, brief["page"], "# Forces\n\n![force](force.svg)\n")
+    asset = "wiki/physics/force.png"
+    safefs.write_text(repo, brief["page"], "# Forces\n\n![force](force.png)\n")
     safefs.write_bytes(repo, asset, b"old")
     base = {p: safefs.read_bytes(repo, p) for p in safefs.walk_files(repo)}
     safefs.write_bytes(repo, asset, b"new")

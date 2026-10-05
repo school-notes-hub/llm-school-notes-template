@@ -142,9 +142,9 @@ def snapshot(data: bytes | None) -> tuple:
     return tuple(spans), meta.get("decisions")
 
 
-def overview(repo: Path) -> str:
+def overview(repo: Path, skip=()) -> str:
     lines = ["# Megerősített döntések", ""]
-    for rel in sorted(wiki_pages(repo)):
+    for rel in sorted(set(wiki_pages(repo)) - set(skip)):
         meta = read_page(repo, rel).meta
         problems = decision_problems(meta)
         if problems:

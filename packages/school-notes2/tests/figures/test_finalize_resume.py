@@ -27,6 +27,7 @@ def test_review_ready_public_failure_then_clear_replays_finalize(
     monkeypatch.setattr(steps, "llm_snapshot", lambda *a: {})
     original = public.media_receipt_rights
     monkeypatch.setattr(public, "media_receipt_rights", lambda repo: lambda rel: None)
+    monkeypatch.setattr(public, "writer_svg_rights", lambda repo: lambda rel: None)
     with pytest.raises(SnError, match="unchanged tool output") as caught:
         finish.finish(ctx, task, notify_owner_items=lambda items: None)
     assert policy.on_error(caught.value, task=task, student=learner, step="finish",
@@ -40,6 +41,9 @@ def test_review_ready_public_failure_then_clear_replays_finalize(
     evidence.pop("rights")
     safefs.write_json(repo, path, evidence)
     monkeypatch.setattr(public, "media_receipt_rights", original)
+    monkeypatch.undo()
+    monkeypatch.setattr(steps, "generate_all", steps.write_public)
+    monkeypatch.setattr(steps, "llm_snapshot", lambda *a: {})
     assert "review_ready" in clear.clear(ctx, "notes", "continue")
     task = phase.load(task.dir)
     assert not task.data["needs_owner"]

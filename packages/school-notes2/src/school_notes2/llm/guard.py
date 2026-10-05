@@ -14,7 +14,7 @@ def headless(run, invoke):
     if current:
         ctx, manual, cache = current
         configured = ctx.cfg.roles.get(timeouts.role_name(run.role_name))
-        if run.role_name in ("reader-1", "reader-2", "recheck") and "reviewer" in ctx.cfg.roles:
+        if run.role_name in ("reader-1", "recheck") and "reviewer" in ctx.cfg.roles:
             configured, _ = ctx.cfg.role("reader")
         if configured and run.role_name not in ("writer", "fix", "reviewer"):
             run = replace(run, role=configured.for_stage(run.role_name), harness=ctx.cfg.harnesses[configured.harness])

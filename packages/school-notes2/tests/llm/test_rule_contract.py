@@ -1,7 +1,9 @@
 from pathlib import Path
 import tomllib
 
-from school_notes2.wiki.check import TYPOGRAPHY
+import re
+
+TYPOGRAPHY = re.compile("[–—“”‘’]")
 
 ROOT = Path(__file__).resolve().parents[4]
 

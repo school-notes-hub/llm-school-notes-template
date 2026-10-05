@@ -27,20 +27,13 @@ def check_result(repo: Path, result: dict, fetch: dict, open_items: set[tuple[st
     for s in result.get("new_subjects") or []:
         if s["subject"] not in new:
             out.append(item(RESULT, None, f"new_subjects: {s['subject']!r} is not new in this run"))
-    if fetch.get("mode") == "fix" and result.get("status") == "done":
-        decided = {(c["file"], c["item_id"]) for c in result.get("review_closure", [])}
-        if open_items - decided:
-            out.append(item(RESULT, None, "review_closure: every assigned item needs a decision"))
+    # An item without a decision simply stays open (#17); an invalid closure is a warning
+    # and leaves its item open.
     out += check_closures(repo, result, open_items, closure_limit)
     out += check_figures(repo, result, fetch, base_content, generated)
     out += check_checks(repo, result, fetch)
     from ..repair import check as repair_check
     out += repair_check.coverage(result, fetch)
-    from ..figures import infographics
-    try:
-        out += infographics.check(repo, result, fetch)
-    except (ValueError, OSError) as exc:
-        out.append(item(RESULT, None, f"infographic_decisions: {exc}"))
     return out
 
 
@@ -49,13 +42,14 @@ def check_closures(repo, result, open_items, closure_limit):
     closures = result.get("review_closure") or []
     keys = [(c["file"], c["item_id"]) for c in closures]
     if len(keys) != len(set(keys)):
-        out.append(item(RESULT, None, "review_closure: duplicate item keys"))
+        out.append(item(RESULT, None, "review_closure: duplicate item keys; the item stays open", "warning"))
     for c in closures:
-        out += [item(RESULT, None, f"review_closure: {m}") for m in closure_problems(repo, c)]
+        out += [item(RESULT, None, f"review_closure: {m}; the item stays open", "warning")
+                for m in closure_problems(repo, c)]
         if not safefs.is_file(repo, c["file"]):
-            out.append(item(RESULT, None, f"review_closure: {c['file']} does not exist"))
+            out.append(item(RESULT, None, f"review_closure: {c['file']} does not exist", "warning"))
         elif (c["file"], c["item_id"]) not in open_items:
-            out.append(item(RESULT, None, f"review_closure: {c['file']} {c['item_id']} is not open"))
+            out.append(item(RESULT, None, f"review_closure: {c['file']} {c['item_id']} is not open", "warning"))
     return out
 
 
@@ -73,34 +67,18 @@ def check_figures(repo, result, fetch, base_content, generated):
     except (ValueError, OSError) as exc:
         out.append(item(RESULT, None, str(exc)))
     inherited = fetch.get("pending_figures", [])
-    out += check_pending(repo, inherited, generated)
     invalid = {e["commission"]["id"] for e in inherited
                if base_content is not None and not pending.valid_at(e["commission"], base_content)}
     assignments = [a for a in commissions.assignments(result, inherited) if a["id"] not in invalid]
-    out += commissions.check(repo, assignments,
-                             [d for d in result.get("notebook_drawings", []) if d["figure"] not in invalid],
-                             generated=generated, requests=requested)
-    return out
-
-
-def check_pending(repo, inherited, generated):
-    from ..figures import commissions, machine
-    out = []
-    for entry in inherited:
-        fid = entry["commission"]["id"]
-        path = f".school-notes/figures/{fid}/figure.json"
-        if not safefs.is_file(repo, path):
-            out.append(item(path, None, "pending figure needs a new candidate or explicit failed reason in this run"))
-        else:
-            try:
-                candidate = commissions.candidate(repo, entry["commission"])
-                if candidate["state"] == "candidate":
-                    out += [item(path, None, message) for message in
-                            machine.generation_errors(repo, entry["commission"], candidate, generated)]
-                if candidate["state"] == "no-figure":
-                    raise ValueError("pending figure needs a new candidate or explicit failed reason")
-            except (ValueError, OSError) as exc:
-                out.append(item(path, None, str(exc)))
+    own = {f["id"] for f in result.get("figures", [])}
+    # A pending figure the writer did not reach stays pending; its candidate's problems are
+    # shown as warnings and P2 records them (#18). New commissions must be valid.
+    attempted = [a for a in assignments if a["id"] in own or safefs.is_file(repo, f".school-notes/figures/{a['id']}/figure.json")]
+    for problem in commissions.check(repo, attempted,
+                                     [d for d in result.get("notebook_drawings", []) if d["figure"] not in invalid],
+                                     generated=generated, requests=requested):
+        pending = problem["file"].startswith(".school-notes/figures/") and problem["file"].split("/")[2] not in own
+        out.append({**problem, "severity": "warning"} if pending else problem)
     return out
 
 

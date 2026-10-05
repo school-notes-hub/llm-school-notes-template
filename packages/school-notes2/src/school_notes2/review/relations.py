@@ -1,7 +1,6 @@
 """Review identities, reference-aware closures and one-round disagreement replies."""
 
 import re
-from collections import Counter
 from pathlib import Path
 
 import yaml
@@ -145,20 +144,6 @@ def route(finding: dict, known: dict) -> tuple[str, bool]:
     return "open", True
 
 
-def valid_responses(responses: list[dict], known: dict) -> tuple[list[dict], list[dict]]:
-    kept, dropped = [], []
-    counts = Counter(r["key"] for r in responses)
-    for response in sorted(responses, key=lambda r: (r["key"], r["verdict"], r["answer"])):
-        item = known["items"].get(response["key"], {})
-        if (item.get("status") == "disagree" and item.get("round") == 1
-                and not item.get("response") and counts[response["key"]] == 1):
-            kept.append(response)
-        else:
-            reason = "duplicate response key" if counts[response["key"]] > 1 else "not an unanswered round-1 disagreement"
-            dropped.append({"key": response["key"], "reason": reason})
-    return kept, dropped
-
-
 def reply(repo: Path, key: str, verdict: str, answer: str) -> str:
     """An idempotent reviewer response; a kept disagreement reopens exactly once."""
     from .files import ClosureError, compute_status
@@ -186,3 +171,56 @@ def reply(repo: Path, key: str, verdict: str, answer: str) -> str:
     safefs.write_text(repo, rel, frontmatter.set_keys(body, {
         "items": items, "item_details": records, "status": compute_status(items)}))
     return rel
+
+
+def apply_item(work, original, answer):
+    paths, owners = apply_items(work, [(original, answer)])
+    return (paths[0] if paths else None), (owners[0] if owners else None)
+
+
+def apply_items(work, answers):
+    """Read and rewrite each report once; later answers see the preceding mutation."""
+    from . import attempts
+    from .files import ClosureError, compute_status, parse_report
+    grouped, written, owners = {}, [], []
+    for original, answer in answers:
+        rel, item_id = answer["key"].rsplit("#", 1)
+        grouped.setdefault(rel, []).append((item_id, original, answer))
+    for rel, entries in sorted(grouped.items()):
+        if not safefs.is_file(work, rel):
+            continue
+        text = safefs.read_text(work, rel)
+        page = parse_report(text)
+        changed = False
+        for item_id, original, answer in sorted(entries, key=lambda e: (e[0], e[2]["verdict"], e[2]["answer"])):
+            detail = details(page, item_id)
+            if page.meta.get("items", {}).get(item_id) != original["status"]:
+                continue  # Concurrent owner/writer closure wins.
+            verdict = answer["verdict"]
+            if verdict in ("accept", "keep"):
+                if detail.get("response"):
+                    continue
+                if original["status"] != "disagree" or detail["round"] != 1 or not answer["answer"].strip():
+                    raise ClosureError("only an unanswered round-1 disagreement accepts a response")
+                detail["response"] = {"verdict": verdict, "answer": answer["answer"]}
+                if verdict == "keep":
+                    page.meta["items"][item_id], detail["round"] = attempts.failed_status(detail), 2
+                page.body = page.body.rstrip() + f"\n\n## Válasz ({item_id})\n\n{verdict}: {' '.join(answer['answer'].split())}\n"
+            else:
+                if original["status"] == "fixed" and detail.get("recheck"):
+                    continue
+                detail["recheck" if original["status"] == "fixed" else "nightly"] = {
+                    "verdict": verdict, "answer": answer["answer"]}
+                if verdict == "not-ok":
+                    detail["chain"] = max(detail["chain"], int(original.get("fix_commit", False)))
+                    page.meta["items"][item_id] = attempts.failed_status(detail)
+                    if page.meta["items"][item_id] == "owner":
+                        owners.append({"file": rel, "item_id": item_id, "reason": answer["answer"]})
+            page.meta.setdefault("item_details", {})[item_id] = detail
+            changed = True
+        if changed:
+            safefs.write_text(work, rel, frontmatter.set_keys(page, {
+                "items": page.meta["items"], "item_details": page.meta["item_details"],
+                "status": compute_status(page.meta["items"])}))
+            written.append(rel)
+    return written, owners

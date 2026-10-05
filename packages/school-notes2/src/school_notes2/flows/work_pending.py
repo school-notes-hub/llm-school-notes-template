@@ -5,7 +5,7 @@ from ..repair import queue
 from ..review import files
 from ..state import phase, safefs
 from ..state.files import read_json
-from . import correction_figures, fix_progress, set_aside
+from . import correction_figures, fix_progress
 
 
 def ready(ctx):
@@ -28,7 +28,7 @@ def ready(ctx):
                     correction_figures.awaiting(ctx, e["commission"]) for e in figures) or (
                     figures and not fix_progress.image_wait(ctx, figures)):
         return True
-    stopped = set_aside.blocked(ctx)
+    stopped = fix_progress.parked(ctx)
     data = queue.load(ctx.notes_path)
     states = {i["page"]: i["status"] for i in data["items"]}
     return any(i["status"] == "pending" and "repair:" + i["page"] not in stopped

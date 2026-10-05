@@ -14,7 +14,7 @@ out = mount(":/out:rw")
 if out:
     incoming = mount(":/in:ro")
     assigned = json.loads((incoming / "assigned.json").read_text())
-    second = any("recheck-r2" in p for p in incoming.parts)
+    second = True  # One pass per run (fix-46): the independent check accepts good work at once.
     if "figures" in assigned:
         value = {"figures": [{**f, "verdict": "accept" if second else "repair", "observed": "Két nyíl.",
             "defects": [] if second else [{"severity": "hiba", "location": "nyíl", "observed": "Hibás irány.",
@@ -23,15 +23,10 @@ if out:
     elif "items" in assigned:
         value = {"items": [{"key": i["key"], "severity": "hiba", "verdict": "ok" if second else "not-ok",
                             "answer": "A magyarázat helyes." if second else "A magyarázat hiányos."}
-                           for i in assigned["items"]],
-                 "hits": [{"hit_id": h, "severity": "hiba", "verdict": "téves", "reason": "Ellenőrizve.",
-                           "item_key": None} for h in assigned["hits"]], "findings": [], "owner_notes": []}
-    elif "pages" in assigned:
+                           for i in assigned["items"]], "findings": [], "owner_notes": []}
+    else:
         value = {"pages": [{"file": p["file"], "verdict": "ok", "first_glance": "Érthető."}
                            for p in assigned["pages"]], "findings": [], "owner_notes": []}
-    else:
-        value = {"hits": [{"hit_id": h, "severity": "hiba", "verdict": "téves", "reason": "Ellenőrizve.",
-                           "covered_by": None} for h in assigned["hits"]], "owner_notes": []}
     (out / "review.json").write_text(json.dumps(value, ensure_ascii=False))
 else:
     sys.argv = ["probe_writer.py", str(mount(":/work:rw"))]

@@ -44,11 +44,6 @@ def from_writer(checks: list[dict]) -> list[Entry]:
                   c.get("note", "")) for c in checks]
 
 
-def from_reviewer(figures: list[dict]) -> list[Entry]:
-    return [Entry(f["page"], f["file"], f["file"], f["observed"], f["verdict"],
-                  f.get("description", ""), f.get("checks")) for f in figures]
-
-
 def _sha256(repo: Path, rel: str) -> str:
     return hashlib.sha256(safefs.read_bytes(repo, rel)).hexdigest()
 

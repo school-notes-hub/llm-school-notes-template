@@ -1,9 +1,15 @@
-"""Stop repeated zero-progress repairs until new work or a new release arrives."""
+"""Time brake: work that made no progress in a run waits 24 hours, per item (#21, Fable 15)."""
+
+from datetime import datetime, timedelta
 
 from ..figures import pending
 from ..images import budget
+from ..log import TZ
 from ..review import relations
-from . import set_aside
+from ..state.files import read_json, write_json
+
+PARK = timedelta(hours=24)
+CLOSED = ("fixed", "disagree", "question", "settled", "owner")
 
 
 def keys(items, waiting):
@@ -11,8 +17,18 @@ def keys(items, waiting):
                   {"figure:" + e["commission"]["id"] for e in waiting})
 
 
+def path(ctx):
+    return ctx.cfg.state_dir / ctx.name / "parked.json"
+
+
+def parked(ctx, now=None):
+    now = now or datetime.now(TZ)
+    return {key for key, until in read_json(path(ctx), {}).items()
+            if datetime.fromisoformat(until) > now}
+
+
 def available(ctx, items, waiting):
-    stopped = set_aside.blocked(ctx)
+    stopped = parked(ctx)
     return ([i for i in items if i["file"] + "#" + i["item_id"] not in stopped],
             [e for e in waiting if "figure:" + e["commission"]["id"] not in stopped])
 
@@ -36,22 +52,32 @@ def runnable_images(ctx, waiting):
             or correction_figures.awaiting(ctx, e["commission"])]
 
 
-def record(ctx, task):
+def record(ctx, task, now=None):
+    """Park each assigned key without progress for 24 hours; progressed keys are freed."""
     if task.get("mode") != "fix" or task.phase == "done":
         return
-    work = set_aside.work(task)
+    work = sorted(set(task.get("fix_work", [])) | set(task.get("assigned_work", [])))
     known = relations.inventory(ctx.notes_path)["items"]
-    closed = sum(known.get(key, {}).get("status") in
-                 ("fixed", "disagree", "question", "settled", "owner")
-                 for key in work if not key.startswith("figure:"))
-    remaining = {e["commission"]["id"] for e in pending.load(ctx.notes_path)}
-    accepted = sum(key[7:] not in remaining for key in work if key.startswith("figure:"))
-    task.update(fix_progress=closed + accepted)
-    if closed + accepted:
-        set_aside.progressed(ctx, task)
-    waiting = [e for e in pending.load(ctx.notes_path) if "figure:" + e["commission"]["id"] in work]
-    only_waiting = all(key.startswith("figure:") for key in work) and not runnable_images(ctx, waiting)
-    if work and closed + accepted == 0 and not only_waiting:
-        set_aside.record(ctx, task, "no-progress")
-        task.update(no_progress=True)
-        set_aside.no_progress_notice(ctx, task)
+    remaining = {e["commission"]["id"]: e for e in pending.load(ctx.notes_path)}
+    previous = {e["commission"]["id"]: e for e in task.get("pending_figures", [])}
+    now = now or datetime.now(TZ)
+    state = {k: v for k, v in read_json(path(ctx), {}).items() if datetime.fromisoformat(v) > now}
+    stalled = []
+    for key in work:
+        if key.startswith("figure:"):
+            fid = key[7:]
+            entry = remaining.get(fid)
+            moved = entry is None or entry["runs"] > previous.get(fid, {}).get("runs", 0)
+        else:
+            item = known.get(key, {})
+            # A writer decision recorded in this run is progress, even if P5 reopened it.
+            moved = item.get("status") in CLOSED or task.run_id in item.get("repair_runs", [])
+        if moved:
+            state.pop(key, None)
+        else:
+            stalled.append(key)
+            state[key] = (now + PARK).isoformat()
+    write_json(path(ctx), dict(sorted(state.items())))
+    task.update(fix_stalled=stalled)
+    if stalled:
+        ctx.log.event("fix.parked", items=stalled, hours=24)

@@ -23,7 +23,7 @@ def test_banner_follows_topic_and_notices_stay_outside_block(repo):
     safefs.write_text(repo, LESSON, text)
     key = units.page_key(repo, LESSON)
     safefs.write_bytes(repo, "wiki/assets/abra.svg", b"changed")
-    assert units.page_key(repo, LESSON) != key
+    assert units.page_key(repo, LESSON) == key  # R1: a banner change is not an author change.
     topic = safefs.read_text(repo, "wiki/proba/elso.md").replace("abra.svg", "other.svg")
     safefs.write_text(repo, "wiki/proba/elso.md", topic)
     updated = banners.update(repo, LESSON, text)
@@ -37,20 +37,23 @@ def test_invalid_banner_target_is_refused(repo, target):
         banners.update(repo, LESSON, text)
 
 
-def test_existing_header_is_replaced_and_no_later_figure_used(repo):
+def test_writer_header_is_never_replaced_and_no_later_figure_used(repo):
+    """E7: the tool never edits the writer's lines; its block goes to the fixed place."""
     text = reuse(repo).replace("# Mit tanultunk", "![Old](../assets/old.png)\n\n# Mit tanultunk")
     updated = banners.update(repo, LESSON, text)
-    assert "old.png" not in updated and updated.count("abra.svg") == 1
+    assert "![Old](../assets/old.png)" in updated and updated.count("abra.svg") == 1
+    assert updated.index("abra.svg") < updated.index("old.png")
     safefs.write_text(repo, "wiki/proba/elso.md", "---\ntype: topic\n---\n# Téma\n\nTananyag.\n\n![Ábra](a.png)\n")
     assert banners.body(repo, LESSON, frontmatter.split(text).meta) == ""
 
 
-def test_banner_reuse_assigns_log_even_when_main_topic_is_not_first(repo):
+def test_banner_source_change_does_not_assign_the_reusing_log(repo):
+    """R1: a lesson log is not reread because its banner's topic page changed."""
     text = reuse(repo)
     text = frontmatter.set_keys(text, {"banner_from": "masodik.md"})
     safefs.write_text(repo, LESSON, text)
     grouped = units.collect(repo, ["wiki/proba/masodik.md"])
-    assert any(LESSON in u["pages"] for u in grouped)
+    assert not any(LESSON in u["pages"] for u in grouped)
 
 
 def test_reusing_old_raw_header_does_not_look_like_an_edit_during_finish(repo):
@@ -60,39 +63,33 @@ def test_reusing_old_raw_header_does_not_look_like_an_edit_during_finish(repo):
     assert _llm_hash(LESSON, text.encode()) == _llm_hash(LESSON, updated.encode())
 
 
-def test_candidate_banner_key_matches_final_publication_not_preview_png(repo):
-    text = reuse(repo)
-    safefs.write_text(repo, LESSON, banners.update(repo, LESSON, text))
-    asset = "wiki/assets/new-banner.svg"
-    safefs.write_bytes(repo, asset, b"<svg>new</svg>")
-    brief = {"id": "new-banner", "page": "wiki/proba/elso.md", "kind": "banner"}
-    candidate = {"state": "candidate", "asset": asset, "alt": "New banner", "caption": "",
-                 "form": "banner", "tool": "svg", "elements": [], "visible_text": [], "attempt": 1}
-    safefs.write_json(repo, ".school-notes/figures/new-banner/figure.json", candidate)
-    image = banners.candidate_image(repo, LESSON, [brief])
-    key = units.page_key(repo, LESSON, banner_image=image)
-    safefs.write_text(repo, brief["page"], '---\ntype: topic\n---\n![New banner](../assets/new-banner.svg)\n')
-    safefs.write_text(repo, LESSON, banners.update(repo, LESSON, safefs.read_text(repo, LESSON)))
-    assert units.page_key(repo, LESSON) == key
+def test_old_banner_bound_reader_key_is_rekeyed_mechanically(repo):
+    """R2: a verdict under the 2.5.x key (which bound the banner) gets the new key without
+    any reading; a verdict for changed author text stays invalid."""
+    from school_notes2.reader import verdicts
+    safefs.write_text(repo, LESSON, banners.update(repo, LESSON, reuse(repo)))
+    old = units.banner_key(repo, LESSON)
+    assert old and old != units.page_key(repo, LESSON)
+    safefs.write_json(repo, verdicts.PATH, [{"role": "reader", "file": LESSON, "key": old, "verdict": "ok",
+                                             "model": "m", "at": "t"}])
+    assert verdicts.rekeyed(repo)[0]["key"] == units.page_key(repo, LESSON)
+    safefs.write_text(repo, LESSON, safefs.read_text(repo, LESSON) + "\nÚj mondat.\n")
+    assert verdicts.rekeyed(repo) is None
 
 
 @pytest.mark.parametrize("legacy", [False, True])
-def test_banner_preview_key_supports_notice_compatibility(repo, legacy):
+def test_reader_key_supports_notice_compatibility(repo, legacy):
     from school_notes2.wiki import author
     from school_notes2.flows import steps
     text = banners.update(repo, LESSON, reuse(repo))
     safefs.write_text(repo, LESSON, text)
-    image = "![Preview](<../assets/preview.svg>)"
-    safefs.write_bytes(repo, "wiki/assets/preview.svg", b"preview")
-    key = units.page_key(repo, LESSON, banner_image=image, legacy_notices=legacy)
+    key = units.page_key(repo, LESSON, legacy_notices=legacy)
     noticed = lesson_log.after_header(text, "pending", "Pending\n")
     safefs.write_text(repo, LESSON, noticed)
     assert steps._llm_part is author.part
-    noticed_key = units.page_key(repo, LESSON, banner_image=image, legacy_notices=legacy)
-    # Compatibility deliberately retains the old notice-dependent whitespace key.
-    assert (noticed_key == key) is not legacy
-    safefs.write_bytes(repo, "wiki/assets/preview.svg", b"changed preview")
-    assert units.page_key(repo, LESSON, banner_image=image, legacy_notices=legacy) != noticed_key
+    noticed_key = units.page_key(repo, LESSON, legacy_notices=legacy)
+    # A notice at the fixed place never changes the author key, in either formula.
+    assert noticed_key == key
 
 
 def test_nested_notice_cleanup_preserves_reused_banner_author_key(repo):

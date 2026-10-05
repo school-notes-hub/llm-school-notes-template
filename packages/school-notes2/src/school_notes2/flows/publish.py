@@ -9,7 +9,7 @@ from ..git.run import with_retries
 from ..site import build as site_build
 from ..site import publish as site_publish
 from ..state import phase
-from ..state.errors import NeedsOwner
+from ..state.files import read_json, write_json
 from . import finish as finish_flow
 from . import policy
 from .context import Ctx
@@ -50,6 +50,8 @@ def _start(ctx: Ctx):
     site_publish.fetch_gh_pages(site, ctx.log, fetch_s=ctx.cfg.timeouts.fetch_s,
                                 ls_remote_s=ctx.cfg.timeouts.ls_remote_s)
     main = repos.rev(bare, "refs/remotes/origin/main")
+    if read_json(_held(ctx), {}).get("source") == main:
+        return None  # This commit's build already failed on content; wait for a new one.
     needed, why = site_publish.publish_needed(bare, site, main, VERSION)
     ctx.log.event("site.publish_needed", "yes" if needed else "no", target=why)
     if not needed:
@@ -66,10 +68,13 @@ def _advance(ctx: Ctx, task) -> None:
                                       finish_flow.renderer(ctx), changed=task.get("changed"),
                                       log=ctx.log)
         except site_build.BuildContentError as exc:
-            # The commit is already on main: only the owner (or a chat) can fix it.
-            raise NeedsOwner("the public build of origin/main failed on content",
-                             todo="fix the pages in `school-notes chat`",
-                             details={"problems": exc.problems[:20]}) from None
+            # Publication waits; the notes run that pushed this commit recorded the
+            # problems as items, and a later clean build publishes everything.
+            ctx.log.event("site.publish_held", "warning", target=task.get("source"), problems=exc.problems[:20])
+            write_json(_held(ctx), {"source": task.get("source")})
+            task.data["closed"] = True
+            task.save()
+            return
         task.set_phase("built", build={"commit": record.commit, "output": str(record.output)})
     if task.phase in ("built", "pushing"):
         task.set_phase("pushing")
@@ -84,3 +89,7 @@ def _advance(ctx: Ctx, task) -> None:
                              ls_remote_s=ctx.cfg.timeouts.ls_remote_s)
         task.set_phase("done")
         finish_flow.check_live(ctx, Path(build["output"]), build["commit"])
+
+
+def _held(ctx: Ctx):
+    return ctx.cfg.state_dir / ctx.name / "publish-held.json"

@@ -13,7 +13,7 @@ from ..wiki.check_result import check_result
 from . import generation_receipts
 from . import fetch as fetch_flow
 from . import status as status_flow
-from . import call_scope, checks, steps
+from . import checks, steps
 from .context import Ctx
 
 
@@ -28,8 +28,7 @@ def build(ctx: Ctx, task_dir=None, *, fetch=None, finish=None) -> Handlers:
         found = phase.open_task(ctx.task_root(), ctx.name, "notes")
         if found is None:
             raise NeedsOwner("there is no open run in this session", todo="call fetch first")
-        from .correction_chat import active
-        return active(found) or found
+        return found
 
     return Handlers(
         check=lambda: check(ctx, task()),
@@ -39,12 +38,10 @@ def build(ctx: Ctx, task_dir=None, *, fetch=None, finish=None) -> Handlers:
 
 
 def check(ctx: Ctx, task) -> dict:
-    """The writer's own check at the end of its work: guard, result.json, changed files.
-    Applies unambiguous auto-fixes and refreshes tool-rendered learning metadata."""
+    """The writer's own check, as often as it likes: guard, result.json, changed files.
+    Refreshes tool-rendered learning metadata. Warnings never need a decision."""
     from ..figures import licenses
     licenses.preflight(ctx.notes_path)
-    if not checks.take(task):
-        return dict(checks.LIMIT)
     problems: list[dict] = []
     try:
         steps.guard_step(ctx, task)
@@ -52,15 +49,9 @@ def check(ctx: Ctx, task) -> dict:
         checks.record_failure(ctx, task, exc, "check.guard")
         problems += exc.items
     from . import learning
-    metadata_valid = True
-    try:
-        problems += steps.check_items(ctx, task)
-    except steps.CheckFailed as exc:
-        checks.record_failure(ctx, task, exc, "check.content")
-        metadata_valid = False
-        problems += exc.items
-    if metadata_valid:
-        problems += steps.order_step(ctx, task)
+    content = steps.check_items(ctx, task)
+    problems += content
+    metadata_valid = not wiki_check.blocking(content)
     result = safefs.read_json(ctx.notes_path, f"{workbranch.WORKDIR}/result.json")
     if result is not None:
         invalid = schema_errors("result", result)
@@ -82,10 +73,9 @@ def check(ctx: Ctx, task) -> dict:
             problems += exc.items
     if metadata_valid:
         problems += public_problems(ctx.notes_path, generation_receipts.rights(ctx))
-    problems = checks.identify(call_scope.current(ctx, task, problems), ctx.notes_path)
+    problems = checks.identify(problems, ctx.notes_path)
     steps.write_check_items(ctx, problems)
     checks.tool_errors(ctx, task, problems)
-    checks.remember(task, problems)
     return checks.response(problems)
 
 
@@ -93,7 +83,8 @@ def public_problems(repo, generated=lambda _: None) -> list[dict]:
     """What finish's public.json step would refuse (a new image with no rights record, a copy
     of a source photo), reported now, so the writer fixes it in the same call."""
     try:
-        public.build(repo, public.either(public.render_rights(repo), public.media_receipt_rights(repo), generated))
+        public.build(repo, public.either(public.render_rights(repo), public.media_receipt_rights(repo), generated,
+                                         public.writer_svg_rights(repo)))
     except public.PublicError as exc:
         return [wiki_check.item(p, None, exc.reason) for p in exc.paths]
     return []
@@ -105,10 +96,6 @@ def generate(ctx, task, plan_id, note):
         if plan_id not in assigned or note:
             return {"state": "disabled", "message": "Repair uses free local figures; paid generation is disabled."}
         return image_generate.generate(ctx.image_settings(), plan_id, log=ctx.log, paid_disabled=True)
-    from ..figures import infographics
-    blocked = infographics.generation_gate(ctx, task, plan_id, note)
-    if blocked:
-        return blocked
     result = image_generate.generate(ctx.image_settings(), plan_id, note, log=ctx.log)
     from . import image_notices
     image_notices.threshold(ctx)

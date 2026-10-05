@@ -6,6 +6,9 @@
   "additionalProperties": false,
   "properties": {
     "owner_notes": {"type": "array", "items": {"type": "string", "pattern": "\\S"}},
+    "review_requests": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+      "required": ["page", "reason"], "properties": {"page": {"type": "string", "pattern": "^wiki/.+\\.md$"},
+                                                    "reason": {"type": "string", "pattern": "\\S"}}}},
     "status": {"enum": ["done", "question"]},
     "questions": {"type": "array", "items": {"type": "object", "additionalProperties": false,
       "required": ["text"], "properties": {"text": {"type": "string", "minLength": 1}}}},

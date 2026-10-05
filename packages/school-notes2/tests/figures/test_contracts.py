@@ -96,7 +96,7 @@ def test_svg_hints_are_only_warnings(repo, make_figure):
         "outputs": {"forces.svg": {"sha256": hashlib.sha256(safefs.read_bytes(repo, asset)).hexdigest()}}})
     report = machine.report(repo, brief, candidate)
     assert not report["errors"]
-    assert {w["code"] for w in report["warnings"]} == {"phone-font", "numbers", "source-pattern", "invisible-edges", "alt-title"}
+    assert {w["code"] for w in report["warnings"]} == {"phone-font", "numbers", "invisible-edges", "alt-title"}
 
 
 def test_symlink_source_is_never_read(repo, make_figure, tmp_path):
@@ -119,7 +119,8 @@ def test_marker_must_be_in_the_reviewed_section(repo, make_figure):
 
 
 @pytest.mark.parametrize("kind", ["png", "svg"])
-def test_no_direct_self_insertion_for_new_images(repo, make_figure, kind):
+def test_no_direct_self_insertion_for_new_raster_images(repo, make_figure, kind):
+    """6b: a writer-drawn SVG needs no commission; a raster image keeps the rights gate."""
     from school_notes2.wiki.guard import Change, GuardInput, run
     brief, candidate = make_figure()
     page = brief["page"]
@@ -128,21 +129,20 @@ def test_no_direct_self_insertion_for_new_images(repo, make_figure, kind):
     text = safefs.read_text(repo, page).replace("<!-- figure: forces -->", f"![force](../assets/physics/forces.{kind})")
     safefs.write_text(repo, page, text)
     problems = run(GuardInput(repo, [Change(page, "added")], lambda p: None))
-    assert len(problems) == 1 and "independent acceptance" in problems[0].message
+    if kind == "svg":
+        assert not problems
+    else:
+        assert len(problems) == 1 and "independent acceptance" in problems[0].message
 
 
-def test_mermaid_requires_commission_in_both_modes(repo, make_figure):
+def test_inline_mermaid_needs_no_commission_in_either_mode(repo, make_figure):
+    """6b: the writer may draw or fix inline Mermaid directly."""
     from school_notes2.wiki.guard import Change, GuardInput, run
     brief, candidate = make_figure()
     page = brief["page"]
     safefs.write_text(repo, page, safefs.read_text(repo, page) + "```mermaid\ngraph LR\n A --> B\n```\n")
     for interactive in (False, True):
-        g = GuardInput(repo, [Change(page, "added")], lambda p: None, interactive=interactive)
-        assert "Mermaid" in run(g)[0].message
-    candidate.pop("asset")
-    candidate["mermaid"] = hashlib.sha256(b"graph LR\n A --> B\n").hexdigest()
-    safefs.write_json(repo, ".school-notes/figures/forces/figure.json", candidate)
-    assert not run(g)
+        assert not run(GuardInput(repo, [Change(page, "added")], lambda p: None, interactive=interactive))
 
 
 def test_result_check_stays_valid_after_tool_insertion(repo, make_figure):

@@ -5,10 +5,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from school_notes2.flows import recheck, review_phases
+from school_notes2.flows import review_phases
 from school_notes2.reader import notice_migration, notices, units, verdicts
 from school_notes2.state import phase, safefs
-from school_notes2.wiki import author, drafts, frontmatter, markers
+from school_notes2.wiki import author, frontmatter, markers
 from .test_notice_regressions import accept, legacy_items
 
 
@@ -25,25 +25,6 @@ def test_review_items_never_create_notices(setup, status, origin, quote):
     meta = frontmatter.split(text).meta
     meta["item_details"]["R1"].update(origin=origin, round=2)
     safefs.write_text(repo, path, frontmatter.set_keys(text, meta))
-    notices.refresh(repo, [page])
-    assert "⏳" not in safefs.read_text(repo, page)
-
-
-def test_failed_recheck_keeps_proof_of_prior_reader_verdict(setup):
-    ctx, task, page = setup
-    repo = ctx.notes_path
-    accept(repo, page)
-    prior = verdicts.valid(repo, page)
-    legacy_items(repo, page, ["A test lefelé gyorsul."])
-    safefs.write_text(repo, page, safefs.read_text(repo, page) + "\nMódosítás.\n")
-    key = "docs/review/legacy.md#R1"
-    recheck._carry_verdicts(ctx, task, {"model": "model", "prior_pages": [prior],
-        "unit": {"pages": [page]}, "items": [{"key": key, "file": page}],
-        "review": {"items": [{"key": key, "verdict": "not-ok"}]}}, [])
-    assert len(verdicts.invalidate(repo)) == 1
-    assert verdicts.invalidate(repo) == []
-    assert verdicts.valid(repo, page) is None
-    assert verdicts.ever_reviewed(repo, page)
     notices.refresh(repo, [page])
     assert "⏳" not in safefs.read_text(repo, page)
 
@@ -100,29 +81,3 @@ def test_whole_wiki_refresh_resumes_and_runs_once(setup, monkeypatch, boundary, 
     assert review_phases.refresh_notices(ctx, task, []) == []
     assert before == {p: safefs.read_bytes(repo, p) for p in before}
     assert notice_migration.PATH in task.get("tool_writes")
-
-
-def test_history_recovery_is_tool_only_for_nightly(tmp_path, git_factory):
-    from tests.conftest import make_origin
-    from school_notes2.review import topics
-    page = "wiki/m/topic.md"
-    text = "---\ntitle: Téma\ntype: topic\n---\n# Téma\n\nTananyag.\n"
-    record = {"role": "reader", "file": page, "key": "earlier", "verdict": "ok"}
-    origin = make_origin(tmp_path, {page: text, verdicts.PATH: json.dumps([record])})
-    repo = tmp_path / "seed"
-    git = git_factory(repo / ".git", repo)
-    safefs.write_json(repo, verdicts.PATH, [])
-    safefs.write_text(repo, page, text + "\n" + markers.wrap("pending", notices.PAGE) + "\n")
-    git.run("add", ".")
-    git.run("commit", "-qm", "legacy stale verdict removed")
-    base = git.out("rev-parse", "HEAD").strip()
-    keys = units.page_key(repo, page)
-    notice_migration.refresh(repo, git=git)
-    assert "⏳" not in safefs.read_text(repo, page)
-    assert verdicts.valid(repo, page) is None and verdicts.ever_reviewed(repo, page)
-    assert units.page_key(repo, page) == keys
-    git.run("add", ".")
-    git.run("commit", "-qm", "tool notice migration")
-    head = git.out("rev-parse", "HEAD").strip()
-    assert topics.author_changes(git, base, head) == []
-    assert topics.closure_changes(git, base, head) == {}

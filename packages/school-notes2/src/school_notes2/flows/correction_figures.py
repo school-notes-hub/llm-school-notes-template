@@ -87,30 +87,6 @@ def defects(state, receipt, previous=()):
     return result
 
 
-def waiting(ctx, task):
-    old = {e["commission"]["id"]: e for e in pending.load(ctx.notes_path)}
-    scoped = task.mode == "interactive" or task.get("mode") == "repair"
-    own = {e["commission"]["id"] for e in task.get("pending_figures", [])}
-    entries = {fid: e for fid, e in old.items() if not scoped or fid in own}
-    for state in task.get("inspection_figures", []):
-        brief = state["brief"]
-        receipt = task.get("inspection_receipts", {}).get(brief["id"], {})
-        verdict = verdict_for(receipt, brief["id"])
-        if verdict.get("verdict") == "accept" or state["candidate"]["state"] == "no-figure":
-            entries.pop(brief["id"], None)
-            continue
-        previous = old.get(brief["id"], {})
-        entries[brief["id"]] = {**previous, "commission": brief, "status": "pending", "runs": previous.get("runs", 0),
-                        "run_ids": previous.get("run_ids", []), "owner_required": previous.get("owner_required", False),
-                        "defects": defects(state, receipt, previous.get("defects", []))}
-    waiting = assignable(ctx, list(entries.values()), paid_disabled=task.get("mode") == "repair")
-    if task.get("mode") == "repair":
-        waiting = [e for e in waiting if not pending.generated(ctx.notes_path, e["commission"])
-                   or awaiting(ctx, e["commission"])]
-    from . import fix_progress
-    return fix_progress.runnable_images(ctx, fix_progress.available(ctx, [], waiting)[1])
-
-
 def start(repo, entries):
     # Called before the child checkpoint; repeats before it are harmless. Resumes
     # after that checkpoint preserve the child's newly written candidates.
@@ -120,18 +96,3 @@ def start(repo, entries):
         path = f".school-notes/figures/{brief['id']}/figure.json"
         if safefs.is_file(repo, path):
             safefs.unlink(repo, path)
-
-
-def changed_figures(ctx, task):
-    from ..figures import commissions, context
-    changed = []
-    for state in task.get("inspection_figures", []):
-        brief = state["brief"]
-        candidate = commissions.candidate(ctx.notes_path, brief)
-        if candidate["state"] != "candidate":
-            continue
-        receipt = task.get("inspection_receipts", {}).get(brief["id"], {})
-        previous = verdict_for(receipt, brief["id"]).get("key")
-        if context.verdict_key(ctx.notes_path, brief, candidate) != previous:
-            changed.append(brief)
-    return changed

@@ -266,13 +266,6 @@ def fetch_json(task: Task, k: int, *, grade: int, whole_run: bool = False, repo=
     if repo is not None:
         from . import licensing
         data["approved_figure_requests"] = licensing.for_fetch(repo, data)
-        from ..figures import infographics
-        if task.get("infographic_policy"):
-            run_id = task.get("correction_parent", task.run_id)
-            data["infographic_run_id"] = run_id
-            data["infographic_commissions"] = task.get("infographic_commissions", [])
-            pages = infographics.assigned(repo, data) if data["mode"] in ("fix", "repair") else []
-            data["infographic_pages"] = infographics.needed(repo, pages, run_id)
     validate("fetch", data)
     return data
 

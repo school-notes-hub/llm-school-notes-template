@@ -4,11 +4,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from school_notes2.figures import migrate_pending, migration_gate, pending, rejected
+from school_notes2.figures import migrate_pending, migration_gate, pending
 from school_notes2.flows import correction_figures, fix, review_phases
 from school_notes2.notify import Mailer
 from school_notes2.reader import report
-from school_notes2.review import night_figures, files
+from school_notes2.review import files
 from school_notes2.state import phase, safefs
 from tests.figures.test_capacity24 import settings
 from tests.flows.test_repair import context as fix_context
@@ -70,7 +70,6 @@ def test_all_mutators_and_restoration_preserve_legacy(repo, make_figure, log, mo
     pending.clear(repo, brief["id"])
     assert correction_figures.persist_owners(ctx, [{"commission": brief, "owner_required": True}]) == []
     assert not correction_figures.mark_exhausted(ctx, {"commission": brief})
-    assert rejected.apply(repo, [{"commission": brief}]) == []
     task = phase.create(repo.parent, "one", "notes", "cron", "review_ready")
     task.update(inspection_figures=[{"brief": brief, "candidate": {"state": "failed"}, "attempted": True}])
     monkeypatch.setattr(review_phases.steps, "generate_all", lambda *a: None)
@@ -88,7 +87,6 @@ def test_nightly_and_reader_skip_pending_image_but_keep_text(repo, make_figure):
     before = legacy(repo, brief)
     safefs.write_text(repo, brief["page"], f"# Topic\n\n<!-- figure: {brief['id']} -->\n![Image](../assets/physics/{asset.rsplit('/', 1)[-1]})\nText.\n")
     unit = {"topic": brief["page"], "pages": [brief["page"]]}
-    assert night_figures.discover(repo, unit) == []
     findings = [{"severity": "hiba", "file": brief["page"], "quote": f"<!-- figure: {brief['id']} -->", "problem": "Pending"},
                 {"severity": "hiba", "file": brief["page"], "quote": "Text.", "problem": "Text problem"}]
     kept, _, _ = report.prepare(repo, findings, [])
@@ -96,9 +94,9 @@ def test_nightly_and_reader_skip_pending_image_but_keep_text(repo, make_figure):
     assert safefs.read_bytes(repo, pending.PATH) == before
 
 
-@pytest.mark.parametrize("flow", ["package", "repair", "nightly"])
+@pytest.mark.parametrize("flow", ["package", "repair"])
 def test_each_entry_point_notifies_and_keeps_unrelated_work(repo, make_figure, log, monkeypatch, flow):
-    from school_notes2.flows import fetch, repair, night_topics
+    from school_notes2.flows import fetch, repair
     from tests.flows.test_fetch_cards import context as fetch_context
     from tests.sources.test_cards import shared
     brief, _ = make_figure()
@@ -127,13 +125,6 @@ def test_each_entry_point_notifies_and_keeps_unrelated_work(repo, make_figure, l
         monkeypatch.setattr(failure, "write_item", lambda *a: None)
         safefs.write_text(repo, ".git", "gitdir: unused\n")
         invoke = lambda: repair.prepare(ctx, task)
-    else:
-        ctx = SimpleNamespace(name="one", notes_path=repo, log=log, bare=lambda: None,
-            worktree=lambda _: SimpleNamespace(work_tree=repo),
-            cfg=SimpleNamespace(state_dir=repo.parent / "state", role=lambda _: (None, None)))
-        task = phase.create(repo.parent, "one", "review", "cron", "prepared")
-        task.update(units=[])
-        invoke = lambda: night_topics.run(ctx, task)
     ctx.mailer = Mailer(repo.parent / "unused", "test@example.test", ctx.cfg.state_dir / "notify.json", log)
     invoke()
     assert task.phase in ("prepared", "reviewed")

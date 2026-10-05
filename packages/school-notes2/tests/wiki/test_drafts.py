@@ -22,7 +22,7 @@ def start(repo):
 def test_draft_notice_clock_and_status_removal(repo):
     text = start(repo)
     assert markers.read(text, "pending") == drafts.NOTICE
-    assert text.index("![ábra]") < text.index("⏳")
+    assert text.index("⏳") < text.index("![ábra]")  # I6: the fixed place after the frontmatter
     assert not drafts.warnings(repo, START + timedelta(days=14))
     assert drafts.warnings(repo, START + timedelta(days=15))[0][0] == REL
     assert drafts.update(text, drafts.lesson_keys(repo)[REL], START + timedelta(days=30)) == text

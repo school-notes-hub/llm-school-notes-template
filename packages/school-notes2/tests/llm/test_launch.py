@@ -125,17 +125,6 @@ def test_login_check(fake, harness, tmp_path, log, monkeypatch):
                         image="img", log=log, podman=str(FAKE))
 
 
-def test_offline_helper_has_no_network(fake, tmp_path, log, monkeypatch):
-    set_mode(monkeypatch, "zero_noout")
-    rc = launch.run_offline(learner="barna", run_id="r", image="img", in_dir=tmp_path / "i",
-                            out_dir=tmp_path / "o", command=["rsvg-convert", "x.svg"], log=log,
-                            timeout=10, podman=str(FAKE))
-    argv = argv_lines(fake)
-    assert rc == 0 and "--network" in argv and "none" in argv
-    assert not any("NET_ADMIN" in a for a in argv)
-    assert not any("/home/agent" in a for a in argv) and "SN_NO_NETWORK=1" in argv
-
-
 def test_interactive_argv_has_tty(role, harness):
     argv = launch.podman_argv(learner="barna", image="img", run_id="r",
                               mounts=launch.Mounts(work=launch.Path("/w")), name="n",

@@ -481,33 +481,3 @@ def test_t154_final_keys_on_rebased_commit_before_build(env):
     hooks.final_keys, hooks.build = final_keys, build
     assert finish.run(task, env.wt, hooks, T, {}) == "done"
     assert len(checked) == 1 and len(checked[0]) == 1
-
-
-@pytest.mark.parametrize("mode", ["fix", "repair"])
-@pytest.mark.parametrize("reason", ["program", "bad_work"])
-def test_archive_keeps_state_and_survives_after_discard_crash(env, log, monkeypatch, mode, reason):
-    from types import SimpleNamespace
-    from school_notes2.flows import set_aside
-    task = env.start_run()
-    task.update(mode=mode, fix_work=["docs/review/a.md#R1"], repair_topic="wiki/a.md" if mode == "repair" else None)
-    (env.path / "wiki/a.md").write_text("Accepted before the tool failed.\n")
-    ctx = SimpleNamespace(name="benedek", notes_path=env.path, worktree=lambda _: env.wt,
-                          cfg=SimpleNamespace(root=env.root, state_dir=env.root / "state"))
-    set_aside.record(ctx, task, reason)
-    original = discard.discard
-    def crash(*args):
-        original(*args)
-        raise KeyboardInterrupt()
-    monkeypatch.setattr(discard, "discard", crash)
-    with pytest.raises(KeyboardInterrupt):
-        set_aside.resume(ctx, task)
-    assert set_aside.path(ctx).is_file()
-    bundle = env.root / "archive" / ctx.name / f"{task.run_id}.bundle"
-    assert bundle.is_file()
-    monkeypatch.setattr(discard, "discard", original)
-    assert set_aside.resume(ctx, phase.load(task.dir))
-    done = phase.load(task.dir)
-    assert done.get("set_aside") and done.get("bundle") == str(bundle)
-    assert "docs/review/a.md#R1" in set_aside.blocked(ctx)
-    assert "Accepted before" not in (env.path / "wiki/a.md").read_text()
-    assert env.wt.ok("bundle", "verify", str(bundle))

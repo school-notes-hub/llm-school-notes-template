@@ -5,19 +5,19 @@ from ..git import workbranch
 from ..llm import launch
 from ..mcp.jobs import JobStore
 from ..schemas import validate
-from ..state.errors import BadWork, Transient, WaitingQuota
+from ..state.errors import BadWork
 from ..state import safefs
 from ..state.files import read_json, write_json
 from ..state.phase import Task
 from . import generation_receipts
-from . import call_scope, checks
 from . import fetch as fetch_flow
 from .context import Ctx
 from .session import mcp
 
 
 def write_inputs(ctx: Ctx, task: Task, k: int) -> None:
-    """fetch.json and changes.json for range k; the old result.json is removed (5.3)."""
+    """fetch.json and changes.json for range k; the old result.json is removed (5.3).
+    check.json stays: after a failed attempt it holds the errors the writer continues with."""
     from ..figures import licenses, rechecks
     licenses.preflight(ctx.notes_path)
     root, workdir = ctx.notes_path, workbranch.WORKDIR
@@ -29,7 +29,8 @@ def write_inputs(ctx: Ctx, task: Task, k: int) -> None:
     rechecks.record(ctx, task, fetch.get("pending_figures", []))
     safefs.write_json(root, f"{workdir}/fetch.json", fetch)
     write_changes(ctx, task)
-    call_scope.write_check(ctx, task, k)
+    if not safefs.is_file(root, f"{workdir}/check.json"):
+        safefs.write_json(root, f"{workdir}/check.json", [])
     safefs.unlink(root, f"{workdir}/result.json")
 
 
@@ -43,13 +44,10 @@ def write_changes(ctx: Ctx, task: Task) -> None:
 
 def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
     """Call the writer for each remaining range; returns 'done' or 'question'."""
-    from . import correction_calls
+    from . import correction_calls, protected
     role, harness = ctx.cfg.role("writer")
     if task.get("max_agents") is None:
         task.update(max_agents=ctx.cfg.limits.max_agents)
-    from . import writer_identity
-    writer_identity.ensure(ctx, task)
-    call_scope.invalidate(task)
     n = len(task.get("ranges"))
     k = task.get("writing_k", 1)
     while k <= n:
@@ -57,18 +55,14 @@ def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
         result = read_json(task.dir / f"result-{k}.json")
         if result is None or result["status"] == "question":
             if task.mode != "interactive":
-                result = correction_calls.run(ctx, task, k, lambda: _range(ctx, task, k, role, harness, handlers))
+                result = correction_calls.run(ctx, task, k, lambda: _range(ctx, task, k, role, harness, handlers),
+                                              lambda: _recovered(ctx, task, k))
             else:
                 result = _range(ctx, task, k, role, harness, handlers)
-            from ..figures import infographics
-            infographics.remember(task, result, ctx.notes_path)
             write_json(task.dir / f"result-{k}.json", result)
         if result["status"] == "done":
             correction_calls.cleanup(task, k)
-        from . import fix_scope
-        fix_scope.recover(ctx, task)
-        if not correction_calls.isolated(task):
-            fix_scope.check_dependencies(ctx, task)
+        protected.restore(ctx, task)
         if result["status"] == "question":
             task.update(question=result.get("questions", []))
             return "question"
@@ -78,20 +72,26 @@ def run_ranges(ctx: Ctx, task: Task, handlers) -> str:
 
 
 def _range(ctx, task, k, role, harness, handlers):
-    from . import correction_calls, steps, fix_scope, writer_identity
-    result = _fix_resume(ctx, task, k) if task.get("mode") == "fix" else None
+    write_inputs(ctx, task, k)
+    return _accepted(ctx, task, k, _call(ctx, task, k, role, harness, handlers))
+
+
+def _recovered(ctx, task, k):
+    """A result.json written before an interruption is used, not thrown away."""
+    result = safefs.read_json(ctx.notes_path, ".school-notes/result.json")
     if result is None:
-        write_inputs(ctx, task, k)
-        result = _invoke(ctx, task, k, role, harness, handlers)
-    writer_identity.remember(ctx, task, k, result)
+        return None
+    return _accepted(ctx, task, k, result)
+
+
+def _accepted(ctx, task, k, result):
+    from . import protected, steps
     validate("result", result)
     (task.dir / f"call-{k}").mkdir(parents=True, exist_ok=True)
     safefs.write_json(task.dir / f"call-{k}", "candidate.json", result)
-    fix_scope.recover(ctx, task)
+    protected.restore(ctx, task)
     try:
         _check_call(ctx, task, k, result)
-        if not correction_calls.isolated(task):
-            fix_scope.check_dependencies(ctx, task)
     except steps.CheckFailed as exc:
         steps.write_check_items(ctx, exc.items)
         raise
@@ -99,7 +99,6 @@ def _range(ctx, task, k, role, harness, handlers):
 
 
 def _call(ctx: Ctx, task: Task, k: int, role, harness, handlers) -> dict:
-    checks.begin(task)
     with mcp(ctx, task.dir, "cron", handlers, lambda: task.run_id) as sessdir:
         run = launch.RoleRun(
             learner=ctx.name, run_id=task.run_id, role_name="fix" if task.get("mode") == "fix" else "writer", role=role,
@@ -118,17 +117,6 @@ def _call(ctx: Ctx, task: Task, k: int, role, harness, handlers) -> dict:
             # The MCP handlers saved the run meanwhile (tool writes, closures); a later save
             # from this stale copy would drop them.
             task.reload()
-    from . import steps
-    from . import writer_identity
-    writer_identity.remember(ctx, task, k, outcome.output)
-    from . import fix_scope
-    fix_scope.recover(ctx, task)
-    (task.dir / f"call-{k}").mkdir(parents=True, exist_ok=True)
-    safefs.write_json(task.dir / f"call-{k}", "candidate.json", outcome.output)
-    problems = checks.accounting(task, outcome.output)
-    if problems:
-        steps.write_check_items(ctx, problems)
-        raise steps.CheckFailed(problems)
     return outcome.output
 
 
@@ -151,7 +139,8 @@ def merge(results_: list[dict]) -> dict:
     notes: dict[str, set] = {}
     closures: dict[tuple, dict] = {}
     lists = ("questions", "new_subjects", "checks", "owner_notes", "figures",
-             "notebook_drawings", "figure_requests", "warnings", "coverage", "infographic_decisions")
+             "notebook_drawings", "figure_requests", "warnings", "coverage", "infographic_decisions",
+             "review_requests")
     merged = {"status": "done", **{key: [] for key in lists}}
     for r in results_:
         if r["status"] == "question":
@@ -189,67 +178,5 @@ def _check_call(ctx, task, k, result):
             operation()
         except steps.CheckFailed as exc:
             problems += exc.items
-    problems += steps.order_step(ctx, task)
-    problems = call_scope.current(ctx, task, problems, k)
-    problems = [i for i in problems if i not in task.get("machine_problems", [])]
     if problems:
         raise steps.CheckFailed(problems)
-
-
-def _fix_resume(ctx, task, k):
-    """Recover a fix output before write_inputs removes it; one crash retry at most."""
-    state = dict(task.get("fix_calls", {}))
-    count = state.get(str(k), 0)
-    rejected = task.get("writer_output_key") in task.get("counted_bad_outputs", [])
-    if count and not rejected:
-        result = safefs.read_json(ctx.notes_path, ".school-notes/result.json")
-        try:
-            validate("result", result)
-        except ValueError:
-            if count >= 2:
-                raise BadWork("fix call interrupted twice without valid output") from None
-        else:
-            from . import fix_scope
-            fix_scope.recover(ctx, task)
-            problems = checks.accounting(task, result)
-            if problems:
-                from .steps import CheckFailed
-                raise CheckFailed(problems)
-            return result
-    if not count:
-        safefs.unlink(ctx.notes_path, ".school-notes/result.json")
-    if count >= 2:
-        raise BadWork("fix call interrupted twice without valid output")
-    state[str(k)] = count + 1
-    task.update(fix_calls=state)
-    return None
-
-
-def _invoke(ctx, task, k, role, harness, handlers):
-    task.update(writer_invocation=task.get("writer_invocation", 0) + 1)
-    try:
-        try:
-            return _call(ctx, task, k, role, harness, handlers)
-        except Transient:
-            if task.get("mode") != "fix":
-                raise
-            retried = task.get("fix_crash_retries", [])
-            if k in retried:
-                raise
-            task.update(fix_crash_retries=sorted(retried + [k]))
-            return _call(ctx, task, k, role, harness, handlers)
-    except BadWork:
-        from . import writer_identity
-        path = ".school-notes/result.json"
-        raw = safefs.read_text(ctx.notes_path, path) if safefs.is_file(ctx.notes_path, path) else None
-        writer_identity.remember(ctx, task, k, raw)
-        raise
-    except (WaitingQuota, launch.TimedOut):
-        # Quota waits and T-125 have their own retry policy; never consume the
-        # correction's crash budget or recover a failed call's partial output.
-        if task.get("mode") == "fix":
-            counts = dict(task.get("fix_calls", {}))
-            counts[str(k)] = max(0, counts.get(str(k), 0) - 1)
-            safefs.unlink(ctx.notes_path, ".school-notes/result.json")
-            task.update(fix_calls=counts)
-        raise

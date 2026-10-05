@@ -243,7 +243,14 @@ def g5_build(task: Task, wt: Git, hooks: Hooks) -> None:
     if task.get("build", {}).get("commit") == commit:
         return
     record = hooks.build(commit)
-    task.data["llm_failures"] = 0  # T-152: only a successful G5 ends the bad-work streak.
+    if record.get("held"):
+        # The build failed on content: its problems were recorded as items in the run's
+        # report. The commit (with the report) is pushed; the publication waits (G8).
+        _add(wt, hooks)
+        if not wt.ok("diff", "--cached", "--quiet"):
+            wt.run("commit", "--no-verify", "--amend", "--no-edit", timeout=LOCAL_TIMEOUT_S)
+        task.update(commit=head(wt))
+        record = {**record, "commit": head(wt)}
     task.set_phase("built", build=record)
 
 
@@ -289,6 +296,9 @@ def g8_release(task: Task, hooks: Hooks, wt: Git) -> None:
     record = task.get("build")
     if not record or record.get("commit") != head(wt):
         return     # the pushed commit was built by someone else's round; publish catches up
+    if record.get("held"):
+        wt.log.event("site.publish", "held", target=record["commit"])
+        return
     try:
         hooks.publish(record)
     except Exception as exc:  # noqa: BLE001 - a release error never fails the run (5.10)

@@ -39,6 +39,71 @@ It does every mechanical step; the LLM runs in a container and asks for mechanic
 | `ops/` | `install.sh <tag>`, crontab, logrotate and configuration examples |
 | `schemas/` | the schema of every JSON contract |
 
+## 2.6.0 KISS (fix-46): the current contract
+
+This section is authoritative; where an older unit section below says otherwise, this wins.
+
+* **Finished notes work is never discarded.** No set-aside, bundle-and-reset or round
+  rollback exists. A program error stops the task with its worktree for the owner; the
+  next release lifts that stop (`needs_owner.release`). A run-level bad result stops the
+  same way, with the work kept. Legacy `set-aside.json` rows, `rollback.json` receipts and
+  round folders are ignored; such tasks simply continue.
+* **One counter per writer call** (`flows/correction_calls.py`, `call-<k>/call.json`). After
+  a failure the writer continues once on its own files with the error list. Only output
+  still unusable at the last attempt (invalid `result.json`, a secret, unprocessable
+  metadata or block markers: `kind: blocking`) is undone from the call's pre-call bytes.
+  Otherwise the call's files and valid result are kept and remaining errors become items.
+  A fix call that failed twice, timed out or asked a question leaves its items open; the
+  run goes on. A package call that failed twice stops for the owner with its files kept.
+  The two-timeout role brake and the quota wait are unchanged.
+* **Errors vs. warnings** (`wiki/check.py`). Errors: secrets, conflict markers, tool block
+  markers, frontmatter YAML and metadata the tool must process, broken links/anchors,
+  math delimiters, local image/embedding rules, render receipts, required frontmatter
+  fields, public.json rights, the path guard. Everything else is a warning that needs no
+  decision: typography, page size, lesson-log form, material names, question form, file
+  names, tags, order, banner presence, infographic decisions, closure accounting, pending
+  figure candidates. `machine_paths` are judged only by the public output gate. An error
+  that already existed in the base is a non-blocking warning (exact file+message match);
+  the tool never turns it into an item. Unreadable base frontmatter is the only old
+  error that stops (the generators cannot read the page).
+* **Mechanical restore, not failure** (`flows/protected.py`). Edited machine keys and blocks
+  come back from the tool's own last write; in cron the base's `decisions` come back. A
+  removed block is the writer's choice; tool blocks are placed at the fixed place right
+  after the frontmatter (or where the writer left the block). A page may be deleted or
+  renamed; links to it are checked. Writer-drawn SVG and inline Mermaid need no
+  commission; a raster image keeps the commission and rights gate.
+* **One pass per run.** Phases: `figures` (P2) → `inspecting` → `review_ready` → `finishing`.
+  Package and chat runs: the reader (P3) reads only changed pages without a current
+  verdict; the rest of the topic is context, its findings are owner notes. Fix runs and
+  resumed 2.5.x correction tasks (`recheck_all`): one recheck (P5) of every author-changed
+  page against the run base. The reviewer names file and line; the tool only validates the
+  line. A `hiba` on a changed line is an item (`chain` +1, deeper than three: owner);
+  everything else is an owner note. A `fixed` closure without a text change, an invalid
+  closure or an empty disagreement leaves the item open.
+* **Finish.** Remaining content errors after the writer's calls become items; the commit
+  goes ahead. A G5 build failure on content records items and holds the publication; the
+  notes commit is still pushed (no new attempt, no reread, no attribution). `publish`
+  remembers a held commit and does not rebuild it.
+* **Brakes by time and real attempts.** An assigned item or figure without progress in a fix
+  run is parked for 24 hours (`state/<learner>/parked.json`), nothing else. Only `fixed`/
+  `disagree` closures count as repair attempts (three → owner, including P5 `not-ok`). A
+  pending figure exhausted after three runs is reported by status and mail, not by an item.
+  Pending figures get their own fix calls, after the text work. A pending bookkeeping
+  migration alone starts no run.
+* **Nightly review from the diff** (`review/nightly.py`, `flows/nightly.py`). The reviewer gets
+  `git diff <claude-reviewed>..<main> -- wiki/`, the commit list with run kinds, the writer's
+  `review_requests` (carried unchanged in `School-Notes-Review-Request:` commit trailers),
+  the closures without an independent verdict and the changed sources; the worktree at H is
+  read-only. It decides what to check. Only a `hiba` on an added author line of the diff
+  (not inside a tool block) becomes an item; every other finding is an owner note. An empty
+  wiki diff makes no call. A legacy topic review task is closed unapplied; the marker did
+  not move, so the diff review covers its range.
+* **Removed:** source-reference/footnote scanners, reader pass two and warning verdicts, the
+  quote-based finding routing and tool-literal classification, the 30% infographic rule,
+  the browser-defect excusing regex and target copying, banner-dependency routing, the MCP
+  check limit and warning accounting, order checks, nightly topic planning, nightly figure
+  review and its retry markers, round identities and the writer-output identity counters.
+
 ## Subject cards
 
 The template's shared `subject-cards.json` holds one card per subject, the same for every
@@ -121,41 +186,8 @@ clock or rejecting the tool's own writes. No new phase or LLM call is introduced
 
 ## Checks and review closure (unit 1c)
 
-Source-reference patterns in `study-site/public-patterns.json` are warning-only. The scanner
-uses changed lines, including Markdown title/description, Mermaid and SVG labels, with the
-structural exceptions from repair plan 8.2. `source_refs.scan(full=True)` and task data
-`mode: repair` support the repair entry point. No rule enters the publication gate.
-The fixed corpus is tested against the optional local learner checkouts, read-only.
-`SN_LEARNER_REPOS` may supply their paths as a colon-separated list (directories named
-`school-notes-<learner>-active`); absent that variable, the tests search the usual sibling
-directories.
-Per-file counts (before verdict suppression) appear in logs and status.
-
-The host and MCP checks compare wiki errors against `task.base`, including link and
-render dependencies read directly from Git. File/message identity ignores line shifts;
-occurrence counts and matching content must both stay unchanged (or matches disappear).
-Math and marker errors without a location require unchanged file content. Inherited
-errors are nonblocking `inherited-check` entries and require no writer warning decision.
-MCP checks only mark them; the host records defects still present after the writer as
-deduplicated `hiba` items. A retained closed hit reopens the same item with its durable
-repair count; three unsuccessful attempts send it to owner. Invalid base YAML or UTF-8
-leaves all current errors blocking and emits one diagnostic log entry.
-Link-only repair work does not assign old lesson-log defects early. Scope-restored pages equal to
-the base are omitted from changed paths; their remaining inherited defects are still
-recorded. Check failures retain the complete ordered list in `last_check_problems` and
-up to 20 file/line/message records in the error log.
-
-MCP check returns errors first, full counts, `truncated` and the full-list path. A durable
-counter permits three checks per invocation, including across background-job restarts;
-fetch of the same interactive run does not reset it; a new run gets its own budget.
-The last own check's warning IDs must have decisions.
-An unfinished question session keeps its result and returns to `needs_owner` when those
-decisions are missing; cron cannot overwrite the owner's answer.
-Later tool warnings without decisions are persisted with `unhandled` for reviewer handoff.
-Accepted/false-positive list verdicts use `review.warnings.record` and the private
-`warning-verdicts.json`; repeating a write is idempotent, content changes invalidate it.
-The reader's second pass and nightly topic calls consume these lists;
-the storage API returns `hiba` findings for review-item creation.
+Warning lists, source-reference scanning, the MCP check limit and inherited-error items are gone (see
+*2.6.0 KISS*). MCP check returns errors first, full counts, `truncated` and the full-list path.
 
 Review metadata is additive `item_details`, keeping old `items: {R1: status}` maps readable.
 Legacy headings supply the page when metadata is absent. Full keys avoid cross-report R1
@@ -358,40 +390,8 @@ two runs only for nonempty warning lists, with `covered_by` deduplication. The
 three fixed Hungarian prompts and output schemas are `reader-1`, `reader-2` and
 `recheck`. Receipts are private; outputs are copied to `.school-notes/reader/`.
 
-P3 writes one run report and reviews every author-changed page, including existing
-pages extended while writing new material. P4 invokes the existing writer with
-`fix.txt`; assignments organize work and never restrict editable wiki pages in any
-mode. P5 judges every author line changed in its round (against the round's
-pre-edit tree), on every page, with context. New errors outside assigned items become chained `origin: recheck`
-items for the next correction round. Up to three correction/recheck rounds run.
-The package material trailer includes all P1 author changes, but excludes unrelated
-backlog pages changed only during P4.
-
-Machine-check errors preserve all edits. The writer receives the error list and
-one continuation on the same worktree; remaining errors become durable correction
-items. Publication still requires a clean machine check. Wiki errors left after
-the in-run rounds keep the task open with its worktree: one notice, and each later
-cron run continues with one writer round (eight rounds in all, item brakes apply).
-Errors outside wiki pages, or nothing left to assign, stop for the owner with the
-work kept. A failed call with a valid `result.json` keeps its files and leaves its
-items open. Only unusable output (invalid result JSON or a secret pattern; a
-machine path is a normal check error) can roll back a whole call, with an explicit
-log event. A removed generated block is not re-placed by the tool; the guard
-names it for the writer. Earlier completed calls remain checkpointed. Interruptions
-and timeouts preserve work. The tool never fixes author prose, links or anchors.
-Tool-owned files, fields and generated blocks are restored from exact recorded
-originals, preserving surrounding author content. Legacy `scope-restores.json`
-is evidence only; an already journaled 2.5.0 `rollback.json` is completed on resume,
-even for tasks with isolated calls.
-
-A changed release or closure of all blocked work resolves the no-progress incident.
-
-In chat, the first `finish` returns `state: review_items`, the assigned items and
-`fix.txt`; P4 stays `correcting`. The existing session writes its fix and closure
-result, and the next `finish` applies the same result, path and content gates
-before P5. The saved handoff and check budget survive restart/fetch without erasing
-the result. No second writer container is launched. A busy writer home in cron
-still leaves the items open through the existing rollback fallback.
+P3/P5, the correction rounds, rollbacks and the chat handoff described in older versions are
+replaced by the one-pass contract in *2.6.0 KISS*.
 
 Reader keys omit machine content and insertion markers. Figure keys keep the 2a
 contract. G4/G5 recompute keys on the final tree, remove stale verdict records and
@@ -573,46 +573,7 @@ actual HTML/PDF/site-file negative tests; without it those two browser builds sk
 
 ## Topic-based nightly review and hourly fixes (unit 5)
 
-The night pins `claude-reviewed..H`, derives topic units from actual author changes and
-new-material `run`/`chat` commits, and calls the reviewer once per topic in path order. D60's
-`review_max_images` and `review_max_diff_kb` configuration keys are obsolete; for one
-release the parser warns and ignores them. Remove them before the next release. The
-reviewer timeout defaults to 5400 seconds; explicit configuration still wins. Repair and maintenance commits never start a nightly call. Eligible topics receive
-full review. Per-topic receipts recover valid output after a crash and skip completed
-calls after quota suspension. Format and crash retries are bounded independently;
-timeout has no immediate retry. The configured `claude-review` template leaves native
-Agent/Task tools enabled, without MCP; the real VM confirmation remains the deployment
-test.
-
-`docs/review/nightly-state.json` carries each completed topic's own reviewed commit,
-blocked topics with their original range start, and consecutive failed-night counts. A
-timeout/failure ends that topic's work for this night; other topics continue. Two
-consecutive failed nights block only that topic. `status --clear <learner> reviewer
---continue` clears the timeout counters and records a local unblock timestamp; the next
-report persists the removal. The global marker advances only when all topics are
-complete: to the report commit R when main is still H, otherwise to H (concurrent work
-belongs to the next night). Thus a quiet night never feeds its own report into another
-nightly run. One report commit contains topic sections, closure replies, hash-bound
-page/figure verdicts, warning decisions and recomputed pending notices. Concurrent
-changes invalidate H-bound verdicts, without overwriting a newer valid one.
-
-A quota suspension is a continuation of the same night: successful results remain in
-durable task receipts and the report commits once the invocation can finish. Timeout
-nights commit partial results and `done_topics` immediately. This preserves one report
-commit per night and append-only pushed history; publishing a quota-time partial commit
-and later extending it would require another commit or history rewriting. An abrupt
-process crash likewise resumes from receipts before committing its report.
-
-Unreviewed embedded figures use the existing independent figure reviewer, including
-phone rendering, with four figures per topic call. Legacy image identity markers exist
-only in one private review view per night, hardlinked where supported and atomically
-replaced when adapted. A completed snapshot receipt prevents copying it for every topic.
-Receipts bind the original image/context fingerprint; inspection uses the private
-view, and retry markers are written only when applying the reviewed result. Existing valid figure verdicts skip the call. Missing figure verdicts go to
-owner notes and `docs/review/night-figure-pending.json`, visible in status and generated
-pending notices, without writer assignments. Rejected figures enter `docs/figure-pending.json` with their observed defects and a
-replacement marker, without a duplicate review item or a consumed writer attempt. Nightly never generates an image or runs an LLM
-during publication.
+The topic-based nightly review is replaced by the diff-based review in *2.6.0 KISS*.
 
 A source-free `fix` run follows new Drive packages and precedes the one-time repair
 queue on each hourly round, with no daily cap. It assigns every open error in deterministic
@@ -752,17 +713,7 @@ figures awaiting nightly review have no notice. Notice-only changes leave author
 browser defects become durable warnings in `status`. Print chapters and PDFs omit
 only notices marked by the tool.
 
-Fix/repair calls receive `fetch.json.infographic_pages`. Each assigned topic needs a
-`result.json.infographic_decisions` entry: `{page, figure_id}` for a generated infographic
-commission, or `{page, reason}` for no new infographic. The tool stores the decision in
-`docs/review/infographic-decisions.json`, keyed by normalized author content; generated
-blocks and whitespace do not invalidate it. A changed set of `##` headings or at
-least 30% new author words requires a new decision; P4 reuses decisions made in its
-parent run. Package writers also record their decisions. Runs created before this
-contract never acquire it on retry. At most two new infographic commissions fit in a
-run; pending figures reserve their remaining paid attempts before new work. The normal
-image budget and pending pipeline apply. Browser link failures retain the referring page
-and target; an author-changed target routes both pages to the writer instead of classifying the referring tool output as a bug.
+The infographic decision contract is removed; an infographic is an optional commission.
 
 Pre-task prerequisites, setup, round-step, report and prolonged-lock failures persist
 in `state/<learner>/last-error.json` with a timestamp and one safe Hungarian sentence.

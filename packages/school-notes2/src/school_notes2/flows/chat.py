@@ -117,13 +117,10 @@ def _launch(ctx: Ctx, task: phase.Task, harness_name: str | None) -> None:
     k = min(task.get("writing_k", 1), n)
     if task.phase == "prepared":
         task.set_phase("writing", writing_k=k)
-    from . import correction_chat
-    if not correction_chat.resume_inputs(ctx, task):
-        writer.write_inputs(ctx, task, k)
+    writer.write_inputs(ctx, task, k)
     h = handlers.build(ctx, None, fetch=lambda: session_fetch(ctx),
                        finish=lambda: session_finish(ctx))
     print(f"Munkamappa: {ctx.notes_path}  (futás: {task.run_id})", file=sys.stderr)
-    checks.begin(task)
     with mcp(ctx, task.dir, "interactive", h, lambda: _current_run(ctx)) as sessdir:
         launch.run_interactive(learner=ctx.name, run_id=task.run_id, role=role, harness=harness,
                                image=ctx.image_tag(),
@@ -152,13 +149,7 @@ def _current_run(ctx: Ctx) -> str:
 def _after_question_session(ctx: Ctx, task: phase.Task) -> None:
     """5.3: the session's result.json replaces result-<k>; cron goes on with range k+1.
     A question the session did not settle goes back to the owner."""
-    try:
-        saved = save_session_result(ctx, task) if task.get("question") else True
-    except steps.CheckFailed as exc:
-        checks.record_failure(ctx, task, exc, "chat.question")
-        task.mark_needs_owner("the session result lacks warning decisions",
-                              f"complete it in `school-notes chat {ctx.name}`", "needs_owner")
-        return
+    saved = save_session_result(ctx, task) if task.get("question") else True
     if not saved:
         task.mark_needs_owner("the blocking question is still open",
                               f"answer it in `school-notes chat {ctx.name}`", "needs_owner")
@@ -176,10 +167,6 @@ def save_session_result(ctx: Ctx, task: phase.Task) -> bool:
     own = safefs.read_json(ctx.notes_path, ".school-notes/result.json")
     if own is None or schema_errors("result", own) or own.get("status") != "done":
         return False
-    problems = checks.accounting(task, own)
-    if problems:
-        steps.write_check_items(ctx, problems)
-        raise steps.CheckFailed(problems)
     n = len(task.get("ranges"))
     k = min(task.get("writing_k", 1), n)
     write_json(task.dir / f"result-{k}.json", own)
@@ -196,19 +183,15 @@ def session_fetch(ctx: Ctx) -> dict:
     task = phase.open_task(ctx.task_root(), ctx.name, "notes")
     if task is None:
         task = interactive_fetch(ctx)
-        checks.begin(task)
     elif task.phase in ("downloading", "downloaded", "moved"):
         if task.get("mode") == "repair":
             from . import repair
             repair.prepare(ctx, task)
         else:
             fetch_flow.advance(ctx, task, lambda: _drive_or_none(ctx))
-    from . import correction_chat
-    if not correction_chat.resume_inputs(ctx, task):
-        writer.write_inputs(ctx, task, min(task.get("writing_k", 1), len(task.get("ranges"))))
-    supplied = correction_chat.active(task) or task
-    return {"run_id": task.run_id, "phase": task.phase, "pages": len(supplied.get("pages", [])),
-            "open_review_items": len(supplied.get("open_review_items", []))}
+    writer.write_inputs(ctx, task, min(task.get("writing_k", 1), len(task.get("ranges"))))
+    return {"run_id": task.run_id, "phase": task.phase, "pages": len(task.get("pages", [])),
+            "open_review_items": len(task.get("open_review_items", []))}
 
 
 def session_finish(ctx: Ctx) -> dict:
@@ -241,7 +224,7 @@ def session_finish(ctx: Ctx) -> dict:
     except steps.CheckFailed as exc:
         checks.record_failure(ctx, task, exc, "chat.finish")
         steps.write_check_items(ctx, exc.items)
-        task.set_phase("writing", review_complete=False, attempt=task.get("attempt", 1) + 1)
+        task.set_phase("writing", review_complete=False)
         return {"state": "check_failed", **checks.response(exc.items)}
     except finish_flow.git_finish.EditedDuringFinish:
         return {"state": "edited", "message": "files changed during finish; call finish again"}
@@ -251,8 +234,4 @@ def session_finish(ctx: Ctx) -> dict:
     if isinstance(state, dict):
         return {**state, "run_id": task.run_id}
     return {"state": state, "run_id": task.run_id, "published": task.get("published"),
-            **({"correction_rolled_back": True, "reason": task.get("correction_rollback_reason"),
-                "items": task.get("correction_rollback_items", []),
-                "rejected_patch": task.get("correction_rejected_patch")}
-               if task.get("correction_rolled_back") else {}),
             "owner_notes": redact(writer.merge(writer.results(task, required=False))["owner_notes"])}

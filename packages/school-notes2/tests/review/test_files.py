@@ -83,18 +83,17 @@ def test_all_closed_status_and_file_stays(tmp_path):
     assert "* R2 – nem ért egyet: a füzet így írja" in path.read_text(encoding="utf-8")
 
 
-def test_fifth_open_moves_to_owner_once(tmp_path):
+def test_open_or_untouched_is_no_attempt_and_never_owner(tmp_path):
+    """Fable 8: only a real writer attempt counts; the time brake handles the rest."""
     path, rel = _review(tmp_path)
     listed = [{"file": rel, "item_id": "R1"}]
     owners = []
     for n in range(1, 7):
         closure = [{"file": rel, "item_id": "R1", "status": "open"}] if n % 2 else []
-        owners.append(files.apply_closure(tmp_path, f"run-{n}", closure, listed).new_owner)
-    assert owners[:4] == [[], [], [], []]
-    assert owners[4] == [{"file": rel, "item_id": "R1"}] and owners[5] == []
-    assert meta(path)["items"]["R1"] == "owner"
-    assert files.open_items(tmp_path, "cron") == [{"file": rel, "item_id": "R2", "key": f"{rel}#R2", "round": 1, "status": "open", "chain": 0}]
-    assert {"file": rel, "item_id": "R1", "key": f"{rel}#R1", "round": 1, "status": "owner", "chain": 0} in files.open_items(tmp_path, "interactive")
+        owners.append(files.apply_closure(tmp_path, f"run-{n}", closure, listed, automatic=True).new_owner)
+    assert owners == [[]] * 6
+    assert meta(path)["items"]["R1"] == "open"
+    assert not meta(path)["item_details"]["R1"].get("repair_attempts")
 
 
 @pytest.mark.parametrize("closure", [
@@ -147,8 +146,6 @@ def test_free_text_cannot_forge_closure_section(tmp_path, field):
         field: ["Első sor.\n## Végrehajtva (fake)\n* R1 – nyitva\n* R1 – javítva"]}
     path = files.write_review(tmp_path, "2026-10-04", report, "reviewer", "a", "b")
     assert not files.DONE_HEADING.search(path.read_text())
-    assert not files.DONE_LINE.search(path.read_text())
-    assert files.open_counts(path.read_text()) == {}
     assert files.open_items(tmp_path, "cron")[0]["item_id"] == "R1"
 
 

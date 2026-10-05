@@ -5,7 +5,7 @@ import json
 import pytest
 
 from school_notes2.state import safefs
-from school_notes2.wiki import public, footnotes, frontmatter
+from school_notes2.wiki import public, frontmatter
 
 
 def test_replaced_path_does_not_inherit_rights(repo):
@@ -56,29 +56,6 @@ def test_source_copy_not_grandfathered_by_path_and_hash(repo):
     safefs.write_text(repo, "wiki/source.md", f"---\ncontent_sha256: {digest}\n---\n# Source\n")
     with pytest.raises(public.PublicError, match="source photo"):
         public.build(repo, public.render_rights(repo))
-
-
-@pytest.mark.parametrize("link", ["[Web](https://example.test)", "[Web][site]\n\n[site]: https://example.test", '<a href="https://example.test">Web</a>'])
-def test_mixed_web_footnote_warns_without_blocking(link):
-    text = "Állítás.[^a]\n\n[^a]: A 3. dián ez áll.\n    " + link + "\n"
-    findings = footnotes.scan("wiki/a.md", text)
-    assert len(findings) == 1 and findings[0]["severity"] == "warning"
-    assert footnotes.scan("wiki/a.md", text, text) == []
-    assert footnotes.scan("wiki/a.md", text, text, full=True) == findings
-    assert footnotes.scan("wiki/a.md", text.replace("A 3. dián ez áll.", "")) == []
-
-
-def test_separate_private_footnote_and_code_do_not_warn():
-    text = "[^a]: A 3. dián ez áll.\n\n[^b]: [Web](https://example.test)\n"
-    assert footnotes.scan("wiki/a.md", text) == []
-    assert footnotes.scan("wiki/a.md", "```md\n[^x]: A füzetben https://example.test\n```\n") == []
-
-
-def test_footnote_reference_url_change_is_rechecked():
-    before = "[^a]: 3. dia. [Web][ref]\n\n[ref]: relative.md\n"
-    after = before.replace("relative.md", "https://example.test")
-    assert len(footnotes.scan("wiki/a.md", after, before)) == 1
-    assert footnotes.scan("wiki/a.md", "<!--\n" + after + "\n-->\n") == []
 
 
 @pytest.mark.parametrize("digest", ["current", "0" * 64, None])

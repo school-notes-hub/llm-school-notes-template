@@ -48,14 +48,17 @@ def test_chapter_order_and_lessons(repo):
     assert any("YYYY-MM-DD" in m for m in found) and any("topic page" in m for m in found)
 
 
-def test_check_preserves_author_bytes_and_reports_size(repo):
+def test_check_preserves_author_bytes_and_has_no_size_or_typography_warning(repo):
+    """#5: the 40 KB and the Hungarian typography warnings are gone."""
     rel = "wiki/proba/masodik.md"
     text = (repo / rel).read_text().replace("\n", "\r\n").rstrip() + "\r\n" + "x" * 41000
     (repo / rel).write_bytes(text.encode())
     items = check.check_files(repo, [rel])
     data = (repo / rel).read_bytes()
     assert data == text.encode()
-    assert any(i["severity"] == "warning" and "40 KB" in i["message"] for i in items)
+    assert not any("40 KB" in i["message"] or "typographic" in i["message"] for i in items)
+    (repo / rel).write_text((repo / rel).read_text() + "\n„Idézet” – gondolatjel.\n")
+    assert not any("typographic" in i["message"] for i in check.check_files(repo, [rel]))
 
 
 def test_render_json_must_match(repo):
@@ -87,9 +90,12 @@ def test_result_checks(repo):
                          {"page": "wiki/proba/elso.md", "image": "wiki/assets/abra.svg", "locator": "x",
                           "observed": "y", "decision": "confirmed"}]}
     found = messages(check_result(repo, result, FETCH, {("docs/review/2026-10-01-review.md", "R1")}))
-    assert len(found) == 5
+    # An invalid closure is a warning (#17): the item stays open; it is not counted here.
+    assert len(found) == 4
     assert any("[3]" in m for m in found) and any("[9]" in m for m in found)
-    assert any("not new" in m for m in found) and any("nincs.md" in m for m in found)
+    assert any("not new" in m for m in found)
+    warnings = check_result(repo, result, FETCH, {("docs/review/2026-10-01-review.md", "R1")})
+    assert any("nincs.md" in i["message"] and i["severity"] == "warning" for i in warnings)
     assert any("page number 7" in m for m in found)
 
 

@@ -4,62 +4,32 @@ import re
 import json
 
 from ..review.severity import is_error
-from ..review import attempts, files, generated, relations, warnings
+from ..review import attempts, files, relations
 from ..state import safefs
 from ..wiki import frontmatter
 
 
 def locate(repo, finding):
-    quote = " ".join(finding.get("quote", "").split())
-    path = finding["file"]
-    text = safefs.read_text(repo, path) if path.endswith((".md", ".svg")) and safefs.is_file(repo, path) else ""
-    pattern = r"\s+".join(re.escape(word) for word in quote.split())
-    matches = list(re.finditer(pattern, text)) if quote else []
-    match = matches[0] if len(matches) == 1 and not finding.get("unlocated") else None
-    return {**finding, "line": text[:match.start()].count("\n") + 1 if match else None,
-            "unlocated": not bool(match)}
-
-
-def list_findings(repo, hits, output, findings=()):
-    decisions = [{**h, "id": h["hit_id"]} for h in output]
-    # The warning store's content keys apply to source_ref findings only.
-    source = [h for h in hits if "line_hash" in h]
-    selected = {h["id"] for h in source}
-    if source:
-        warnings.record(repo, source, [d for d in decisions if d["id"] in selected])
-    by_id = {h["id"]: h for h in hits}
-    advice_ids = {f["id"] for f in findings if not is_error(f)}
-    result = []
-    for decision in decisions:
-        covered = decision.get("covered_by")
-        if decision["verdict"] != "hiba" or (covered and not (covered in advice_ids and is_error(decision))):
-            continue
-        hit = by_id[decision["id"]]
-        lines = safefs.read_text(repo, hit["file"]).splitlines()
-        n = hit.get("line") or 1
-        result.append({"file": hit["file"], "quote": lines[n - 1] if n <= len(lines) else "",
-                       "problem": decision["reason"], "suggestion": "", "category": "forráskötött",
-                       "origin": "list", "relates_to": None, "hit_id": hit["id"],
-                       "severity": decision.get("severity", "hiba"),
-                       **({"item_key": decision["item_key"]} if "item_key" in decision else {})})
-    return result
+    """The reviewer names the line; the tool only checks that it exists (T4)."""
+    path, n = finding["file"], finding.get("line")
+    lines = safefs.read_text(repo, path).splitlines() if path.endswith((".md", ".svg")) and safefs.is_file(repo, path) else []
+    valid = isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= len(lines)
+    return {**finding, "line": n if valid else None, "unlocated": not valid}
 
 
 def prepare(repo, findings, notes, pages=()):
-    """Route once before report writing and page verdict decisions (also on replay)."""
+    """Advice goes to owner notes; a page with only advice is ok (also on replay)."""
     from ..figures import migration_gate
     findings = [figure_quote(repo, f) for f in findings]
     findings = [f for f in findings if not migration_gate.concerns(repo, f)]
     advice = [f for f in findings if not is_error(f)]
     findings = [f for f in findings if is_error(f)]
-    pages = [{**p, "verdict": "ok"} if any(f["file"] == p["file"] for f in advice)
-             and not any(f["file"] == p["file"] for f in findings) else p for p in pages]
-    kept, notes, literals = generated.partition(repo, findings, notes)
+    pages = [{**p, "verdict": "ok"} if not any(f["file"] == p["file"] for f in findings) else p for p in pages]
     _, notes = advice_notes(advice, notes)
-    return kept, notes, generated.page_verdicts(pages, findings, literals)
+    return findings, notes, pages
 
 
-def write(repo, path, findings, notes, model, base, at):
+def write(repo, path, findings, notes, model, base, at, *, write=None):
     """Write findings already routed by prepare; no second partition on replay."""
     if safefs.is_file(repo, path):
         return path
@@ -69,7 +39,7 @@ def write(repo, path, findings, notes, model, base, at):
                                              json.dumps(f, sort_keys=True, ensure_ascii=False)))
     review = {"verdict": "changes" if ordered else "ok", "owner_notes": notes,
               "findings": [{**f, "id": f"R{n}"} for n, f in enumerate(ordered, 1)]}
-    files.write_review(repo, at[:10], review, model, base, base, path=repo / path)
+    files.write_review(repo, at[:10], review, model, base, base, path=repo / path, write=write)
     return path
 
 

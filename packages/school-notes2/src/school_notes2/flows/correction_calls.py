@@ -1,101 +1,157 @@
-"""Isolate fix call failures; prior successful calls survive a bounded retry."""
+"""One writer call with one failure counter; a failed call never takes other work with it.
 
-import copy
+After a failure the writer continues once on its own files with the error list. Only output
+that is still unusable after that (an invalid result.json, a secret, metadata or block
+markers the tool cannot process) is undone, from the call's pre-call bytes. Other remaining
+errors become items for the next run and the call's work is kept. A call that failed twice
+leaves its items open; the rest of the run goes on."""
+
 import shutil
 
+from ..llm import launch
+from ..schemas import validate
 from ..state import safefs
-from . import correction, steps
+from ..state.errors import BadWork, WaitingQuota
+from . import steps
+
+PREFIXES = ("wiki", "docs", "publication", "tools", ".school-notes")
+LIMIT = 2
 
 
 def isolated(task):
     return task.get("mode") == "fix" and task.mode != "interactive" and bool(task.get("calls"))
 
 
-def run(ctx, task, k, invoke):
+def snapshot(repo, root):
+    root.mkdir(parents=True, exist_ok=True)
+    saved = safefs.read_json(root, "snapshot.json")
+    if saved is not None:
+        return saved
+    paths = sorted({p for prefix in PREFIXES for p in safefs.walk_files(repo, prefix)})
+    for path in paths:
+        safefs.write_bytes(root, "before/" + path, safefs.read_bytes(repo, path))
+    safefs.write_json(root, "snapshot.json", paths)
+    return paths
+
+
+def restore(repo, root):
+    paths = safefs.read_json(root, "snapshot.json")
+    current = {p for prefix in PREFIXES for p in safefs.walk_files(repo, prefix)}
+    for path in sorted(current - set(paths)):
+        safefs.unlink(repo, path)
+    for path in paths:
+        safefs.write_bytes(repo, path, safefs.read_bytes(root, "before/" + path))
+
+
+def run(ctx, task, k, invoke, recover):
+    """`invoke()` runs the writer and checks its output; `recover()` checks a result.json
+    left by an interrupted call (None when there is none)."""
     root = task.dir / f"call-{k}"
-    correction.snapshot(ctx.notes_path, root)
-    if not safefs.is_file(root, "task.json"):
-        safefs.write_json(root, "task.json", task.data["data"])
-    while True:
-        failure = safefs.read_json(root, "failure.json")
-        if failure:
-            if not failure.get("restored"):
-                # A 2.5.0 receipt (no `unusable` key) was a check failure: keep the work too.
-                if failure.get("unusable"):
-                    restore(ctx, task, root, failure)
-                else:
-                    continue_work(ctx, task, root, failure)
-            if failure["count"] >= 2:
-                candidate = safefs.read_json(root, "candidate.json")
-                if not failure.get("unusable") and candidate is not None:
-                    from . import machine_findings
-                    machine_findings.record(ctx, task, failure["items"])
-                    return candidate
-                return failed_result(task, k)
+    snapshot(ctx.notes_path, root)
+    state = safefs.read_json(root, "call.json")
+    if state is None:  # A 2.5.x call interrupted mid-way left only its old crash counter.
+        state = {"failures": 0, "running": bool(task.get("fix_calls", {}).get(str(k))), "items": []}
+    candidate = None
+    if state["running"]:  # Interrupted (crash, kill, transient): reuse valid output first.
+        state["running"] = False
         try:
-            return invoke()
+            candidate = recover()
+        except steps.CheckFailed as exc:
+            state = _failed(ctx, root, state, exc.items, unusable=_unusable(exc.items))
+            if not state["unusable"]:
+                safefs.write_json(root, "candidate-kept.json", True)
+        except (BadWork, ValueError):
+            state = _failed(ctx, root, state, [], unusable=True)
+        else:
+            if candidate is None:
+                state = _failed(ctx, root, state, [], unusable=False)
+            else:
+                return _done(root, state, candidate)
+    while state["failures"] < LIMIT:
+        safefs.write_json(root, "call.json", {**state, "running": True})
+        try:
+            result = invoke()
         except steps.CheckFailed as exc:
             steps.checks.record_failure(ctx, task, exc, "writer.check_preserved")
-            from ..wiki.check import SECRET_MESSAGE
-            unusable = any(i["message"].startswith(SECRET_MESSAGE + " ") for i in exc.items)
-            safefs.write_json(root, "failure.json", {
-                "count": (failure or {}).get("count", 0) + 1, "items": exc.items,
-                "preserve": not unusable, "unusable": unusable})
-        except (steps.BadWork, ValueError) as exc:
-            # Only an invalid result.json is unusable output; any other writer failure
-            # keeps the call's files and continues (fix-45: no discard, no stop).
-            from ..schemas import validate
-            try:
-                validate("result", safefs.read_json(ctx.notes_path, ".school-notes/result.json"))
-            except ValueError:
-                unusable = True
-            else:
-                unusable = False
-            ctx.log.event("writer.call_failed", reason=str(exc)[:300], call=k, unusable=unusable)
-            safefs.write_json(root, "failure.json", {
-                "count": (failure or {}).get("count", 0) + 1, "items": [],
-                "preserve": not unusable, "unusable": unusable})
+            state = _failed(ctx, root, state, exc.items, unusable=_unusable(exc.items))
+            if not state["unusable"]:
+                safefs.write_json(root, "candidate-kept.json", True)
+        except (BadWork, ValueError) as exc:
+            ctx.log.event("writer.call_failed", reason=str(exc)[:300], call=k)
+            state = _failed(ctx, root, state, [], unusable=_invalid_output(ctx))
+        except launch.TimedOut as exc:
+            if not isolated(task) or exc.details.get("suspended") or exc.details.get("count", 0) >= 2:
+                safefs.write_json(root, "call.json", {**state, "running": False})
+                raise  # The timeout policy: retry in a later round; two in a row stop for the owner.
+            ctx.log.event("writer.call_timeout", call=k)
+            state = {**state, "failures": LIMIT, "running": False, "unusable": False}
+            safefs.write_json(root, "call.json", state)
+        except WaitingQuota:
+            safefs.write_json(root, "call.json", {**state, "running": False})
+            raise
+        else:
+            if result.get("status") == "question" and isolated(task):
+                ctx.log.event("writer.call_question", call=k, questions=result.get("questions", []))
+                return _done(root, state, failed_result(task, k, "A jegyzetíró kérdést tett fel; a tétel nyitva maradt."))
+            return _done(root, state, result)
+    candidate = safefs.read_json(root, "candidate.json") if safefs.is_file(root, "candidate-kept.json") else None
+    if candidate is not None and not state.get("unusable"):
+        from . import machine_findings
+        machine_findings.record(ctx, task, state["items"])
+        return _done(root, state, candidate)
+    if not isolated(task):
+        from ..state.errors import NeedsOwner
+        # A continued run starts this call afresh, on the kept files.
+        safefs.write_json(root, "call.json", {**state, "failures": 0, "running": False})
+        raise NeedsOwner("the writer call failed twice; its files are kept",
+                         todo="continue the run in `school-notes chat`", details={"items": state["items"][:20]})
+    return _done(root, state, failed_result(task, k, "A hívás kétszer sikertelen volt; a tétel nyitva maradt."))
 
 
-def continue_work(ctx, task, root, failure):
-    counts = dict(task.get("fix_calls", {}))
-    counts[str(task.get("writing_k", 1))] = 0
-    task.update(writer_output_key=None, fix_calls=counts, writer_check={"count": 0, "warnings": []})
+def _unusable(items):
+    from ..wiki.check import blocking
+    return bool(blocking(items))
+
+
+def _invalid_output(ctx):
+    try:
+        validate("result", safefs.read_json(ctx.notes_path, ".school-notes/result.json"))
+    except ValueError:
+        return True
+    return False
+
+
+def _failed(ctx, root, state, items, *, unusable):
+    """Count the failure; undo output only if it is still unusable at the last attempt."""
+    if unusable and state["failures"] + 1 >= LIMIT:
+        ctx.log.event("writer.unusable_rollback", call=root.name)
+        restore(ctx.notes_path, root)
+        safefs.unlink(root, "candidate-kept.json")
     safefs.unlink(ctx.notes_path, ".school-notes/result.json")
-    steps.write_check_items(ctx, failure["items"])
-    safefs.write_json(root, "failure.json", {**failure, "restored": True})
+    steps.write_check_items(ctx, items)
+    state = {**state, "failures": state["failures"] + 1, "running": False, "items": items, "unusable": unusable}
+    safefs.write_json(root, "call.json", state)
+    return state
+
+
+def _done(root, state, result):
+    safefs.write_json(root, "call.json", {**state, "running": False, "done": True})
+    return result
 
 
 def cleanup(task, k):
-    """Only a durable result permits deleting the call rollback, including on resume."""
+    """Only a durable result permits deleting the call's pre-call bytes."""
     root = task.dir / f"call-{k}"
     if root.exists():
         shutil.rmtree(root)
 
 
-def restore(ctx, task, root, failure):
-    ctx.log.event("writer.unusable_rollback", reason="unusable output", call=task.get("writing_k", 1))
-    correction.restore(ctx.notes_path, root)
-    before = safefs.read_json(root, "task.json")
-    # Invocation identities and assigned work remain monotonic across a rollback.
-    kept = {key: task.get(key) for key in ("writer_invocation", "assigned_work", "failed_fix_calls")
-            if task.get(key) is not None}
-    task.data["data"] = {**copy.deepcopy(before), **kept}
-    counts = dict(task.get("fix_calls", {}))
-    counts[str(task.get("writing_k", 1))] = 0
-    task.update(writer_output_key=None, fix_calls=counts, writer_check={"count": 0, "warnings": []})
-    safefs.unlink(ctx.notes_path, ".school-notes/result.json")
-    steps.write_check_items(ctx, failure["items"])
-    safefs.write_json(root, "failure.json", {**failure, "restored": True})
-
-
-def failed_result(task, k):
+def failed_result(task, k, note):
     assigned = task.get("calls", [])
     call = assigned[k - 1] if k <= len(assigned) else {}
     task.update(failed_fix_calls=sorted(set(task.get("failed_fix_calls", [])) | {k}))
     return {"status": "done", "review_closure": [
-        {"file": i["file"], "item_id": i["item_id"], "status": "open",
-         "note": "A hívás kétszer hibás kimenetet adott; a tétel nyitva maradt."}
+        {"file": i["file"], "item_id": i["item_id"], "status": "open", "note": note}
         for i in call.get("open_review_items", [])]}
 
 
@@ -109,16 +165,7 @@ def successful_fetch(ctx, task, supplied):
                   for k in range(1, len(task.get("calls")) + 1) if k not in failed]
     items = {(i["file"], i["item_id"]) for f in successful for i in f["open_review_items"]}
     figures = {e["commission"]["id"] for f in successful for e in f.get("pending_figures", [])}
-    pages = {p for f in successful for p in f.get("infographic_pages", [])}
     return {**supplied, "open_review_items": [i for i in supplied["open_review_items"]
                                             if (i["file"], i["item_id"]) in items],
             "pending_figures": [e for e in supplied.get("pending_figures", [])
-                                           if e["commission"]["id"] in figures],
-            **({"infographic_pages": [p for p in supplied["infographic_pages"] if p in pages]}
-               if "infographic_pages" in supplied else {})}
-
-
-def failed_keys(task):
-    calls = task.get("calls", [])
-    return sorted({i["file"] + "#" + i["item_id"] for k in task.get("failed_fix_calls", [])
-                   for i in calls[k - 1].get("open_review_items", [])})
+                                           if e["commission"]["id"] in figures]}

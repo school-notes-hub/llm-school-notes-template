@@ -101,7 +101,7 @@ def ranges(calls: list[dict]) -> list[list[int]]:
 
 
 def fix_assignments(repo, reviews, pending, limit=30):
-    """Every item once; whole page groups where possible, all figures in call one."""
+    """Every item once; whole page groups where possible; figures in separate calls."""
     groups = review_groups(reviews, repo=repo)
     embedded = relations.related_pages(repo)
     out, chunk, name = [], [], None
@@ -116,11 +116,15 @@ def fix_assignments(repo, reviews, pending, limit=30):
             chunk += portion
     if chunk:
         out.append(_fix_call(repo, name, chunk))
-    if pending:
-        # Figures precede the first page group in the same call, without an extra invocation.
-        if not out:
-            out.append(_fix_call(repo, "", []))
-        out[0]["pending_figure_ids"] = sorted(e["commission"]["id"] for e in pending)
+    # Pending figures get their own calls, one per subject, after the text work: an
+    # unfinished figure never takes a text call's work with it.
+    by_subject = {}
+    for entry in pending:
+        by_subject.setdefault(subject(entry["commission"]["page"], embedded), []).append(entry["commission"]["id"])
+    for name in sorted(by_subject):
+        call = _fix_call(repo, name, [])
+        call["pending_figure_ids"] = sorted(by_subject[name])
+        out.append(call)
     return out
 
 

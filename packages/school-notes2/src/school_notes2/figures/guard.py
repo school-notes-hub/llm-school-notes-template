@@ -1,11 +1,8 @@
-"""Writer-side prevention of SVG/bitmap self-insertion; Mermaid remains inline."""
-
-import hashlib
-from collections import Counter
+"""Writer-side prevention of bitmap self-insertion. A writer-drawn SVG or inline Mermaid
+needs no commission (6b); a raster image keeps the rights gate (commission and review)."""
 
 from ..state import safefs
 from ..wiki.pages import links, resolve, wiki_pages
-from . import commissions
 
 
 def check(g) -> list:
@@ -19,16 +16,7 @@ def check(g) -> list:
             link.image and resolve(p, link.target) in assets
             for link in links(safefs.read_text(g.worktree, p))))
     for page in sorted(pages):
-        text = safefs.read_text(g.worktree, page)
-        old = (g.base_content(page) or b"").decode("utf-8", "replace")
-        out += _images(g, page, text, Violation)
-        previous = Counter(m[1] for m in commissions.MERMAID.finditer(old))
-        for match in commissions.MERMAID.finditer(text):
-            if previous[match[1]]:
-                previous[match[1]] -= 1
-                continue
-            if not _assigned_mermaid(g.worktree, page, match[1]):
-                out.append(Violation(page, "new or changed Mermaid needs a figure commission and rendered independent review", False))
+        out += _images(g, page, safefs.read_text(g.worktree, page), Violation)
     return out
 
 
@@ -41,7 +29,7 @@ def _images(g, page, text, violation):
     tool_banner = g.tool_parts.get(page) == parts_hash(text)
     for link in links(text):
         asset = resolve(page, link.target)
-        if not link.image or not asset or not asset.startswith("wiki/"):
+        if not link.image or not asset or not asset.startswith("wiki/") or asset.endswith(".svg"):
             continue
         old = g.base_content(asset)
         if not safefs.is_file(g.worktree, asset):
@@ -57,22 +45,6 @@ def _images(g, page, text, violation):
             continue
         out.append(violation(page, "new or changed image must remain a figure/image marker until independent acceptance", False))
     return out
-
-
-def _assigned_mermaid(repo, page, source):
-    from . import context
-    for fid, occurrences in commissions.markers(repo).items():
-        if len(occurrences) != 1 or occurrences[0][0] != page:
-            continue
-        try:
-            brief = commissions.read(repo, fid)
-            candidate = commissions.candidate(repo, brief)
-            if (brief["page"] == page and candidate.get("mermaid") == hashlib.sha256(source.encode()).hexdigest()
-                    and context.mermaid_source(repo, brief, candidate) == source):
-                return True
-        except (OSError, ValueError):
-            continue
-    return False
 
 
 def _accepted(repo, page, fid):

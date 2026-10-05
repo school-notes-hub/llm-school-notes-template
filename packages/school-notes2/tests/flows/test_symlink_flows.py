@@ -32,12 +32,11 @@ def test_writer_check_reports_an_image_without_rights(world):
     chat.session_fetch(ctx)
     task = phase.open_task(ctx.task_root(), "benedek", "notes")
     (ctx.notes_path / "wiki/assets/proba").mkdir(parents=True)
-    (ctx.notes_path / "wiki/assets/proba/abra.svg").write_text(
-        '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>\n')
+    (ctx.notes_path / "wiki/assets/proba/abra.png").write_bytes(b"\x89PNG raster without rights")
     index = ctx.notes_path / "wiki/index.md"
-    index.write_text(index.read_text() + "\n![Ábra](assets/proba/abra.svg)\n")
+    index.write_text(index.read_text() + "\n![Ábra](assets/proba/abra.png)\n")
     found = handlers.check(ctx, task)
-    assert any(p["file"] == "wiki/assets/proba/abra.svg" and "render.json" in p["message"]
+    assert any(p["file"] == "wiki/assets/proba/abra.png" and "render.json" in p["message"]
                for p in found["problems"]), found
 
 

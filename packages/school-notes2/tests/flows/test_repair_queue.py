@@ -65,7 +65,7 @@ def test_full_source_folders_and_svg_inventory_without_copying_sources(tmp_path)
     result = queue.build(tmp_path)
     assert result["figures"][0]["pages"] == [a]
     assert result["figures"][0]["status"] == "pending"
-    assert result["figures"][0]["matches"] == 1
+    assert result["figures"][0]["matches"] == 0  # No text heuristic orders the queue (T5).
     result["figures"][0]["status"] = "keep"
     assert queue.build(tmp_path, result)["figures"][0]["status"] == "keep"
     safefs.write_text(tmp_path, "wiki/assets/a.svg", '<svg><text>Új</text></svg>')
@@ -73,7 +73,7 @@ def test_full_source_folders_and_svg_inventory_without_copying_sources(tmp_path)
 
 
 @pytest.mark.parametrize("student", ["benedek", "barna"])
-def test_urgent_is_owner_data_and_pattern_urgency_is_recomputed(tmp_path, student):
+def test_urgent_is_owner_data_and_no_text_pattern_reorders(tmp_path, student):
     repo = tmp_path / student
     repo.mkdir()
     a, b = page(repo, "a"), page(repo, "b")
@@ -86,10 +86,8 @@ def test_urgent_is_owner_data_and_pattern_urgency_is_recomputed(tmp_path, studen
     rebuilt["items"][0]["urgent"] = False
     assert queue.build(repo, rebuilt)["items"][0]["page"] == a
     page(repo, "b", body="A 3. dián ez látszik.\n")
-    matched = queue.build(repo)
-    assert matched["items"][0]["page"] == b and not matched["items"][0]["urgent"]
-    page(repo, "b")
-    assert queue.build(repo, matched)["items"][0]["page"] == a
+    # No text pattern makes a page urgent (T5): only the owner's field orders the queue.
+    assert queue.build(repo)["items"][0]["page"] == a
 
 
 def test_queue_validation_refuses_ambiguous_or_invalid_state(tmp_path):

@@ -1,11 +1,11 @@
-"""Complete source-free correction runs, using the ordinary P1/P2/P6 chain."""
+"""Source-free correction runs, using the ordinary writer → check → recheck → commit chain."""
 
 from ..git import repos, workbranch
 from ..figures import pending, migration_gate
-from ..review import files, repair_migration
+from ..review import files
 from ..sources import calls
 from ..state import phase, safefs
-from . import correction, correction_figures, steps
+from . import correction_figures, fix_progress, steps
 
 
 def next_task(ctx):
@@ -14,18 +14,15 @@ def next_task(ctx):
     wt = ctx.worktree("notes")
     base = repos.rev(wt, "refs/remotes/origin/main")
     wt.run("switch", "--detach", base)
-    reviews = [i for i in files.open_items(ctx.notes_path, "cron") if not migration_gate.concerns(ctx.notes_path, i)]
-    items = reviews
+    items = [i for i in files.open_items(ctx.notes_path, "cron") if not migration_gate.concerns(ctx.notes_path, i)]
     entries = pending.load(ctx.notes_path)
     was_owner = {e["commission"]["id"] for e in entries if e["owner_required"]}
     waiting = correction_figures.assignable(ctx, entries)
     owners = [e for e in entries if e["owner_required"] and e["commission"]["id"] not in was_owner]
-    migration = next(repair_migration.updates(ctx.notes_path), None) is not None
-    from . import fix_progress
     items, waiting = fix_progress.available(ctx, items, waiting)
     waiting = fix_progress.runnable_images(ctx, waiting)
-    if not owners and not migration and not items and not waiting:
-        return None
+    if not owners and not items and not waiting:
+        return None  # A pending bookkeeping migration alone never starts a run (R5).
     task = phase.create(ctx.task_root(), ctx.name, "notes", "cron", "moved")
     task.update(mode="fix", base=base, preparation_base=base, open_review_items=items,
                 max_agents=ctx.cfg.limits.max_agents, attempt=1, pending_figures=waiting, figure_owners=owners,
@@ -42,7 +39,6 @@ def prepare(ctx, task):
     learning.migrate(ctx, task)
     # Reopened legacy items join this first repair run, after the journaled migration.
     reviews = [i for i in files.open_items(ctx.notes_path, "cron") if not migration_gate.concerns(ctx.notes_path, i)]
-    from . import fix_progress
     reviews, _ = fix_progress.available(ctx, reviews, [])
     task.update(open_review_items=reviews)
     written = correction_figures.persist_owners(ctx, task.get("figure_owners", []))
@@ -51,10 +47,6 @@ def prepare(ctx, task):
     correction_figures.start(ctx.notes_path, waiting)
     grouping = calls.fix_assignments(ctx.notes_path, reviews, waiting)
     task.update(fix_work=fix_progress.keys(reviews, waiting), assigned_work=[])
-    root = task.dir / "fix-before"
-    correction.snapshot(ctx.notes_path, root)
-    from .fix_scope import TOOL_STATE
-    safefs.write_json(root, "tool-state.json", {k: task.get(k, {}) for k in TOOL_STATE})
     task.set_phase("prepared", calls=grouping, ranges=calls.ranges(grouping) or [[0, 0]], packages=[], pages=[],
                    pending_images=[], pending_figures=waiting, writing_k=1, skip_writer=not grouping,
-                   correction_before=str(root / "before"), dot_git=safefs.read_text(ctx.notes_path, ".git"))
+                   dot_git=safefs.read_text(ctx.notes_path, ".git"))

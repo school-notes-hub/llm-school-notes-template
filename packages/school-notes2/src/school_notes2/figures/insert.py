@@ -111,12 +111,10 @@ def invalidated(repo: Path) -> list[dict]:
             continue
         if removed(repo, record):
             continue
+        if record.get("night_spec"):
+            continue  # Historical nightly figure verdicts are kept as records only.
         try:
-            if record.get("night_spec"):
-                from ..review.night_figures import fingerprint
-                current = fingerprint(repo, record["night_spec"])
-            else:
-                current = context.verdict_key(repo, record["commission"], record["candidate"])
+            current = context.verdict_key(repo, record["commission"], record["candidate"])
         except (OSError, ValueError):
             current = None
         if current != record.get("key", ""):
@@ -128,7 +126,7 @@ def removed(repo: Path, record: dict) -> bool:
     if not safefs.is_file(repo, record["file"]):
         return True
     if record.get("night_spec"):
-        return False  # fingerprint detects changed or removed legacy embeddings.
+        return False  # Historical nightly figure verdicts are kept as records only.
     text = safefs.read_text(repo, record["file"])
     return (markers.read(text, f"figure-{record['id']}") is None and
             not any(page == record["file"] for page, _ in commissions.markers(repo).get(record["id"], [])))

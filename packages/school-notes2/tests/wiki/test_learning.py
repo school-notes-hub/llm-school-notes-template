@@ -66,7 +66,9 @@ def test_questions_have_stable_unique_disjoint_ids():
 def test_question_anchor_check_is_wired_to_check_files(repo):
     write(repo, REL, (repo / REL).read_text() + QUESTIONS.replace("<!-- q: elso-jel -->\n", ""))
     found = check.check_files(repo, [REL])
-    assert any("preceding" in i["message"] for i in check.errors(found))
+    # Fable 13: question form is a warning; it never fails a writer call.
+    assert any("preceding" in i["message"] and i["severity"] == "warning" for i in found)
+    assert not check.errors(found)
 
 
 @pytest.mark.parametrize("kind", ["add", "remove", "answer", "format", "quoted", "flow", "alias"])
@@ -125,14 +127,23 @@ def test_materials_schema_rejects_bad_values(repo, materials):
     lessons = frontmatter.split(text).meta["lessons"]
     lessons[0]["materials"] = materials
     write(repo, NOTE, frontmatter.set_keys(text, {"lessons": lessons}))
-    assert any("material" in i["message"] for i in check.errors(check.check_files(repo, [NOTE])))
+    found = check.check_files(repo, [NOTE])
+    assert any("material" in i["message"] for i in found)
+    # #16: a badly formed material name is a warning; only a non-list breaks the source line.
+    assert bool(check.errors(found)) == (not isinstance(materials, list))
 
 
 def test_source_block_position_and_idempotence():
+    """I6: the tool block goes to the fixed place after the frontmatter, or where the writer
+    left its marker; the writer's own lines are never searched or moved."""
     text = page("type: lesson-notes", "\n![Banner](a.svg)\n\n# Mit tanultunk ezen az órán\n")
     new = lesson_log.after_header(text, lesson_log.BLOCK, "📎 Füzet: dátum nélküli óra\n")
-    assert new.index("![Banner]") < new.index("📎") < new.index("# Mit tanultunk")
+    assert new.index("---\n\n<!-- school-notes:generated lesson-sources -->") >= 0
+    assert new.index("📎") < new.index("![Banner]") < new.index("# Mit tanultunk")
     assert lesson_log.after_header(new, lesson_log.BLOCK, "📎 Füzet: dátum nélküli óra\n") == new
+    left = text.replace("# Mit", markers.wrap(lesson_log.BLOCK, "") + "\n# Mit")
+    placed = lesson_log.after_header(left, lesson_log.BLOCK, "📎 Füzet: dátum nélküli óra\n")
+    assert placed.index("![Banner]") < placed.index("📎") < placed.index("# Mit tanultunk")
 
 
 def test_lesson_form_and_source_pointer_scope(repo):
@@ -143,7 +154,8 @@ def test_lesson_form_and_source_pointer_scope(repo):
     for rel, extra in ((REL, markers.wrap(lesson_log.BLOCK, "📎 Füzet: 2026. 09. 29.\n")),
                        (NOTE, "\n📎 Kézzel írt utaló.\n")):
         write(repo, rel, (repo / rel).read_text() + extra)
-        assert any("source pointer" in i["message"] for i in check.errors(check.check_files(repo, [rel])))
+        assert any("source pointer" in i["message"] and i["severity"] == "warning"
+                   for i in check.check_files(repo, [rel]))
 
 
 def test_overview_is_private_sorted_and_replaces_resolved_question(repo):

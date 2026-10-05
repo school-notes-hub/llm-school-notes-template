@@ -36,7 +36,7 @@ def test_four_hours_of_decreasing_free_space_is_one_incident(world):
     assert len(sent) == 2
 
 
-@pytest.mark.parametrize("error,limit", [(Transient, 3), (BadWork, 2)])
+@pytest.mark.parametrize("error,limit", [(Transient, 3), (BadWork, 1)])
 def test_task_retries_survive_restart_and_mail_only_on_stop(world, monkeypatch, error, limit):
     ctx, sent = world
     task = phase.create(ctx.task_root(), ctx.name, "notes", "cron", "writing")

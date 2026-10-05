@@ -9,7 +9,6 @@ from school_notes2.repair import check, failure, queue
 from school_notes2.state import phase, safefs
 from school_notes2.state.errors import BadWork
 from school_notes2.state.files import read_json, write_json
-from school_notes2.wiki import frontmatter
 from tests.flows.test_repair_queue import page
 from tests.sources.test_cards import CARD, LEARNERS, shared
 from tests.conftest import recording_mailer
@@ -88,8 +87,8 @@ def test_queue_prepare_is_tool_only_and_completion_is_resumable(tmp_path, log, m
     assert queue.load(ctx.notes_path)["items"][0]["status"] == "done"
 
 
-def test_second_bad_repair_is_set_aside_without_reordering_queue(tmp_path, log, monkeypatch):
-    from school_notes2.flows import set_aside
+def test_bad_repair_stops_with_the_work_kept_and_queue_untouched(tmp_path, log, monkeypatch):
+    """Point 1: a bad result never discards or archives the work; the run waits for the owner."""
     ctx, topic, mailed = context(tmp_path, log, monkeypatch)
     page(ctx.notes_path, "b")
     safefs.write_json(ctx.notes_path, queue.PATH, queue.build(ctx.notes_path))
@@ -98,15 +97,10 @@ def test_second_bad_repair_is_set_aside_without_reordering_queue(tmp_path, log, 
     repair.prepare(ctx, task)
     discarded = []
     monkeypatch.setattr(failure.discard, "discard", lambda *args: discarded.append(1))
-    assert failure.handle(ctx, task, BadWork("first"))
-    assert not task.get("set_aside")
-    assert failure.handle(ctx, task, BadWork("second"))
-    assert task.phase == "done" and task.get("set_aside") and not task.data["needs_owner"]
-    assert discarded == [1] and len(mailed) == 1
+    assert failure.handle(ctx, task, BadWork("bad output"))
+    assert task.phase != "done" and not task.get("set_aside") and task.data["needs_owner"]
+    assert discarded == []
     assert safefs.read_bytes(ctx.notes_path, queue.PATH) == original
-    assert "repair:" + topic in set_aside.blocked(ctx)
-    monkeypatch.setattr(repair, "start", lambda ctx, topic: topic)
-    assert repair.next_task(ctx) == "wiki/m/b.md"
 
 
 def test_owner_notes_stay_in_private_report(tmp_path, log, monkeypatch):
@@ -119,44 +113,6 @@ def test_owner_notes_stay_in_private_report(tmp_path, log, monkeypatch):
     assert result == read_json(task.dir / "report.json")
     assert result["owner_notes"] == ["Kihagyás, indok, jobb javaslat.", "Második észrevétel."]
     assert not mailed
-
-
-def test_repair_protects_related_prose_dates_and_scope(tmp_path, log, monkeypatch):
-    ctx, topic, _ = context(tmp_path, log, monkeypatch)
-    rel = page(ctx.notes_path, "old-log", "lesson-notes", body="Régi tananyag [A](a.md#old).\n",
-               lessons=[{"date_note": "Nem ismert", "topics": ["a.md"]}])
-    other = page(ctx.notes_path, "other")
-    old = {p: safefs.read_text(ctx.notes_path, p) for p in [topic, rel, other]}
-    ctx.worktree = lambda _: SimpleNamespace(run=lambda *args, **kw: SimpleNamespace(
-        returncode=0, stdout=old[args[1].split(":", 1)[1]].encode()))
-    task = phase.create(tmp_path, "barna", "notes", "cron", "writing")
-    task.update(mode="repair", base="base", repair_targets=[{"page": topic, "kind": "topic", "related": [rel]}])
-    safefs.write_text(ctx.notes_path, rel, old[rel].replace("#old", "#new"))
-    assert not check.problems(ctx, task, [rel])
-    from school_notes2.flows import inherited_check
-    assert inherited_check.deferred_lesson(ctx, task, rel)
-    safefs.write_text(ctx.notes_path, rel, old[rel].replace("Régi", "Új").replace("Nem ismert", "2026-10-01"))
-    safefs.write_text(ctx.notes_path, other, old[other] + "Másik változás.")
-    found = check.problems(ctx, task, [rel, other])
-    assert found == []
-    assert "Másik változás." in safefs.read_text(ctx.notes_path, other)
-
-
-def test_repair_may_add_lesson_materials_only(tmp_path, log, monkeypatch):
-    ctx, topic, _ = context(tmp_path, log, monkeypatch)
-    rel = page(ctx.notes_path, "old-log", "lesson-notes", body="Régi tananyag [A](a.md).\n",
-               lessons=[{"date_note": "Nem ismert", "topics": ["a.md"]}])
-    old = {p: safefs.read_text(ctx.notes_path, p) for p in [topic, rel]}
-    ctx.worktree = lambda _: SimpleNamespace(run=lambda *args, **kw: SimpleNamespace(
-        returncode=0, stdout=old[args[1].split(":", 1)[1]].encode()))
-    task = phase.create(tmp_path, "barna", "notes", "cron", "writing")
-    task.update(mode="repair", base="base", repair_targets=[{"page": rel, "kind": "lesson-notes", "related": [topic]}])
-    with_materials = old[rel].replace("topics: [a.md]", "topics: [a.md], materials: ['A téma (prezentáció)']")
-    assert with_materials != old[rel]
-    safefs.write_text(ctx.notes_path, rel, with_materials)
-    assert not [i for i in check.problems(ctx, task, [rel]) if "lessons" in i["message"]]
-    safefs.write_text(ctx.notes_path, rel, with_materials.replace("Nem ismert", "2026-10-01"))
-    assert check.problems(ctx, task, [rel]) == []
 
 
 def test_lesson_log_shortening_requires_coverage_and_checks():

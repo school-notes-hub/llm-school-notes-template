@@ -4,9 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from school_notes2.flows import correction, journal, learning
+from school_notes2.flows import journal, learning
 from school_notes2.reader import report
-from school_notes2.review import files, relations, repair_migration, topic_result
+from school_notes2.review import files, relations, repair_migration
 from school_notes2.state import phase, safefs
 from school_notes2.wiki import frontmatter
 
@@ -48,7 +48,7 @@ def test_third_failed_repair_and_each_checkpoint_replay(tmp_path, reader, learne
             if reader:
                 report.reopen(repo, answer["key"], answer["answer"])
             else:
-                topic_result.apply_item(repo, {"status": "fixed", "fix_commit": True}, answer)
+                relations.apply_item(repo, {"status": "fixed", "fix_commit": True}, answer)
         reopen()
         before = safefs.read_bytes(repo, rel)
         reopen()
@@ -64,8 +64,13 @@ def test_only_assigned_items_count_and_related_findings_inherit(tmp_path):
     rel = setup(tmp_path)
     report.append(tmp_path, rel, [finding(problem="Másik hiba.")], [], "extra")
     listed = [{"file": rel, "item_id": "R1"}]
+    for n in range(3):  # Only a real writer attempt counts (Fable 8): untouched never does.
+        files.apply_closure(tmp_path, f"untouched-{n}", [], listed, automatic=True)
+    assert item(tmp_path, rel)["status"] == "open" and not item(tmp_path, rel).get("repair_attempts")
     for n in range(3):
-        files.apply_closure(tmp_path, f"fix-{n}", [], listed, automatic=True)
+        files.apply_closure(tmp_path, f"fix-{n}", [{"file": rel, "item_id": "R1", "status": "fixed"}], listed,
+                            automatic=True)
+        report.reopen(tmp_path, rel + "#R1", "Még hibás.")
     assert item(tmp_path, rel)["status"] == "owner"
     assert "repair_attempts" not in relations.details(safefs.read_text(tmp_path, rel), "R2")
     # A falsely closed item reappearing under a new ID retains its consumed budget.
@@ -133,46 +138,17 @@ def test_migration_interrupted_write_resumes_once(tmp_path, monkeypatch, learner
     assert page.meta["items"]["R18"] == "settled"
 
 
-def test_rollback_does_not_consume_item_attempts(tmp_path):
-    rel = setup(tmp_path)
-    ctx = SimpleNamespace(notes_path=tmp_path)
-    task = phase.create(tmp_path / "state", "one", "notes", "cron", "correcting")
-    task.update(correction_items=files.open_items(tmp_path, "cron"))
-    for n in range(3):
-        task.update(attempt=n + 1)
-        root = task.dir / str(n)
-        correction.snapshot(tmp_path, root)
-        saved = {"status": "rollback", "reason": "bad work"}
-        correction.apply(ctx, task, root, saved)
-        before = safefs.read_bytes(tmp_path, rel)
-        correction.apply(ctx, phase.load(task.dir), root, saved)
-        assert safefs.read_bytes(tmp_path, rel) == before
-    assert item(tmp_path, rel).get("repair_attempts", 0) == 0
-    assert item(tmp_path, rel)["status"] == "open"
-
-
-def test_migration_alone_does_not_schedule_a_nightly_topic(tmp_path, repos):
-    from school_notes2.review import topics
-    from tests.review.conftest import sh
-    rel = legacy(repos.laptop)
-    base = repos.commit({rel: safefs.read_text(repos.laptop, rel)})
-    changes = dict(repair_migration.updates(repos.laptop))
-    head = repos.commit(changes, "review policy migration")
-    sh("git", "fetch", "-q", "origin", cwd=repos.wt_path)
-    sh("git", "switch", "--detach", head, cwd=repos.wt_path)
-    assert topics.affected(repos.repo, repos.wt_path, base, head) == []
-    assert topics.plan(repos.repo, repos.wt_path, base, head, {}) == ([], [])
-
-
 @pytest.mark.parametrize("nightly", [True, False])
 def test_third_unsuccessful_disagreement_is_owner(tmp_path, nightly):
     rel = setup(tmp_path)
     for n in range(2):
-        files.apply_closure(tmp_path, f"fix-{n}", [], files.open_items(tmp_path, "cron"), automatic=True)
+        files.apply_closure(tmp_path, f"fix-{n}", [{"file": rel, "item_id": "R1", "status": "fixed"}],
+                            files.open_items(tmp_path, "cron"), automatic=True)
+        report.reopen(tmp_path, rel + "#R1", "Még hibás.")
     closure = {"file": rel, "item_id": "R1", "status": "disagree", "note": "Szakmai indok."}
     files.apply_closure(tmp_path, "third", [closure], files.open_items(tmp_path, "cron"), automatic=True)
     if nightly:
-        topic_result.apply_item(tmp_path, {"status": "disagree"},
+        relations.apply_item(tmp_path, {"status": "disagree"},
                                 {"severity": "hiba", "key": rel + "#R1", "verdict": "keep", "answer": "Fenntartom."})
     else:
         relations.reply(tmp_path, rel + "#R1", "keep", "Fenntartom.")
@@ -190,7 +166,7 @@ def test_migrated_zero_attempts_ignore_old_d77_history(tmp_path):
         safefs.write_text(tmp_path, path, text)
     files.apply_closure(tmp_path, "new", [], files.open_items(tmp_path, "cron"), automatic=True)
     assert item(tmp_path, rel)["status"] == "open"
-    assert item(tmp_path, rel)["repair_attempts"] == 1
+    assert item(tmp_path, rel).get("repair_attempts", 0) == 0  # Untouched is no attempt (Fable 8).
 
 
 @pytest.mark.parametrize("role", ["reader-1", "reviewer", "recheck"])

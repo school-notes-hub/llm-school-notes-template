@@ -1,17 +1,14 @@
 """2.2.2: VM index corruption, placement, tool feedback and durable replay."""
 
-from types import SimpleNamespace
 
 import pytest
 
-from school_notes2.flows import correction, inspection
 from school_notes2.figures import pending
-from school_notes2.reader import new_pages, calls, notices, report, units, verdicts
-from school_notes2.review import generated, relations
-from school_notes2.state import phase, safefs
+from school_notes2.reader import new_pages, notices, report, units, verdicts
+from school_notes2.review import relations
+from school_notes2.state import safefs
 from school_notes2.wiki import drafts, frontmatter, lesson_log, markers
-from .test_phases import finding
-from .test_reader import pass1
+from .helpers import finding
 
 
 DESCRIPTION = "<!-- image-description\nasset: ../assets/banner.png\nobserved: Áttekintés.\n-->\n"
@@ -44,7 +41,8 @@ def refresh_twice(repo, page):
 
 @pytest.mark.parametrize("wrapped", [False, True])
 @pytest.mark.parametrize("reason", ["missing", "unlocated", "draft"])
-def test_page_notice_moves_after_banner_and_description(setup, wrapped, reason):
+def test_page_notice_goes_to_the_fixed_place_after_frontmatter(setup, wrapped, reason):
+    """I6: the tool's notice is placed after the frontmatter, never by reading the header."""
     ctx, _, page = setup
     safefs.write_json(ctx.notes_path, new_pages.PATH, {page: "v2-run"})
     banner = markers.wrap("figure-banner", BANNER) if wrapped else BANNER
@@ -63,7 +61,7 @@ def test_page_notice_moves_after_banner_and_description(setup, wrapped, reason):
         return
     expected = drafts.NOTICE if reason == "draft" else notices.PAGE
     assert result.count(expected) == 1
-    assert result.index(markers.OPEN.format(name="pending")) > result.index(DESCRIPTION)
+    assert result.index(markers.OPEN.format(name="pending")) < result.index("# Téma")
     assert result.index(expected) < result.index("Bevezetés.")
     assert markers.read(result, "figure-banner") == BANNER if wrapped else BANNER in result
 
@@ -86,7 +84,7 @@ def test_vm_nested_duplicates_are_removed_and_authored_items_keep_notices(setup)
     assert notices.SECTION not in markers.read(result, "notes")
     assert "* Jegyzetlista" in markers.read(result, "notes")
     assert "Órabevezető" in result
-    assert result.index(notices.PAGE) > result.index(DESCRIPTION)
+    assert result.index(notices.PAGE) < result.index("# Téma")
     assert "pending-section-7b79e662bcc8" not in result
 
 
@@ -136,7 +134,8 @@ def test_priority_and_disappearing_notices_preserve_author_key(setup):
                                    "purpose": "Áttekintés", "must_show": [], "avoid_misreading": "Nem tanító ábra.",
                                    "taught_conventions": [], "text_complete_without_figure": True}, "run", [])
     result = refresh_twice(ctx.notes_path, page)
-    assert result.count("⏳") == 1 and notices.FIGURE in result
+    # The page notice sits at the fixed place, the figure notice at its marker (I6).
+    assert result.count("⏳") == 2 and notices.FIGURE in result and notices.PAGE in result
     safefs.write_json(ctx.notes_path, "docs/figure-pending.json", [])
     result = refresh_twice(ctx.notes_path, page)
     assert result.count("⏳") == 1 and notices.PAGE in result
@@ -151,83 +150,12 @@ def test_priority_and_disappearing_notices_preserve_author_key(setup):
     assert result == frontmatter.set_keys(original, {}, remove=("status",))
 
 
-@pytest.mark.parametrize("quote, expected", [("# 📝 Jegyzetek", True), ("# 📝\n Jegyzetek", True),
-                                               ("Kézi mondat.", False), ("nincs", False), ("", False),
-                                               ("# 📝 Jegyzetek\n<!-- /school-notes:generated -->\nKézi", False)])
-def test_generated_quote_must_be_fully_contained(quote, expected):
-    text = markers.wrap("notes", "# 📝 Jegyzetek\n") + "Kézi mondat.\n"
-    assert generated.only_literals(text, quote) is expected
-
-
-def test_new_header_blocks_follow_description_without_nesting():
+def test_new_tool_block_goes_after_frontmatter_without_nesting():
     text = META + markers.wrap("figure-banner", BANNER) + "\nBevezetés.\n"
     result = lesson_log.after_header(text, "lesson-sources", "Forrásutaló\n")
     markers.check(result)
     assert markers.read(result, "figure-banner") == BANNER
-    assert result.index("Forrásutaló") > result.index(DESCRIPTION)
-
-
-@pytest.mark.parametrize("mixed", [False, True])
-@pytest.mark.parametrize("boundary", ["report", "verdicts"])
-def test_tool_feedback_and_page_verdict_resume_without_duplicate_or_writer_work(setup, monkeypatch, mixed, boundary):
-    ctx, task, page = setup
-    text = safefs.read_text(ctx.notes_path, page) + "\n" + markers.wrap("notes", "# 📝 Jegyzetek\n")
-    safefs.write_text(ctx.notes_path, page, text)
-    tool = {**finding(page), "quote": "# 📝 Jegyzetek", "problem": "Sablonhiba."}
-    findings = [tool, {**tool, "id": "F-2"}]
-    if mixed:
-        findings.append({**finding(page), "id": "F-3"})
-    invoked = []
-    def invoke(*args, **kwargs):
-        invoked.append(1)
-        return SimpleNamespace(output=pass1(page, findings))
-    monkeypatch.setattr(calls.launch, "run_headless", invoke)
-    inspection.prepare(ctx, task)
-    method = "write_text" if boundary == "report" else "write_json"
-    original = getattr(safefs, method)
-    fired = []
-    def crash(repo, path, *args, **kwargs):
-        result = original(repo, path, *args, **kwargs)
-        target = str(path).endswith("-run.md") if boundary == "report" else path == verdicts.PATH
-        if target and not fired:
-            fired.append(1)
-            raise RuntimeError("after write")
-        return result
-    monkeypatch.setattr(safefs, method, crash)
-    with pytest.raises(RuntimeError, match="after write"):
-        inspection.inspect(ctx, task)
-    task = phase.load(task.dir)
-    inspection.inspect(ctx, task)
-    path = task.get("inspection_report")
-    result = safefs.read_text(ctx.notes_path, path)
-    assert invoked == [1]
-    assert result.count("Tool-sablon") == 1 and "Sablonhiba." in result
-    assert len(task.get("reader_owner_notes")) == 1
-    assert len(correction.assigned(ctx, task)) == int(mixed)
-    assert verdicts.valid(ctx.notes_path, page)["verdict"] == ("changes" if mixed else "ok")
-    notices_text = refresh_twice(ctx.notes_path, page)
-    assert notices.PAGE not in notices_text
-    assert notices.SECTION not in notices_text
-    assert "Sablonhiba" not in notices_text
-    before = safefs.read_bytes(ctx.notes_path, path)
-    inspection.inspect(ctx, phase.load(task.dir))
-    assert safefs.read_bytes(ctx.notes_path, path) == before
-
-
-def test_supplement_routes_tool_findings_to_owner_notes_and_replays(setup):
-    ctx, _, page = setup
-    safefs.write_text(ctx.notes_path, page, META + BANNER + markers.wrap("notes", "# 📝 Jegyzetek\n"))
-    path = "docs/review/run.md"
-    tool = {**finding(page), "quote": "# 📝 Jegyzetek", "origin": "list"}
-    kept, notes, _ = report.prepare(ctx.notes_path, [tool], [])
-    report.write(ctx.notes_path, path, kept, notes, "model", "base", "2026-10-04")
-    assert not relations.inventory(ctx.notes_path)["items"]
-    report.append(ctx.notes_path, path, kept, notes, "recheck")
-    assert not relations.inventory(ctx.notes_path)["items"]
-    before = safefs.read_bytes(ctx.notes_path, path)
-    assert "Tool-sablon" in before.decode()
-    report.append(ctx.notes_path, path, kept, notes, "recheck")
-    assert safefs.read_bytes(ctx.notes_path, path) == before
+    assert result.index("Forrásutaló") < result.index(BANNER)
 
 
 def test_notice_write_interruption_resumes_byte_identically(setup, monkeypatch):
@@ -252,32 +180,6 @@ def test_notice_write_interruption_resumes_byte_identically(setup, monkeypatch):
     assert safefs.read_bytes(ctx.notes_path, fired[0]) == written
     assert notices.refresh(ctx.notes_path, [page, second]) == []
     assert safefs.read_bytes(ctx.notes_path, page) == safefs.read_bytes(ctx.notes_path, second)
-
-
-def test_recheck_tool_hit_does_not_spoil_repaired_page_verdict(setup):
-    from school_notes2.flows import recheck
-    from school_notes2.review import files
-    ctx, task, page = setup
-    text = safefs.read_text(ctx.notes_path, page) + "\n" + markers.wrap("notes", "# 📝 Jegyzetek\n")
-    safefs.write_text(ctx.notes_path, page, text)
-    path = "docs/review/run.md"
-    report.write(ctx.notes_path, path, [{**finding(page), "origin": "reader"}], [], "model", "base", "2026-10-04")
-    files.apply_closure(ctx.notes_path, "fix", [{"file": path, "item_id": "R1", "status": "fixed"}], [])
-    key = path + "#R1"
-    hit = {"id": "H1", "file": page, "line": text[:text.index("# 📝 Jegyzetek")].count("\n") + 1}
-    task.update(inspection_report=path, reader_pages=[{"file": page}])
-    saved = {"receipts": {}, "units": [{"status": "reviewed", "model": "model", "hits": [hit],
-             "items": [{"key": key, "file": page}], "review": {
-                 "items": [{"severity": "hiba", "key": key, "verdict": "ok", "answer": "Javítva."}],
-                 "hits": [{"severity": "hiba", "hit_id": "H1", "verdict": "hiba", "reason": "Sablonhiba."}], "owner_notes": []}}]}
-    recheck.apply(ctx, task, saved)
-    assert verdicts.valid(ctx.notes_path, page)["verdict"] == "ok"
-    assert len(relations.inventory(ctx.notes_path)["items"]) == 1
-    assert len(task.get("recheck_owner_notes")) == 1
-    assert "Tool-sablon" in safefs.read_text(ctx.notes_path, path)
-    before = safefs.read_bytes(ctx.notes_path, path)
-    recheck.apply(ctx, phase.load(task.dir), saved)
-    assert safefs.read_bytes(ctx.notes_path, path) == before
 
 
 def test_heading_directly_before_generated_block_keeps_notice_before_block(setup):

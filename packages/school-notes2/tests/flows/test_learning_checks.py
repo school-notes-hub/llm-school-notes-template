@@ -126,7 +126,7 @@ def test_legacy_log_author_edit_defers_inherited_form_errors(learning_run):
     note.write_text(note.read_text() + "\nÚj tartalom.\n")
     answer = handlers.check(ctx, task)
     assert answer["ok"]
-    assert any("lesson log needs" in p["message"] and p["kind"] == "inherited-check"
+    assert any("lesson log needs" in p["message"] and p["severity"] == "warning"
                for p in answer["problems"])
     steps.regenerate(ctx, task)
 
@@ -134,9 +134,11 @@ def test_legacy_log_author_edit_defers_inherited_form_errors(learning_run):
 @pytest.mark.parametrize("invalid", ["yaml", "decisions", "date", "materials", "draft_tracking"])
 @pytest.mark.parametrize("entrypoint", [handlers.check, steps.content_steps, steps.regenerate])
 @pytest.mark.parametrize("edit_prose", [False, True])
-def test_old_metadata_errors_need_owner(learning_run, invalid, entrypoint, edit_prose):
+def test_old_metadata_errors_never_stop_the_run(learning_run, invalid, entrypoint, edit_prose):
+    """#3 (fix-46): a metadata error already in the base is logged, never a stop or an item."""
     ctx, task = learning_run
     task.data["mode"] = "cron"
+    task.update(skip_writer=True)
     # Emulate metadata already present in the base, not a writer change.
     wt = ctx.worktree("notes")
     text = (ctx.notes_path / NOTE).read_text()
@@ -154,11 +156,14 @@ def test_old_metadata_errors_need_owner(learning_run, invalid, entrypoint, edit_
     task.update(base=wt.out("rev-parse", "HEAD").strip())
     if edit_prose:
         (ctx.notes_path / NOTE).write_text(text + "\nÚj magyarázat.\n")
-    with pytest.raises(NeedsOwner) as failure:
-        entrypoint(ctx, task)
-    assert NOTE in str(failure.value)
-    assert "PRIVATE_VALUE" not in str(failure.value)
-    assert task.data["llm_failures"] == 0
+    if invalid == "yaml":  # Unreadable frontmatter on main: the only old error the owner fixes.
+        with pytest.raises(NeedsOwner, match="unreadable frontmatter") as failure:
+            entrypoint(ctx, task)
+        assert "PRIVATE_VALUE" not in str(failure.value)
+        return
+    assert not [i for i in steps.check_items(ctx, task) if i.get("severity", "error") == "error"]
+    entrypoint(ctx, task)
+    assert task.data["llm_failures"] == 0 and not task.data["needs_owner"]
 
 
 def test_new_metadata_errors_return_to_writer(learning_run):
@@ -214,16 +219,3 @@ def test_new_error_on_previously_invalid_page_returns_to_writer(learning_run):
     answer = handlers.check(ctx, task)
     assert not answer["ok"]
     assert any("materials" in p["message"] for p in answer["problems"])
-
-
-def test_existing_yaml_error_with_interactive_prose_edit_needs_owner(learning_run):
-    ctx, task = learning_run
-    note = ctx.notes_path / NOTE
-    note.write_text("---\nprivate: [PRIVATE_VALUE\n---\n")
-    wt = ctx.worktree("notes")
-    wt.run("add", "wiki")
-    wt.run("commit", "-qm", "legacy invalid YAML")
-    task.update(base=wt.out("rev-parse", "HEAD").strip())
-    note.write_text(note.read_text() + "\nÚj magyarázat.\n")
-    with pytest.raises(NeedsOwner):
-        steps.content_steps(ctx, task)

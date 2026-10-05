@@ -21,11 +21,13 @@ def test_nightly_logs_use_own_task_after_notes_and_resume(cfg, monkeypatch, stud
     monkeypatch.setattr(nightly.setup, "ensure", lambda c: None)
     monkeypatch.setattr(nightly.cleanup, "old_tasks", lambda c: None)
     monkeypatch.setattr(operational_report, "ended", lambda *a, **kw: None)
-    def prepare(c, tasks):
-        return phase.create(c.task_root(), c.name, "review", "cron", "prepared")
-    monkeypatch.setattr(nightly, "_prepare", prepare)
+    def prepare(root, name, *args, **kw):
+        task = phase.create(root, name, "review", "cron", "prepared")
+        task.update(diff_review=True)
+        return task
+    monkeypatch.setattr(nightly.review, "prepare", prepare)
     if saved_phase:
-        task = prepare(ctx, [])
+        task = prepare(ctx.task_root(), ctx.name)
         task.set_phase(saved_phase, quota_phase="reviewing")
     interrupted = []
     def review(c, task):

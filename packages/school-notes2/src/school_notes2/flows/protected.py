@@ -63,10 +63,14 @@ def restore(ctx, task):
         if current is not None:
             expected = task.get("tool_writes" if whole else "tool_parts", {}).get(path)
             actual = hashlib.sha256(current).hexdigest() if whole else guard.parts_hash(current.decode("utf-8", "replace"))
-            if expected and actual == expected:
+            if expected and actual == expected and (whole or task.mode == "interactive" or
+                                                    not _decisions_changed(current, steps.base_reader(ctx, task)(path))):
                 continue
         old = original(ctx, task, path)
         fixed = old if whole else restore_parts(current, old)
+        if not whole and task.mode != "interactive" and fixed is not None:
+            # Cron never changes an owner decision: the base's `decisions` come back (#13).
+            fixed = restore_decisions(fixed, steps.base_reader(ctx, task)(path))
         if fixed != current:
             if fixed is None:
                 safefs.unlink(ctx.notes_path, path)
@@ -105,3 +109,29 @@ def restore_parts(current, old):
     blocks = {m['name']: m[0] for m in markers.BLOCK.finditer(source)}
     text = markers.BLOCK.sub(lambda match: blocks.get(match['name'], ""), text)
     return text.encode()
+
+
+def _decisions_changed(current, base):
+    from ..wiki import decisions
+    try:
+        return decisions.snapshot(current) != decisions.snapshot(base)
+    except (ValueError, UnicodeError, yaml.YAMLError):
+        return False  # The guard reports unreadable frontmatter.
+
+
+def restore_decisions(current, base):
+    """Put the base's `decisions` frontmatter chunk back, byte for byte."""
+    if current is None or not _decisions_changed(current, base):
+        return current
+    try:
+        page = frontmatter.split(current.decode("utf-8"))
+        old = frontmatter.split((base or b"").decode("utf-8"))
+    except (ValueError, UnicodeError, yaml.YAMLError):
+        return current
+    original = dict(frontmatter.blocks(old.raw_meta)) if old.has_fm else {}
+    chunks = [original["decisions"] if key == "decisions" and "decisions" in original else chunk
+              for key, chunk in (frontmatter.blocks(page.raw_meta) if page.has_fm else [])
+              if key != "decisions" or "decisions" in original]
+    if "decisions" in original and not any(key == "decisions" for key, _ in frontmatter.blocks(page.raw_meta)):
+        chunks.append(original["decisions"])
+    return ("---\n" + "\n".join(chunks) + "\n---\n" + page.body).encode()

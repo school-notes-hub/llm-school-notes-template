@@ -1,46 +1,12 @@
 """Unassigned headers and safe, content-addressed migration restarts."""
 
 import hashlib
-import json
 
 import pytest
 
 from school_notes2.figures import migrate_pending, pending
-from school_notes2.flows import correction_figures
 from school_notes2.state import safefs
 from school_notes2.wiki import banners
-
-
-@pytest.mark.parametrize("path,kind", [("wiki/m/t.md", "topic"),
-    ("wiki/m/summary.md", "chapter-summary"), ("wiki/m/index.md", None)])
-@pytest.mark.parametrize("runs", [0, 3])
-def test_unassigned_pending_banner_does_not_block(repo, make_figure, path, kind, runs):
-    brief, _ = make_figure(page=path, kind="banner")
-    for n in range(runs):
-        pending.record(repo, brief, str(n), [], attempted=True)
-    pending.record(repo, brief, "deferred", [], attempted=False)
-    meta = f"type: {kind}\n" if kind else ""
-    safefs.write_text(repo, path, f"---\n{meta}title: Header\n---\n<!-- image: forces -->\n# Header\nChanged text.\n")
-    safefs.unlink(repo, ".school-notes/figures/forces.json")
-    assert not banners.check_required(repo, [path])
-    assert pending.load(repo)[0]["owner_required"] == (runs == 3)
-    safefs.write_text(repo, path, f"---\n{meta}title: Header\n---\n# Header\nChanged text.\n")
-    assert banners.check_required(repo, [path])
-
-
-def test_budget_deferred_banner_does_not_block(repo, make_figure):
-    from datetime import date
-    from decimal import Decimal
-    from types import SimpleNamespace
-    brief, _ = make_figure(kind="banner")
-    entry = pending.record(repo, brief, "deferred", [], attempted=False)
-    settings = SimpleNamespace(ledger=lambda: {"jobs": {}}, today=lambda: date(2026, 10, 5),
-        daily_usd=Decimal(0), monthly_usd=Decimal(10), reservation_usd=Decimal("0.05"), max_attempts=3, learner="one")
-    ctx = SimpleNamespace(notes_path=repo, image_settings=lambda: settings)
-    assert correction_figures.assignable(ctx, [entry]) == [entry]
-    safefs.unlink(repo, ".school-notes/figures/forces.json")
-    safefs.write_text(repo, brief["page"], "---\ntype: topic\n---\n<!-- image: forces -->\nChanged.\n")
-    assert not banners.check_required(repo, [brief["page"]])
 
 
 def test_existing_banner_needs_hash_bound_generation_proof(repo):
@@ -49,12 +15,13 @@ def test_existing_banner_needs_hash_bound_generation_proof(repo):
     safefs.write_text(repo, page, "---\ntype: topic\n---\n![Header](../assets/header.svg)\nText.\n")
     safefs.write_json(repo, "publication/public.json", {"assets": [{"path": asset,
         "sha256": hashlib.sha256(b"<svg/>").hexdigest(), "rights": "authored"}]})
-    assert banners.check_required(repo, [page])
+    body = lambda: safefs.read_text(repo, page).split("---\n", 2)[2]
+    assert not banners.generated_header(repo, page, body())
     safefs.write_json(repo, "docs/evidence/image-generation/ledger.json", {
         "rights": "generated", "outputs": [hashlib.sha256(b"<svg/>").hexdigest()]})
-    assert not banners.check_required(repo, [page])
+    assert banners.generated_header(repo, page, body())
     safefs.write_bytes(repo, asset, b"<svg>changed</svg>")
-    assert banners.check_required(repo, [page])
+    assert not banners.generated_header(repo, page, body())
 
 
 def legacy(repo):
@@ -94,7 +61,6 @@ def test_migration_headers_dry_run_restart_and_receipt_loss(repo, monkeypatch, b
         assert brief["decision_reason"]["code"] == "c" and entry["runs"] == 0
         text = safefs.read_text(repo, brief["page"])
         assert "![Header]" in text and text.count(f"<!-- image: {brief['id']} -->") == 1
-        assert not banners.check_required(repo, [brief["page"]])
     receipt = safefs.read_text(state, migrate_pending.RECEIPT)
     assert "Lesson." not in receipt and "purpose" not in receipt
     pending.record(repo, entries[0]["commission"], "real-run", [], attempted=True)

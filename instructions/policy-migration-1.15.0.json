@@ -121,7 +121,7 @@
       "heading": "Workflows",
       "destination": "instructions/wiki-workflows.md",
       "source_sha256": "4002b650b71d3afec1c296105ed32cc47d22be691ef1ca640204d1a696c97abc",
-      "migrated_sha256": "c216b6cffbb9147b9111713ad5dec7902a1bdfaabc0140b277927abbbaa8fc09",
+      "migrated_sha256": "b4918a8d9844974fb62091a1f4d027b35dc18c615b3858a3d354235c2fc988e3",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
       "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: public-safe anchored questions/decisions; private readings and coverage; independent reader check before machine list; 1.18.2: in a tool run the build checks formulas; MCP check checks delimiters only; 1.19.0: banner and infographic are generated images; pending figures and the recheck scope in a correction; 2.5.1 (fix-45): fix-mode checks cover every own change, including necessary edits on other pages"
     },
@@ -129,7 +129,7 @@
       "heading": "Choosing and replacing authored visuals",
       "destination": "instructions/visual-policy.md",
       "source_sha256": "d6180905164864ce436be307edf626132fea3f122b9f5ba0596dad6208c27ba5",
-      "migrated_sha256": "cfc141e4f3871dac0590fc61cc521d46d61297483c71e51f853edcf5e31dc175",
+      "migrated_sha256": "ccc9c9ece89c9e274edc325ae0655d413c5f3d574286c09be7b1c793ce507e02",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
       "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: same notebook drawing, correct; independent acceptance; named replacement reasons; 1.19.0: banner and infographic are always generated images, never authored SVG"
     },
@@ -149,7 +149,7 @@
     {
       "heading": "Subject cards and figure handoff",
       "destination": "instructions/school-notes-run.md",
-      "migrated_sha256": "5ef07364af5d4f3c0b550782945c10ad4fde29c5e956d08012cb67c20b7084b5",
+      "migrated_sha256": "759c89f988918d224537da5a856410e29cb6c08c49cf44e227256d838b6adbc5",
       "change": "Section added after the original migration; now audited with the exact image-plan schema, commission distinction and validated example (fix-27)."
     }
   ],

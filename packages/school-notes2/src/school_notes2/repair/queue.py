@@ -6,7 +6,7 @@ from pathlib import PurePosixPath
 from ..schemas import validate, SchemaError
 from ..state import safefs
 from ..state.errors import NeedsOwner
-from ..wiki import pages, source_refs
+from ..wiki import pages
 
 PATH = "docs/repair-queue.json"
 DEPENDENT = ("lesson-notes", "chapter-summary", "review")
@@ -75,7 +75,7 @@ def build(repo, previous=None) -> dict:
             raise NeedsOwner(f"{rel}: priority must be a nonnegative integer or null",
                              todo="edit docs/repair-queue.json, then run repair --queue")
         links = related(rel, book)
-        matches = len(source_refs.scan(rel, safefs.read_text(repo, rel), full=True))
+        matches = 0  # No text heuristic orders the queue; the owner's priority does.
         items.append({"page": rel, "kind": page.meta.get("type", "concept"),
                       "status": "pending" if rel in approved and before.get("status") == "done" else before.get("status", "pending"),
                       "priority": priority,
@@ -109,7 +109,7 @@ def _figures(repo, book, previous) -> list[dict]:
         digest = pages.sha256(repo, rel)
         before = old.get(rel, {})
         out.append({"file": rel, "sha256": digest, "pages": sorted(embeds.get(rel, [])),
-                    "matches": len(source_refs.scan(rel, safefs.read_text(repo, rel), full=True)),
+                    "matches": 0,
                     "status": before.get("status", "pending") if before.get("sha256") == digest else "pending"})
     return out
 

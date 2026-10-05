@@ -1,13 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "review.json, the reviewer's output (plan 4.7)",
+  "title": "the nightly reviewer's output: findings on the diff, closure verdicts, owner notes",
   "type": "object",
   "required": [
-    "verdict",
-    "pages",
     "findings",
     "items",
-    "hits",
     "owner_notes"
   ],
   "additionalProperties": false,
@@ -19,12 +16,6 @@
         "pattern": "\\S"
       }
     },
-    "verdict": {
-      "enum": [
-        "ok",
-        "changes"
-      ]
-    },
     "findings": {
       "type": "array",
       "items": {
@@ -33,6 +24,7 @@
         "required": [
           "id",
           "file",
+          "line",
           "problem",
           "relates_to",
           "quote",
@@ -47,10 +39,8 @@
             "type": "string"
           },
           "line": {
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": "integer",
+            "minimum": 1
           },
           "problem": {
             "type": "string",
@@ -86,33 +76,6 @@
         }
       }
     },
-    "pages": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "file",
-          "verdict"
-        ],
-        "properties": {
-          "file": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "\\S"
-          },
-          "verdict": {
-            "enum": [
-              "ok",
-              "changes"
-            ]
-          },
-          "first_glance": {
-            "type": "string"
-          }
-        }
-      }
-    },
     "items": {
       "type": "array",
       "items": {
@@ -141,51 +104,6 @@
             ]
           },
           "answer": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "\\S"
-          },
-          "severity": {
-            "enum": [
-              "hiba",
-              "javaslat"
-            ]
-          }
-        }
-      }
-    },
-    "hits": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "hit_id",
-          "verdict",
-          "covered_by",
-          "reason",
-          "severity"
-        ],
-        "properties": {
-          "hit_id": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "\\S"
-          },
-          "verdict": {
-            "enum": [
-              "hiba",
-              "megengedett",
-              "téves"
-            ]
-          },
-          "covered_by": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "reason": {
             "type": "string",
             "minLength": 1,
             "pattern": "\\S"

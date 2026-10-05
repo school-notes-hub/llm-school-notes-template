@@ -116,7 +116,7 @@ def probe_world(tmp_path, monkeypatch, learner, bundle):
 
 def generated(counter, fid):
     counter.append(fid)
-    return {"state": "error", "message": "Job changed"} if len(counter) == 2 else {"state": "generated"}
+    return {"state": "error", "message": "Job changed"} if len(counter) == 1 else {"state": "generated"}
 
 def image_stub(ctx, task, assigned, counter):
     """No paid service: the fake writer retries a Job changed response."""
@@ -127,7 +127,7 @@ def image_stub(ctx, task, assigned, counter):
             ctx.log.event("probe.image", "error", message=answer["message"])
             answer = handlers.generate(ctx, task, brief["id"], None)
         assert answer["state"] == "generated"
-        round_n = 2 if "-r2" in task.run_id else 1
+        round_n = 1
         ext = "webp" if brief["kind"] in ("banner", "infographic") else "png"
         asset = f"wiki/assets/probe/{brief['id']}.{ext}"
         buf = io.BytesIO()
@@ -176,10 +176,13 @@ def scenario(tmp_path, monkeypatch, learner, mode, bundle=None, *, render=True):
     rc = run.run(ctx)
     task = phase.all_tasks(ctx.task_root(), learner)[-1]
     assert rc == 0 and task.phase == "done", (task.phase, task.data.get("last_error"))
-    assert task.get("correction_round") == 2
-    assert expected <= {i["key"] for c in calls for i in c["open_review_items"]}
-    assert figures <= set(images)
-    assert (ctx.notes_path / "wiki/probe-unassigned.md").exists()
+    assert task.get("correction_round") is None  # One pass per run: no in-run rounds.
+    if mode == "fix":
+        assert expected <= {i["key"] for c in calls for i in c["open_review_items"]}
+        assert figures <= set(images)
+        assert (ctx.notes_path / "wiki/probe-unassigned.md").exists()
+    else:  # The backlog belongs to the next (fix) run; a package run does not take it on.
+        assert expected <= {i["key"] for i in files.open_items(ctx.notes_path, "cron")}
     assert "Run-Id: " + task.run_id in show(origin, "main")
     if render:
         # The tool removes the build folder after the run; the log keeps the browser-checked build.
@@ -188,14 +191,18 @@ def scenario(tmp_path, monkeypatch, learner, mode, bundle=None, *, render=True):
         assert builds and builds[-1]["checked"] == builds[-1]["pages"] > 0
     else:
         assert len(builds) == 1
-    receipts = list(task.dir.glob("attempt-1/reader/*/recheck-r2/receipt.json"))
+    pattern = "attempt-1/recheck/*/receipt.json" if mode == "fix" else "attempt-1/reader/*/pass1/receipt.json"
+    receipts = list(task.dir.glob(pattern))
     assert receipts and all(json.loads(p.read_text())["status"] == "reviewed" for p in receipts)
-    figure_receipts = list(task.dir.glob("attempt-1/figure-review/recheck-r2-*/accepted.json"))
+    figure_receipts = list(task.dir.glob("attempt-1/figure-review/*/accepted.json"))
     if figures:
         assert figure_receipts
         assert all(v["verdict"] == "accept" for p in figure_receipts
                    for v in json.loads(p.read_text())["review"]["figures"])
     events = [json.loads(line) for line in ctx.cfg.log_path.read_text().splitlines()]
+    # Every tool write is recorded at once: the restore of protected bytes never touches one.
+    restored = [p for e in events if e["action"] == "writer.protected_restored" for p in e.get("pages", [])]
+    assert all(p.startswith("wiki/") or p == "wiki/probe-unassigned.md" for p in restored), restored
     if render:
         assert any(e["action"] == "site.build" and "duration_s" in e for e in events)
     if images:

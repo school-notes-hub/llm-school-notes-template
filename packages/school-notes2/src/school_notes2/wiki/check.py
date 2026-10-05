@@ -15,35 +15,37 @@ from ..state import safefs
 from . import decisions, drafts, frontmatter, lesson_log, markers
 from .pages import CODE_FENCE, links, resolve
 
-SIZE_WARN = 40 * 1024
 TYPES_WITH_CHAPTER = ("topic", "chapter-summary")
 LESSON_SUFFIX = "-jegyzet.md"
 KNOWN_TYPES = ("topic", "chapter-summary", "lesson-notes", "review", "source-summary",
                "concept", "entity", "question")
-# The release's last gate (check-public.py) and this check share one pattern file, so the
-# check tells the writer everything the gate would stop (5.4/5). Secrets and machine paths
-# only (4.10): footnotes naming photos stay in the wiki; the public view leaves them out.
+# The release's last gate (check-public.py) and this check share one pattern file. The wiki
+# check uses only the real secret patterns; machine paths are judged by the output gate (#15).
 PATTERNS_FILE = Path(__file__).resolve().parents[4] / "study-site" / "public-patterns.json"
 
 
 def load_patterns(path: Path = PATTERNS_FILE) -> tuple[str, ...]:
-    data = json.loads(path.read_text(encoding="utf-8"))
-    return tuple(data["secrets"]) + tuple(data["machine_paths"])
+    return tuple(json.loads(path.read_text(encoding="utf-8"))["secrets"])
 
 
 SECRET_PATTERNS = load_patterns()
-SECRETS = frozenset(json.loads(PATTERNS_FILE.read_text(encoding="utf-8"))["secrets"])
-# The only check result that makes a writer call unusable (fix-45): a real secret.
 SECRET_MESSAGE = "forbidden secret pattern"
+# Blocking problems make the writer's output unusable (a secret, broken frontmatter or
+# block markers that the tool cannot process); every other error is fixed by the writer
+# or becomes an item for the next run.
+BLOCKING = "blocking"
 CONFLICT = re.compile(r"^(<<<<<<<|>>>>>>>)( |$)", re.M)
 TAG = re.compile(r"^(?=.*[a-z])[a-z0-9-]+(/[a-z0-9-]+)*$")
 FILE_NAME = re.compile(r"^[a-z0-9][a-z0-9-]*\.md$")
-ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-TYPOGRAPHY = re.compile("[–—“”‘’]")
 
 
-def item(file: str, line: int | None, message: str, severity: str = "error") -> dict:
-    return {"file": file, "line": line, "message": message, "severity": severity}
+def item(file: str, line: int | None, message: str, severity: str = "error", kind: str | None = None) -> dict:
+    found = {"file": file, "line": line, "message": message, "severity": severity}
+    return {**found, "kind": kind} if kind else found
+
+
+def blocking(items: list[dict]) -> list[dict]:
+    return [i for i in items if i.get("kind") == BLOCKING]
 
 
 def autofix(repo: Path, rel: str) -> bool:
@@ -56,38 +58,25 @@ def line_of(text: str, pos: int) -> int:
 
 
 def check_secrets(rel: str, text: str) -> list[dict]:
-    """Conflict markers, secrets and machine paths: every file the writer may change."""
+    """Conflict markers and secrets: every file the writer may change."""
     out = []
     for m in CONFLICT.finditer(text):
-        out.append(item(rel, line_of(text, m.start()), "unresolved conflict marker"))
+        out.append(item(rel, line_of(text, m.start()), "unresolved conflict marker", kind=BLOCKING))
     for pattern in SECRET_PATTERNS:
-        message = SECRET_MESSAGE if pattern in SECRETS else "forbidden secret or machine-path pattern"
         for m in re.finditer(pattern, text, re.I):
-            out.append(item(rel, line_of(text, m.start()), f"{message} {pattern!r}"))
+            out.append(item(rel, line_of(text, m.start()), f"{SECRET_MESSAGE} {pattern!r}", kind=BLOCKING))
     return out
 
 
 def check_text(rel: str, text: str) -> list[dict]:
-    """Wiki-page rules: the above plus block markers, size, formulas, punctuation."""
+    """Wiki-page rules: the above plus block markers and formulas."""
     out = check_secrets(rel, text)
     try:
         markers.check(text)
     except markers.MarkerError as exc:
-        out.append(item(rel, None, str(exc)))
-    if len(text.encode()) > SIZE_WARN:
-        out.append(item(rel, None, "page is over 40 KB; consider splitting it", "warning"))
+        out.append(item(rel, None, str(exc), kind=BLOCKING))
     out += check_formulas(rel, text)
-    if TYPOGRAPHY.search(CODE_FENCE.sub("", _body(text))):
-        out.append(item(rel, None, "typographic dash or quote; the wiki uses ASCII punctuation "
-                                   "outside verbatim quotes", "warning"))
     return out
-
-
-def _body(text: str) -> str:
-    try:
-        return frontmatter.split(text).body
-    except Exception:
-        return text
 
 
 def check_formulas(rel: str, text: str) -> list[dict]:
@@ -178,13 +167,13 @@ def check_meta(repo: Path, rel: str, meta: dict, *, fs=safefs) -> list[dict]:
     out = [item(rel, None, f"frontmatter {key!r} missing") for key in required
            if not isinstance(meta.get(key), str) or not meta.get(key).strip()]
     if not FILE_NAME.match(name):
-        out.append(item(rel, None, "file names are accent-free lowercase kebab-case"))
+        out.append(item(rel, None, "file names are accent-free lowercase kebab-case", "warning"))
     kind = meta.get("type") or ("lesson-notes" if lesson_page else None)
     if kind and kind not in KNOWN_TYPES:
         out.append(item(rel, None, f"unknown page type {kind!r}", "warning"))
     for tag in meta.get("tags") or []:
         if not isinstance(tag, str) or not TAG.match(tag):
-            out.append(item(rel, None, f"tag {tag!r} must be lowercase kebab-case, not numeric"))
+            out.append(item(rel, None, f"tag {tag!r} must be lowercase kebab-case, not numeric", "warning"))
     if kind in TYPES_WITH_CHAPTER:
         out += check_chapter(repo, rel, meta, fs=fs)
     if kind == "lesson-notes":
@@ -234,7 +223,7 @@ def check_lessons(repo: Path, rel: str, meta: dict, *, fs=safefs) -> list[dict]:
             continue
         if lesson.get("date") is not None and not decisions.valid_date(lesson["date"]):
             out.append(item(rel, None, f"lesson {n}: `date` must be YYYY-MM-DD"))
-        out += [item(rel, None, f"lesson {n}: {message}")
+        out += [item(rel, None, f"lesson {n}: {message}", "warning")
                 for message in lesson_log.material_problems(lesson)]
         if not isinstance(lesson.get("topics", []), list):
             out.append(item(rel, None, f"lesson {n}: `topics` must be a list"))
@@ -305,7 +294,7 @@ def check_files(repo: Path, paths: list[str], *, today: date | None = None, fs=s
         try:
             page = frontmatter.split(text)
         except Exception as exc:
-            out.append(item(rel, 1, f"frontmatter is not valid YAML: {exc}"))
+            out.append(item(rel, 1, f"frontmatter is not valid YAML: {exc}", kind=BLOCKING))
             continue
         out += check_meta(repo, rel, page.meta, fs=fs)
         out += check_learning(repo, rel, page, fs=fs)
@@ -317,22 +306,27 @@ def check_files(repo: Path, paths: list[str], *, today: date | None = None, fs=s
 
 
 def check_learning(repo: Path, rel: str, page: frontmatter.Page, *, fs=safefs) -> list[dict]:
-    out = [item(rel, None, message) for message in
+    out = [item(rel, None, message, kind=BLOCKING) for message in
            decisions.decision_problems(page.meta) + drafts.problems(page.meta)]
     offset = len(page.raw_meta.splitlines()) + 2 if page.has_fm else 0
-    out += [item(rel, line + offset, message)
+    out += [item(rel, line + offset, message, "warning")
             for line, message in decisions.question_problems(page.body, page.meta)]
     if "status" in page.meta and page.meta["status"] not in ("draft", "stable", "deprecated"):
         out.append(item(rel, None, "status must be draft, stable or deprecated"))
     visible = markers.BLOCK.sub("", CODE_FENCE.sub("", page.body))
     if re.search(r"^\s*(?:<sub>)?📎", visible, re.M):
-        out.append(item(rel, None, "the tool renders the source pointer; supply lessons[].materials"))
-    if lesson_log.is_lesson(rel, page.meta) and isinstance(page.meta.get("lessons"), list):
-        out += [item(rel, None, message)
-                for message in lesson_log.form_problems(repo, rel, page.body, page.meta,
-                                            read=lambda repo, path: frontmatter.split(fs.read_text(repo, path)))]
+        out.append(item(rel, None, "the tool renders the source pointer; supply lessons[].materials", "warning"))
+    if lesson_log.is_lesson(rel, page.meta):
+        try:
+            lesson_log.source_line(page.meta)
+        except ValueError as exc:
+            out.append(item(rel, None, str(exc), kind=BLOCKING))
+        if isinstance(page.meta.get("lessons"), list):
+            out += [item(rel, None, message, "warning")
+                    for message in lesson_log.form_problems(repo, rel, page.body, page.meta,
+                                                read=lambda repo, path: frontmatter.split(fs.read_text(repo, path)))]
     elif lesson_log.BLOCK in markers.names(page.body):
-        out.append(item(rel, None, "source pointer belongs only on a lesson log"))
+        out.append(item(rel, None, "source pointer belongs only on a lesson log", "warning"))
     return out
 
 

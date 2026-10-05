@@ -39,9 +39,12 @@ def test_finish_only_retries_completion_not_owner_item(tmp_path, log, monkeypatc
     task.update(ranges=[[0, 0]])
     rel = files.write_review(ctx.notes_path, "2026-10-04", {"verdict": "changes", "findings": [
         {"severity": "hiba", "id": "R1", "file": "wiki/a/topic.md", "problem": "Hiba."}]}, "r", "a", "b")
+    from school_notes2.wiki import frontmatter
+    text = rel.read_text()
+    details = frontmatter.split(text).meta["item_details"]
+    details["R1"] = {**details["R1"], "repair_attempts": 3, "repair_runs": ["a", "b", "c"]}
+    rel.write_text(frontmatter.set_keys(text, {"item_details": details}))  # three real attempts
     listed = files.open_items(ctx.notes_path, "cron")
-    for n in range(4):
-        files.apply_closure(ctx.notes_path, f"old-{n}", [], listed)
     def content(ctx, task):
         outcome = files.apply_closure(ctx.notes_path, task.run_id, [], listed)
         return SimpleNamespace(new_owner=outcome.new_owner, question=False, result={"status": "done"})

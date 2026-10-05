@@ -5,9 +5,8 @@ import hashlib
 import pytest
 
 from school_notes2.figures import context, machine, migrate_pending, pending
-from school_notes2.review import night_figures
 from school_notes2.state import safefs
-from school_notes2.wiki import banners, rights
+from school_notes2.wiki import banners, frontmatter, rights
 
 
 @pytest.mark.parametrize("learner", ["one", "two"])
@@ -32,15 +31,13 @@ def test_v1_webp_is_not_regenerated(repo, monkeypatch, learner, proof, compressi
             receipt = {"images": receipt}
         safefs.write_json(repo, "docs/evidence/v1-banner-compression.json", receipt)
         assert rights.media(repo)(asset)[0] == "generated"
-    assert not banners.check_required(repo, [page])
-    view = repo.parent / "night-view"
-    night_figures.prepare_view(repo, view)
-    assert not machine.generation_errors(view, {"kind": "banner"}, {"asset": asset})
+    assert banners.generated_header(repo, page, frontmatter.split(safefs.read_text(repo, page)).body)
+    assert not machine.generation_errors(repo, {"kind": "banner"}, {"asset": asset})
     monkeypatch.setattr(migrate_pending, "historical", lambda *a: {})
     preview = migrate_pending.migrate(repo, state_dir=repo.parent / "state", repo=object(), dry_run=True)
     assert preview["commissions"] == []
     safefs.write_bytes(repo, asset, b"changed bytes")
-    assert banners.check_required(repo, [page])
+    assert not banners.generated_header(repo, page, frontmatter.split(safefs.read_text(repo, page)).body)
 
 
 def test_compression_requires_generated_original_and_exact_target(repo):

@@ -54,7 +54,7 @@ def _metrics(task):
         from ..llm.metrics import from_transcript
         # The role prefix is stable; labels can contain arbitrary dashes.
         from ..llm.timeouts import ROLES, role_name
-        role = next((r for r in ("figure-review", "reader-1", "reader-2", "recheck", "fix", *ROLES)
+        role = next((r for r in ("figure-review", "reader-1", "recheck", "fix", *ROLES)
                      if path.name.startswith("transcript-" + r + "-")), "unknown")
         values = totals.setdefault(role_name(role), {})
         for key, value in from_transcript(path).items():

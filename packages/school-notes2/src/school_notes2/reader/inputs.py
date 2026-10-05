@@ -63,10 +63,9 @@ def prepare(repo: Path, view: Path, unit: dict, folder: Path, old_text, *, targe
         for qid in ids.get("questions", []):
             match = re.search(r"<!-- q: " + re.escape(qid) + r" -->\s*([^\n]+)", text)
             questions.append({"id": qid, "text": match[1] if match else ""})
-        from ..review import scope
         pages.append({"file": page, "role": "assigned" if page in unit["pages"] else "context",
                       "text": "" if targeted else text,
-                      "changed_lines": scope.excerpts(old_text(page), safefs.read_text(repo, page)) if targeted else [],
+                      "changed_lines": excerpts(old_text(page), safefs.read_text(repo, page)) if targeted else [],
                       "questions": [] if targeted else questions,
                       "decisions": frontmatter.split(text).meta.get("decisions", []),
                       "items": {} if targeted else ids.get("items", {}),
@@ -77,20 +76,13 @@ def prepare(repo: Path, view: Path, unit: dict, folder: Path, old_text, *, targe
     return assigned
 
 
-def hits(repo: Path, items: list[dict]) -> list[dict]:
-    out = []
-    for item in sorted(items, key=lambda i: (i["file"], i.get("line") or 0, i["id"])):
-        text = safefs.read_text(repo, item["file"])
-        lines = text.splitlines()
-        n = max(0, min(len(lines) - 1, (item.get("line") or 1) - 1))
-        start, end = n, n + 1
-        for _ in range(2):
-            while start > 0 and lines[start - 1].strip():
-                start -= 1
-            start = max(0, start - 1)
-            while end < len(lines) and lines[end].strip():
-                end += 1
-            end = min(len(lines), end + 1)
-        out.append({k: item[k] for k in ("id", "file", "line", "message") if k in item} |
-                   {"context": "\n".join(lines[start:end])})
-    return out
+def changed(old, new):
+    """New-side line numbers that differ from the old text (a plain line diff)."""
+    a, b = old.splitlines(), new.splitlines()
+    return {n + 1 for tag, _, _, start, end in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes()
+            if tag != "equal" for n in range(start, end)}
+
+
+def excerpts(old, new):
+    numbers = changed(old, new)
+    return [{"line": n, "text": line} for n, line in enumerate(new.splitlines(), 1) if n in numbers]

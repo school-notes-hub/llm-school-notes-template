@@ -10,11 +10,7 @@ from school_notes2.reader import calls, contracts, inputs, report, units, verdic
 from school_notes2.state import safefs
 from school_notes2.state.errors import BadWork, Transient, WaitingQuota
 from school_notes2.wiki import frontmatter, markers
-
-
-def pass1(page, findings=None):
-    return {"pages": [{"file": page, "verdict": "changes" if findings else "ok", "first_glance": "Téma"}],
-            "findings": findings or [], "owner_notes": []}
+from .helpers import finding, pass1
 
 
 def test_blind_input_physical_allowlist_and_final_candidate(setup):
@@ -89,18 +85,19 @@ def test_exact_coverage_and_no_family_questions(setup):
         contracts.check({**pass1(page), "family_questions": []}, "reader-1", {"pages": [{"file": page}]})
     with pytest.raises(ValueError):
         contracts.check(pass1(page), "reader-1", {"pages": [{"file": "wiki/m/missing.md"}]})
-    hit = {"severity": "hiba", "hit_id": "H1", "verdict": "hiba", "covered_by": "F-2", "reason": "hiba"}
-    with pytest.raises(ValueError, match="covered_by"):
-        contracts.check({"hits": [hit], "owner_notes": []}, "reader-2", {"hits": ["H1"], "findings": ["F-1"]})
     with pytest.raises(ValueError):
-        contracts.check({"items": [], "hits": [], "pages": [], "owner_notes": []}, "recheck", {"items": [], "hits": []})
+        contracts.check({"items": [], "pages": [], "owner_notes": []}, "recheck", {"items": []})
+    with pytest.raises(ValueError):  # The reviewer names the line (T4); the schema requires it.
+        contracts.check(pass1(page, [{k: v for k, v in finding(page).items() if k != "line"}]), "reader-1",
+                        {"pages": [{"file": page}]})
 
 
-def test_quote_whitespace_unlocated_and_generated_hash(setup):
+def test_reviewer_line_is_validated_never_searched_and_generated_hash(setup):
     ctx, task, page = setup
-    located = report.locate(ctx.notes_path, {"file": page, "quote": "A test\nlefelé   gyorsul."})
-    assert not located["unlocated"]
-    assert report.locate(ctx.notes_path, {"file": page, "quote": "nincs"})["unlocated"]
+    located = report.locate(ctx.notes_path, {"file": page, "line": 7, "quote": "egészen más idézet"})
+    assert not located["unlocated"] and located["line"] == 7  # The quote is never matched (T4).
+    for line in (None, 0, 99, True):
+        assert report.locate(ctx.notes_path, {"file": page, "line": line, "quote": "A test lefelé gyorsul."})["unlocated"]
     key = units.page_key(ctx.notes_path, page)
     text = safefs.read_text(ctx.notes_path, page)
     safefs.write_text(ctx.notes_path, page, text + "\n" + markers.wrap("pending", "notice"))
@@ -126,9 +123,8 @@ def test_unit_routing_first_lesson_topic_and_source_only(setup):
 
 def test_reader_prompts_include_verbatim_plan_sentences():
     from school_notes2.llm.argv import prompt
-    assert "Olvasd végig az egész oldalt úgy, mint a 9. évfolyamos olvasó, aki a forrást nem látja. Gépi listát most nem kapsz: mindent magad találj meg – a forrásról szóló mondatot diaszámmal vagy anélkül is." in prompt("reader-1", grade=9)
-    assert "Itt a gépi találatok. Mindegyikre egy ítélet és egy mondat indok; ha már jelezted, írd oda az F-azonosítót. A lista nem teljes, és amit az előbb találtál, az akkor is érvényes, ha itt nincs találat." in prompt("reader-2", grade=9)
-    assert "Ez nem teljes review. Tételenként ítélj: a javítás megoldotta-e (`ok`/`not-ok`); a vitatott tételnél fogadd el az indokot (`accept`), vagy egyszer, röviden válaszolj (`keep`). Az új találatokról ítélj." in prompt("recheck", grade=9)
+    assert "Olvasd végig az egész oldalt úgy, mint a 9. évfolyamos olvasó, aki a forrást nem látja. Gépi listát nem kapsz: mindent magad találj meg – a forrásról szóló mondatot diaszámmal vagy anélkül is." in prompt("reader-1", grade=9)
+    assert "Ez nem teljes review. Tételenként ítélj: a javítás megoldotta-e (`ok`/`not-ok`); a vitatott tételnél fogadd el az indokot (`accept`), vagy egyszer, röviden válaszolj (`keep`). A javított tételeket és a futás összes megváltozott sorát ellenőrizd" in prompt("recheck", grade=9)
 
 
 def test_mermaid_candidate_is_rendered_in_reader_view(setup):

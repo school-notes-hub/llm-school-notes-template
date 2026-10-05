@@ -62,7 +62,7 @@ def test_prepare_skips_unreadable_page_and_old_error_needs_owner(learning_run, m
     assert inp["mode"] == "interactive"
     assert NOTE not in relations.related_pages(ctx.notes_path)
     assert relations.page_ids(ctx.notes_path, NOTE) == (set(), set())
-    with pytest.raises(NeedsOwner, match="invalid metadata predating this run"):
+    with pytest.raises(NeedsOwner, match="unreadable frontmatter predating this run"):
         learning.validate(ctx, phase.load(task.dir))
     # Fixing the YAML in chat makes the same check usable again.
     safefs.write_text(ctx.notes_path, NOTE, valid)

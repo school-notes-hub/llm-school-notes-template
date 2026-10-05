@@ -75,6 +75,20 @@ def media(repo: Path):
     return lookup
 
 
+def writer_svgs(repo):
+    def lookup(rel):
+        return ("authored", "writer-svg") if writer_svg(repo, rel) else None
+    return lookup
+
+
+def writer_svg(repo, rel):
+    """A writer-drawn SVG is authored (6b), unless it embeds another image or data."""
+    if not rel.startswith("wiki/assets/") or not rel.endswith(".svg") or not safefs.is_file(repo, rel):
+        return False
+    text = safefs.read_text(repo, rel, errors="replace").lower()
+    return "<image" not in text and "data:" not in text and "<foreignobject" not in text
+
+
 def compressed_records(repo, generated):
     """v1 WebP receipts link published bytes to a proven generated original."""
     records = []

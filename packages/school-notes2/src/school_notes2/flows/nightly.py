@@ -1,20 +1,15 @@
 """`school-notes nightly <learner>` (plan 5.6): one independent review of the day's commits."""
 
-from pathlib import Path
-
 from .. import VERSION
 from ..llm import launch
 from ..log import now_iso, today
 from ..review import close as review_close
 from ..review import nightly as review
-from ..state import phase
+from ..state import phase, safefs
 from ..state.errors import Prerequisite
 from . import cleanup, policy, prereq, setup
 from .context import Ctx
 from .operation import entry
-
-RASTERIZE = ["bash", "-c", 'for f in /in/*.svg; do rsvg-convert -o "/out/$(basename "${f%.svg}").png" "$f"'
-             ' || exit 1; done']
 
 
 @entry("nightly")
@@ -38,9 +33,12 @@ def nightly(ctx: Ctx) -> int:
         if any(t.open and t.data.get("needs_owner") for t in tasks):
             ctx.log.event("nightly.skip", "needs_owner")
             return 0
+        _retire_legacy(ctx, tasks)
         task = review.pending_close(tasks) or _unfinished(tasks)
         if task is None:
-            task = _prepare(ctx, tasks)
+            task = review.prepare(ctx.task_root(), ctx.name, ctx.bare(), ctx.worktree("review"),
+                                  fetch_timeout=ctx.cfg.timeouts.fetch_s, max_agents=ctx.cfg.limits.max_agents,
+                                  log=ctx.log)
         if task is not None:
             ctx.log = ctx.log.bind(run_id=task.run_id)
             if task.get("max_agents") is None:
@@ -48,7 +46,7 @@ def nightly(ctx: Ctx) -> int:
             if task.phase == "waiting_quota":
                 task.set_phase(task.get("quota_phase"))
             if task.phase in ("prepared", "reviewing"):
-                _review(ctx, task)              # 8.2: the same H/T as recorded
+                _review(ctx, task)              # 8.2: the same range as recorded
             if task.phase in review.ACTIVE:
                 _close(ctx, task)
             policy.on_success(task)
@@ -66,26 +64,20 @@ def nightly(ctx: Ctx) -> int:
 def _unfinished(tasks: list[phase.Task]):
     """An interrupted review (no review.json yet) resumes instead of a new one."""
     for task in tasks:
-        if task.open and task.phase in ("prepared", "reviewing", "waiting_quota") and not task.get("stuck") \
+        if task.open and task.phase in ("prepared", "reviewing", "waiting_quota") and task.get("diff_review") \
                 and not task.data.get("closed"):
             return task
     return None
 
 
-def _prepare(ctx: Ctx, tasks: list[phase.Task]):
-    return review.prepare(ctx.task_root(), ctx.name, ctx.bare(), ctx.worktree("review"),
-                          fetch_timeout=ctx.cfg.timeouts.fetch_s, max_agents=ctx.cfg.limits.max_agents,
-                          rasterize=lambda svgs, out: _rasterize(ctx, svgs, out))
-
-
-def _rasterize(ctx: Ctx, svgs: list[Path], out_dir: Path) -> list[Path]:
-    """5.6/3: an LLM-written SVG is rendered in a container without network or host files."""
-    rc = launch.run_offline(learner=ctx.name, run_id="raster", image=ctx.image_tag(),
-                            in_dir=svgs[0].parent, out_dir=out_dir, command=RASTERIZE,
-                            log=ctx.log, timeout=ctx.cfg.timeouts.rasterize_s)
-    if rc != 0:
-        ctx.log.event("review.rasterize", "error", rc=rc)
-    return [out_dir / f"{s.stem}.png" for s in svgs if (out_dir / f"{s.stem}.png").is_file()]
+def _retire_legacy(ctx: Ctx, tasks: list[phase.Task]) -> None:
+    """A 2.5.x topic review is closed unapplied; the marker did not move, so the new diff
+    review covers the same commits (only review output, never notes work, is redone)."""
+    for task in tasks:
+        if task.open and not task.get("diff_review"):
+            ctx.log.event("nightly.legacy_retired", target=task.run_id, phase=task.phase)
+            task.data["closed"] = True
+            task.save()
 
 
 def _prerequisites(ctx: Ctx) -> None:
@@ -101,41 +93,35 @@ def _prerequisites(ctx: Ctx) -> None:
 
 
 def _review(ctx: Ctx, task: phase.Task) -> None:
-    review.resume_prepared(task, ctx.bare(), ctx.worktree("review"),
-                           lambda svgs, out: _rasterize(ctx, svgs, out))
-    if task.get("units") != []:
-        _prerequisites(ctx)
-    if task.get("topic_review"):
-        from . import night_topics
-        night_topics.run(ctx, task)
-        return
-    role, harness = ctx.cfg.role("reviewer")
-    out = task.dir / "out"
-    out.mkdir(exist_ok=True)
+    from ..review import call
+    if not task.get("input_ready"):
+        review.write_input(task, ctx.bare(), ctx.worktree("review"))
+    ctx.worktree("review").run("switch", "--detach", "--discard-changes", task.get("H"))
+    _prerequisites(ctx)
     task.set_phase("reviewing")
-    run = launch.RoleRun(
-        learner=ctx.name, run_id=task.run_id, role_name="reviewer", role=role, harness=harness,
-        image=ctx.image_tag(),
-        mounts=launch.Mounts(work=ctx.cfg.worktree(ctx.name, "review"), work_readonly=True,
-                             in_dir=task.dir / "in", out_dir=out),
-        output_host=out / "review.json", schema="review", task_dir=task.dir, grade=ctx.student.grade,
-        label=task.get("T", task.run_id),
-        allowed_domains=ctx.cfg.provider_domains,
-        max_agents=task.get("max_agents", ctx.cfg.limits.max_agents), lease_dir=ctx.cfg.state_dir / "agent-leases")
-    try:
-        outcome = launch.run_headless(run, log=ctx.log,
-                                      snapshot=lambda: launch.tree_fingerprint(out))
-    except launch.TimedOut as exc:
-        task.update(timeout_day=today())
-        if exc.details.get("count", 0) >= 2 or exc.details.get("suspended"):
-            task.update(blocked_topics=[task.get("T")])
+    configured, harness = ctx.cfg.role("reviewer")
+    run = launch.RoleRun(ctx.name, task.run_id, "reviewer", configured, harness, ctx.image_tag(),
+                         launch.Mounts(), task.dir / "out/review.json", "nightly", task.dir,
+                         grade=ctx.student.grade, label="diff", allowed_domains=ctx.cfg.provider_domains,
+                         max_agents=task.get("max_agents", ctx.cfg.limits.max_agents),
+                         lease_dir=ctx.cfg.state_dir / "agent-leases")
+    work = ctx.worktree("review").work_tree
+    receipt = call.run(work, task.dir, {"items": task.get("items", [])}, run, log=ctx.log)
+    if receipt["status"] != "reviewed":
+        # The marker stays: the next night reviews the same (larger) range.
+        ctx.log.event("nightly.failed", "error", reason=receipt.get("reason", ""))
+        if receipt.get("timeout_count", 0) >= 2:
             task.mark_needs_owner("Két egymás utáni éjszakai időtúllépés.",
                                   f"Állítsd be az időkorlátot; school-notes status --clear {ctx.name} reviewer --continue",
                                   "timeout")
+            return
+        task.data["closed"] = True
+        task.save()
         return
-    review.record_review(task, outcome.output, ctx.cfg.worktree(ctx.name, "review"))
-    if task.get("dropped_responses"):
-        ctx.log.event("review.dropped_responses", items=task.get("dropped_responses"))
+    findings, notes = review.triage(receipt["review"], safefs.read_text(task.dir, "in/diff.patch"), work)
+    safefs.write_json(task.dir, "review.json", {"findings": findings, "owner_notes": notes,
+                                                "items": receipt["review"]["items"]})
+    task.set_phase("reviewed")
 
 
 def _notify_owners(ctx: Ctx, task: phase.Task) -> None:

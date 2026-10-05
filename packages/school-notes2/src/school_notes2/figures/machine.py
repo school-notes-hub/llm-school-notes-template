@@ -7,7 +7,7 @@ from xml.etree import ElementTree
 
 from ..state import safefs
 from ..wiki.check import check_renders
-from ..wiki import frontmatter, rights, source_refs
+from ..wiki import frontmatter, rights
 from . import context, licenses
 
 NUMBER = re.compile(r"(?<![\w#])[-+]?\d+(?:[.,]\d+)?")
@@ -98,8 +98,6 @@ def svg_hints(text: str, brief: dict, embedding: dict) -> list[dict]:
     extra = sorted(set(NUMBER.findall(labels)) - set(NUMBER.findall(expected)))
     if extra:
         warnings.append({"code": "numbers", "message": "SVG numbers absent from commission/text", "values": extra})
-    if any(pattern.search(labels) for pattern in source_refs.PATTERNS):
-        warnings.append({"code": "source-pattern", "message": "Source-reference pattern in SVG labels"})
     return warnings
 
 

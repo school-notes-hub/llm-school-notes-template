@@ -13,9 +13,12 @@ from ..state import safefs
 from ..state.phase import Task
 from ..state.errors import NeedsOwner
 from ..wiki import banners, decisions, drafts, frontmatter, lesson_log
-from ..wiki.pages import read_page, resolve, wiki_pages
-from . import checks, journal, steps
+from ..wiki.pages import read_page, wiki_pages
+from . import journal, steps
 from .context import Ctx
+
+
+UNREADABLE = "frontmatter is not valid YAML or not a mapping"
 
 
 def observation_date(task: Task, today: date | None = None) -> date:
@@ -25,74 +28,49 @@ def observation_date(task: Task, today: date | None = None) -> date:
     return date.fromisoformat(task.get("learning_date"))
 
 
-def validate(ctx: Ctx, task: Task) -> None:
-    """Inspect metadata page by page before any whole-wiki consumer or tool write."""
-    problems = []
-    for rel in sorted(wiki_pages(ctx.notes_path)):
-        problems += [steps.wiki_check.item(rel, None, m) for m in
-                     _metadata_problems(rel, safefs.read_text(ctx.notes_path, rel), ctx.notes_path)]
-    if problems:
-        _classify(ctx, task, problems)
+def validate(ctx: Ctx, task: Task) -> list[dict]:
+    """Metadata problems the tool cannot process, on pages this run's author changed.
 
-
-def _classify(ctx, task, problems):
+    A problem that already exists in the base never stops a run (#3): it is logged, and the
+    tool's generators skip that page. A new one on an author-changed page is blocking: the
+    writer's output for that page is unusable until it is fixed."""
     changed = steps.llm_snapshot(ctx, task)
     base = steps.base_reader(ctx, task)
-    def read_old(repo, rel):
-        text = base(rel)
-        if text is None:
-            raise FileNotFoundError(rel)
-        return frontmatter.split(text.decode("utf-8", "replace"))
-    outside, routed = [], []
-    for problem in problems:
-        rel = problem["file"]
-        old = base(rel)
-        previous = _metadata_problems(rel, old.decode("utf-8", "replace"), ctx.notes_path, read_old) if old else []
-        if problem["message"] not in previous:
-            dependency = _banner_dependency(ctx.notes_path, rel, problem["message"])
-            if dependency in changed:
-                problem = {**problem, "file": dependency, "message": f"{rel}: {problem['message']}"}
-            elif rel not in changed:
-                outside.append(problem)
-        else:
-            outside.append(problem)
-        routed.append(problem)
-    checks.tool_errors(ctx, task, routed)
-    if outside:
-        raise NeedsOwner("invalid metadata predating this run: " + "; ".join(
-            f"{p['file']}: {p['message']}" for p in outside),
-            todo="repair the listed pages in `school-notes chat`", details={"items": outside})
-    raise steps.CheckFailed(routed)
+    new, old = [], []
+    for rel in sorted(wiki_pages(ctx.notes_path)):
+        messages = _metadata_problems(rel, safefs.read_text(ctx.notes_path, rel))
+        if not messages:
+            continue
+        before = base(rel)
+        previous = _metadata_problems(rel, before.decode("utf-8", "replace")) if before is not None else []
+        for message in messages:
+            problem = steps.wiki_check.item(rel, None, message, kind=steps.wiki_check.BLOCKING)
+            (new if rel in changed and message not in previous else old).append(problem)
+    unreadable = [p for p in old if p["message"] == UNREADABLE]
+    if unreadable:
+        # The tool cannot read such a page at all; only this blocks, and only the owner can
+        # repair main. Every other old metadata problem is logged and the run goes on (#3).
+        raise NeedsOwner("unreadable frontmatter predating this run: " + ", ".join(p["file"] for p in unreadable),
+                         todo="repair the listed pages in `school-notes chat`", details={"items": unreadable})
+    if old:
+        ctx.log.event("learning.old_metadata", "warning", items=old[:20])
+    return new
 
 
-def _banner_dependency(repo, rel, message):
-    try:
-        meta = read_page(repo, rel).meta
-    except (ValueError, OSError):
-        return None
-    try:
-        banners.body(repo, rel, meta)
-    except (ValueError, OSError) as exc:
-        if str(exc) == message and isinstance(meta.get("banner_from"), str):
-            return resolve(rel, meta["banner_from"])
-    return None
+def broken(repo, rel) -> bool:
+    return bool(_metadata_problems(rel, safefs.read_text(repo, rel)))
 
 
-def _metadata_problems(rel: str, text: str, repo=None, banner_reader=read_page) -> list[str]:
+def _metadata_problems(rel: str, text: str) -> list[str]:
     try:
         meta = frontmatter.split(text).meta
     except (ValueError, yaml.YAMLError):
-        return ["frontmatter is not valid YAML or not a mapping"]
+        return [UNREADABLE]
     messages = drafts.problems(meta) + decisions.decision_problems(meta)
     if lesson_log.is_lesson(rel, meta):
         try:
             lesson_log.source_line(meta)
         except ValueError as exc:
-            messages.append(str(exc))
-    if repo is not None and not messages:
-        try:
-            banners.body(repo, rel, meta, read=banner_reader)
-        except (ValueError, OSError) as exc:
             messages.append(str(exc))
     return messages
 
@@ -100,14 +78,12 @@ def _metadata_problems(rel: str, text: str, repo=None, banner_reader=read_page) 
 def migrate(ctx: Ctx, task: Task) -> None:
     """Replay-safe hotfix bookkeeping, before assignment or generated-page writes."""
     from ..reader import verdicts
-    from ..review import generated, repair_migration
+    from ..review import repair_migration
     journal.settle(ctx, task)
     records = verdicts.rekeyed(ctx.notes_path)
     if records is not None:
         journal.write(ctx, task, verdicts.PATH, json.dumps(records, ensure_ascii=False, indent=2) + "\n", whole=True)
     for rel, text in repair_migration.updates(ctx.notes_path):
-        journal.write(ctx, task, rel, text, whole=True)
-    for rel, text in generated.owner_updates(ctx.notes_path):
         journal.write(ctx, task, rel, text, whole=True)
 
 
@@ -115,18 +91,22 @@ def refresh(ctx: Ctx, task: Task, *, today: date | None = None) -> None:
     repo = ctx.notes_path
     migrate(ctx, task)
     today = observation_date(task, today)
-    validate(ctx, task)
     journal.settle(ctx, task)
-    linked = drafts.lesson_keys(repo)
-    for rel in sorted(wiki_pages(repo)):
+    skipped = {rel for rel in wiki_pages(repo) if broken(repo, rel)}
+    linked = drafts.lesson_keys(repo, skip=skipped)
+    for rel in sorted(set(wiki_pages(repo)) - skipped):
         old = safefs.read_text(repo, rel)
         meta = read_page(repo, rel).meta
-        new = banners.update(repo, rel, old)
+        try:
+            new = banners.update(repo, rel, old)
+        except (ValueError, OSError) as exc:  # An unusable banner_from is the writer's to fix.
+            ctx.log.event("learning.banner_skipped", "warning", target=rel, message=str(exc)[:200])
+            new = old
         new = drafts.update(new, linked.get(rel, []), today)
         if lesson_log.is_lesson(rel, meta):
             new = lesson_log.after_header(new, lesson_log.BLOCK, lesson_log.source_line(meta))
         if new != old:
             journal.write(ctx, task, rel, new, whole=False)
-    overview = decisions.overview(repo)
+    overview = decisions.overview(repo, skip=skipped)
     if not safefs.exists(repo, decisions.OVERVIEW) or safefs.read_text(repo, decisions.OVERVIEW) != overview:
         journal.write(ctx, task, decisions.OVERVIEW, overview, whole=True)

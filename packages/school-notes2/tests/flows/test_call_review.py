@@ -4,11 +4,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from school_notes2.flows import call_scope, fetch, handlers, run, steps, writer
+from school_notes2.flows import fetch, handlers, steps, writer
 from school_notes2.review import files
 from school_notes2.sources import calls
 from school_notes2.state import phase, safefs
-from school_notes2.state.errors import SnError
 from school_notes2.state.files import write_json
 from school_notes2.wiki import check, frontmatter
 from tests.flows.test_subject_calls import data
@@ -52,7 +51,7 @@ def test_two_subjects_share_twenty_closures_without_untouched_overflow(tmp_path,
     assert len(whole["open_review_items"]) == len(closures) == 12
     files.apply_closure(tmp_path, "test", closures, whole["open_review_items"], 5)
     final = safefs.read_text(tmp_path, rel)
-    assert files.open_counts(final) == {}
+    assert "nem érintett" not in final
     assert {i["item_id"] for i in files.open_items(tmp_path, "cron")} == {f"R{n}" for n in range(1, 13)}
 
 
@@ -105,96 +104,10 @@ def task_context(tmp_path):
     return ctx, task
 
 
-@pytest.mark.parametrize("crash", [False, True])
-def test_finish_returns_all_subject_errors_and_reuses_other_checkpoints(tmp_path, monkeypatch, crash):
-    ctx, task = task_context(tmp_path)
-    items = [check.item(f"wiki/{s}/topic.md", None, "bad") for s in ("a", "b")]
-    monkeypatch.setattr(run.fetch_flow, "advance", lambda *a: None)
-    def failed(*a, **kw):
-        raise steps.CheckFailed(items)
-    monkeypatch.setattr(run.finish_flow, "finish", failed)
-    original = call_scope.invalidate
-    if crash:
-        def interrupted(task):
-            (task.dir / "result-1.json").unlink()
-            raise RuntimeError("during invalidation")
-        monkeypatch.setattr(call_scope, "invalidate", interrupted)
-    with pytest.raises(RuntimeError if crash else steps.CheckFailed):
-        run.advance(ctx, task)
-    monkeypatch.setattr(call_scope, "invalidate", original)
-    task = phase.load(task.dir)
-    invoked = []
-    def write(ctx, task, k, *args):
-        invoked.append(k)
-        assert safefs.read_json(tmp_path, ".school-notes/check.json")[0]["file"] == (
-            "wiki/b/topic.md" if k == 1 else "wiki/a/topic.md")
-        return {"status": "done"}
-    monkeypatch.setattr(writer, "_call", write)
-    monkeypatch.setattr(writer, "write_changes", lambda *a: None)
-    monkeypatch.setattr(writer, "_check_call", lambda *a: None)
-    assert writer.run_ranges(ctx, task, None) == "done"
-    assert invoked == [1, 2]
-    assert phase.load(task.dir).get("writing_k") == 4
-
-
-@pytest.mark.parametrize("rel", ["publication/public.json",
-                                 "docs/review/report.md", "tools/subjects.json"])
-def test_unassignable_finish_error_is_program_error_without_writer_strike(tmp_path, rel):
-    ctx, task = task_context(tmp_path)
-    before = (task.dir / "result-3.json").read_bytes()
-    with pytest.raises(SnError, match="cannot be assigned") as error:
-        call_scope.retry(ctx, task, [check.item(rel, None, "bad aggregate")])
-    assert error.value.kind == "program" and task.data["llm_failures"] == 0
-    assert (task.dir / "result-3.json").read_bytes() == before and task.phase == "finishing"
-
-
-@pytest.mark.parametrize("rel", ["wiki/log.md", "wiki/index.md", "wiki/assets/orphan.svg"])
-def test_g5_subjectless_error_retries_first_call(tmp_path, monkeypatch, rel):
-    from school_notes2.flows import finish
-    from school_notes2.site.build import BuildContentError
-    ctx, task = task_context(tmp_path)
-    ctx.worktree = lambda _: None
-    ctx.bare = lambda: None
-    ctx.log = None
-    ctx.cfg.timeouts = SimpleNamespace(fetch_s=1, ls_remote_s=1)
-    monkeypatch.setattr(run.fetch_flow, "advance", lambda *a: None)
-    monkeypatch.setattr(finish.site_publish, "fetch_gh_pages", lambda *a, **kw: None)
-    monkeypatch.setattr(finish.site_publish, "changed_since_publish", lambda *a: [])
-    monkeypatch.setattr(finish, "renderer", lambda _: None)
-    items = [check.item(rel, None, "G5 defect")]
-    def build(*a, **kw):
-        raise BuildContentError(items)
-    monkeypatch.setattr(finish.site_build, "build", build)
-    monkeypatch.setattr(finish, "finish", lambda ctx, task, **kw: finish._build(ctx, task, "a" * 40))
-    with pytest.raises(steps.CheckFailed):
-        run.advance(ctx, task)
-    invoked = []
-    def write(ctx, task, k, *args):
-        invoked.append(k)
-        assert safefs.read_json(tmp_path, ".school-notes/check.json") == items
-        return {"status": "done"}
-    monkeypatch.setattr(writer, "_call", write)
-    monkeypatch.setattr(writer, "write_changes", lambda *a: None)
-    monkeypatch.setattr(writer, "_check_call", lambda *a: None)
-    assert writer.run_ranges(ctx, phase.load(task.dir), None) == "done"
-    assert invoked == [1]
-
-
-def test_new_invocation_defects_replace_original_retry_input(tmp_path):
-    ctx, task = task_context(tmp_path)
-    call_scope.retry(ctx, task, [check.item("wiki/b/topic.md", None, "finish defect")])
-    call_scope.write_check(ctx, task, 1)
-    newer = [check.item("wiki/b/topic.md", None, "new invocation defect")]
-    steps.write_check_items(ctx, newer)
-    call_scope.write_check(ctx, phase.load(task.dir), 1)
-    assert safefs.read_json(tmp_path, ".school-notes/check.json") == newer
-
-
 def test_per_call_validation_and_mcp_hide_other_subject_errors(tmp_path, monkeypatch):
     ctx, task = task_context(tmp_path)
     task.update(writing_k=1)
     monkeypatch.setattr(steps, "guard_step", lambda *a: None)
-    monkeypatch.setattr(steps, "order_step", lambda *a: [])
     errors = [check.item("wiki/a/topic.md", None, "other subject")]
     def changed(*a, **kw):
         raise steps.CheckFailed(errors)

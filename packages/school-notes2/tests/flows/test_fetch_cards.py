@@ -53,8 +53,7 @@ def test_prepare_persists_only_allocated_review_capacity(tmp_path, monkeypatch):
     assert task.get("calls") == []
     assert not task.get("skip_writer")
     files.apply_closure(repo, task.run_id, [], task.get("open_review_items"), 5)
-    counts = files.open_counts(safefs.read_text(repo, report.relative_to(repo).as_posix()))
-    assert counts == {}
+    assert "Végrehajtva" not in safefs.read_text(repo, report.relative_to(repo).as_posix())
 
 
 @pytest.mark.parametrize("student", LEARNERS)

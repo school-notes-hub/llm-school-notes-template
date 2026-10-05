@@ -50,7 +50,7 @@ def test_check_judges_only_writer_files(repo):
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
         (repo / rel).write_text("$$ [törött](nincs.md)\n")
     (repo / "references/proba").mkdir(parents=True)
-    (repo / "references/proba/k.md").write_text("/home/dlaszlo/titok\n")
+    (repo / "references/proba/k.md").write_text("ghp_" + "a" * 36 + "\n")
     found = check.check_files(repo, ["docs/review/x.md", "sources/proba/csomag/document.md",
                                      "references/proba/k.md"])
     assert [i["file"] for i in found] == ["references/proba/k.md"]

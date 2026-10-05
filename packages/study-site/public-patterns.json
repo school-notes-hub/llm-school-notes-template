@@ -1,5 +1,5 @@
 {
-  "comment": "Patterns that must never appear in the public site (plan 4.10, 5.4/5). Python `re` syntax, matched case-insensitively. `secrets` and `machine_paths` also apply to every wiki Markdown file (the tool's check reads this file); `output_only` applies only to rendered output, because the Markdown legitimately holds these in HTML comments that the renderer drops. The last output_only rule: no link or image may point into sources/ or references/ (those files are strictly private). source_refs are warning-only heuristics; never a publication gate.",
+  "comment": "Patterns that must never appear in the public site (plan 4.10, 5.4/5). Python `re` syntax, matched case-insensitively. `secrets` also apply to every wiki Markdown file (the tool's check reads this file); `machine_paths` and `output_only` apply only to rendered output, because the Markdown legitimately holds these in HTML comments that the renderer drops (and a URL may contain such a path segment). The last output_only rule: no link or image may point into sources/ or references/ (those files are strictly private).",
   "secrets": [
     "OPENROUTER_API_KEY",
     "\\bsk-or-v1-[0-9a-f]{20,}",
@@ -28,10 +28,5 @@
     "<!--\\s*(?:q|figure|figure-request|image):",
     "\"decisions\"\\s*:",
     "(?:href|src|srcset)\\s*=\\s*[\\\"\\x27]?[^\\\"\\x27>\\s]*(?:^|/)docs/review/"
-  ],
-  "source_refs": [
-    "\\b\\d+(?:\\s*[-–]\\s*\\d+)?\\.?\\s*(?:dia|diája|dián|diánál|diákon|fotó\\w*|(?:füzet|tankönyv|PDF)[ -]?oldal\\w*)\\b",
-    "\\b\\d+(?:\\s*[-–]\\s*\\d+)?(?:\\.\\s*oldal\\w*|\\s+oldal(?:on|án|i))\\b",
-    "\\b(?:dia|fotó|füzetoldal|tankönyvoldal|PDF[ -]oldal)\\s*\\d+\\b"
   ]
 }

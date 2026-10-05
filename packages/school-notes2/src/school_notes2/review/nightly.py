@@ -1,45 +1,29 @@
-"""Nightly review, tool side of preparation (plan 5.6/1–3, 6.9/1).
+"""Nightly review from the diff (owner, 2026-10-05): the tool hands the independent reviewer
+only the commit range since the last nightly review – `git diff <from>..<to> -- wiki/`, the
+commit list, the writer's review requests and the open closures. The reviewer decides from
+the diff what is a content change and what it wants to check; administrative and tool
+changes may be skipped. An empty wiki diff needs no call.
 
 Two Git objects are passed in: `repo` is the bare clone (fetch, rev-list, diff, push) and
 `wt` is the review worktree (its own linked gitdir plus --work-tree, for switch/commit).
-The LLM launch is not here; the orchestrator runs the reviewer between prepare and close.
 """
 
-import difflib
 import json
-from dataclasses import dataclass, field
-from pathlib import Path, PurePosixPath
-from typing import Callable
+import re
+from pathlib import Path
 
 from ..git import repos
 from ..git.run import Git, with_retries
-from ..schemas import validate
-from ..state import phase
-from ..state.errors import BadWork, NeedsOwner, Transient
-from ..sources.order import natural_key
-from ..state import safefs
-from ..state.files import read_json, write_bytes, write_json, write_text
+from ..state import phase, safefs
+from ..state.errors import NeedsOwner, Transient
 from ..wiki import markers
 from . import relations
 
-DIFF_PATHS = ("wiki", "docs/review", "docs/evidence/pages")
-IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"}
-RASTER_EXT = IMAGE_EXT - {".svg"}
 MARKER_REF = "refs/remotes/origin/claude-reviewed"
 MAIN_REF = "refs/remotes/origin/main"
 ACTIVE = ("reviewed", "closing", "pushing")
-
-Rasterize = Callable[[list[Path], Path], list[Path]]
-
-
-@dataclass
-class Range:
-    base: str                 # origin/claude-reviewed
-    head: str                 # H = origin/main
-    end: str                  # T: the last commit taken (H, or earlier when a limit cut)
-    commits: list[str]
-    patch: str
-    images: list[dict] = field(default_factory=list)
+REQUEST = "School-Notes-Review-Request: "
+HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 
 
 def fetch(repo: Git, timeout: float) -> None:
@@ -61,57 +45,60 @@ def rev(repo: Git, ref: str) -> str:
     return proc.stdout.decode().strip() if proc.returncode == 0 else ""
 
 
-def changed(repo: Git, a: str, b: str, paths: tuple[str, ...]) -> list[tuple[str, str]]:
-    """[(status, path)] between two commits, renames off (6.3)."""
-    raw = repo.out("diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-status",
-                   "-z", a, b, "--", *paths)
-    parts = raw.split("\0")
-    return [(parts[i][0], parts[i + 1]) for i in range(0, len(parts) - 1, 2)]
+def wiki_diff(repo: Git, base: str, head: str) -> str:
+    return repo.out("diff", "--no-ext-diff", "--no-textconv", "--no-renames", base, head, "--", "wiki")
 
 
-def blob(repo: Git, commit: str, path: str) -> bytes:
-    return repo.run("cat-file", "blob", f"{commit}:{path}").stdout
+def added_lines(patch: str) -> dict[str, set[int]]:
+    """New-side line numbers of the `+` lines per file, read from Git's own hunk headers."""
+    found, path, line = {}, None, 0
+    for text in patch.splitlines():
+        if text.startswith("+++ "):
+            path = text[6:] if text.startswith("+++ b/") else None
+            continue
+        hunk = HUNK.match(text)
+        if hunk:
+            line = int(hunk[1])
+            continue
+        if path is None or text.startswith(("--- ", "diff ", "index ", "\\")):
+            continue
+        if text.startswith("+"):
+            found.setdefault(path, set()).add(line)
+            line += 1
+        elif not text.startswith("-"):
+            line += 1
+    return found
 
 
-def _text(data: bytes, path: str) -> list[str] | None:
-    if PurePosixPath(path).suffix.lower() in IMAGE_EXT or b"\0" in data:
-        return None
-    text = data.decode("utf-8", "replace")
-    return (markers.empty_all(text) if path.endswith(".md") else text).splitlines(keepends=True)
-
-
-def build_patch(repo: Git, a: str, b: str) -> str:
-    """Unified diff of the reviewed paths with generated blocks emptied (plan 5.6/3)."""
+def commits(repo: Git, base: str, head: str) -> list[dict]:
     out = []
-    for status, path in changed(repo, a, b, DIFF_PATHS):
-        old = blob(repo, a, path) if status != "A" else b""
-        new = blob(repo, b, path) if status != "D" else b""
-        old_lines, new_lines = _text(old, path), _text(new, path)
-        if old_lines is None or new_lines is None:
-            out.append(f"Binary file {path} ({status})\n")
-            continue
-        diff = list(difflib.unified_diff(old_lines, new_lines,
-                                         "/dev/null" if status == "A" else f"a/{path}",
-                                         "/dev/null" if status == "D" else f"b/{path}"))
-        out.append("".join(line if line.endswith("\n") else line + "\n" for line in diff))
-    return "".join(out)
+    for sha in repo.out("rev-list", "--reverse", "--topo-order", f"{base}..{head}").split():
+        message = repo.out("show", "-s", "--format=%B", sha)
+        lines = message.splitlines()
+        run = next((l.removeprefix("School-Notes-Run: ") for l in lines if l.startswith("School-Notes-Run: ")), None)
+        requests = []
+        for l in lines:
+            if l.startswith(REQUEST):
+                try:
+                    requests += json.loads(l.removeprefix(REQUEST))
+                except ValueError:
+                    continue
+        out.append({"commit": sha, "subject": lines[0] if lines else "", "run": run, "review_requests": requests})
+    return out
 
 
-def images(repo: Git, a: str, b: str) -> list[dict]:
-    """New source images and new/changed figures, in natural path order (4.3)."""
+def open_closures(work: Path) -> list[dict]:
+    """Writer closures no independent check has judged yet, read from the item records."""
     found = []
-    for status, path in changed(repo, a, b, ("sources", "wiki/assets")):
-        suffix = PurePosixPath(path).suffix.lower()
-        if suffix not in IMAGE_EXT or status == "D":
-            continue
-        if path.startswith("sources/") and status != "A":
-            continue
-        found.append({"path": path, "kind": "source" if path.startswith("sources/") else "figure"})
-    return sorted(found, key=lambda img: natural_key(img["path"]))     # 4.3: 2 before 10
+    for key, item in relations.inventory(work)["items"].items():
+        if (item["status"] == "fixed" and not item.get("recheck") and not item.get("nightly")) or (
+                item["status"] == "disagree" and not item.get("response")):
+            found.append({**item, "key": key})
+    return found
 
 
-def select(repo: Git, *, fetch_timeout: float) -> Range | None:
-    """Pin the entire range. D60's image/diff and D85's commit caps are removed."""
+def prepare(root: Path, student: str, repo: Git, wt: Git, *, fetch_timeout: float, max_agents: int = 3,
+            log=None):
     fetch(repo, fetch_timeout)
     base, head = rev(repo, MARKER_REF), rev(repo, MAIN_REF)
     if not base:
@@ -119,131 +106,56 @@ def select(repo: Git, *, fetch_timeout: float) -> Range | None:
     if not repo.ok("merge-base", "--is-ancestor", base, head):
         raise NeedsOwner("origin/claude-reviewed is not an ancestor of origin/main",
                          todo="check the claude-reviewed branch on GitHub")
-    commits = repo.out("rev-list", "--reverse", "--topo-order", f"{base}..{head}").split()
-    return Range(base, head, head, commits, "") if commits else None
-
-
-def write_input(repo: Git, wt: Git, rng: Range, in_dir: Path, rasterize: Rasterize) -> None:
-    """Review worktree at T; diff.patch, the images and images.json into the input folder."""
-    wt.run("switch", "--detach", "--discard-changes", rng.end)
-    out_dir = in_dir / "images"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    write_text(in_dir / "diff.patch", rng.patch, 0o644)
-    listing, svgs = [], []
-    for n, img in enumerate(rng.images, start=1):
-        name = f"{n:03d}-{PurePosixPath(img['path']).name}"
-        if PurePosixPath(img["path"]).suffix.lower() in RASTER_EXT:
-            write_bytes(out_dir / name, blob(repo, rng.end, img["path"]), 0o644)
-            listing.append({**img, "file": f"images/{name}"})
-        else:
-            svg = in_dir / "svg" / name
-            write_bytes(svg, blob(repo, rng.end, img["path"]), 0o644)
-            svgs.append(svg)
-            listing.append({**img, "file": f"images/{Path(name).with_suffix('.png').name}"})
-    if svgs:
-        rasterize(svgs, out_dir)  # network-less container (plan 5.6/3), never on the host
-    write_json(in_dir / "images.json", listing, 0o644)
-    write_json(in_dir / "relations.json", relations.reviewer_inventory(wt.work_tree), 0o644)
-
-
-def prepare(root: Path, student: str, repo: Git, wt: Git, *, fetch_timeout: float,
-            rasterize: Rasterize, max_agents: int = 3):
-    rng = select(repo, fetch_timeout=fetch_timeout)
-    if rng is None:
-        return None
+    if base == head or not wiki_diff(repo, base, head).strip():
+        if log is not None:
+            log.event("review.no_diff", base=base, head=head)
+        return None  # Nothing in wiki/ changed: no call (owner, 2026-10-05).
     task = phase.create(root, student, "review", "cron", "prepared")
-    task.update(base=rng.base, H=rng.head, T=rng.head, commits=rng.commits,
-                topic_review=True, max_agents=max_agents)
-    resume_prepared(task, repo, wt, rasterize)
+    task.update(base=base, H=head, T=head, diff_review=True, max_agents=max_agents)
+    write_input(task, repo, wt)
     return task
 
 
-def resume_prepared(task: phase.Task, repo: Git, wt: Git, rasterize: Rasterize) -> None:
-    """Recover the pinned tree even after a partial report was committed."""
+def write_input(task: phase.Task, repo: Git, wt: Git) -> None:
+    """The pinned tree at H and the reviewer's input folder; repeatable after a crash."""
     wt.run("switch", "--detach", "--discard-changes", task.get("H"))
-    if task.get("topic_review"):
-        from . import topics
-        if task.get("units") is None or task.get("material_policy") != 1:
-            state = topics.read_state(repo, task.get("H"))
-            grouped, skipped = topics.plan(repo, wt.work_tree, task.get("base"), task.get("H"), state)
-            eligible = {u["topic"] for u in grouped}
-            results = [e for e in task.get("topic_results", [])
-                       if e["unit"]["topic"] in eligible and e["unit"]["mode"] == "full"]
-            task.update(units=grouped, material_policy=1, topic_results=results,
-                        nightly_state=state, skipped_topics=skipped,
-                        blocked_topics=[b for b in state.get("blocked_topics", [])
-                                        if b["topic"] in {u["topic"] for u in grouped}], input_ready=True)
-        return
-    base, end = task.get("base"), task.get("T")
-    rng = Range(base, task.get("H"), end, task.get("commits"), build_patch(repo, base, end),
-                images(repo, base, end))
-    write_input(repo, wt, rng, task.dir / "in", rasterize)
-    task.update(input_ready=True)
+    folder = task.dir / "in"
+    folder.mkdir(parents=True, exist_ok=True)
+    patch = wiki_diff(repo, task.get("base"), task.get("H"))
+    listed = commits(repo, task.get("base"), task.get("H"))
+    sources = repo.out("diff", "--name-only", "--no-renames", task.get("base"), task.get("H"), "--", "sources").split()
+    safefs.write_text(folder, "diff.patch", patch)
+    safefs.write_json(folder, "commits.json", listed)
+    safefs.write_json(folder, "review-requests.json",
+                      [{**r, "commit": c["commit"]} for c in listed for r in c["review_requests"]])
+    safefs.write_json(folder, "items.json", open_closures(wt.work_tree))
+    safefs.write_json(folder, "sources.json", sorted(sources))
+    task.update(input_ready=True, items=[{"key": i["key"], "status": i["status"]} for i in open_closures(wt.work_tree)])
 
 
-def _page_exists(worktree: Path, page: str) -> bool:
-    try:
-        return safefs.is_file(worktree, page)
-    except safefs.UnsafePath:
-        return False
-
-
-def record_review(task: phase.Task, review: dict, worktree: Path | None = None) -> None:
-    """A valid review.json closes the LLM part; from here on no LLM call is needed.
-
-    Figures that name no existing wiki page or no reviewed image cannot become evidence:
-    they are dropped (listed in the task as `dropped_figures`) instead of failing the close
-    every night. The image may be the input name (`images/003-x.png`) or a repo path."""
-    validate("review", review)
-    known = relations.inventory(worktree) if worktree is not None else {"pages": {}, "items": {}}
-    for finding in review["findings"]:
-        page = known["pages"].get(finding["file"], {})
-        if finding.get("relates_to") in page.get("decisions", []) and not finding.get("new_evidence", "").strip():
-            raise BadWork(f"review.json: {finding['id']}: a decision reference requires new_evidence")
-    responses, dropped_responses = relations.valid_responses(review.get("responses", []), known)
-    kept, dropped = _valid_figures(task, review.get("figures") or [], worktree)
-    review = {**review, "figures": kept, "responses": responses}
-    write_json(task.dir / "review.json", review)
-    task.set_phase("reviewed", dropped_figures=dropped, dropped_responses=dropped_responses)
-
-
-def _valid_figures(task: phase.Task, figures: list[dict], worktree: Path | None):
-    listing = read_json(task.dir / "in" / "images.json", []) or []
-    by_input = {img["file"]: img["path"] for img in listing}
-    reviewed = {img["path"] for img in listing}
-    kept, dropped = [], []
-    for fig in figures:
-        path = by_input.get(fig["file"], fig["file"])
-        page = fig["page"]
-        page_ok = (page.startswith("wiki/") and page.endswith(".md") and ".." not in page
-                   and (worktree is None or _page_exists(worktree, page)))
-        if page_ok and path in reviewed:
-            kept.append({**fig, "file": path})
+def triage(review: dict, patch: str, work: Path) -> tuple[list[dict], list[str]]:
+    """Only a learning-blocking finding on an added author line of the diff is an item;
+    every other finding is an owner note (the reviewer's own words, nothing dropped)."""
+    added = added_lines(patch)
+    items, notes = [], list(review["owner_notes"])
+    for f in sorted(review["findings"], key=lambda f: f["id"]):
+        lines = safefs.read_text(work, f["file"]) if safefs.is_file(work, f["file"]) else ""
+        tool = any(start <= _offset(lines, f["line"]) < end for start, end, _ in markers.spans(lines))
+        if f["severity"] == "hiba" and f["line"] in added.get(f["file"], set()) and not tool:
+            items.append(f)
         else:
-            dropped.append({"file": fig["file"], "page": page})
-    return kept, dropped
+            notes.append(f"{f['file']}:{f['line']}: {f['problem']}" + (f" → {f['suggestion']}" if f.get("suggestion") else ""))
+    return items, list(dict.fromkeys(" ".join(n.split()) for n in notes))
+
+
+def _offset(text: str, line: int) -> int:
+    rows = text.splitlines(keepends=True)
+    return sum(len(r) for r in rows[:max(0, line - 1)])
 
 
 def pending_close(tasks: list[phase.Task]) -> phase.Task | None:
-    """An earlier review whose review.json is valid but whose closing did not finish."""
+    """An earlier review whose output is valid but whose closing did not finish."""
     for task in tasks:
-        if task.kind == "review" and task.open and task.phase in ACTIVE:
+        if task.kind == "review" and task.open and task.phase in ACTIVE and task.get("diff_review"):
             return task
     return None
-
-
-def load_review(task: phase.Task) -> dict:
-    review = json.loads((task.dir / "review.json").read_text(encoding="utf-8"))
-    if task.get("topic_review"):
-        return review  # Tool-assembled from separately validated topic receipts.
-    # Already saved reports from the previous contract remain resumable.
-    legacy = {**review, "findings": [{"relates_to": None, "severity": "hiba", **{
-        k: v for k, v in f.items() if k not in ("origin", "chain", "unlocated")}}
-        for f in review["findings"]]}
-    for field in ("hits", "items", "responses"):
-        if field in legacy:
-            legacy[field] = [{"severity": "hiba", **r} for r in legacy[field]]
-    legacy.pop("family_questions", None)
-    validate("review", legacy)
-    return {**legacy, **({"family_questions": review["family_questions"]}
-                       if "family_questions" in review else {})}

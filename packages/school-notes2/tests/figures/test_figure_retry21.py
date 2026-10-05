@@ -8,7 +8,6 @@ import pytest
 from school_notes2.figures import commissions, context, machine, migrate_pending, pending
 from school_notes2.flows import correction_figures, review_phases
 from school_notes2.state import safefs
-from school_notes2.wiki import banners
 from school_notes2.wiki.check_result import check_result
 
 
@@ -30,23 +29,19 @@ def test_banner_embedding_and_mandatory_marker(repo, make_figure):
     brief, candidate = make_figure(kind="banner")
     assert context.embedding(repo, brief, candidate)["alt"] == candidate["alt"]
     assert context.embedding(repo, brief, candidate)["caption"] == candidate["caption"]
-    page = brief["page"]
-    assert banners.check_required(repo, [page])  # A footer marker is no header.
-    safefs.write_text(repo, page, "---\ntype: topic\ntitle: Forces\n---\n<!-- image: forces -->\n# Forces\n")
-    assert not banners.check_required(repo, [page])
     candidate = {"state": "no-figure", "reason": "No header"}
     safefs.write_json(repo, ".school-notes/figures/forces/figure.json", candidate)
     with pytest.raises(ValueError, match="required banner"):
         commissions.candidate(repo, brief)
 
 
-def test_only_real_attempts_count_and_missing_candidate_is_check_error(repo, make_figure):
+def test_only_real_attempts_count_and_missing_candidate_stays_pending(repo, make_figure):
     brief, _ = make_figure()
     first = pending.record(repo, brief, "one", [])
     safefs.unlink(repo, ".school-notes/figures/forces/figure.json")
     assert pending.record(repo, brief, "two", [])["runs"] == 1
     fetch = {"packages": [], "pages": [], "pending_figures": [first]}
-    assert check_result(repo, {"status": "done"}, fetch, set())
+    assert not check_result(repo, {"status": "done"}, fetch, set())  # #18: no error, still pending
     safefs.write_json(repo, ".school-notes/figures/forces/figure.json", {"state": "failed", "reason": "Render failed"})
     assert not check_result(repo, {"status": "done"}, fetch, set())
     assert pending.record(repo, brief, "two", [])["runs"] == 2
@@ -105,33 +100,6 @@ def test_history_restores_latest_unpoisoned_defects():
     assert migrate_pending.historical(git, {"f"}) == {"f": [{"observed": "wrong arrow"}]}
 
 
-@pytest.mark.parametrize("boundary", ["marker", "pending"])
-def test_nightly_rejection_resumes_without_duplicate_queue(repo, make_figure, monkeypatch, boundary):
-    from school_notes2.figures import rejected
-    from school_notes2.review import night_figures
-    brief, candidate = make_figure()
-    page = brief["page"]
-    safefs.write_text(repo, page, safefs.read_text(repo, page).replace("<!-- figure: forces -->", "![F](../assets/physics/forces.png)"))
-    spec = night_figures.discover(repo, {"topic": page, "pages": [page]})[0]
-    verdict = {"defects": [{"severity": "hiba", "location": "arrow", "observed": "wrong", "expected": "right"}],
-               "text_mismatch": [], "observed": "arrow"}
-    entry = rejected.request(spec, brief, verdict, night_figures.fingerprint(repo, spec))
-    original = safefs.write_text
-    fired = []
-    def crash(root, path, value, mode=0o644):
-        original(root, path, value, mode)
-        if not fired and path == (page if boundary == "marker" else pending.PATH):
-            fired.append(1)
-            raise KeyboardInterrupt()
-    monkeypatch.setattr(safefs, "write_text", crash)
-    with pytest.raises(KeyboardInterrupt):
-        rejected.apply(repo, [entry])
-    rejected.apply(repo, [entry])
-    rejected.apply(repo, [entry])
-    assert pending.load(repo)[0]["runs"] == 0
-    assert safefs.read_text(repo, page).count(f"<!-- figure: {entry['commission']['id']} -->") == 1
-
-
 @pytest.mark.parametrize("inherited", [False, True])
 def test_p1_rejects_drawn_banner_even_with_invalid_inherited_context(repo, make_figure, inherited):
     brief, _ = make_figure(kind="banner")
@@ -139,4 +107,8 @@ def test_p1_rejects_drawn_banner_even_with_invalid_inherited_context(repo, make_
     fetch = {"packages": [], "pages": [], "pending_figures": [{"commission": brief}] if inherited else []}
     result = {"status": "done", "figures": [] if inherited else [assignment]}
     problems = check_result(repo, result, fetch, set(), base_content=lambda _: None)
-    assert any("generation receipt" in p["message"] for p in problems)
+    if inherited:  # A pending figure is judged in P2 (failed candidate), never a P1 error (#18).
+        assert not problems
+        assert any("generation receipt" in e for e in commissions.preflight(repo, brief))
+    else:
+        assert any("generation receipt" in p["message"] for p in problems)

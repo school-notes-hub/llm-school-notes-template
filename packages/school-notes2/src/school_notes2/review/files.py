@@ -20,8 +20,6 @@ OPEN, OWNER, FIXED, DISAGREE = "open", "owner", "fixed", "disagree"
 WORDS = {"fixed": "javítva", "disagree": "nem ért egyet", "open": "nyitva",
          "untouched": "nem érintett", "question": "nyitott kérdés", "settled": "rendezett"}
 DONE_HEADING = re.compile(r"^## Végrehajtva \((?P<run>[^)]+)\)$", re.M)
-DONE_LINE = re.compile(r"^\* (?P<item>R\d+) – (?P<word>javítva|nem ért egyet|nyitva|nem érintett)",
-                       re.M)
 ITEM_NUM = re.compile(r"R(\d+)")
 # The items as they were before this run's section: lets a repeated finish of the same,
 # still uncommitted run replace its own section instead of skipping a corrected result.
@@ -214,16 +212,6 @@ def open_items(repo: Path, mode: str) -> list[dict]:
     return found
 
 
-def open_counts(text: str) -> dict[str, int]:
-    """How many times each item stayed open or untouched across all Végrehajtva sections."""
-    counts: dict[str, int] = {}
-    for section in DONE_HEADING.split(text)[2::2]:
-        for m in DONE_LINE.finditer(section):
-            if m.group("word") in (WORDS["open"], WORDS["untouched"]):
-                counts[m.group("item")] = counts.get(m.group("item"), 0) + 1
-    return counts
-
-
 def _done_section(run_id: str, entries: list[tuple[str, str, str]], before: dict) -> str:
     lines = [f"## Végrehajtva ({run_id})", "",
              f"<!-- school-notes:before {json.dumps(before, sort_keys=True)} -->", ""]
@@ -277,18 +265,15 @@ def _apply_one(repo: Path, path: Path, run_id: str, closures: dict, listed: list
             note = " ".join(filter(None, [note, c.get("question_id"), c.get("decision_id")]))
         entries.append((item_id, status, note))
         record = dict(details.get(item_id, relations.details(page, item_id)))
-        if automatic and item_id in before:
-            attempts.record(record, run_id)
+        if automatic and item_id in before and status in (FIXED, DISAGREE):
+            attempts.record(record, run_id)  # Only a real writer attempt counts (Fable 8).
         details[item_id] = record
         if status in (FIXED, DISAGREE, "question", "settled"):
             items[item_id] = status
             record.pop("recheck", None)
             details[item_id] = record
     body = body.rstrip("\n") + "\n\n" + _done_section(run_id, entries, before)
-    counts = open_counts(body)
-    new_owner = [i for i, s in items.items() if s == OPEN and (
-        attempts.failed_status(details[i]) == OWNER if "repair_attempts" in details.get(i, {})
-        else counts.get(i, 0) >= owner_after)]
+    new_owner = [i for i, s in items.items() if s == OPEN and attempts.failed_status(details.get(i, {})) == OWNER]
     for item_id in new_owner:
         items[item_id] = OWNER
     new_text = fm.set_keys(f"---\n{page.raw_meta}\n---\n{body}",

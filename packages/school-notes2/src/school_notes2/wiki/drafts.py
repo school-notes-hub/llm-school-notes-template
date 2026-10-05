@@ -11,9 +11,9 @@ KEY = "draft_tracking"
 NOTICE = "⏳ Ez a téma az órán folytatódik; a jegyzet az eddig tanult részt tartalmazza.\n"
 
 
-def lesson_keys(repo: Path) -> dict[str, list[str]]:
+def lesson_keys(repo: Path, skip=()) -> dict[str, list[str]]:
     found: dict[str, list[str]] = {}
-    for rel in sorted(wiki_pages(repo)):
+    for rel in sorted(set(wiki_pages(repo)) - set(skip)):
         meta = read_page(repo, rel).meta
         if not lesson_log.is_lesson(rel, meta):
             continue

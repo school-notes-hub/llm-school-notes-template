@@ -1,17 +1,24 @@
-"""P2/P3: final candidate state, independent reader and figure checks, one report."""
+"""P2 and one independent check per run: the reader (new material, P3) or the recheck of
+every changed author line (fix runs, P5). Findings become items for the next run."""
 
 import subprocess
 
-from ..figures import pending, commissions, context, inputs as figure_inputs, review as figure_review, migration_gate
+from ..figures import commissions, context, inputs as figure_inputs, review as figure_review, migration_gate
 from ..reader import calls, inputs, report, units, verdicts
 from ..state import safefs
-from ..wiki import banners, frontmatter
 from . import correction_figures, generation_receipts, steps
 from .inspection_runtime import folder, role, render, figures
 
+RECEIPT = "inspection.json"
+
+
+def rechecking(task):
+    """Fix runs and resumed 2.5.x correction rounds recheck lines; new material is read."""
+    return task.get("mode") == "fix" or bool(task.get("recheck_all"))
+
 
 def prepare(ctx, task):
-    result = task.get("inspection_result")
+    result = task.get("inspection_result") or {}
     waiting = {e["commission"]["id"]: e["commission"] for e in task.get("pending_figures", [])}
     assignments = [a for a in commissions.assignments(result, task.get("pending_figures", []))
                    if not migration_gate.concerns(ctx.notes_path, a)]
@@ -27,30 +34,18 @@ def prepare(ctx, task):
             brief = commissions.validate_assignments(ctx.notes_path, [assignment])[0]
         except (ValueError, OSError) as exc:
             if assignment["id"] not in waiting:
-                raise steps.CheckFailed(commissions.check(ctx.notes_path, [assignment])) from exc
+                # A new commission the writer left invalid gives no figure; the text stays (#7).
+                ctx.log.event("figure.invalid_commission", "warning", target=assignment["id"], message=str(exc)[:200])
+                continue
             brief = waiting[assignment["id"]]
             candidate = {"state": "failed", "reason": str(exc)}
             safefs.write_json(ctx.notes_path, f".school-notes/figures/{brief['id']}/figure.json", candidate)
         else:
             candidate = candidate_state(ctx, task, brief)
         states.append({"brief": brief, "candidate": candidate, "attempted": attempted})
-    briefs = [s["brief"] for s in states]
     changed = sorted(steps.llm_snapshot(ctx, task))
-    grouped = units.collect(ctx.notes_path, changed, result.get("review_closure", []), briefs)
-    task.update(inspection_changed=task.get("inspection_changed", changed), inspection_all_units=grouped)
-    # Retry only changed keys. A unit containing an invalid page is read as a whole.
-    grouped = [u for u in grouped if task.get("mode") == "fix" or any(verdicts.valid(ctx.notes_path, p) is None for p in u["pages"])
-               or any(s["brief"]["page"] in u["pages"] and figure_changed(ctx, task, s) for s in states)]
-    task.update(inspection_figures=states, inspection_units=grouped)
-
-
-def figure_changed(ctx, task, state):
-    if state["candidate"]["state"] != "candidate":
-        return False
-    brief = state["brief"]
-    key = context.verdict_key(ctx.notes_path, brief, state["candidate"])
-    previous = task.get("inspection_receipts", {}).get(brief["id"], {})
-    return figure_review.verdict_for(previous, brief["id"]).get("key") != key
+    grouped = [] if rechecking(task) else units.collect(ctx.notes_path, changed, (), [s["brief"] for s in states])
+    task.update(inspection_figures=states, inspection_units=grouped, inspection_changed=changed)
 
 
 def candidate_state(ctx, task, brief):
@@ -71,54 +66,58 @@ def candidate_state(ctx, task, brief):
     return candidate
 
 
+def figure_changed(ctx, task, state):
+    if state["candidate"]["state"] != "candidate":
+        return False
+    brief = state["brief"]
+    key = context.verdict_key(ctx.notes_path, brief, state["candidate"])
+    previous = task.get("inspection_receipts", {}).get(brief["id"], {})
+    return figure_review.verdict_for(previous, brief["id"]).get("key") != key
+
+
 def old_text(ctx, task, page):
-    old = ctx.worktree("notes").run("show", f"{steps.base_of(task)}:{page}", check=False)
-    return old.stdout.decode("utf-8", "replace") if old.returncode == 0 else ""
+    old = steps.base_reader(ctx, task)(page)
+    return old.decode("utf-8", "replace") if old is not None else ""
 
 
 def inspect(ctx, task):
-    root, repo = folder(task), ctx.notes_path
-    saved = safefs.read_json(root, "p3.json")
+    from . import recheck
+    root = folder(task)
+    saved = safefs.read_json(root, RECEIPT)
     if saved is None:
-        view = prepare_view(ctx, task, root)
-        findings, notes, pages, coverage, fixes = inspect_readers(ctx, task, view)
+        view = root / "reader-view"
+        inputs.preview(ctx.notes_path, view, [s["brief"] for s in task.get("inspection_figures", [])], render(ctx, task))
         receipts, figure_notes = inspect_figures(ctx, task)
-        notes += figure_notes
-        saved = {"findings": findings, "notes": notes, "pages": pages, "receipts": receipts, "coverage": coverage, "fixes": fixes}
-        safefs.write_json(root, "p3.json", saved)
-    _apply(ctx, task, saved)
-    if saved.get("fixes"):
-        from . import recheck
-        recheck.apply(ctx, task, {"units": saved["fixes"], "receipts": saved["receipts"]})
-
-
-def prepare_view(ctx, task, root):
-    repo = ctx.notes_path
-    briefs = [s["brief"] for s in task.get("inspection_figures", [])]
-    view = root / "reader-view"
-    inputs.preview(repo, view, briefs, render(ctx, task))
-    for unit in task.get("inspection_units", []):
-        for page in unit["pages"]:
-            if frontmatter.split(safefs.read_text(repo, page)).meta.get("banner_from"):
-                unit["keys"][page] = units.page_key(repo, page, banner_image=banners.candidate_image(repo, page, briefs))
-    return view
+        if rechecking(task):
+            saved = {"recheck": recheck.run(ctx, task, view), "receipts": receipts, "notes": figure_notes}
+        else:
+            findings, notes, pages = inspect_readers(ctx, task, view)
+            saved = {"findings": findings, "notes": notes + figure_notes, "pages": pages, "receipts": receipts}
+        safefs.write_json(root, RECEIPT, saved)
+    if "recheck" in saved:
+        recheck.apply(ctx, task, saved)
+    else:
+        _apply(ctx, task, saved)
 
 
 def inspect_readers(ctx, task, view):
-    findings, notes, pages, coverage, fixes = [], [], [], [], []
+    findings, notes, pages = [], [], []
+    changed = set(task.get("inspection_changed", []))
+    figured = {s["brief"]["page"] for s in task.get("inspection_figures", []) if figure_changed(ctx, task, s)}
     for unit in task.get("inspection_units", []):
-        if task.get("mode") == "fix":
-            from . import recheck
-            closures = [c for c in task.get("inspection_result", {}).get("review_closure", [])
-                        if c["status"] in ("fixed", "disagree")]
-            fixes.append(recheck.check_unit(ctx, task, view, unit, closures))
-        else:
-            result = _reader(ctx, task, view, unit)
-            findings += result["findings"]
-            notes += result["notes"]
-            pages += result["pages"]
-            coverage.append({"topic": unit["topic"], **result["coverage"]})
-    return findings, notes, pages, coverage, fixes
+        # Only changed pages without a current verdict (or with a changed figure) are
+        # assigned; the rest of the topic is context (Fable 6). Nothing is read twice.
+        assigned = [p for p in unit["pages"] if p in figured or
+                    (p in changed and verdicts.valid(ctx.notes_path, p) is None)]
+        if not assigned:
+            continue
+        unit = {**unit, "pages": assigned, "context": sorted(set(unit["pages"]) - set(assigned) | set(unit["context"])),
+                "keys": {p: units.page_key(ctx.notes_path, p) for p in assigned}}
+        result = _reader(ctx, task, view, unit)
+        findings += result["findings"]
+        notes += result["notes"]
+        pages += result["pages"]
+    return findings, notes, pages
 
 
 def inspect_figures(ctx, task):
@@ -144,53 +143,32 @@ def inspect_figures(ctx, task):
 def _reader(ctx, task, view, unit):
     repo, root = ctx.notes_path, folder(task) / "reader" / units.slug(unit["topic"])
     assigned = inputs.prepare(repo, view, unit, root / "pass1/in", lambda p: old_text(ctx, task, p))
-    first = calls.run(repo, view, root / "pass1", "reader-1", assigned, role(ctx, task), log=ctx.log,
-                      allowed_paths=set(unit["pages"]) | set(unit.get("context", [])))
-    findings, notes, pages, coverage = [], [], [], {"errors": 0, "covered": 0}
-    if first["status"] == "reviewed":
-        review = first["review"]
-        safefs.write_json(repo, f".school-notes/reader/{root.name}/pass1.json", review)
-        findings = [{**f, "origin": "reader", "outside_assignment": f["file"] not in unit["pages"]}
-                    for f in review["findings"]]
-        notes += review["owner_notes"]
-        pages = [{**p, "key": unit["keys"][p["file"]], "model": first["model"]} for p in review["pages"]]
-    hits = [h for h in task.get("check_warnings", []) if h["file"] in unit["pages"]]
-    if hits:
-        second_in = root / "pass2/in"
-        second_in.mkdir(parents=True, exist_ok=True)
-        ids = [f["id"] for f in findings]
-        assigned = {"hits": [h["id"] for h in hits], "findings": ids}
-        safefs.write_json(second_in, "assigned.json", assigned)
-        safefs.write_json(second_in, "hits.json", inputs.hits(repo, hits))
-        safefs.write_json(second_in, "findings.json", findings)
-        second = calls.run(repo, view, root / "pass2", "reader-2", assigned, role(ctx, task), log=ctx.log)
-        if second["status"] == "reviewed":
-            review = second["review"]
-            safefs.write_json(repo, f".school-notes/reader/{root.name}/pass2.json", review)
-            findings += report.list_findings(repo, hits, review["hits"], findings)
-            notes += review["owner_notes"]
-            errors = [h for h in review["hits"] if h["verdict"] == "hiba"]
-            coverage = {"errors": len(errors), "covered": sum(h["covered_by"] is not None for h in errors)}
-            ctx.log.event("reader.coverage", topic=unit["topic"], **coverage)
-    return {"findings": findings, "notes": notes, "pages": pages, "coverage": coverage}
+    first = calls.run(repo, view, root / "pass1", "reader-1", assigned, role(ctx, task), log=ctx.log)
+    if first["status"] != "reviewed":
+        return {"findings": [], "notes": [], "pages": []}
+    review = first["review"]
+    safefs.write_json(repo, f".school-notes/reader/{root.name}/pass1.json", review)
+    return {"findings": [{**f, "origin": "reader"} for f in review["findings"]], "notes": review["owner_notes"],
+            "pages": [{**p, "key": unit["keys"][p["file"]], "model": first["model"]} for p in review["pages"]]}
 
 
 def _apply(ctx, task, saved):
     findings, notes, pages = report.prepare(ctx.notes_path, saved["findings"], saved["notes"], saved["pages"])
-    saved = {**saved, "findings": findings, "notes": notes, "pages": pages}
     path = f"docs/review/{task.data['created'][:10]}-{task.run_id}-run.md"
-    if not task.get("inspection_figures") and not any(saved.get(k) for k in ("findings", "notes", "pages", "receipts", "fixes")):
+    if not task.get("inspection_figures") and not any(saved.get(k) for k in ("findings", "notes", "pages", "receipts")):
         task.update(inspection_receipts={}, reader_pages=[])
         return
     model = role(ctx, task).role
-    existing = frontmatter.split(safefs.read_text(ctx.notes_path, path)) if safefs.is_file(ctx.notes_path, path) else None
-    if existing is not None and (task.get("attempt", 1) > 1 or existing.meta.get("reviewer") == "check"):
-        report.append(ctx.notes_path, path, saved["findings"], saved["notes"], f"attempt-{task.get('attempt', 1)}")
+    from . import journal
+    journal.settle(ctx, task)
+    write = lambda repo, rel, text: journal.write(ctx, task, rel, text, whole=True)
+    if safefs.is_file(ctx.notes_path, path):
+        report.append(ctx.notes_path, path, findings, notes, f"reader-{task.get('attempt', 1)}", write=write)
     else:
-        report.write(ctx.notes_path, path, saved["findings"], saved["notes"],
-                     f"{model.model}/{model.effort}", task.get("base"), task.data["created"])
-    for page in saved["pages"]:
+        report.write(ctx.notes_path, path, findings, notes, f"{model.model}/{model.effort}", task.get("base"),
+                     task.data["created"], write=write)
+    for page in pages:
         verdicts.record(ctx.notes_path, [page], {page["file"]: page["key"]}, page["model"], task.data["created"])
-    task.update(inspection_report=path, inspection_receipts=saved["receipts"], reader_pages=saved["pages"],
-                reader_owner_notes=saved["notes"], reader_coverage=saved.get("coverage", []))
-    steps.record_tool_files(task, ctx.notes_path, [path, verdicts.PATH, "docs/review/warning-verdicts.json"])
+    task.update(inspection_report=path, inspection_receipts=saved["receipts"], reader_pages=pages,
+                reader_owner_notes=notes)
+    steps.record_tool_files(task, ctx.notes_path, [path, verdicts.PATH])

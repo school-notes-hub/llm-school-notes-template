@@ -62,8 +62,9 @@ def test_stale_keys_and_figure_records_are_not_upgraded(setup):
 
 
 @pytest.mark.parametrize("boundary", ["before", "after"])
-@pytest.mark.parametrize("target", [verdicts.PATH, "docs/review/legacy.md"])
-def test_migrations_resume_and_preserve_nonliteral_items(setup, monkeypatch, boundary, target):
+@pytest.mark.parametrize("target", [verdicts.PATH])
+def test_migrations_resume_and_never_route_items_by_quote(setup, monkeypatch, boundary, target):
+    """T2: no item is moved to the owner because its quote matches tool text."""
     ctx, task, page = setup
     repo = ctx.notes_path
     safefs.write_text(repo, page, nested("notes"))
@@ -85,10 +86,10 @@ def test_migrations_resume_and_preserve_nonliteral_items(setup, monkeypatch, bou
     task = phase.load(task.dir)
     learning.migrate(ctx, task)
     known = relations.inventory(repo)["items"]
-    assert [item["status"] for item in known.values()] == ["owner", "open", "open"]
-    assert known["docs/review/legacy.md#R1"]["tool_reason"]
-    assert len(files.open_items(repo, "cron")) == 2
-    before = {rel: safefs.read_bytes(repo, rel) for rel in (verdicts.PATH, "docs/review/legacy.md")}
+    assert [item["status"] for item in known.values()] == ["open", "open", "open"]
+    assert not known["docs/review/legacy.md#R1"].get("tool_reason")
+    assert len(files.open_items(repo, "cron")) == 3
+    before = {rel: safefs.read_bytes(repo, rel) for rel in (verdicts.PATH,)}
     learning.migrate(ctx, phase.load(task.dir))
     for rel, data in before.items():
         assert safefs.read_bytes(repo, rel) == data

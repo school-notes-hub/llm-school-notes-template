@@ -215,7 +215,7 @@ def _headless(run, *, log, snapshot, podman):
 
 def _volume_role(role_name: str) -> str:
     """The reviewer has its own home; everything else (writer, chat) uses the writer's."""
-    return "reviewer" if role_name in ("reviewer", "figure-review", "reader-1", "reader-2", "recheck") else "writer"
+    return "reviewer" if role_name in ("reviewer", "figure-review", "reader-1", "recheck") else "writer"
 
 
 def _run_fed(argv: list[str], stdin: bytes | None, out, name: str, timeout: float,
@@ -306,20 +306,3 @@ def run_login(*, learner: str, role: str, harness: Harness, image: str, log: Log
     return rc
 
 
-def run_offline(*, learner: str, run_id: str, image: str, in_dir: Path, out_dir: Path,
-                command: list[str], log: Log, timeout: float, limits: Limits = Limits(),
-                podman: str = "podman") -> int:
-    """A networkless helper container (SVG rasterising for the reviewer, plan 5.6/3)."""
-    name = container_name(learner, run_id=run_id, role="raster")
-    remove_stale(name, podman)
-    argv = podman_argv(learner=learner, image=image, run_id=run_id, name=name, network=False,
-                       mounts=Mounts(in_dir=in_dir, out_dir=out_dir, home=False),
-                       limits=limits, podman=podman) + command
-    proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL)
-    timed_out = _wait(proc, name, timeout, podman)
-    log.event("llm.offline", "error" if timed_out or proc.returncode else "ok",
-              rc=proc.returncode, timed_out=timed_out)
-    if timed_out:
-        raise Transient("the offline helper container timed out")
-    return proc.returncode

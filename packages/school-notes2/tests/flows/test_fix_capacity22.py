@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from school_notes2.flows import correction, correction_figures
+from school_notes2.flows import correction_figures
 from school_notes2.review import files
 from school_notes2.sources import calls
 from school_notes2.state import phase, safefs
@@ -32,16 +32,12 @@ def test_assignment_reserves_all_attempts_per_generated_figure(tmp_path, monthly
     assert all(e["runs"] == 0 for e in entries)
 
 
-@pytest.mark.parametrize("p4", [False, True])
-def test_31_item_page_assigned_in_one_run_two_calls(tmp_path, p4):
+def test_31_item_page_assigned_in_one_run_two_calls(tmp_path):
     page = "wiki/m/a.md"
-    path = files.write_review(tmp_path, "2026-10-05", {"verdict": "changes", "findings": [
+    files.write_review(tmp_path, "2026-10-05", {"verdict": "changes", "findings": [
         {"severity": "hiba", "id": f"R{n}", "file": page, "problem": "Hiba.", "relates_to": None}
-        for n in range(1, 32)]}, "fake", "a", "b").relative_to(tmp_path).as_posix()
-    ctx = SimpleNamespace(name="learner", notes_path=tmp_path, cfg=SimpleNamespace(state_dir=tmp_path / "state", limits=SimpleNamespace(review_closures_per_run=30)))
-    task = phase.create(tmp_path / "state", "learner", "notes", "cron", "correcting")
-    task.update(inspection_report=path, inspection_units=[{"pages": [page]}], inspection_result={})
-    selected = correction.assigned(ctx, task) if p4 else files.open_items(tmp_path, "cron")
+        for n in range(1, 32)]}, "fake", "a", "b")
+    selected = files.open_items(tmp_path, "cron")
     grouping = calls.fix_assignments(tmp_path, selected, [])
     assert [len(c["open_review_items"]) for c in grouping] == [30, 1]
     for n, call in enumerate(grouping, 1):

@@ -44,7 +44,8 @@ def test_nightly_review_end_to_end(world, tmp_path, monkeypatch):
     report = [f for f in files if f.endswith("-review.md")]
     assert report, files
     text = show(origin, f"main:{report[0]}")
-    assert "R1: open" in text and "### R1" in text
+    assert "R1: open" in text and "### R1" in text and "R2:" not in text
+    assert "Régi sor gondja." in text  # A finding on an unchanged line is an owner note.
     reviewed = subprocess.run(["git", f"--git-dir={origin}", "rev-parse", "claude-reviewed", "main"],
                               capture_output=True, text=True).stdout.split()
     assert reviewed[0] == reviewed[1]          # quiet close: M=R
@@ -56,6 +57,30 @@ def test_nightly_review_end_to_end(world, tmp_path, monkeypatch):
     assert nightly_flow.nightly(ctx) == 0      # the third night is still empty
     assert len([t for t in phase.all_tasks(ctx.task_root(), "benedek") if t.kind == "review"]) == 1
     assert len(delivered) == 1  # Empty nights add no mail.
+
+
+def test_admin_only_commit_reaches_the_reviewer_but_gives_no_item(world, tmp_path, monkeypatch):
+    """Owner, 2026-10-05: the reviewer decides from the diff; a tool-only change (here a ⏳
+    block) cannot become an item, and a range without a wiki diff needs no call at all."""
+    ctx, origin, drive, package = world
+    seed = subprocess.run(["git", f"--git-dir={origin}", "rev-parse", "main"],
+                          capture_output=True, text=True, check=True).stdout.strip()
+    subprocess.run(["git", f"--git-dir={origin}", "update-ref", "refs/heads/claude-reviewed", seed], check=True)
+    laptop_commit(tmp_path, origin, "docs/review/index.md", "# Review\n\nadmin\n")
+    assert nightly_flow.nightly(ctx) == 0
+    assert not [t for t in phase.all_tasks(ctx.task_root(), "benedek") if t.kind == "review"]
+    text = show(origin, "main:wiki/proba/elso.md")
+    notice = "<!-- school-notes:generated pending -->\n⏳ Ezt az oldalt még ellenőrizzük.\n<!-- /school-notes:generated -->\n"
+    clone = tmp_path / "laptop"
+    (clone / "wiki/proba/elso.md").write_text(text + notice, encoding="utf-8")
+    subprocess.run(["git", "-C", str(clone), "commit", "-qam", "tool notice\n\nSchool-Notes-Run: fix"], check=True, env=ENV)
+    subprocess.run(["git", "-C", str(clone), "push", "-q", "origin", "main"], check=True, env=ENV)
+    assert nightly_flow.nightly(ctx) == 0, ctx.cfg.log_path.read_text()[-2000:]
+    task = [t for t in phase.all_tasks(ctx.task_root(), "benedek") if t.kind == "review"][-1]
+    assert task.phase == "done"
+    assert [c["run"] for c in json.loads((task.dir / "in/commits.json").read_text())] == ["chat", "fix"]
+    review = json.loads((task.dir / "review.json").read_text())
+    assert review["findings"] == [] and any("Hiányzik egy példa." in n for n in review["owner_notes"])
 
 
 def test_nightly_without_marker_needs_owner(world):

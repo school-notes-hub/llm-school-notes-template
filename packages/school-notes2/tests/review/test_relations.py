@@ -30,7 +30,6 @@ def test_reference_closure_and_same_run_resume(tmp_path, report, status, field, 
     # Even at the escalation threshold a reference closure does not stay open.
     for n in range(4):
         files.apply_closure(tmp_path, f"earlier-{n}", [], listed)
-    assert files.open_counts(path.read_text()) == {"R1": 4}
     outcome = files.apply_closure(tmp_path, "run", [closure], listed)
     before = path.read_bytes()
     files.apply_closure(tmp_path, "run", [closure], listed)
@@ -38,7 +37,6 @@ def test_reference_closure_and_same_run_resume(tmp_path, report, status, field, 
     assert frontmatter.split(path.read_text()).meta["items"]["R1"] == status
     assert key in path.read_text()
     assert not outcome.new_owner
-    assert files.open_counts(path.read_text()) == {"R1": 4}
     assert not files.open_items(tmp_path, "cron")
     own_section = path.read_text().split("## Végrehajtva (run)")[1]
     assert "nem érintett" not in own_section
@@ -149,18 +147,6 @@ def test_new_review_requires_relates_to_and_no_direct_family_questions():
         validate("review", {"verdict": "ok", "findings": [], "family_questions": []})
 
 
-def test_saved_legacy_review_is_still_resumable(tmp_path):
-    from school_notes2.review import nightly
-    from school_notes2.state import phase
-    from school_notes2.state.files import write_json
-    task = phase.create(tmp_path, "tester", "review", "cron", "reviewed")
-    write_json(task.dir / "review.json", {"verdict": "changes", "findings": [
-        {"severity": "hiba", "id": "R1", "file": PAGE, "problem": "Régi tétel."}], "family_questions": ["Régi kérdés."]})
-    saved = nightly.load_review(task)
-    assert saved["findings"][0]["relates_to"] is None
-    assert saved["family_questions"] == ["Régi kérdés."]
-
-
 @pytest.mark.parametrize("status", ["disagree", "fixed", "settled"])
 @pytest.mark.parametrize("chain", [0, 1])
 def test_related_dispute_never_reborn_and_chain_is_tool_owned(tmp_path, report, status, chain):
@@ -212,24 +198,21 @@ def test_reviewer_inventory_is_grouped_filtered_and_deterministic(tmp_path, repo
 
 @pytest.mark.parametrize("target", [PAGE, "wiki/assets/a.svg"])
 def test_missing_decision_evidence_is_invalid_output_not_unlocated(tmp_path, report, target):
-    from school_notes2.review import nightly
-    from school_notes2.state import phase
-    from school_notes2.state.errors import BadWork
-    task = phase.create(tmp_path / "tasks", "tester", "review", "cron", "reviewing")
+    from school_notes2.review import call
     page = tmp_path / PAGE
     page.write_text(page.read_text() + '\n![Ábra](../assets/a.svg)\n')
-    finding = {"severity": "hiba", "id": "R1", "file": target, "problem": "Más adat.", "relates_to": "tema-nev"}
-    with pytest.raises(BadWork, match="requires new_evidence"):
-        nightly.record_review(task, {"verdict": "changes", "findings": [finding]}, tmp_path)
-    assert task.phase == "reviewing" and not (task.dir / "review.json").exists()
-    nightly.record_review(task, {"verdict": "changes", "findings": [{**finding, "new_evidence": "Új bizonyíték."}]}, tmp_path)
-    assert task.phase == "reviewed"
+    (tmp_path / "wiki/assets").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "wiki/assets/a.svg").write_text("<svg/>")
+    finding = {"severity": "hiba", "id": "R1", "file": target, "line": 1, "quote": "q", "problem": "Más adat.",
+               "relates_to": "tema-nev"}
+    with pytest.raises(ValueError, match="requires new_evidence"):
+        call.check({"findings": [finding], "items": [], "owner_notes": []}, {"items": []}, tmp_path)
+    call.check({"findings": [{**finding, "new_evidence": "Új bizonyíték."}], "items": [], "owner_notes": []},
+               {"items": []}, tmp_path)
 
 
 @pytest.mark.parametrize("embedded", [True, False])
 def test_asset_routes_using_embedding_page_questions_and_decisions(tmp_path, report, embedded):
-    from school_notes2.review import nightly
-    from school_notes2.state import phase
     page = tmp_path / PAGE
     image = '\n![Ábra](../assets/a.svg)\n'
     page.write_text(page.read_text() + (image if embedded else '\n```md\n' + image + '```\n'))
@@ -244,9 +227,7 @@ def test_asset_routes_using_embedding_page_questions_and_decisions(tmp_path, rep
     review = {"verdict": "changes", "findings": [
         {"severity": "hiba", "id": "R1", "file": asset, "problem": "Kérdés.", "relates_to": "tema-datum"},
         {"severity": "hiba", "id": "R2", "file": asset, "problem": "Döntés.", "relates_to": "tema-nev", "new_evidence": "Új adat."}]}
-    task = phase.create(tmp_path / "tasks", "tester", "review", "cron", "reviewing")
-    nightly.record_review(task, review, tmp_path)
-    path = files.write_review(tmp_path, "2026-10-05", nightly.load_review(task), "r", "b", "c")
+    path = files.write_review(tmp_path, "2026-10-05", review, "r", "b", "c")
     meta = frontmatter.split(path.read_text()).meta
     assert meta["items"] == ({"R2": "owner"} if embedded else {"R1": "open", "R2": "open"})
     assert meta["item_details"]["R2"]["unlocated"] is not embedded
@@ -255,13 +236,3 @@ def test_asset_routes_using_embedding_page_questions_and_decisions(tmp_path, rep
     if embedded:
         assert not any(i["file"] == path.relative_to(tmp_path).as_posix()
                        for i in files.open_items(tmp_path, "cron"))
-
-
-def test_duplicate_responses_drop_both_without_choosing_a_verdict(tmp_path, report):
-    path, rel = report
-    files.apply_closure(tmp_path, "writer", [{"file": rel, "item_id": "R1", "status": "disagree", "note": "Indok."}], [])
-    responses = [{"severity": "hiba", "key": f"{rel}#R1", "verdict": verdict, "answer": "Indok."} for verdict in ("keep", "accept")]
-    kept, dropped = relations.valid_responses(responses, relations.inventory(tmp_path))
-    assert not kept and len(dropped) == 2
-    assert all(i["reason"] == "duplicate response key" for i in dropped)
-    assert relations.valid_responses(list(reversed(responses)), relations.inventory(tmp_path)) == (kept, dropped)

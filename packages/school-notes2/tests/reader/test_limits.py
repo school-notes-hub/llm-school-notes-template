@@ -28,9 +28,9 @@ def test_home_exclusion_and_global_slots(tmp_path):
 
 def test_role_names_and_home_assignment():
     names = {launch.container_name("a", run_id="run", role=r, unit="topic", attempt=1)
-             for r in ("writer", "reader-1", "reader-2", "figure-review", "recheck")}
-    assert len(names) == 5
+             for r in ("writer", "reader-1", "figure-review", "recheck")}
+    assert len(names) == 4
     assert launch.container_name("a", run_id="run2", role="writer") not in names
-    for name in ("reader-1", "reader-2", "recheck", "figure-review", "reviewer"):
+    for name in ("reader-1", "recheck", "figure-review", "reviewer"):
         assert launch._volume_role(name) == "reviewer"
     assert launch._volume_role("fix") == "writer"

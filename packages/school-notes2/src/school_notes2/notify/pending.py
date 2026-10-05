@@ -21,8 +21,6 @@ def send(ctx, notice: Notice) -> bool:
 
 def retry(ctx) -> None:
     from . import incidents
-    from ..flows import set_aside
-    set_aside.reconcile(ctx)
     incidents.restore_pending(ctx)
     _closed_tasks(ctx)
     pending = read_json(path(ctx), {}) or {}
@@ -80,14 +78,7 @@ def _closed_tasks(ctx):
     """Recover a clear interrupted after saving the outcome but before queuing mail."""
     from ..flows import operational_report as report
     from ..state import phase
-    from ..flows import set_aside
-    stopped = read_json(set_aside.path(ctx), {})
     for task in phase.all_tasks(ctx.task_root(), ctx.name):
-        row = stopped.get(task.run_id, {})
-        if row.get("reason") == "no-progress":
-            if not task.get("no_progress"):
-                task.update(no_progress=True)
-            set_aside.no_progress_notice(ctx, task)
         closed = task.data.get("closed") and task.get("closure_reason")
         if not (closed or task.get("set_aside") or task.phase == "done" and task.get("no_progress")) or task.get("closure_notice_delivered"):
             continue

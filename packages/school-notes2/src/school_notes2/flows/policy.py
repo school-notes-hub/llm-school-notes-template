@@ -1,19 +1,20 @@
 """One error policy for every entry point (plan 8.1, 8.3).
 
 Transient errors were already retried inside the step; here a failed invocation counts
-once per half hour (`retries`); a third failure stops until the next hourly probe. Bad LLM work
-counts in `llm_failures` (two in a row stop). Prerequisites never touch a task."""
+once per half hour (`retries`); a third failure stops until the next hourly probe. Bad writer
+work is counted per call (`correction_calls`); a run-level bad result stops the task. Nothing is
+ever discarded: a stopped task keeps its worktree and a program error is released by the next
+tool release. Prerequisites never touch a task."""
 
 import traceback
 
 from . import transient_retry
 from ..log import Log
 from ..notify import Mailer, Notice
-from ..state.errors import BadWork, NeedsOwner, Prerequisite, SnError, Transient, WaitingQuota
+from ..state.errors import BadWork, Prerequisite, Transient, WaitingQuota
 from ..state.phase import Task
 
 MAX_RETRIES = transient_retry.LIMIT
-MAX_LLM_FAILURES = 2
 
 
 def on_error(exc: BaseException, *, task: Task | None, student: str, step: str, log: Log,
@@ -41,13 +42,6 @@ def on_error(exc: BaseException, *, task: Task | None, student: str, step: str, 
         from . import checks
         task.update(last_check_problems=checks.ordered(exc.items))
     task.record_error(kind, str(exc))
-    from .operation import CURRENT
-    current = CURRENT.get()
-    if kind == "program" and task.phase != "done" and task.get("mode") in ("fix", "repair") and not interactive and current:
-        from . import set_aside
-        set_aside.stop(current[0], task)
-        return kind
-
     if isinstance(exc, WaitingQuota):
         if task.phase != "waiting_quota":
             task.set_phase("waiting_quota", quota_phase=task.phase)
@@ -61,29 +55,11 @@ def on_error(exc: BaseException, *, task: Task | None, student: str, step: str, 
     if isinstance(exc, Transient):
         if transient_retry.failed(task):
             _stop(task, exc, student, step, mailer, "a transient error did not pass in 3 tries")
-    elif isinstance(exc, BadWork):
-        _bad_work(task, exc, student, step, mailer, interactive, current)
+    elif isinstance(exc, BadWork) and interactive:
+        pass  # The session gets the error through MCP; nothing counts.
     else:
         _stop(task, exc, student, step, mailer, "")
     return kind
-
-
-def _bad_work(task, exc, student, step, mailer, interactive, current):
-    if interactive:
-        return  # The session gets the error through MCP; nothing counts.
-    key = task.get("writer_output_key")
-    counted = task.get("counted_bad_outputs", [])
-    if not key or key not in counted:
-        task.data["llm_failures"] += 1
-        if key:
-            task.data["data"]["counted_bad_outputs"] = sorted(counted + [key])
-        task.save()
-    if task.data["llm_failures"] >= MAX_LLM_FAILURES:
-        if task.phase != "done" and task.get("mode") in ("fix", "repair") and current:
-            from . import set_aside
-            set_aside.stop(current[0], task, reason="bad_work")
-            return
-        _stop(task, exc, student, step, mailer, "the writer failed twice in a row")
 
 
 def on_success(task: Task) -> None:
@@ -105,7 +81,6 @@ def _stop(task: Task, exc: BaseException, student: str, step: str, mailer: Maile
     from .operation import CURRENT
     from ..notify import incidents
     if CURRENT.get():
-        from .set_aside import release
         task.data["needs_owner"]["release"] = release(CURRENT.get()[0])
         task.save()
         incidents.task_error(CURRENT.get()[0], task, step, exc)
@@ -118,3 +93,9 @@ def _mail(mailer, student, kind, task, step, exc, message=None) -> None:
     mailer.send(Notice(student=student, kind=kind, run_id=task.run_id if task else "",
                        step=step, error_class=getattr(exc, "kind", "program"),
                        message=message or str(exc), todo=getattr(exc, "todo", "")))
+
+
+def release(ctx):
+    """The installed release; a program stop is lifted by the next one."""
+    from .. import VERSION
+    return str(ctx.release()) if hasattr(ctx, "release") else VERSION

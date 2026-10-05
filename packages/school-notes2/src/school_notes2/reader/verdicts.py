@@ -17,13 +17,16 @@ def record(repo, pages, keys, model, at):
 
 
 def rekeyed(repo):
-    """Upgrade only records still matching the pre-2.2.2 formula, before page writes."""
+    """Mechanical re-keying after a key-formula change, without reading anything: a record
+    still matching an older formula of the same text gets the current key (R2)."""
+    from .units import banner_key
     records = safefs.read_json(repo, PATH, [])
     updated = []
     for record in records:
         if record.get("role") == "reader" and safefs.is_file(repo, record["file"]):
             key = page_key(repo, record["file"])
-            if key != record.get("key", "") and page_key(repo, record["file"], legacy_notices=True) == record.get("key", ""):
+            if key != record.get("key", "") and record.get("key", "") in (
+                    page_key(repo, record["file"], legacy_notices=True), banner_key(repo, record["file"])):
                 record = {**record, "key": key}
         updated.append(record)
     return sorted(updated, key=lambda r: (r["file"], r.get("key", ""), r["role"])) if updated != records else None

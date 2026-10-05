@@ -93,7 +93,9 @@ def check_change(change: Change, g: GuardInput) -> list[Violation]:
             return []    # a delete/modify conflict the owner settled by deleting
         if path in g.tool_files:
             return [Violation(path, "a file the tool wrote was deleted", True)]
-        return [Violation(path, "deleting or renaming a file that existed before the run", False)]
+        if not _allowed(path, g):
+            return [Violation(path, "the writer may not change files here", False)]
+        return []  # Deleting or renaming is the writer's choice; links to it are checked (#13).
     kind = _file_kind(g.worktree, path)
     if kind:
         return [Violation(path, f"{kind} in the worktree", True)]
@@ -138,13 +140,11 @@ def check_parts(path: str, data: bytes, g: GuardInput) -> list[Violation]:
     if _pending(path, _sha(parts.encode()), False, g):
         return []
     if base is not None:
-        # The tool never guesses where a removed block belongs; the writer puts it back.
+        # Edited tool bytes were already restored mechanically; a removed block is the
+        # writer's choice, and the tool regenerates the blocks it owns at their fixed place.
         old = base.decode("utf-8", "replace")
-        missing = [n for n in markers.names(old) if n not in markers.names(text)]
-        if missing:
-            block = next(m[0] for m in markers.BLOCK.finditer(old) if m["name"] == missing[0])
-            return [Violation(path, f"generated block {missing[0]!r} was removed; put it back unchanged "
-                                    f"at its place:\n{block}", False)]
+        if any(n not in markers.names(text) for n in markers.names(old)):
+            return []
     return [Violation(path, "a machine field or a generated block was edited", False)]
 
 

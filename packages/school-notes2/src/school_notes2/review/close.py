@@ -5,19 +5,16 @@ R is committed on a detached HEAD in the review worktree on top of the fresh ori
 """
 
 from dataclasses import dataclass
-import json
 from pathlib import Path
 from typing import Callable
 
 from .severity import is_error
 from ..log import duration
-from ..evidence import records
 from ..git.run import Git, classify, failure_text
 from ..state import phase, safefs
 from ..state.errors import Race, Transient
-from ..wiki import public
 from . import files, index, relations
-from .nightly import MAIN_REF, fetch, load_review, rev
+from .nightly import MAIN_REF, fetch, rev
 
 ROUNDS = 3
 
@@ -115,67 +112,37 @@ def _finish(task: phase.Task, repo: Git, r: str, m: str) -> tuple[str, str]:
     return r, m
 
 
-def close(task: phase.Task, repo: Git, wt: Git, ident: Identity, t: Timeouts = Timeouts(),
-          fetch_pages: list[dict] | None = None) -> tuple[str, str]:
+def close(task: phase.Task, repo: Git, wt: Git, ident: Identity, t: Timeouts = Timeouts()) -> tuple[str, str]:
     with duration(repo.log, "review.close"):
-        return _close_report(task, repo, wt, ident, t, fetch_pages)
+        return _close_report(task, repo, wt, ident, t)
 
 
-def _close_report(task, repo, wt, ident, t, fetch_pages):
-    """Write the report, index and evidence; commit R; push main=R, claude-reviewed=M."""
-    review = load_review(task)
-    base, head, end = task.get("base"), task.get("H"), task.get("T")
-    if task.get("topic_review") and not task.get("topic_results") and not task.get("all_topics_done"):
-        from . import topic_result, topics
-        from ..reader import notice_migration
-        policy = json.loads(topics.text(repo, head, notice_migration.PATH) or "{}")
-        if (policy.get("policy") == notice_migration.POLICY and
-                public.dumps(topic_result.state(task)) == topics.text(repo, head, topics.STATE)):
-            return _finish(task, repo, head, base)
+def _close_report(task, repo, wt, ident, t):
+    """Write the report and the closure verdicts; commit R; push main=R, claude-reviewed=M."""
+    review = safefs.read_json(task.dir, "review.json")
+    base, head = task.get("base"), task.get("H")
 
     def write(worktree: Path) -> list[str]:
-        responses, dropped = relations.valid_responses(review.get("responses", []), relations.inventory(worktree))
-        task.update(dropped_responses_at_close=dropped)
-        if dropped:
-            repo.log.event("review.dropped_responses", items=dropped)
-        replied = [relations.reply(worktree, r["key"], r["verdict"], r["answer"])
-                   for r in responses]
         known = relations.inventory(worktree)
-        report = files.write_review(worktree, ident.date, review, ident.reviewer, base, end, known=known)
+        originals = {i["key"]: i for i in task.get("items", [])}
+        paths, owners = relations.apply_items(worktree, [(originals[i["key"]], i) for i in review["items"]
+                                                         if i["key"] in originals])
+        findings = [{**f, "id": f"R{n}", "origin": "nightly"} for n, f in enumerate(review["findings"], 1)]
+        report = files.write_review(worktree, ident.date, {"verdict": "changes" if findings else "ok",
+                                    "findings": findings, "owner_notes": review["owner_notes"]},
+                                    ident.reviewer, base, head, known=known)
         rel = report.relative_to(worktree).as_posix()
-        owners = [{"file": rel, "item_id": key, "reason": "review finding requires an owner decision"}
-                  for key, status in (files.read_items(worktree, report) or {}).items() if status == files.OWNER]
-        extra = []
-        if task.get("topic_review"):
-            from . import topic_result
-            extra, closure_owners, notes = topic_result.apply(task, worktree, ident, log=repo.log, git=wt)
-            owners += closure_owners
-            notes = [" ".join(n.split()) for n in notes if n not in review.get("owner_notes", [])]
-            if notes:
-                merged = {**review, "owner_notes":
-                          list(dict.fromkeys(review.get("owner_notes", []) + notes))}
-                safefs.write_json(task.dir, "review.json", merged)
-                # Notices need the report before export; adding notes must not reroute
-                # findings against the closure states just changed by apply.
-                files.write_review(worktree, ident.date, merged, ident.reviewer, base, end,
-                                   path=report, known=known)
+        owners += [{"file": rel, "item_id": key, "reason": "review finding requires an owner decision"}
+                   for key, status in (files.read_items(worktree, report) or {}).items() if status == files.OWNER]
         task.update(notify_owner_items=owners)
-        written = replied + extra + [report.relative_to(worktree).as_posix(),
-                   index.update(worktree).relative_to(worktree).as_posix()]
-        written += records.append(worktree, records.from_reviewer(review.get("figures", [])),
-                                  kind="review",
-                                  run_id=task.run_id, checker=ident.reviewer, at=ident.at,
-                                  fetch_pages=fetch_pages)
-        return written
+        return paths + [rel, index.update(worktree).relative_to(worktree).as_posix()]
 
     def choose_m(r: str, head_now: str) -> str:
-        if task.get("topic_review"):
-            return (r if head_now == head else head) if task.get("all_topics_done") else base
-        # Legacy tasks keep their original marker contract.
-        return r if end == head and head_now == head else end
+        # The report commit itself needs no review when nothing else arrived meanwhile.
+        return r if head_now == head else head
 
     n = sum(is_error(f) for f in review["findings"])
-    title = f"{n} megállapítás ({base[:7]}..{end[:7]})"
+    title = f"{n} megállapítás ({base[:7]}..{head[:7]})"
     return _close(task, repo, wt, write, choose_m, _message(ident, task.run_id, title), t)
 
 

@@ -48,15 +48,15 @@ def source_line(meta: dict) -> str:
         label = str(value).replace("-", ". ") + "." if value else "dátum nélküli óra"
         if not dates or dates[-1] != label:
             dates.append(label)
-        problems = material_problems(lesson)
-        if problems:
-            raise ValueError("; ".join(problems))
-        for name in lesson.get("materials", []):
-            if name not in materials:
+        names = lesson.get("materials", [])
+        if not isinstance(names, list):
+            raise ValueError("`materials` must be a list of public material names")
+        for name in names:  # A badly formed name is a warning; it is still shown as text.
+            if isinstance(name, str) and name.strip() and name not in materials:
                 materials.append(name)
     line = "📎 Füzet: " + ", ".join(dates)
     if materials:
-        line += " · Tanári anyag: " + "; ".join(plain(name) for name in materials)
+        line += " · Tanári anyag: " + "; ".join(plain(" ".join(name.split())) for name in materials)
     return line + "\n"
 
 
@@ -66,39 +66,19 @@ def plain(text: str) -> str:
 
 
 def after_header(text: str, name: str, body: str) -> str:
-    """Insert once, after the leading banner (or title/placeholder while it is pending)."""
+    """A tool block is replaced where it is (also an empty one the writer left), or put at
+    the fixed place right after the frontmatter."""
     text = markers.clean_nested_notices(text)
     if name in markers.names(text):
         return markers.replace(text, name, body)
     if not body:
         return text
-    cut = header_end(text)
-    return text[:cut] + "\n" + markers.wrap(name, body) + "\n" + text[cut:]
+    return markers.at_fixed_place(text, name, body)
 
 
 def header_end(text: str) -> int:
-    """After the leading banner, its description and any enclosing generated block."""
-    page = frontmatter.split(text)
-    # Hide multiline comments without changing offsets; retain pending image markers.
-    visible = COMMENT.sub(lambda m: m[0] if re.match(r"<!-- (?:image|figure):", m[0])
-                          else re.sub(r"[^\n]", " ", m[0]), page.body)
-    offset, title_end = 0, 0
-    for line in visible.splitlines(keepends=True):
-        offset += len(line)
-        if re.match(r"\s*(?:!\[|<img\b|<!-- (?:image|figure):)", line):
-            break
-        if re.match(r"^# ", line):
-            title_end = offset
-        elif line.strip() and not line.startswith("<!--"):
-            offset = title_end
-            break
-    else:
-        offset = title_end
-    cut = len(text) - len(page.body) + offset
-    description = re.match(r"\s*<!-- image-description\b.*?-->(?:\n|$)", text[cut:], re.S)
-    if description:
-        cut += description.end()
-    return markers.outside(text, cut)
+    """The fixed place of tool blocks: the first line after the frontmatter."""
+    return len(text) - len(frontmatter.split(text).body)
 
 
 def form_problems(repo: Path, rel: str, body: str, meta: dict, *, read=read_page) -> list[str]:

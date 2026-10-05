@@ -2,7 +2,7 @@
 from datetime import datetime
 from pathlib import Path
 import pytest
-from school_notes2.flows import context, fix_progress, run, set_aside, work_pending
+from school_notes2.flows import context, run, work_pending
 from school_notes2.flows import round as scheduler
 from school_notes2.state import phase
 from school_notes2.review import files
@@ -45,41 +45,6 @@ def test_night_waits_for_all_students_until_six(cfg, monkeypatch):
     assert scheduler._night_ready(contexts, datetime(2026, 10, 5, 6, tzinfo=scheduler.TZ))
     monkeypatch.setattr(work_pending, "ready", lambda _: False)
     assert scheduler._night_ready(contexts, datetime(2026, 10, 5, 4, tzinfo=scheduler.TZ))
-
-
-@pytest.mark.parametrize("mode", ["fix", "repair"])
-@pytest.mark.parametrize("crash", [False, True])
-def test_archive_resume_release_and_new_work(cfg, monkeypatch, mode, crash):
-    ctx = context.make(cfg, "first", console=False)
-    ctx.notes_path.mkdir(parents=True)
-    version = ["2.5.0"]
-    monkeypatch.setattr(ctx.__class__, "release", lambda _: Path(version[0]))
-    task = phase.create(ctx.task_root(), ctx.name, "notes", "cron", "correcting")
-    item = {"file": "docs/review/a.md", "item_id": "R1"}
-    task.update(mode=mode, open_review_items=[item], repair_topic="wiki/a/topic.md" if mode == "repair" else None)
-    delivered, discarded = [], []
-    ctx.mailer = recording_mailer(cfg.state_dir, ctx.log, monkeypatch, delivered)
-    monkeypatch.setattr(set_aside.discard, "discard", lambda *args: discarded.append(args[1]))
-    original = set_aside.resume
-    if crash:
-        monkeypatch.setattr(set_aside, "resume", lambda *args: (_ for _ in ()).throw(KeyboardInterrupt()))
-        with pytest.raises(KeyboardInterrupt):
-            set_aside.stop(ctx, task)
-        assert set_aside.path(ctx).exists() and task.phase != "done"
-        monkeypatch.setattr(set_aside, "resume", original)
-    set_aside.stop(ctx, phase.load(task.dir))
-    done = phase.load(task.dir)
-    assert done.phase == "done" and done.get("set_aside")
-    assert discarded == [task.run_id] and len(delivered) == 1
-    mail = delivered[0].get_content()
-    assert "félretéve" in mail and "archívumban" in mail and "kész" not in mail
-    assert fix_progress.available(ctx, [item], []) == ([], [])
-    new = {"file": item["file"], "item_id": "R2"}
-    assert fix_progress.available(ctx, [item, new], [])[0] == [new]
-    assert ("repair:wiki/a/topic.md" in set_aside.blocked(ctx)) == (mode == "repair")
-    version[0] = "2.5.1"
-    assert fix_progress.available(ctx, [item], [])[0] == [item]
-    assert not set_aside.blocked(ctx)
 
 
 def test_package_stop_resumes_on_new_release(cfg, monkeypatch):

@@ -159,20 +159,16 @@ def test_second_run_without_packages_does_nothing(world):
     assert show(origin, "main") == before
 
 
-def test_bad_link_goes_back_to_the_writer_then_needs_owner(world, monkeypatch):
+def test_bad_link_is_kept_and_becomes_an_item_for_the_next_run(world, monkeypatch):
+    """KISS (fix-46): the writer gets the error list once; what remains is an item for the
+    next run. The finished notes are committed and pushed, never discarded or stopped."""
     ctx, origin, drive, package = world
     monkeypatch.setenv("FAKE_WRITER", "badlink")
-    assert run_flow.run(ctx) == 1
-    task = phase.open_task(ctx.task_root(), "benedek", "notes")
-    assert task.phase == "review_ready" and task.data["llm_failures"] == 0
-    assert task.get("machine_problems")
-    assert any("nincs-ilyen" in p.read_text() for p in (ctx.notes_path / "wiki").rglob("*.md"))
-    check = json.loads((ctx.notes_path / ".school-notes/check.json").read_text())
-    assert any("nincs-ilyen" in json.dumps(i) for i in check)
-    # fix-45: the writer never fixed it, the machine item is exhausted (owner) within the
-    # rounds, so the run stops for the owner with the work kept: no discard, no strike.
-    assert task.data["needs_owner"]["class"] == "needs_owner"
-    assert run_flow.run(ctx) == 0
-    task = phase.open_task(ctx.task_root(), "benedek", "notes")
-    assert task.phase == "review_ready" and task.data["needs_owner"]
-    assert any("nincs-ilyen" in p.read_text() for p in (ctx.notes_path / "wiki").rglob("*.md"))
+    assert run_flow.run(ctx) == 0, ctx.cfg.log_path.read_text()[-3000:]
+    task = phase.all_tasks(ctx.task_root(), "benedek")[-1]
+    assert task.phase == "done" and not task.data["needs_owner"]
+    calls = (ctx.notes_path.with_name(f"{ctx.notes_path.name}-writer-calls.log")).read_text().splitlines()
+    assert calls == ["1/1", "1/1"]  # One continuation with the error list, then no more.
+    assert "nincs-ilyen" in show(origin, "main:wiki/proba/2026-10-02-teszt-jegyzet.md")
+    report = show(origin, f"main:{task.get('inspection_report')}")
+    assert "origin: check" in report and "nincs-ilyen" in report and "R1: open" in report

@@ -26,7 +26,7 @@ def test_session_check_failure_is_reported_not_counted(world, monkeypatch):
     subprocess.run([sys.executable, str(HERE / "fake_writer.py"), str(ctx.notes_path), "badlink"],
                    check=True)
     result = chat.session_finish(ctx)
-    assert result["state"] == "review_items" and result["open_review_items"]
+    assert result["state"] == "check_failed" and "nincs-ilyen" in str(result["problems"])
     task = phase.open_task(ctx.task_root(), "benedek", "notes")
     assert task.data["llm_failures"] == 0 and task.data["needs_owner"] is None
 
@@ -53,10 +53,12 @@ def test_crash_after_commit_resumes_with_one_commit(world, monkeypatch):
     assert log.count(f"Run-Id: {task.run_id}") == 1
 
 
-def test_session_review_handoff_real_guard_and_git_finish(world, monkeypatch):
-    from school_notes2.flows import handlers, writer
+def test_session_reader_findings_become_items_without_a_handoff(world, monkeypatch):
+    """KISS (fix-46): one pass per run, also in a session. The reader's finding is an item
+    for the next run; there is no in-run correction round and no second writer."""
+    from school_notes2.flows import writer
     from school_notes2.reader import calls
-    from school_notes2.state import safefs
+    from school_notes2.review import files
     ctx, origin, drive, package = world
     chat.session_fetch(ctx)
     subprocess.run([sys.executable, str(HERE / "fake_writer.py"), str(ctx.notes_path)], check=True)
@@ -64,37 +66,20 @@ def test_session_review_handoff_real_guard_and_git_finish(world, monkeypatch):
     invoked = []
     def reader(repo, view, folder, stage, assigned, configured, **kwargs):
         invoked.append(stage)
-        if stage == "reader-1":
-            findings = [{"severity": "hiba", "id": "F-1", "file": page, "quote": "Mit tanultunk ezen az órán",
-                         "category": "nyelvezet", "problem": "Pontatlan cím", "suggestion": "Pontosítsd",
-                         "relates_to": None}] if page in [p["file"] for p in assigned["pages"]] else []
-            review = {"pages": [{"file": p["file"], "verdict": "changes" if p["file"] == page else "ok",
-                                  "first_glance": "Téma"} for p in assigned["pages"]],
-                      "findings": findings, "owner_notes": []}
-        else:
-            review = {"items": [{"severity": "hiba", "key": i["key"], "verdict": "ok", "answer": "Rendben"}
-                                 for i in assigned["items"]], "hits": [], "owner_notes": []}
+        findings = [{"severity": "hiba", "id": "F-1", "file": page, "line": 9, "quote": "Mit tanultunk ezen az órán",
+                     "category": "nyelvezet", "problem": "Pontatlan cím", "suggestion": "Pontosítsd",
+                     "relates_to": None}] if page in [p["file"] for p in assigned["pages"]] else []
+        review = {"pages": [{"file": p["file"], "verdict": "changes" if p["file"] == page else "ok",
+                              "first_glance": "Téma"} for p in assigned["pages"]],
+                  "findings": findings, "owner_notes": []}
         return {"status": "reviewed", "model": "fake/high", "review": review}
     monkeypatch.setattr(calls, "run", reader)
-    def no_second_writer(*args):
-        raise AssertionError("second writer")
-    monkeypatch.setattr(writer, "run_ranges", no_second_writer)
+    monkeypatch.setattr(writer, "run_ranges", lambda *a: (_ for _ in ()).throw(AssertionError("second writer")))
     answer = chat.session_finish(ctx)
-    assert answer["state"] == "review_items", answer
-    assigned = answer["open_review_items"]
-    # A local clarification leaves the lesson-log's required title intact.
-    text = safefs.read_text(ctx.notes_path, page).replace("[Első]", "[Első téma]")
-    safefs.write_text(ctx.notes_path, page, text)
-    safefs.write_json(ctx.notes_path, ".school-notes/result.json", {"status": "done",
-        "infographic_decisions": [{"page": p, "reason": "A szöveg elegendő."} for p in
-            safefs.read_json(ctx.notes_path, ".school-notes/fetch.json")["infographic_pages"]], "review_closure": [
-        {"file": i["file"], "item_id": i["item_id"], "status": "fixed", "note": "Pontosítva"} for i in assigned]})
-    checked = handlers.build(ctx).check()
-    assert checked["ok"], checked
-    result = chat.session_finish(ctx)
-    assert result["state"] == "done", result
-    assert invoked.count("recheck") == 1
-    assert "[Első téma]" in show(origin, "main:" + page)
+    assert answer["state"] == "done", answer
+    assert invoked == ["reader-1"]
+    items = files.open_items(ctx.notes_path, "cron")
+    assert len(items) == 1 and "Pontatlan cím" in show(origin, "main:" + items[0]["file"])
 
 
 def test_session_build_failure_rechecks_edits_before_amending(world, monkeypatch):
@@ -121,5 +106,5 @@ def test_session_build_failure_rechecks_edits_before_amending(world, monkeypatch
     safefs.write_text(ctx.notes_path, page, text)
     result = chat.session_finish(ctx)
     assert result["state"] == "done", result
-    assert guarded == [1, 2] and len(built) == 2
+    assert guarded == [1, 1] and len(built) == 2  # No new attempt: nothing is re-read (fix-46).
     assert "[Első téma]" in show(origin, "main:" + page)

@@ -22,12 +22,6 @@ def repair(ctx: Ctx, *, topic: str | None = None, build_queue: bool = False,
     try:
         setup.ensure(ctx)
         existing = phase.open_task(ctx.task_root(), ctx.name, "notes")
-        from . import set_aside
-        if set_aside.resume(ctx, existing):
-            return 1
-        if existing is None and not build_queue and "repair:" + str(topic) in set_aside.blocked(ctx):
-            ctx.log.event("repair.skip", "set_aside", target=topic)
-            return 0
         if existing is not None:
             if existing.get("mode") != "repair" or existing.get("repair_topic") != topic or bool(
                     existing.get("repair_request_queue", existing.get("queue_only"))) != build_queue:
@@ -133,10 +127,10 @@ def complete(ctx, task):
 
 
 def next_task(ctx):
-    from . import set_aside
+    from . import fix_progress
     data = queue.load(ctx.notes_path)
-    stopped = set_aside.blocked(ctx)
-    data = {**data, "items": [{**i, "status": "owner"} if "repair:" + i["page"] in stopped else i
+    parked = fix_progress.parked(ctx)
+    data = {**data, "items": [{**i, "status": "owner"} if "repair:" + i["page"] in parked else i
                             for i in data["items"]]}
     item = queue.next_item(data)
     return start(ctx, topic=item["page"]) if item else None

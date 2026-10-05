@@ -8,7 +8,7 @@ ROLES = ("writer", "reader", "figure-review", "figure", "reviewer")
 
 
 def role_name(name):
-    if name in ("reader-1", "reader-2", "recheck"):
+    if name in ("reader-1", "recheck"):
         return "reader"
     return "writer" if name == "fix" else name
 

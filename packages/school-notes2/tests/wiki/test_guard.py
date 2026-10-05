@@ -80,7 +80,7 @@ def test_delete_and_symlink_and_git_file(repo):
     found = run(repo, base, [("wiki/proba/masodik.md", "deleted"), ("wiki/proba/evil.md", "added")],
                 git_file=b"gitdir: /srv/x\n")
     by_path = {v.path: v for v in found}
-    assert not by_path["wiki/proba/masodik.md"].owner
+    assert "wiki/proba/masodik.md" not in by_path  # #13: deleting a page is the writer's choice
     assert by_path["wiki/proba/evil.md"].owner and by_path[".git"].owner
 
 

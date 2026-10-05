@@ -6,8 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from school_notes2.figures import migration_gate, pending, rechecks, rejected
-from school_notes2.flows import correction, correction_figures, review_phases, writer
+from school_notes2.figures import migration_gate, pending, rechecks
+from school_notes2.flows import correction_calls, correction_figures, review_phases, writer
 from school_notes2.images import pending as image_pending
 from school_notes2.notify import Mailer
 from school_notes2.state import phase, safefs
@@ -51,7 +51,7 @@ def test_lost_last_attempt_escalates_once_without_taking_capacity(repo, make_fig
 def inputs(monkeypatch, entry):
     monkeypatch.setattr(writer.fetch_flow, "fetch_json", lambda *a, **kw: {"pending_figures": [entry]})
     monkeypatch.setattr(writer, "write_changes", lambda *a: None)
-    monkeypatch.setattr(writer.call_scope, "write_check", lambda *a: None)
+
 
 
 @pytest.mark.parametrize("learner", ["benedek", "barna"])
@@ -81,10 +81,10 @@ def test_free_rechecks_stop_after_two_assignments_and_resume_once(repo, make_fig
     # P4 has a separate child run ID; its receipt survives a worktree rollback.
     second = phase.Task(first.dir / "child", {**first.data, "run_id": first.run_id + "-fix-a1"})
     snapshot = first.dir / "snapshot"
-    correction.snapshot(repo, snapshot)
+    correction_calls.snapshot(repo, snapshot)
     writer.write_inputs(ctx, second, 1)
     writer.write_inputs(ctx, second, 1)
-    correction.restore(repo, snapshot)
+    correction_calls.restore(repo, snapshot)
     assert json.loads(rechecks.path(ctx).read_text()) == {brief["id"]: sorted([first.run_id, second.run_id])}
     third = phase.Task(first.dir / "third", {**first.data, "run_id": first.run_id + "-third"})
     with pytest.raises(ValueError, match="assignments exhausted"):
@@ -127,9 +127,8 @@ def test_gate_logs_new_runtime_and_nightly_commissions_without_mutation(repo, ma
     monkeypatch.setattr(review_phases.steps, "record_tool_files", lambda *a: None)
     monkeypatch.setattr(review_phases.notices, "refresh", lambda *a, **kw: [])
     review_phases.finalize(ctx, task)
-    assert rejected.apply(repo, [{"commission": {"id": "retry-z"}}, {"commission": {"id": "retry-a"}}], log=log) == []
     events = [json.loads(line) for line in log.main.read_text().splitlines()]
     assert [(e["action"], e["target"]) for e in events if e["action"] != "review.finalize"] == [
-        ("figure.migration_dropped", fid) for fid in ("new", "retry-a", "retry-z")]
+        ("figure.migration_dropped", "new")]
     assert safefs.read_bytes(repo, pending.PATH) == before
     assert not safefs.is_file(repo, migration_gate.MARK)

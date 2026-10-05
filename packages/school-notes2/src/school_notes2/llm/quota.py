@@ -73,7 +73,7 @@ def wait(ctx, run, cache):
     task = phase.open_task(ctx.task_root(), ctx.name, kind)
     interactive = task is not None and task.mode == "interactive"
     work = "az éjszakai review" if kind == "review" else "a jegyzetírás"
-    if run.role_name in ("reader", "reader-1", "reader-2", "recheck", "figure-review"):
+    if run.role_name in ("reader", "reader-1", "recheck", "figure-review"):
         work = "a jegyzet lektorálása"
     continuation = (f"A folytatáshoz indítsd újra: school-notes chat {ctx.name}."
                     if interactive else "Visszatöltődés után onnan folytatódik.")

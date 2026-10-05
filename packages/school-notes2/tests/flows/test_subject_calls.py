@@ -101,4 +101,6 @@ def test_writer_rechecks_each_call_before_saving_result(tmp_path, monkeypatch, l
     assert writer.run_ranges(ctx, task, None) == "done"
     assert len(invoked) == 2
     assert (task.dir / "result-1.json").exists()
-    assert task.get("machine_problems")
+    # The kept work's remaining error is an item for the next run, in the run's report.
+    report = phase.load(task.dir).get("inspection_report")
+    assert report and "Broken" in (tmp_path / report).read_text()
