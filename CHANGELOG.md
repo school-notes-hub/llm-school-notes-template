@@ -2,6 +2,13 @@
 
 Newest first. Each entry says what changed in the shared files and what an existing wiki must do when it applies the update (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)). A wiki records the version it is on in `PROFILE.md`.
 
+## 1.19.2 - 2026-10-05
+
+- Pending notices (run module): only a pending figure, a continuing (`draft`) topic and a new reader page from a v2 writer run that was never reviewed show a notice; review items never do.
+- Infographic decision (run module): in a fix or repair run every assigned topic page gets a recorded infographic decision (a `kind: infographic` commission or a short reason).
+- Lesson logs (Wiki structure): a log that covers several lessons may use the plural heading „Mit tanultunk ezeken az órákon”.
+- Migration (controller-owned): synchronize the changed instructions through Template updates; the tool removes stale notices once; no learner content changes.
+
 ## 1.19.1 - 2026-10-05
 
 - Image plan (Media workflows, run module): the exact required and optional fields of `image-plan.json` with a valid example; the commission fields (`id`, `kind`, `page`, `purpose`) belong in `figures/<id>.json`, not in the image plan.
