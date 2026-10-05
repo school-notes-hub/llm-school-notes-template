@@ -9,6 +9,7 @@ from school_notes2.flows import context, operation, round as scheduler
 from school_notes2.log import TZ
 from school_notes2.state import phase
 from school_notes2.state.files import read_json, write_json
+from tests.conftest import assert_suppressed, recording_mailer
 
 
 @pytest.fixture
@@ -95,10 +96,10 @@ def test_quota_review_due_before_nightly_time_and_timeout_waits(cfg):
     assert not scheduler.due(ctx, now, {})
 
 
-def test_vm_lock_shared_with_direct_entries_and_alert(cfg):
+def test_vm_lock_shared_with_direct_entries_and_alert(cfg, monkeypatch):
     ctx = context.make(cfg, "third", console=False)
     messages = []
-    ctx.mailer = SimpleNamespace(send=lambda n: messages.append(n))
+    ctx.mailer = recording_mailer(cfg.state_dir, ctx.log, monkeypatch, messages)
     lock = operation.vm_lock(cfg)
     assert lock.try_acquire("chat")
     write_json(lock.holder_path, {"kind": "chat", "since": "2020-01-01T00:00:00+01:00"})
@@ -107,7 +108,8 @@ def test_vm_lock_shared_with_direct_entries_and_alert(cfg):
     def run(ctx):
         called.append(1)
     assert run(ctx) == 0
-    assert not called and messages[0].kind == "lock_held"
+    assert not called and not messages
+    assert_suppressed(ctx.log, "lock_held")
     lock.release()
     assert operation.vm_lock(cfg).probe()
 

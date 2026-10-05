@@ -12,6 +12,7 @@ from school_notes2.state.files import read_json, write_json
 from school_notes2.wiki import frontmatter
 from tests.flows.test_repair_queue import page
 from tests.sources.test_cards import CARD, LEARNERS, shared
+from tests.conftest import assert_suppressed, recording_mailer
 
 
 def context(tmp_path, log, monkeypatch):
@@ -33,7 +34,7 @@ def context(tmp_path, log, monkeypatch):
     mailed = []
     ctx = SimpleNamespace(name="barna", notes_path=repo, worktree=lambda _: wt,
                           task_root=lambda: tmp_path, log=log, cfg=cfg,
-                          mailer=SimpleNamespace(send_once=mailed.append, send=mailed.append))
+                          mailer=recording_mailer(tmp_path, log, monkeypatch, mailed))
     monkeypatch.setattr(repair.repos, "rev", lambda *args: "a" * 40)
     monkeypatch.setattr(repair.workbranch, "changed_files", lambda *args: [])
     monkeypatch.setattr(repair.workbranch, "start", lambda *args, **kw: None)
@@ -109,10 +110,11 @@ def test_second_bad_repair_retires_target_without_reordering_queue(tmp_path, log
     record = frontmatter.split(safefs.read_text(ctx.notes_path, task.get("repair_owner_item"))).meta
     assert record["items"] == {"R1": "owner"}
     report.completion(ctx, task)
-    assert len(mailed) == 1 and "két sikertelen" in mailed[0].message
+    assert not mailed
+    assert_suppressed(log, "repair_owner:")
 
 
-def test_owner_notes_reach_completion_report_and_existing_mail_path(tmp_path, log, monkeypatch):
+def test_owner_notes_stay_in_private_report(tmp_path, log, monkeypatch):
     ctx, topic, mailed = context(tmp_path, log, monkeypatch)
     task = repair.start(ctx, topic=topic, no_push=True)
     task.update(ranges=[[0, 0], [0, 0]])
@@ -121,8 +123,7 @@ def test_owner_notes_reach_completion_report_and_existing_mail_path(tmp_path, lo
     result = report.completion(ctx, task)
     assert result == read_json(task.dir / "report.json")
     assert result["owner_notes"] == ["Kihagyás, indok, jobb javaslat.", "Második észrevétel."]
-    assert all(n in mailed[0].message for n in result["owner_notes"])
-    assert mailed[0].kind == f"owner_notes:{task.run_id}"
+    assert not mailed
 
 
 def test_repair_protects_related_prose_dates_and_scope(tmp_path, log, monkeypatch):

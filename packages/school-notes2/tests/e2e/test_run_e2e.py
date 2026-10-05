@@ -118,12 +118,18 @@ def show(origin: Path, rev_path: str) -> str:
                           capture_output=True, text=True).stdout
 
 
-def test_hourly_run_end_to_end(world):
+def test_hourly_run_end_to_end(world, monkeypatch):
     ctx, origin, drive, package = world
+    from school_notes2.notify import Mailer
+    delivered = []
+    monkeypatch.setattr(Mailer, "_deliver", lambda self, msg: delivered.append(msg) or True)
     rc = run_flow.run(ctx)
     assert rc == 0, ctx.cfg.log_path.read_text()[-3000:]
     task = phase.all_tasks(ctx.task_root(), "benedek")[-1]
     assert task.phase == "done", task.data
+    assert len(delivered) == 1
+    assert "állapota: kész" in delivered[0].get_content()
+    assert "{" not in delivered[0].get_content()
     log = show(origin, "main")
     assert f"Run-Id: {task.run_id}" in log and "notes(benedek): Teszt óra feldolgozva." in log
     note = show(origin, "main:wiki/proba/2026-10-02-teszt-jegyzet.md")

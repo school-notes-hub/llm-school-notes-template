@@ -1,6 +1,5 @@
 """Private operational summaries; only currently available mechanical facts."""
 
-import json
 import time
 
 from ..figures.review import verdict_for
@@ -78,20 +77,12 @@ def completed(ctx, task, report, duration, *, finishing=False):
     notes += task.get("correction_result", {}).get("owner_notes", []) + report.get("owner_notes", [])
     report["owner_notes"] = list(dict.fromkeys(notes))
     receipt = terminal(task)
-    # An explicit finish can also stop at --no-push's committed branch. It has
-    # no completion summary, but still delivers the writer's owner notes.
-    notice_key = receipt or ("finish" if finishing else None)
-    # Pin the choice before sending: finish and the operation wrapper may straddle
-    # ten minutes, and an interrupted delivery must retry the same notice.
+    # A resumed owner stop is a new closure; retries keep the same receipt.
+    notice_key = completion_key(task, receipt) if receipt else None
     notices = task.get("completion_notices", {})
-    choice = notices.get(notice_key)
-    if receipt == "needs_owner" and choice == "owner_notes":
-        choice = None  # A resumed older task may have pinned the premature choice.
-    if notice_key and choice is None:
-        choice = ("completion" if duration > 600 and receipt else
-                  "owner_notes" if receipt != "needs_owner" and report["owner_notes"] else None)
-        if choice:
-            task.update(completion_notices={**notices, notice_key: choice})
+    choice = "completion" if receipt else None
+    if choice and notices.get(notice_key) != choice:
+        task.update(completion_notices={**notices, notice_key: choice})
     if choice == "completion":
         try:
             report.update(details(ctx, task))
@@ -103,25 +94,50 @@ def completed(ctx, task, report, duration, *, finishing=False):
     report = redact(report)
     write_json(task.dir / "report.json", report)
     if choice == "completion":
-        pending.send(ctx, Notice(ctx.name, f"completion:{task.run_id}:{receipt}", task.run_id, "finish", "feldolgozás",
-                                 json.dumps(report, ensure_ascii=False, indent=2), "A feldolgozás összesítése."))
-    elif choice == "owner_notes":
-        pending.send(ctx, Notice(ctx.name, f"owner_notes:{task.run_id}", task.run_id,
-                                 "finish", "owner_notes", "\n\n".join(report["owner_notes"]),
-                                 "Olvasd át a kihagyott lépések indokát és a jobb javaslatot."))
+        mode = MODES.get(task.get("mode") or ("chat" if task.mode == "interactive" else "run"), MODES["run"])
+        pending.send(ctx, Notice(ctx.name, f"completion:{task.run_id}:{notice_key}", task.run_id, "finish",
+                                 subject(ctx.name, mode, receipt), sentence(ctx.name, mode, task, receipt), ""))
     return report
+
+
+# label and possessive form for the one-sentence mail
+MODES = {"run": ("jegyzetfutás", "jegyzetfutása"), "fix": ("javító futás", "javító futása"),
+         "repair": ("javítási futás", "javítási futása"), "chat": ("interaktív munkamenet", "interaktív munkamenete"),
+         "nightly": ("éjszakai review", "éjszakai review-ja")}
+STATES = {"done": "kész", "closed": "lezárva", "needs_owner": "elakadt, rád vár"}
+
+
+def subject(name, mode, receipt):
+    return f"{name.capitalize()}: {mode[0]} – {STATES.get(receipt, receipt)}"
+
+
+def sentence(name, mode, task, receipt, *, ended=None):
+    """One sentence: who, what, when it started and ended, and how it ended."""
+    started = task.data.get("created", "")[:16].replace("T", " ")
+    ended = (ended or now_iso())[:16].replace("T", " ")
+    text = f"{name.capitalize()} {mode[1]} {started}-kor indult, {ended}-kor ért véget, állapota: {STATES.get(receipt, receipt)}"
+    owner = task.data.get("needs_owner") or {}
+    if receipt == "needs_owner":
+        # Raw exception messages may contain source content, JSON or paths.
+        reasons = {"timeout": "időtúllépés", "program": "programhiba",
+                   "bad_work": "hibás munkakimenet", "transient": "ismétlődő átmeneti hiba",
+                   "prerequisite": "hiányzó előfeltétel"}
+        text += f" ({reasons.get(owner.get('class'), 'tulajdonosi döntés szükséges')})"
+    return text + "."
+
+
+def completion_key(task, receipt):
+    generation = task.get("completion_generation", 0)
+    return f"{receipt}:{generation}" if generation else receipt
 
 
 def ended(ctx, kind, started, before, *, successful=True):
     """Persist active elapsed time, including interrupted/quota-limited invocations."""
     elapsed = time.monotonic() - started
     tasks = phase.all_tasks(ctx.task_root(), ctx.name)
-    wanted = "review" if kind == "nightly" else "notes"
-    candidates = [t for t in tasks if t.kind == wanted and (t.run_id not in before or before[t.run_id] and before[t.run_id] != t.data)]
+    wanted = ("notes", "review") if kind == "clear" else ("review",) if kind == "nightly" else ("notes",)
+    candidates = [t for t in tasks if t.kind in wanted and (t.run_id not in before or before[t.run_id] and before[t.run_id] != t.data)]
     if not candidates:
-        if kind == "nightly" and successful and not any(t.kind == "review" and t.open for t in tasks):
-            ctx.mailer.send_once(Notice(ctx.name, "nightly-empty:" + now_iso()[:10], "", "nightly", "éjszakai review",
-                                        f"{now_iso()}: nincs feldolgozott tartomány; időtartam: {elapsed:.1f} s.", "Nincs teendő."))
         return
     task = candidates[-1]
     from .operation import TIMING
@@ -130,7 +146,7 @@ def ended(ctx, kind, started, before, *, successful=True):
     task.update(active_seconds=max(task.get("active_seconds", 0), baseline + elapsed))
     if not terminal(task):
         return
-    if kind == "nightly":
+    if task.kind == "review":
         review = read_json(task.dir / "review.json", {})
         report = {"időpont": now_iso(), "időtartam_s": task.get("active_seconds"), "tartomány": [task.get("base"), task.get("T")],
                   "fázis": task.phase, "blokkolt": task.get("blocked_topics", []),
@@ -140,8 +156,11 @@ def ended(ctx, kind, started, before, *, successful=True):
                   "jelölő oka": "minden témakör kész" if task.get("all_topics_done") else "hiányzó vagy blokkolt témakör",
                   "témakörök": review.get("topics", []), "kihagyott": task.get("skipped_topics", []),
                   "keretállapot": read_json(ctx.cfg.state_dir / "quota.json", {}), "tokenek": _metrics(task)}
-        pending.send(ctx, Notice(ctx.name, f"nightly:{task.run_id}:{terminal(task)}", task.run_id,
-                                 "nightly", "éjszakai review", json.dumps(redact(report), ensure_ascii=False, indent=2), "Az éjszakai munka összesítése."))
+        write_json(task.dir / "report.json", redact(report))
+        receipt = terminal(task)
+        pending.send(ctx, Notice(ctx.name, f"nightly:{task.run_id}:{completion_key(task, receipt)}", task.run_id, "nightly",
+                                 subject(ctx.name, MODES["nightly"], receipt),
+                                 sentence(ctx.name, MODES["nightly"], task, receipt), ""))
     else:
         report = read_json(task.dir / "report.json", {"mode": task.get("mode", "chat" if task.mode == "interactive" else "run")})
         completed(ctx, task, report, task.get("active_seconds", 0))

@@ -10,13 +10,14 @@ from school_notes2.llm import launch, quota, quota_probe, timeouts
 from school_notes2.state import phase
 from school_notes2.state.errors import WaitingQuota
 from tests.operations.test_round import cfg  # noqa: F401
+from tests.conftest import assert_suppressed, recording_mailer
 
 
 @pytest.fixture
 def world(cfg, monkeypatch):
     ctx = context.make(cfg, "third", console=False)
     notices = []
-    ctx.mailer = SimpleNamespace(send=lambda n: notices.append(n), send_once=lambda n: notices.append(n))
+    ctx.mailer = recording_mailer(cfg.state_dir, ctx.log, monkeypatch, notices)
     role = Role("codex", "fake", "high", 7200)
     harness = Harness("codex", [], [], [])
     task = phase.create(ctx.task_root(), ctx.name, "notes", "cron", "writing")
@@ -44,7 +45,8 @@ def test_pre_call_gate_once_per_round_manual_and_unknown(world, monkeypatch, rem
         launch.run_headless(run, log=ctx.log, snapshot=lambda: None)
     assert len(probes) == 1
     if remaining is None:
-        assert any(n.kind == "quota_unknown:codex" for n in notices)
+        assert_suppressed(ctx.log, "quota_unknown:codex")
+    assert not notices
 
 
 def test_quota_resume_keeps_phase_and_no_bad_work_strike(world, monkeypatch):
@@ -76,7 +78,8 @@ def test_mid_call_quota_manual_still_stops_and_blocks_round(world, monkeypatch):
     cache = {}
     with operation.scope(ctx, manual=True, cache=cache), pytest.raises(WaitingQuota):
         launch.run_headless(call, log=ctx.log, snapshot=lambda: None)
-    assert cache["codex"]["remaining"] == 0 and notices
+    assert cache["codex"]["remaining"] == 0 and not notices
+    assert_suppressed(ctx.log, "quota:codex")
 
 
 def test_timeout_streak_not_bad_work_success_resets_and_clear(world, monkeypatch):
@@ -92,7 +95,8 @@ def test_timeout_streak_not_bad_work_success_resets_and_clear(world, monkeypatch
         assert bool(task.data["needs_owner"]) == (count == 2)
         assert task.data["llm_failures"] == 0
         assert timeouts.counter(ctx, call)["count"] == count
-    assert len(notices) == 2
+    assert not notices
+    assert_suppressed(ctx.log, "timeout:writer:")
     clear.clear(ctx, "writer", "continue")
     assert not phase.load(task.dir).data["needs_owner"]
     with operation.scope(ctx), pytest.raises(launch.TimedOut):

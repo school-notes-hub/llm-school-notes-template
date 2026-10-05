@@ -17,6 +17,7 @@ from school_notes2.state.errors import WaitingQuota
 from school_notes2.state.files import read_json, write_json
 from tests.operations.test_round import cfg  # noqa: F401
 from tests.operations.test_quota_timeouts import world  # noqa: F401
+from tests.conftest import assert_suppressed
 
 
 def test_chat_below_two_percent_and_mid_call_quota_resume(world, monkeypatch):
@@ -40,8 +41,8 @@ def test_chat_below_two_percent_and_mid_call_quota_resume(world, monkeypatch):
     assert chat.chat(ctx, None, ask=lambda _: pytest.fail("unexpected question"), say=lambda _: None) == 1
     saved = phase.load(task.dir)
     assert saved.phase == "waiting_quota" and saved.get("quota_phase") == "writing"
-    assert notices[0].todo == "Kézi indítás: school-notes chat third"
-    assert "jegyzetírás áll" in notices[0].message and "onnan folytatódik" not in notices[0].message
+    assert not notices
+    assert_suppressed(ctx.log, "quota:codex")
     assert chat.chat(ctx, None, ask=lambda _: pytest.fail("unexpected question")) == 0
     assert seen == ["writing", "writing"] and not probes
     assert phase.load(task.dir).data["llm_failures"] == 0
@@ -129,8 +130,8 @@ def test_first_learner_exception_does_not_starve_others(cfg, monkeypatch, failur
     scheduler.round(cfg)
     assert [(k, n) for k, n in calls if n != "third"][:4] == [
         (k, n) for k in ("nightly", "run") for n in ("first", "second")]
-    errors = [m for m in delivered if "broken" in m.get_content()]
-    assert len(errors) == (1 if failure == "due" else 2)  # daily, per failed step
+    assert not delivered
+    assert_suppressed(context.make(cfg, failing, console=False).log)
     if failure in ("due", "before", "action"):
         assert "third" not in read_json(cfg.state_dir / "round.json")["nightly_started"]
     assert operation.TIMING.get() is None
@@ -158,7 +159,7 @@ def test_yesterdays_review_finishes_then_todays_review_can_start(cfg, monkeypatc
 
 
 @pytest.mark.parametrize("kind", ["notes", "review"])
-def test_three_quota_rounds_send_only_one_quota_mail(world, monkeypatch, kind):
+def test_three_quota_rounds_send_no_mail(world, monkeypatch, kind):
     ctx, task, call, _ = world
     if kind == "review":
         task = phase.create(ctx.task_root(), ctx.name, kind, "cron", "reviewing")
@@ -179,8 +180,8 @@ def test_three_quota_rounds_send_only_one_quota_mail(world, monkeypatch, kind):
             policy.on_error(exc, task=current, student=ctx.name, step="test", log=ctx.log, mailer=ctx.mailer)
     for _ in range(3):
         work(ctx)
-    assert len(delivered) == 1
-    assert ("review áll" if kind == "review" else "jegyzetírás áll") in delivered[0].get_content()
+    assert not delivered
+    assert_suppressed(ctx.log, "quota:codex")
     task.reload()
     assert task.phase == "waiting_quota" and task.get("active_seconds") >= 720
 
@@ -219,7 +220,7 @@ def test_completed_today_task_prevents_duplicate_night_after_state_write_crash(c
     assert scheduler.due(ctx, datetime(2026, 10, 5, 10, tzinfo=TZ), {})
 
 
-def test_failed_empty_night_has_no_summary_and_success_is_deduplicated(cfg, monkeypatch):
+def test_empty_night_never_sends_mail(cfg, monkeypatch):
     ctx = context.make(cfg, "third", console=False)
     deliveries = []
     monkeypatch.setattr(Mailer, "_deliver", lambda self, msg: deliveries.append(msg) or True)
@@ -231,7 +232,7 @@ def test_failed_empty_night_has_no_summary_and_success_is_deduplicated(cfg, monk
     assert not deliveries
     night(ctx, 0)
     night(ctx, 0)
-    assert len(deliveries) == 1
+    assert not deliveries
 
 
 def test_vm_quota_and_lock_notice_logs_have_vm_identity(world, monkeypatch):
@@ -249,7 +250,7 @@ def test_vm_quota_and_lock_notice_logs_have_vm_identity(world, monkeypatch):
     finally:
         lock.release()
     events = [json.loads(line) for line in ctx.cfg.log_path.read_text().splitlines()]
-    assert {e["action"] for e in events} >= {"quota.read", "notify.mail", "round.skip"}
+    assert {e["action"] for e in events} >= {"quota.read", "notify.suppressed", "round.skip"}
     assert all(e["student"] == "VM" for e in events)
 
 

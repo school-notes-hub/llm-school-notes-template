@@ -14,6 +14,7 @@ from school_notes2.state import phase, safefs
 from tests.flows.test_fetch_cards import context as fetch_context
 from tests.flows.test_repair import context as fix_context
 from tests.sources.test_cards import shared
+from tests.conftest import assert_suppressed
 
 
 def settings(learner, attempts=()):
@@ -43,7 +44,8 @@ def test_exhausted_job_becomes_owner_once_without_a_run(repo, make_figure, log, 
     stored = pending.load(repo)[0]
     assert stored["runs"] == 1 and stored["run_ids"] == ["old"] and stored["owner_required"]
     assert pending.for_subjects(repo, {"physics"}) == []
-    assert len(sent) == 1
+    assert not sent
+    assert_suppressed(log)
 
 
 def test_unpaid_failed_calls_do_not_exhaust_job(repo, make_figure):
@@ -136,4 +138,5 @@ def test_finalization_marks_paid_exhaustion_with_one_notice(repo, make_figure, l
         review_phases.finalize(ctx, phase.load(task.dir))
     stored = pending.load(repo)[0]
     assert stored["owner_required"] and stored["runs"] == old_runs + 1
-    assert len(sent) == 1
+    assert not sent
+    assert_suppressed(log)

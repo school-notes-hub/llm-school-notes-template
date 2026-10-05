@@ -1,4 +1,4 @@
-"""Ú-1: failed owner mail survives task completion and process interruption."""
+"""Only completion mail survives task completion and process interruption."""
 
 from types import SimpleNamespace
 
@@ -9,6 +9,7 @@ from school_notes2.notify import Mailer, Notice, pending
 from school_notes2.review import files
 from school_notes2.state import phase
 from school_notes2.state.files import read_json, write_json
+from tests.conftest import assert_suppressed
 
 
 def context(tmp_path, log, learner):
@@ -31,7 +32,7 @@ def next_run(ctx, monkeypatch):
 
 
 @pytest.mark.parametrize("learner", ["benedek", "barna"])
-def test_failed_finish_owner_notice_retries_in_next_run(tmp_path, log, monkeypatch, learner):
+def test_finish_only_retries_completion_not_owner_item(tmp_path, log, monkeypatch, learner):
     ctx = context(tmp_path, log, learner)
     task = phase.create(tmp_path, learner, "notes", "cron", "finishing")
     task.update(ranges=[[0, 0]])
@@ -55,7 +56,9 @@ def test_failed_finish_owner_notice_retries_in_next_run(tmp_path, log, monkeypat
     monkeypatch.setattr(Mailer, "_deliver", lambda self, msg: deliveries.append(msg) or False)
     assert finish.finish(ctx, task, notify_owner_items=lambda items: run.owner_items(ctx, task, items)) == "done"
     assert files.read_items(ctx.notes_path, rel) == {"R1": "owner"}
-    assert len(read_json(pending.path(ctx))) == 1
+    assert list(read_json(pending.path(ctx))) == [f"completion:{task.run_id}:done"]
+    assert len(deliveries) == 1
+    assert_suppressed(log, "review_owner:")
     # A fresh context and no open task: the next run still retries the notice.
     ctx = context(tmp_path, log, learner)
     monkeypatch.setattr(Mailer, "_deliver", lambda self, msg: deliveries.append(msg) or True)
@@ -74,17 +77,18 @@ def test_failed_completion_notices_retry_after_done(tmp_path, log, monkeypatch, 
     deliveries = []
     monkeypatch.setattr(Mailer, "_deliver", lambda self, msg: False)
     report.completion(ctx, task)
-    assert len(read_json(pending.path(ctx))) == 2
+    assert len(read_json(pending.path(ctx))) == 1
+    assert_suppressed(log, "repair_owner:")
     monkeypatch.setattr(Mailer, "_deliver", lambda self, msg: deliveries.append(msg) or True)
     next_run(context(tmp_path, log, learner), monkeypatch)
     next_run(context(tmp_path, log, learner), monkeypatch)
-    assert len(deliveries) == 2 and read_json(pending.path(ctx)) == {}
+    assert len(deliveries) == 1 and read_json(pending.path(ctx)) == {}
 
 
 @pytest.mark.parametrize("after_receipt", [False, True])
 def test_pending_notice_resumes_across_delivery_boundaries(tmp_path, log, monkeypatch, after_receipt):
     ctx = context(tmp_path, log, "barna")
-    notice = Notice(ctx.name, "owner:test", "run", "finish", "owner", "Tétel.", "Dönts.")
+    notice = Notice(ctx.name, "completion:test:done", "run", "finish", "kész", "A futás elkészült.", "")
     delivered = []
     monkeypatch.setattr(Mailer, "_deliver", lambda self, msg: delivered.append(msg) or True)
     original = Mailer.send_once

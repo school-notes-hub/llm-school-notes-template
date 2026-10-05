@@ -37,6 +37,7 @@ def nightly(ctx: Ctx) -> int:
         if task is None:
             task = _prepare(ctx, tasks)
         if task is not None:
+            ctx.log = ctx.log.bind(run_id=task.run_id)
             if task.get("max_agents") is None:
                 task.update(max_agents=ctx.cfg.limits.max_agents)
             if task.phase == "waiting_quota":

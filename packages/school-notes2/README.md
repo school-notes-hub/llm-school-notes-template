@@ -24,7 +24,7 @@ It does every mechanical step; the LLM runs in a container and asks for mechanic
 |---|---|
 | `config.py` | reads and validates `~/.config/school-notes/config.toml` |
 | `state/` | `phase.json` (task folder), the per-learner lock, error classes, atomic writes |
-| `log/`, `notify/` | JSONL log; e-mail through `msmtp`, once a day per kind |
+| `log/`, `notify/` | JSONL log; e-mail through `msmtp`, one short sentence per run closure |
 | `git/` | the only Git caller (`run.py`), bare clones, work branch, `finish` G0–G9, conflicts, discard |
 | `drive/` | listing, readiness, download, move (built on `tools/drive_media.py`) |
 | `sources/` | order, photo and PDF preparation, hashes, duplicates, batching |
@@ -63,9 +63,8 @@ The source-grounded repair rules and writer/fix prompts support the P1–P6 flow
 Source-free hourly fixes use `fix.txt`; nightly review uses a separate topic contract
 with exact page, closure and warning accounting and private `owner_notes`.
 Writer `owner_notes` are emitted as `writer.owner_notes` JSONL log events and, at completion,
-in the private task `report.json`, the finish response and the completion summary,
-with token-like secrets redacted. When no summary is sent, the notes use one separate
-e-mail notice. Operational reports provide the full e-mail layout.
+in the private task `report.json` and finish response, with token-like secrets redacted.
+They never enter e-mail; only the short operational status is mailed.
 The additive figure lists and `coverage` survive range merging. Warning decisions are validated per writer invocation. `coverage` records
 `source`, `unit` and either a `target` topic-section link or an omission `reason`,
 without creating an image evidence record. `question`/`settled` closures now validate the reference on the item's page and close it.
@@ -152,13 +151,15 @@ Existing question/open-item and disagreement references go to the pending sectio
 decisions to owner, unknown references
 to unlocated. A decision reference without new evidence is invalid reviewer output.
 The tool inherits the related item's chain; findings about fixed/settled items escalate to
-chain 1 and owner. Owner items use the existing once-per-item notification path, with
-a durable handoff across closing restarts. Failed deliveries retry on later nights;
-the per-item receipt skips already delivered notices, and the handoff completes only
-after every notice has a receipt. Invalid or stale responses are dropped and logged.
-Notes-run owner items, repair handoffs and `owner_notes` mail also enter the private
+chain 1 and owner. Owner-item notifications pass through the common mail gate and
+are logged as `notify.suppressed`; their state remains visible in `status`.
+The durable handoff completes after suppression, including across closing restarts.
+Invalid or stale responses are dropped and logged. Completion mail enters the private
 per-learner `pending-owner-notices.json` before delivery. Every `run` retries that
 queue, even after the originating task has completed; receipts prevent duplicate mail.
+Legacy queued non-completion notices are suppressed and removed on retry. Old JSON
+summaries are rebuilt from task metadata; if that metadata is gone, suppression is
+logged and the unsafe message is removed.
 Reviewer input groups only open, owner and disagree items by page. Independent review
 transitions and appended tool sections merge during rebase; contradictory edits still stop.
 An upstream transition to an item in a new closure's `before` map also stops the merge,
@@ -416,16 +417,16 @@ The single cron job replaces the previous per-learner jobs. Direct run/nightly,
 repair, chat, host fetch/finish and owner clear share the same VM admission.
 Manual commands, chat, host fetch/finish and clear return 75 with a Hungarian
 stderr message if the VM lock is busy; cron round returns 0 without waiting.
-A failing learner step is logged and mailed daily; later learners still run.
+A failing learner step is logged; later learners still run.
 An empty successful night also consumes today's review slot. Finishing an older
 night does not consume today’s new review.
 The lock is inherited by detached MCP jobs and is never forcibly broken. A busy
-lock older than twelve hours triggers the existing daily notification path.
+lock older than twelve hours is logged through the suppressed notification path.
 
 Weekly quota probes use the role's home in a short container without a model call:
 Codex app-server JSON-RPC and Claude OAuth usage. Only the weekly window counts.
 The cache is shared by harness family for one round. Unknown usage (including 401)
-permits the call, logs the failure and mails daily; known remaining usage at or
+permits the call and logs the failure; known remaining usage at or
 below 2% pauses in `waiting_quota`. `run/nightly --manual`, chat, host fetch/finish
 and CLI repair bypass only this pre-call gate. Recognized harness quota error
 events still pause manual runs. Interactive waits name `school-notes chat` as
@@ -453,19 +454,17 @@ Unit 5 replaces the original capped nightly range with topic calls, while retain
 this scheduler, quota gate and timeout policy.
 
 Processing invocations accumulate active elapsed time (quota-wait hours do not
-count). Work over ten minutes gets a private summary through the durable notice
-queue, including available per-topic review/figure outcomes, pending indicators,
-timeouts, quota observations, owner notes and transcript metrics. Nights report
-even empty ranges. The email renderer preserves the full summary instead of the
-previous 500-character truncation. Summaries are sent once per terminal state
-(done, owner intervention or closure). Quota waits and retry invocations only
-accumulate elapsed time; they send no summary. Owner notes are included in that
-summary, without a separate owner-notes e-mail; runs of at most ten minutes send
-their notes in one separate notice at done/closed/finish. A needs_owner stop defers
-that notice until completion, preserving earlier notes across continuation. Summary
-details are computed only for a summary notice; failed detail collection falls back
-to the basic report. The choice survives retries and crossing the
-ten-minute boundary during notification. Error and owner-item notices are unchanged.
+count). Every terminal notes run and nonempty nightly review sends one short Hungarian
+sentence: learner, run mode, start and end date/time, status, and a safe error-class
+label when owner intervention is needed. No JSON, learner content, paths or owner
+notes enter the message. Detailed outcomes remain in the private `report.json`.
+The common `Mailer.send` / `send_once` gate suppresses all other notification kinds
+as `notify.suppressed`, including timeouts, quotas, locks, migration, licenses and
+individual owner items. Empty nights send no mail. A no-push branch that has not
+closed sends no completion mail. Failed delivery stays in the durable queue.
+Repeated finish/report calls share a receipt; continuing an owner-stopped run advances
+a persisted closure generation, so the next closure may send one new message.
+No new phase or model call is introduced.
 The VM verification/deployment,
 T-144 owner gate and cron installation are outside this repository change.
 
@@ -621,7 +620,7 @@ never force-pushes it.
 Until `docs/figure-pending-migrations.json` exists, a nonempty pending queue is frozen:
 notes (package, fix and repair-queue runs) and nightly review do not assign its figures,
 count attempts, escalate owners or create related review items; its bytes stay intact.
-Other work proceeds. A log event and a durable `send_once` notice explain the missing
+Other work proceeds. A log event and a suppressed `send_once` notice record the missing
 migration. An initially empty queue gets a `pending_format` marker before its first
 current-format record; this does not claim that the legacy-header migration ran.
 New failed commissions and nightly retry requests dropped during this window log
@@ -637,7 +636,7 @@ Generated pending assignments reserve `max_attempts × reservation_usd` per figu
 against both daily and monthly capacity, only for the run’s assigned subjects.
 New content precedes replacements regardless of their IDs. An exhausted paid job
 is excluded and marked `owner_required` when no generated candidate awaits review
-(including a rejected or lost last attempt), with one durable owner notice;
+(including a rejected or lost last attempt), with an owner record and suppressed notification;
 if no writer work remains, a tool-only fix persists that flag without an LLM call.
 An unreviewed generated candidate is eligible for free retrieval and independent
 rechecking even at the paid limit or with no remaining budget; no generator call is
@@ -645,7 +644,7 @@ made. Hash-bound independent `repair`/`reject` verdicts update the matching ledg
 attempt without changing its cost. `review_pending` defers run-count escalation until
 that candidate has a verdict, including after an interrupted third run.
 Free rechecking is limited to two assignments per commission; exhaustion requires
-an owner decision with one notice. `state/<learner>/figure-rechecks.json` records
+an owner decision with a suppressed notification. `state/<learner>/figure-rechecks.json` records
 assignment run IDs before writer input is handed over. Resumes and ranges of the
 same assignment share a receipt; P4 uses its child run ID. Worktree rollback cannot
 reset this limit. These receipts do not consume paid generation attempts.

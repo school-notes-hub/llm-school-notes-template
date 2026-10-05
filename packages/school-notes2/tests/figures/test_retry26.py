@@ -13,6 +13,7 @@ from school_notes2.notify import Mailer
 from school_notes2.state import phase, safefs
 from tests.figures.test_capacity24 import settings
 from tests.figures.test_gate25 import legacy
+from tests.conftest import assert_suppressed
 
 
 def context(repo, log, monkeypatch, learner, last):
@@ -43,7 +44,8 @@ def test_lost_last_attempt_escalates_once_without_taking_capacity(repo, make_fig
     stored = pending.load(repo)[0]
     assert stored["owner_required"] and stored["run_ids"] == ["old"]
     assert [e["commission"]["id"] for e in pending.for_subjects(repo, {"physics"})] == ["next"]
-    assert len(sent) == 1
+    assert not sent
+    assert_suppressed(log)
 
 
 def inputs(monkeypatch, entry):
@@ -96,8 +98,8 @@ def test_free_rechecks_stop_after_two_assignments_and_resume_once(repo, make_fig
         assert correction_figures.assignable(ctx, pending.load(repo)) == []
     stored = pending.load(repo)[0]
     assert stored["owner_required"] and stored["run_ids"] == ["old"]
-    assert len(sent) == 1
-    assert "újraellenőrzési" in sent[0].get_content()
+    assert not sent
+    assert_suppressed(log)
     assert not image_pending.scan(config)["pending"]
 
 

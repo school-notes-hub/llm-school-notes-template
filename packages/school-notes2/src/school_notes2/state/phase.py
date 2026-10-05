@@ -84,6 +84,8 @@ class Task:
         self.save()
 
     def clear_needs_owner(self) -> None:
+        if self.data.get("needs_owner"):
+            self.data["data"]["completion_generation"] = self.get("completion_generation", 0) + 1
         self.data["needs_owner"] = None
         self.data["retries"] = 0
         self.data["llm_failures"] = 0

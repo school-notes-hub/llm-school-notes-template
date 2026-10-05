@@ -10,6 +10,7 @@ from school_notes2.state import phase, safefs
 from school_notes2.state.errors import BadWork, NeedsOwner
 from tests.flows.test_repair import context
 from tests.flows.test_repair_queue import page
+from tests.conftest import assert_suppressed
 
 
 @pytest.mark.parametrize("mode,blocked", [("cron", False), ("repair", False), ("repair", True)])
@@ -114,13 +115,13 @@ def test_trial_dependencies_use_finished_queue_state(tmp_path):
 
 
 @pytest.mark.parametrize("stage", ["writing", "committed"])
-def test_held_trial_daily_alert_and_phase_text(tmp_path, log, monkeypatch, stage):
+def test_held_trial_suppression_and_phase_text(tmp_path, log, monkeypatch, stage):
     ctx, topic, mailed = context(tmp_path, log, monkeypatch)
     task = repair.start(ctx, topic=topic, no_push=True)
     task.set_phase(stage)
     assert not run._may_run(ctx, task)
-    assert mailed[0].kind == "no_push" and stage in mailed[0].message
-    assert "finish" in mailed[0].todo and "--discard" in mailed[0].todo
+    assert not mailed
+    assert_suppressed(log, "no_push")
     data = {"learner": ctx.name, "lock": {"held": False}, "open": [{
         "kind": "notes", "mode": "cron", "run_id": task.run_id, "phase": stage,
         "age_h": 1, "packages": 0, "retries": 0, "llm_failures": 0, "no_push": True}],
@@ -131,7 +132,7 @@ def test_held_trial_daily_alert_and_phase_text(tmp_path, log, monkeypatch, stage
     assert ("commit után megállt" in text) == (stage == "committed")
 
 
-def test_hold_reminder_is_daily_across_resume(tmp_path, log, monkeypatch):
+def test_hold_reminder_is_suppressed_across_resume(tmp_path, log, monkeypatch):
     from school_notes2.notify import Mailer
     ctx, topic, _ = context(tmp_path, log, monkeypatch)
     delivered = []
@@ -140,7 +141,8 @@ def test_hold_reminder_is_daily_across_resume(tmp_path, log, monkeypatch):
     task = repair.start(ctx, topic=topic, no_push=True)
     assert not run._may_run(ctx, task)
     assert not run._may_run(ctx, phase.load(task.dir))
-    assert len(delivered) == 1
-    monkeypatch.setattr("school_notes2.notify.today", lambda: "2099-01-01")
+    assert not delivered
+    assert_suppressed(log)
     assert not run._may_run(ctx, phase.load(task.dir))
-    assert len(delivered) == 2
+    assert not delivered
+    assert_suppressed(log)

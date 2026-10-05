@@ -18,6 +18,7 @@ from school_notes2.state.files import read_json
 from tests.operations.test_round import cfg  # noqa: F401
 from tests.operations.test_quota_timeouts import world  # noqa: F401
 from tests.review.conftest import repos  # noqa: F401
+from tests.conftest import assert_suppressed
 
 
 def test_empty_night_then_daytime_commit_waits_until_next_day(cfg, repos, monkeypatch):
@@ -71,14 +72,13 @@ def test_same_day_continuation_consumes_today(cfg, monkeypatch):
     ("reader-2", "a jegyzet lektorálása"), ("recheck", "a jegyzet lektorálása"),
     ("figure-review", "a jegyzet lektorálása"),
 ])
-def test_quota_notice_names_the_work_with_correct_article(world, role, work):
+def test_quota_error_names_the_work_without_mail(world, role, work):
     ctx, _, call, notices = world
     call = replace(call, role_name=role)
     with pytest.raises(quota.WaitingQuota) as caught:
         quota.wait(ctx, call, {"codex": {"remaining": 1, "reset": "week"}})
-    assert notices[0].message == (
-        f"third: codex, maradék: 1%. {work.capitalize()} áll. "
-        "Visszatöltődés után onnan folytatódik.")
+    assert not notices
+    assert_suppressed(ctx.log, "quota:codex")
     assert str(caught.value) == f"codex: {work} vár. Visszatöltődés után onnan folytatódik."
 
 

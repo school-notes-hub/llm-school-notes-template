@@ -12,6 +12,7 @@ from school_notes2.review import night_figures, files
 from school_notes2.state import phase, safefs
 from tests.figures.test_capacity24 import settings
 from tests.flows.test_repair import context as fix_context
+from tests.conftest import assert_suppressed
 
 
 def legacy(repo, brief):
@@ -49,12 +50,14 @@ def test_fix_freezes_legacy_then_migration_unlocks(tmp_path, log, monkeypatch, l
         assert not task.get("pending_figures") and not task.get("figure_owners")
         task.set_phase("done")
         assert safefs.read_bytes(ctx.notes_path, pending.PATH) == before
-    assert len(sent) == 1 and "a függő ábrák migrációja még nem futott le" in sent[0].get_content()
+    assert not sent
+    assert_suppressed(log)
     assert "figure.migration_required" in log.main.read_text()
     migrate_pending.migrate(ctx.notes_path, state_dir=ctx.cfg.state_dir / learner, repo=wt)
     task = fix.next_task(ctx)
     assert task.get("figure_owners")[0]["owner_required"]
-    assert len(sent) == 2  # Distinct, now justified paid-exhaustion notice.
+    assert not sent
+    assert_suppressed(log)
 
 
 def test_all_mutators_and_restoration_preserve_legacy(repo, make_figure, log, monkeypatch):
@@ -136,7 +139,8 @@ def test_each_entry_point_notifies_and_keeps_unrelated_work(repo, make_figure, l
     assert task.phase in ("prepared", "reviewed")
     assert not task.get("pending_figures")
     assert safefs.read_bytes(repo, pending.PATH) == before
-    assert len(sent) == 1
+    assert not sent
+    assert_suppressed(log)
 
 
 def test_first_current_queue_record_recovers_after_marker_write(repo, make_figure, monkeypatch):

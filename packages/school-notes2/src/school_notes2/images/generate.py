@@ -38,7 +38,10 @@ def generate(settings: ImageSettings, plan_id: str, repair_note: str | None = No
         try:
             job = plans.build_job(settings, plan_id)
         except ValueError as exc:
-            return {"state": "error", "message": str(exc)}
+            return {"state": "error", "message": f"{exc}\nJavítsd a {plans.target(plan_id)} képtervet "
+                    "a prompt képtervsémája szerint (kötelező: role és a felsorolt mezők). "
+                    f"Az id, kind, page, purpose a .school-notes/figures/{plan_id}.json "
+                    "megbízásba való, nem a képtervbe. Ezután hívd újra az image_generate-et."}
         plans.keep(settings, plan_id)
         job_path = plans.write_job(settings, plan_id, job)
         entry = settings.ledger().get("jobs", {}).get(job["id"], {"attempts": []})

@@ -34,8 +34,9 @@ schema.attributes.details = ['open'];
 const el = (tagName, properties = {}, children = []) => ({ type: 'element', tagName, properties, children });
 const isElement = (n, tag) => n.type === 'element' && (!tag || n.tagName === tag);
 // An empty anchor with a plain lower-case id and nothing else (the wiki's section jump targets).
+// Lower-case includes accented letters: a Hungarian heading slug keeps them ("a-földművelés").
 const isJumpTarget = n => isElement(n, 'a') && !n.properties.href && !n.children.length
-  && /^(?:user-content-)?[a-z0-9][a-z0-9-]{0,80}$/.test(String(n.properties.id || ''));
+  && /^(?:user-content-)?[\p{Ll}\p{Nd}][\p{Ll}\p{Nd}-]{0,200}$/u.test(String(n.properties.id || ''));
 
 // The public view leaves out what a reader cannot open: a footnote with no public web link
 // cites the notebook, teacher material or a textbook, all private. A chapter title's grade

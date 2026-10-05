@@ -8,11 +8,12 @@ import pytest
 from school_notes2.flows import context, operational_report, status
 from school_notes2.llm import quota
 from school_notes2.llm.quota import probe as real_probe
-from school_notes2.notify import Mailer, Notice, render
+from school_notes2.notify import Mailer
 from school_notes2.state import phase
 from school_notes2.state.files import read_json, write_json
 from tests.operations.test_round import cfg  # noqa: F401
 from tests.operations.test_quota_timeouts import world  # noqa: F401
+from tests.conftest import assert_suppressed
 
 
 def test_probe_uses_correct_home_no_model_or_secret_logging(world, monkeypatch):
@@ -54,7 +55,7 @@ def test_probe_timeout_cleanup_unknown(world, monkeypatch):
     assert len(cleaned) == 2
 
 
-def test_mail_dedup_across_learners_windows_and_days(world, monkeypatch):
+def test_quota_mail_suppressed_across_learners_and_windows(world, monkeypatch):
     ctx, task, call, _ = world
     deliveries = []
     monkeypatch.setattr(Mailer, "_deliver", lambda self, msg: deliveries.append(msg) or True)
@@ -64,20 +65,22 @@ def test_mail_dedup_across_learners_windows_and_days(world, monkeypatch):
         other = context.make(ctx.cfg, name, console=False)
         with pytest.raises(quota.WaitingQuota):
             quota.wait(other, replace(call, learner=name), cache)
-    assert len(deliveries) == 1
+    assert not deliveries
+    assert_suppressed(ctx.log)
     cache["codex"]["reset"] = "week-2"
     with pytest.raises(quota.WaitingQuota):
         quota.wait(ctx, call, cache)
-    assert len(deliveries) == 2
+    assert not deliveries
+    assert_suppressed(ctx.log)
 
 
-def test_completion_full_body_threshold_and_resume(world, monkeypatch):
+def test_completion_short_body_and_resume(world, monkeypatch):
     ctx, task, _, notices = world
     task.update(packages=[{"id": "package"}], active_seconds=590, inspection_units=[])
     write_json(task.dir / "report.json", {"mode": "repair", "owner_notes": ["magyarázat " * 100]})
     monkeypatch.setattr(operational_report.time, "monotonic", lambda: 10)
     operational_report.ended(ctx, "run", 0, {task.run_id: True})
-    assert not notices  # exactly 600 is not longer than ten minutes
+    assert not notices  # Still writing, irrespective of duration
     monkeypatch.setattr(operational_report.time, "monotonic", lambda: 11)
     operational_report.ended(ctx, "run", 10, {task.run_id: True})
     assert not notices  # an unfinished invocation never sends a summary
@@ -86,10 +89,10 @@ def test_completion_full_body_threshold_and_resume(world, monkeypatch):
     operational_report.ended(ctx, "run", 10, {task.run_id: True})
     assert len(notices) == 1
     assert read_json(task.dir / "report.json")["időtartam_s"] == 602
-    body = render(notices[0], "owner@example.test").get_content()
-    assert len(body) > 1000 and "keretállapot" in body and "owner_notes" in body
-    assert "⏳-jelzések" in body and "időtúllépések" in body
-    assert notices[0].kind == f"completion:{task.run_id}:done"
+    body = notices[0].get_content()
+    assert len(body) < 250 and "indult" in body and "kész" in body
+    assert "keretállapot" not in body and "owner_notes" not in body
+    assert read_json(task.dir / "report.json")["owner_notes"]
 
 
 def test_status_only_reads_operations_and_quota(world):
@@ -105,7 +108,7 @@ def test_status_only_reads_operations_and_quota(world):
     assert read_json(ctx.cfg.state_dir / "round.json")["status"] == "running"
 
 
-def test_unknown_preserves_last_known_and_daily_mail(world, monkeypatch):
+def test_unknown_preserves_last_known_without_mail(world, monkeypatch):
     ctx, task, call, _ = world
     deliveries = []
     monkeypatch.setattr(Mailer, "_deliver", lambda self, msg: deliveries.append(msg) or True)
@@ -116,7 +119,8 @@ def test_unknown_preserves_last_known_and_daily_mail(world, monkeypatch):
     quota.check(ctx, call, False, {})
     state = read_json(ctx.cfg.state_dir / "quota.json")["codex"]
     assert state["remaining"] is None and state["last_known"]["remaining"] == 90
-    assert len(deliveries) == 1
+    assert not deliveries
+    assert_suppressed(ctx.log)
 
 
 def test_claude_401_never_emits_token(monkeypatch):
@@ -147,7 +151,7 @@ def test_detached_finish_uses_inherited_timing_without_double_count(world, monke
     finally:
         TIMING.reset(token)
     assert phase.load(task.dir).get("active_seconds") == 650
-    assert all(n.kind.endswith(":done") for n in notices)
+    assert len(notices) == 1 and "kész" in notices[0].get_content()
 
 
 def test_report_distinguishes_changed_pages_context_and_historical_findings(world, monkeypatch):
@@ -174,7 +178,7 @@ def test_report_distinguishes_changed_pages_context_and_historical_findings(worl
     assert len(result["időtúllépések"]) == 1
 
 
-def test_vm_alert_only_once_daily(world, monkeypatch):
+def test_vm_alert_is_always_suppressed(world, monkeypatch):
     from school_notes2.flows import operation
     ctx, task, _, _ = world
     deliveries = []
@@ -187,11 +191,12 @@ def test_vm_alert_only_once_daily(world, monkeypatch):
         for _ in range(2):
             with operation.admission(ctx, "round") as acquired:
                 assert not acquired
-        assert len(deliveries) == 1
-        monkeypatch.setattr("school_notes2.notify.today", lambda: "2099-01-02")
+        assert not deliveries
+        assert_suppressed(ctx.log)
         with operation.admission(ctx, "round") as acquired:
             assert not acquired
-        assert len(deliveries) == 2
+        assert not deliveries
+        assert_suppressed(ctx.log)
     finally:
         lock.release()
 
@@ -238,7 +243,7 @@ def test_claude_helper_401_returns_only_unknown(monkeypatch, capsys):
 
 
 @pytest.mark.parametrize("completed", [False, True])
-def test_partial_night_email_keeps_actual_marker(world, monkeypatch, completed):
+def test_partial_night_private_report_keeps_actual_marker(world, monkeypatch, completed):
     ctx, _, _, notices = world
     task = phase.create(ctx.task_root(), ctx.name, "review", "cron", "reviewing")
     task.update(base="old-marker", H="new-head", T="new-head", all_topics_done=False)
@@ -247,5 +252,6 @@ def test_partial_night_email_keeps_actual_marker(world, monkeypatch, completed):
     else:
         task.mark_needs_owner("preflight", "retry", "needs_owner")
     operational_report.ended(ctx, "nightly", 0, {task.run_id: True})
-    data = json.loads(notices[-1].message)
+    data = read_json(task.dir / "report.json")
+    assert len(notices) == 1 and "{" not in notices[0].get_content()
     assert data["jelölő"] == "old-marker" and "hiányzó" in data["jelölő oka"]

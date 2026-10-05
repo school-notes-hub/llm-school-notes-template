@@ -139,6 +139,18 @@
       "source_sha256": "80d22c45177d409047b347d3bd030f73dbb3d0c5c3ec16715e6684d5dc8831f5",
       "migrated_sha256": "ced6d8ffef428ae0af519aa3fdb669405574f9829a4e2327390db66d08372f73",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below."
+    },
+    {
+      "heading": "In a school-notes run",
+      "destination": "instructions/media-workflows.md",
+      "migrated_sha256": "108816724a92f77c3750fddecffc8115684556a7cf4791cc95935b0f14ad777a",
+      "change": "Section added after the original migration; now audited with the exact image-plan schema, commission distinction and validated example (fix-27)."
+    },
+    {
+      "heading": "Subject cards and figure handoff",
+      "destination": "instructions/school-notes-run.md",
+      "migrated_sha256": "a74ff56f177f3593d443f43325fd97acefc9a24ff908a32d71ba5105e3c9e840",
+      "change": "Section added after the original migration; now audited with the exact image-plan schema, commission distinction and validated example (fix-27)."
     }
   ],
   "superseded": [

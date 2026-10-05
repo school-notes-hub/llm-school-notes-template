@@ -1,14 +1,15 @@
-"""E-mail notices (plan 8.4): msmtp, at most one per learner and error type per day.
+"""E-mail notices (plan 8.4, owner 2026-10-05): one short mail per finished run, nothing else.
 
-A notice carries the learner, run id, step, error class, a short message and the next
-step – never note content, photos or personal data. An msmtp failure is only logged."""
+Only the end-of-run summaries (`completion:` and `nightly:` kinds) are mailed; every other
+notice is logged as `notify.suppressed` and stays visible in `school-notes status`. A notice
+never carries note content, photos or personal data. An msmtp failure is only logged."""
 
 import subprocess
 from dataclasses import dataclass
 from email.message import EmailMessage
 from pathlib import Path
 
-from ..log import Log, today, now_iso
+from ..log import Log, now_iso
 from ..mcp.redact import redact
 from ..state.files import read_json, write_json
 
@@ -16,12 +17,19 @@ from ..state.files import read_json, write_json
 @dataclass(frozen=True)
 class Notice:
     student: str
-    kind: str        # daily filter key, e.g. "needs_owner:notes", "prerequisite:login"
+    kind: str        # stable receipt key; only completion: and nightly: are mailed
     run_id: str
     step: str
     error_class: str
     message: str
     todo: str
+
+
+RUN_KINDS = ("completion:", "nightly:")
+
+
+def mailed(notice: Notice) -> bool:
+    return notice.kind.startswith(RUN_KINDS)
 
 
 @dataclass(frozen=True)
@@ -34,25 +42,17 @@ class Mailer:
     msmtp: str = "msmtp"
 
     def send(self, notice: Notice) -> bool:
-        """Send unless the same learner+kind was already mailed today. True: mail went out."""
-        sent = read_json(self.state, {}) or {}
-        key = f"{notice.student}:{notice.kind}"
-        if sent.get(key) == today():
-            self.log.bind(student=notice.student).event("notify.skip", target=key)
-            return False
-        if not self._deliver(render(notice, self.to)):
-            return False
-        sent = {k: v for k, v in sent.items() if v == today()}
-        sent[key] = today()
-        write_json(self.state, sent)
-        self.log.bind(student=notice.student).event("notify.mail", target=key)
-        return True
+        """Use the same durable receipt as send_once, regardless of entry point."""
+        return self.send_once(notice) is True
 
     def send_once(self, notice: Notice) -> bool | None:
         """Mail once ever: True means sent, False already sent, None delivery failed."""
+        key = f"{notice.student}:{notice.kind}"
+        if not mailed(notice):
+            self.log.bind(student=notice.student).event("notify.suppressed", target=key)
+            return False
         path = self.state.with_name("notify-once.json")
         done = set(read_json(path, []) or [])
-        key = f"{notice.student}:{notice.kind}"
         if key in done:
             return False
         if self._deliver(render(notice, self.to)):
@@ -79,6 +79,10 @@ class Mailer:
 def render(notice: Notice, to: str) -> EmailMessage:
     message = EmailMessage()
     message["To"] = to
+    if mailed(notice):
+        message["Subject"] = f"School Notes – {notice.error_class}"
+        message.set_content(f"{redact(notice.message)}\n")
+        return message
     message["Subject"] = f"School Notes – {notice.student}: {notice.error_class} ({notice.step})"
     message.set_content(
         f"Tanuló: {notice.student}\n"

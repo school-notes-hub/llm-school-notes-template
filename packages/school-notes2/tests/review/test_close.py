@@ -6,6 +6,7 @@ from school_notes2.state.errors import NeedsOwner, Transient
 from school_notes2.wiki import frontmatter as fm
 
 from .conftest import sh
+from tests.conftest import assert_suppressed
 
 IDENT = close.Identity("benedek", "opus-5.5/high", "2.0.0", "2026-10-04", "2026-10-04T03:20:00+02:00")
 REVIEW = {"verdict": "changes",
@@ -212,9 +213,9 @@ def test_close_decision_owner_notification_survives_crash(tmp_path, repos, monke
             flow._notify_owners(ctx, resumed)
     flow._notify_owners(ctx, phase.load(task.dir))
     flow._notify_owners(ctx, phase.load(task.dir))
-    assert len(delivered) == 1
+    assert not delivered
+    assert_suppressed(repos.repo.log)
     assert phase.load(task.dir).get("owners_notified")
-    assert "five times" not in delivered[0].get_content()
 
 
 def test_resume_rebuilds_legacy_relation_input_at_pinned_commit(tmp_path, repos):

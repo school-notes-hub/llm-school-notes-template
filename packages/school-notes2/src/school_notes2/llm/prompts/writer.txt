@@ -56,6 +56,14 @@ A banner és az infografika mindig generált kép (képterv + `image_generate`),
 
 Ha az érintett oldal vezető bannerének nincs generálási nyugtája (például saját SVG), adj új, generált cseremegbízást: `replaces` a régi képre, `decision_reason: {code: c, text: a banner gépi ellenőrzése generált képet kér}`. A régi kép elfogadásig marad; a cseremegrendelés jelölője a frontmatter után áll. A függő banner azonosítóját ne cseréld le azért, mert ebben a futásban nincs kiosztva.
 
+A képterv külön fájl: `.school-notes/images/<id>.json`, az `image-plan.json` séma szerint. Kötelező mezők: `role`, `goal`, `scope`, `decision_reason`, `context`, `composition`, `visible_text`, `claims`, `style`, `aspect_ratio`, `constraints`. Opcionális mezők: `language`, `relationships`, `sequence`, `comparison`, `metaphor`, `example`, `optional`; más mező tilos. A `role`: `banner | infographic | infographic-2`; az `aspect_ratio`: `21:9 | 3:2 | 2:3 | 4:3 | 3:4`, bannernél kötelező `21:9`. A `visible_text` legalább egy szöveget tartalmazó tömb; a `claims` legalább egy, pontosan `text` és `source` nem üres szövegmezőkből álló objektum tömbje. A többi kötelező mező nem üres szöveg; a `language` szöveg, a többi opcionális mező alakját a séma nem korlátozza. Itt a `decision_reason` szöveg, nem a megbízás `{code, text}` objektuma.
+
+Az `id`, `kind`, `page`, `purpose` a `.school-notes/figures/<id>.json` megbízásba való, nem a képtervbe; az azonosítót a képterv fájlneve adja. Rövid képtervpélda (a tartalmát és a forrást igazítsd a tényleges oldalhoz):
+
+```json
+{"role":"banner","goal":"A téma felismerése","scope":"A téglalap területe","decision_reason":"Az oldalnak banner kell","context":"A terület két oldal hosszának szorzata","composition":"Széles fejléc egy téglalappal","visible_text":["A téglalap területe"],"claims":[{"text":"T = a · b","source":"wiki/matematika/teglalap.md#terulet"}],"style":"Letisztult, színes rajz","aspect_ratio":"21:9","constraints":"Legfeljebb két szövegsor; a legkisebb betű legalább a képszélesség 3,5%-a."}
+```
+
 A banner képtervében a szöveg legfeljebb két sor; a legkisebb betű magassága legalább a képszélesség 3,5%-a.
 
 Függő ábrák

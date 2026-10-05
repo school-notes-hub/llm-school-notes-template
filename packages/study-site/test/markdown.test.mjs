@@ -9,6 +9,14 @@ test('an empty jump-target anchor keeps its plain id for links from other pages'
   assert.ok(html.includes('href="#pdf-13-oldal"'), html);
 });
 
+test('a jump-target anchor with an accented Hungarian id keeps its plain id', async () => {
+  const { renderMarkdown } = await import('../lib/markdown.mjs');
+  const out = await renderMarkdown('# T\n\n<a id="2-dia---a-földművelés-térképe"></a>\n\n## A földművelés elterjedése\n', { resolveUrl: async h => h });
+  const html = out.html ?? String(out);
+  assert.ok(html.includes('id="2-dia---a-földművelés-térképe"'), html);
+  assert.ok(!html.includes('user-content-2-dia'), html);
+});
+
 test('an mp4 image becomes a video with its PNG poster; print keeps only the poster', async () => {
   const { renderMarkdown, printSection } = await import('../lib/markdown.mjs');
   const resolveUrl = async h => h.replace('../assets/', 'assets/');

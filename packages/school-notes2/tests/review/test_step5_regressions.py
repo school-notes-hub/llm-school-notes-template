@@ -9,6 +9,7 @@ from school_notes2.reader.units import slug
 from school_notes2.state import phase, safefs
 from school_notes2.state.errors import BadWork, NeedsOwner, Prerequisite
 from tests.review.test_topics import FIX, IDENT, context, good, prepare
+from tests.conftest import assert_suppressed, recording_mailer
 
 
 @pytest.mark.parametrize("learner", ["one", "two"])
@@ -86,7 +87,7 @@ def test_format_then_first_timeout_blocks_and_notifies(tmp_path, repos, log, mon
     repos.commit({"wiki/a.md": "# A\n"})
     ctx = context(tmp_path, repos, log)
     notices = []
-    ctx.mailer.send_once = lambda notice: notices.append(notice) or True
+    ctx.mailer = recording_mailer(tmp_path, log, monkeypatch, notices)
     def fail(*args, **kwargs):
         raise BadWork("format")
     monkeypatch.setattr(launch, "run_headless", fail)
@@ -100,7 +101,8 @@ def test_format_then_first_timeout_blocks_and_notifies(tmp_path, repos, log, mon
     night_topics.run(ctx, second)
     assert second.get("failed_topics")[0]["count"] == 2
     assert second.get("blocked_topics")[0]["topic"] == "wiki/a.md"
-    assert len(notices) == 1
+    assert not notices
+    assert_suppressed(log, "nightly-blocked:")
 
 
 def test_unblocked_is_sorted_and_clear_applies_to_old_records(tmp_path):

@@ -1,27 +1,21 @@
 from school_notes2.flows import policy
 from school_notes2.state import phase
 from school_notes2.state.errors import BadWork, NeedsOwner, Prerequisite, Transient
+from tests.conftest import assert_suppressed, recording_mailer
 
 
-class FakeMailer:
-    def __init__(self):
-        self.sent = []
-
-    def send(self, notice):
-        self.sent.append(notice)
-        return True
-
-
-def test_transient_stops_on_third_failed_invocation(tmp_path, log):
+def test_transient_stops_on_third_failed_invocation(tmp_path, log, monkeypatch):
     task = phase.create(tmp_path, "benedek", "notes", "cron", "prepared")
-    mailer = FakeMailer()
+    sent = []
+    mailer = recording_mailer(tmp_path, log, monkeypatch, sent)
     for _ in range(2):
         policy.on_error(Transient("net"), task=task, student="benedek", step="fetch", log=log,
                         mailer=mailer)
-    assert task.data["needs_owner"] is None and not mailer.sent
+    assert task.data["needs_owner"] is None and not sent
     policy.on_error(Transient("net"), task=task, student="benedek", step="fetch", log=log,
                     mailer=mailer)
-    assert task.data["needs_owner"]["class"] == "transient" and len(mailer.sent) == 1
+    assert task.data["needs_owner"]["class"] == "transient" and not sent
+    assert_suppressed(log, "needs_owner:notes")
 
 
 def test_success_in_the_second_hour_resets(tmp_path, log):
@@ -43,9 +37,10 @@ def test_bad_work_twice_needs_owner_but_not_interactive(tmp_path, log):
     assert task.data["needs_owner"]
 
 
-def test_needs_owner_and_program_errors_stop_at_once(tmp_path, log):
+def test_needs_owner_and_program_errors_stop_at_once(tmp_path, log, monkeypatch):
     task = phase.create(tmp_path, "barna", "notes", "cron", "committed")
-    mailer = FakeMailer()
+    sent = []
+    mailer = recording_mailer(tmp_path, log, monkeypatch, sent)
     policy.on_error(NeedsOwner("conflict", todo="chat"), task=task, student="barna",
                     step="finish", log=log, mailer=mailer)
     assert task.data["needs_owner"]["todo"] == "chat"
@@ -54,11 +49,16 @@ def test_needs_owner_and_program_errors_stop_at_once(tmp_path, log):
                     mailer=mailer)
     assert task2.data["needs_owner"]["class"] == "program"
     assert "traceback" in log.main.read_text()
+    assert not sent
+    assert_suppressed(log, "needs_owner:notes")
+    assert_suppressed(log, "needs_owner:review")
 
 
-def test_prerequisite_mails_without_touching_the_task(tmp_path, log):
+def test_prerequisite_is_suppressed_without_touching_the_task(tmp_path, log, monkeypatch):
     task = phase.create(tmp_path, "barna", "notes", "cron", "prepared")
-    mailer = FakeMailer()
+    sent = []
+    mailer = recording_mailer(tmp_path, log, monkeypatch, sent)
     policy.on_error(Prerequisite("login expired", todo="log in"), task=task, student="barna",
                     step="login", log=log, mailer=mailer)
-    assert task.data["retries"] == 0 and mailer.sent[0].kind == "prerequisite:login"
+    assert task.data["retries"] == 0 and not sent
+    assert_suppressed(log, "prerequisite:login")
