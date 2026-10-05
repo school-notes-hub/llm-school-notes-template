@@ -144,6 +144,14 @@ def test_exhausted_image_is_not_pending_and_never_called(make_settings, fake_api
     for n in range(3):
         run(s, log, repair_note="javítás" if n else None)
     assert fake_api.calls == 3
+    assert pending.scan(s)["exhausted"] == []
+    assert pending.scan(s)["pending"] == [{"plan_id": "termeles-banner", "page": PAGE}]
+    assert run(s, log)["number"] == 3  # Free retrieval while the last image awaits judgement.
+    from school_notes2.figures import context
+    from school_notes2.images import judgement
+    brief, candidate = prepare_candidate(s)
+    judgement.record(s, [brief], {"review": {"figures": [{"id": brief["id"], "verdict": "reject",
+        "key": context.verdict_key(s.worktree, brief, candidate)}]}})
     scan = pending.scan(s)
     assert scan["exhausted"] == [{"plan_id": "termeles-banner", "page": PAGE}]
     assert run(s, log, repair_note="még egyszer")["state"] == "exhausted"

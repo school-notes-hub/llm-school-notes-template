@@ -26,13 +26,26 @@ def is_fix(repo, commit):
     return "School-Notes-Run: fix" in repo.out("show", "-s", "--format=%B", commit).splitlines()
 
 
+def author_text(repo, commit, path):
+    """Retry markers are tool output, even when the nightly report is in the range."""
+    value = text(repo, commit, path)
+    raw = text(repo, commit, "docs/figure-pending.json")
+    entries = json.loads(raw) if raw else []
+    for entry in entries:
+        brief = entry["commission"]
+        if brief["page"] == path and brief["id"].startswith("retry-"):
+            for kind in ("figure", "image"):
+                value = value.replace(f"<!-- {kind}: {brief['id']} -->\n\n", "")
+    return part(value)
+
+
 def author_changes(repo, base, head):
     result = []
     for status, path in sorted(nightly.changed(repo, base, head, ("wiki",))):
         if status == "D":
             continue
         if path.endswith(".md"):
-            if part(text(repo, base, path)) == part(text(repo, head, path)):
+            if author_text(repo, base, path) == author_text(repo, head, path):
                 continue
         result.append(path)
     return result

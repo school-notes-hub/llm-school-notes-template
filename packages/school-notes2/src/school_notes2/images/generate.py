@@ -21,11 +21,13 @@ RETRYABLE = ("not-sent", "http-429")
 
 
 def generate(settings: ImageSettings, plan_id: str, repair_note: str | None = None, *,
-             log: Log, sleep=time.sleep) -> dict:
+             log: Log, sleep=time.sleep, paid_disabled=False) -> dict:
     plans.check_id(plan_id)
-    from ..figures import commissions, context
+    from ..figures import commissions, context, migration_gate
     try:
         brief = commissions.read(settings.worktree, plan_id)
+        if migration_gate.concerns(settings.worktree, brief):
+            return {"state": "disabled", "message": "a függő ábrák migrációja még nem futott le"}
         commissions.validate_assignments(settings.worktree, [{k: brief[k] for k in ("id", "page", "kind")}])
         context.embedding(settings.worktree, brief, {"alt": "", "caption": ""})
     except (ValueError, OSError) as exc:
@@ -39,6 +41,15 @@ def generate(settings: ImageSettings, plan_id: str, repair_note: str | None = No
             return {"state": "error", "message": str(exc)}
         plans.keep(settings, plan_id)
         job_path = plans.write_job(settings, plan_id, job)
+        entry = settings.ledger().get("jobs", {}).get(job["id"], {"attempts": []})
+        if awaiting_review(entry) and not repair_note:
+            attempt = [a for a in entry["attempts"] if a["state"] not in ("failed", "lost")][-1]
+            result = {"state": "generated", "number": attempt["number"], "sha256": attempt["sha256"],
+                      "cost_usd": attempt.get("cost_usd"),
+                      "attempts_left": settings.max_attempts - attempts_used(entry)}
+            return {**result, **_preview(settings, job, result)}
+        if paid_disabled:
+            return {"state": "disabled", "message": "Paid generation is disabled; only an existing unreviewed candidate can be reused."}
         blocked = _blocked(settings, job["id"], repairing=bool(repair_note))
         if blocked:
             log.event("image.generate", blocked["state"], target=plan_id)
@@ -73,6 +84,11 @@ def _blocked(settings: ImageSettings, job_id: str, *, repairing: bool = False) -
 
 def attempts_used(entry: dict) -> int:
     return sum(1 for a in entry["attempts"] if a["state"] != "failed")
+
+
+def exhausted(entry: dict, maximum: int) -> bool:
+    paid = [a for a in entry["attempts"] if a["state"] != "failed"]
+    return len(paid) >= maximum and paid[-1]["state"] == "rejected"
 
 
 def awaiting_review(entry: dict) -> bool:

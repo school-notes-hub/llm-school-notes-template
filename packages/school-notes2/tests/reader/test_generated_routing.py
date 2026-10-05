@@ -103,7 +103,7 @@ def test_recheck_routed_value_cannot_upgrade_original_page(setup):
              "items": [{"key": path + "#R1", "file": page}], "review": {
                  "items": [{"key": path + "#R1", "verdict": "ok", "answer": "Javítva."}],
                  "hits": [{"hit_id": "H1", "verdict": "hiba", "reason": "Címhiba."}], "owner_notes": []}}]}
-    recheck._apply(ctx, task, saved)
+    recheck.apply(ctx, task, saved)
     assert verdicts.valid(repo, page)["verdict"] == "changes"
     item = relations.inventory(repo)["items"][path + "#R2"]
     assert item["file"] == source and item["status"] == "open"

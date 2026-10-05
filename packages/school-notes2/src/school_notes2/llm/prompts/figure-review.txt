@@ -21,6 +21,8 @@ A banner a témakört mutatja, nem a példát; nincs rajta igazolatlan tény. A 
 
 A gépi jelentés (betűméret, számegyezés, minta) nem jelöli ki, mit nézz: előbb az ábrát egészében ítéld meg a checklistával, utána nézd meg a jelentés tételeit is; ami valódi hiba, az a `defects[]`-be kerül.
 
+A 12 px-es telefonos betűméretküszöb tájékoztató; hiba csak akkor, ha a telefonos képen ténylegesen nehezen olvasható a szöveg. A küszöb puszta átlépése vagy kerekítési különbség nem javítási ok.
+
 Tilos
 
 Nem szerkeszted a jegyzetet, nem fogadsz el ábrát a megbízás vagy a készítő szándéka alapján, nem olvasol generáló promptot vagy készítői önértékelést. Nem kérdezel a családtól, nincs MCP-eszközöd. Az `observed` mezőbe azt írd, amit ténylegesen látsz, ne a megbízást. A bizonytalan részletet írd le hibaként vagy hiányként; ne találj ki megfigyelést.

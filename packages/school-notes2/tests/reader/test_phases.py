@@ -244,6 +244,9 @@ def test_pending_figure_third_run_owner_and_resume(setup, monkeypatch):
              "text_complete_without_figure": True}
     safefs.write_text(ctx.notes_path, page, safefs.read_text(ctx.notes_path, page) + "\n<!-- figure: f -->\n")
     safefs.write_json(ctx.notes_path, ".school-notes/figures/f.json", brief)
+    task.update(mode="fix")
+    safefs.write_json(ctx.notes_path, ".school-notes/figures/f/figure.json",
+                      {"state": "failed", "reason": "Renderhiba"})
     for rid in ("older-1", "older-2"):
         pending.record(ctx.notes_path, brief, rid, [])
     task.update(inspection_result={"status": "done", "figures": [{k: brief[k] for k in ("id", "page", "kind")}]})
@@ -264,7 +267,7 @@ def test_capacity_exhausted_still_completes_p4_before_p6(setup, monkeypatch):
     ctx, task, page = setup
     install_reader(monkeypatch, page, findings=[finding(page)])
     task.update(inspection_result={"status": "done", "review_closure": [
-        {"file": "docs/review/older.md", "item_id": f"R{n}", "status": "fixed"} for n in range(20)]})
+        {"file": "docs/review/older.md", "item_id": f"R{n}", "status": "fixed"} for n in range(ctx.cfg.limits.review_closures_per_run)]})
     # The old closures' pages are absent from the fixture, so they add no review unit.
     review_phases.advance(ctx, task, lambda _: None)
     saved = safefs.read_json(inspection.folder(task) / "correction", "receipt.json")

@@ -9,7 +9,8 @@ from ..sources import calls
 from ..state import phase, safefs
 from ..state.errors import BadWork, Transient, WaitingQuota
 from ..wiki import frontmatter
-from . import generation_receipts
+from . import correction_figures, generation_receipts
+from .correction_figures import changed_figures
 from . import checks, handlers, inspection, steps, writer
 
 PREFIXES = ("wiki", "docs", "publication", "tools", ".school-notes")
@@ -35,7 +36,7 @@ def assigned(ctx, task):
     # P1 and P4 share the run's closure capacity.
     selected = all_items(ctx, task)
     used = sum(c["status"] != "open" for c in task.get("inspection_result", {}).get("review_closure", []))
-    return calls.select_reviews(selected, max(0, ctx.cfg.limits.review_closures_per_run - used))
+    return calls.select_reviews(selected, max(0, ctx.cfg.limits.review_closures_per_run - used), repo=ctx.notes_path)
 
 
 def snapshot(repo, root):
@@ -66,10 +67,15 @@ def child_task(ctx, task, root, items):
     data = copy.deepcopy(task.data)
     data.update(run_id=f"{task.run_id}-fix-a{task.get('attempt', 1)}", mode="cron", phase="writing")
     child = phase.Task(root / "writer", data)
-    grouping = calls.assignments(ctx.notes_path, [], [], items, [], review_limit=len(items))
+    waiting = task.get("correction_figures", [])
+    images = [{"plan_id": e["commission"]["id"], "page": e["commission"]["page"]} for e in waiting]
+    grouping = calls.assignments(ctx.notes_path, [], [], items, images, review_limit=len(items))
+    for call in grouping:
+        call["pending_images"] = []
+    correction_figures.start(ctx.notes_path, waiting)
     child.data["data"].update(mode="fix", packages=[], pages=[], calls=grouping,
                                ranges=calls.ranges(grouping), writing_k=1, open_review_items=items,
-                               pending_images=[], pending_figures=[], skip_writer=False, effective_result=None,
+                               pending_images=[], pending_figures=waiting, skip_writer=False, effective_result=None,
                                correction_parent=task.run_id, correction_before=str(root / "before"),
                                paid_disabled=task.get("mode") == "repair")
     if task.mode == "interactive":
@@ -85,43 +91,52 @@ def run(ctx, task, edits=None):
     root.mkdir(parents=True, exist_ok=True)
     saved = safefs.read_json(root, "receipt.json")
     if saved is None:
-        items = assigned(ctx, task)
-        task.update(correction_items=items)
-        if not items:
-            saved = {"status": "done", "result": {"status": "done"}}
-        else:
-            snapshot(ctx.notes_path, root)
-            child = child_task(ctx, task, root, items)
-            try:
-                if task.mode == "interactive":
-                    from . import correction_chat
-                    result = correction_chat.result(ctx, child)
-                    if result is None:
-                        return correction_chat.handoff(ctx, items)
-                else:
-                    outcome = writer.run_ranges(ctx, child, handlers.build(ctx, child.dir))
-                    if outcome == "question":
-                        raise BadWork("fix pass asked a blocking question")
-                    result = writer.merge(writer.results(child))
-                saved = validated(ctx, child, root, items, result)
-            except WaitingQuota:
-                raise
-            except launch.TimedOut as exc:
-                saved = {"status": "rollback", "reason": str(exc)}
-                if exc.details.get("count", 0) >= 2 or exc.details.get("suspended"):
-                    safefs.write_json(root, "receipt.json", saved)
-                    apply(ctx, task, root, saved, edits)
-                    raise
-            except steps.CheckFailed as exc:
-                saved = {"status": "rollback", "reason": str(exc), "items": exc.items[:10]}
-            except (BadWork, Transient) as exc:
-                saved = {"status": "rollback", "reason": str(exc)}
+        saved = execute(ctx, task, root, edits)
+        if saved is None or "status" not in saved:
+            return saved
         if saved["status"] == "rollback" and task.mode == "interactive":
             from .correction_backup import rejected
             rejected(ctx.notes_path, root, PREFIXES, ctx.log)
             saved["rejected_patch"] = (root / "rejected.patch").relative_to(task.dir).as_posix()
         safefs.write_json(root, "receipt.json", saved)
     apply(ctx, task, root, saved, edits)
+
+
+def execute(ctx, task, root, edits):
+    if task.get("correction_assignment_root") != str(root):
+        task.update(correction_items=assigned(ctx, task), correction_figures=correction_figures.waiting(ctx, task),
+                    correction_assignment_root=str(root))
+    items, waiting = task.get("correction_items"), task.get("correction_figures")
+    if not items and not waiting:
+        saved = {"status": "done", "result": {"status": "done"}}
+    else:
+        snapshot(ctx.notes_path, root)
+        child = child_task(ctx, task, root, items)
+        try:
+            if task.mode == "interactive":
+                from . import correction_chat
+                result = correction_chat.result(ctx, child)
+                if result is None:
+                    return correction_chat.handoff(ctx, items)
+            else:
+                outcome = writer.run_ranges(ctx, child, handlers.build(ctx, child.dir))
+                if outcome == "question":
+                    raise BadWork("fix pass asked a blocking question")
+                result = writer.merge(writer.results(child))
+            saved = validated(ctx, child, root, items, result)
+        except WaitingQuota:
+            raise
+        except launch.TimedOut as exc:
+            saved = {"status": "rollback", "reason": str(exc)}
+            if exc.details.get("count", 0) >= 2 or exc.details.get("suspended"):
+                safefs.write_json(root, "receipt.json", saved)
+                apply(ctx, task, root, saved, edits)
+                raise
+        except steps.CheckFailed as exc:
+            saved = {"status": "rollback", "reason": str(exc), "items": exc.items[:10]}
+        except (BadWork, Transient) as exc:
+            saved = {"status": "rollback", "reason": str(exc)}
+    return saved
 
 
 def apply(ctx, task, root, saved, edits=None):
@@ -148,11 +163,25 @@ def apply(ctx, task, root, saved, edits=None):
     outcome = files.apply_closure(ctx.notes_path, f"{task.run_id}-fix-a{task.get('attempt', 1)}", result.get("review_closure", []),
                                   task.get("correction_items", []), ctx.cfg.limits.owner_after_open)
     steps.record_tool_files(task, ctx.notes_path, outcome.written)
+    apply_figures(ctx, task, root, saved)
+
+
+def apply_figures(ctx, task, root, saved):
+    result = saved["result"]
     from ..figures import commissions
     figures = {s["brief"]["id"]: s for s in task.get("inspection_figures", [])}
     for brief in commissions.validate_assignments(ctx.notes_path, result.get("figures", [])):
-        figures[brief["id"]] = {"brief": brief}
+        figures[brief["id"]] = {**figures.get(brief["id"], {}), "brief": brief}
+    attempts = task.get("correction_attempts", {})
+    if str(root) not in attempts:
+        assigned_ids = {f["id"] for f in result.get("figures", [])} | {
+            e["commission"]["id"] for e in task.get("correction_figures", [])}
+        attempts = {**attempts, str(root): {
+            fid: state.get("attempted", False) or (fid in assigned_ids and correction_figures.attempted(ctx, task, state["brief"]))
+            for fid, state in figures.items()}}
+        task.update(correction_attempts=attempts)
     for state in figures.values():
+        state["attempted"] = attempts[str(root)][state["brief"]["id"]]
         state["candidate"] = inspection.candidate_state(ctx, task, state["brief"])
     task.update(correction_result=result, correction_rolled_back=False,
                 correction_warnings=saved.get("warnings", []),
@@ -161,7 +190,7 @@ def apply(ctx, task, root, saved, edits=None):
 
 def validated(ctx, child, root, items, result):
     """Both writers enter the same result, scope, path and content gates."""
-    check_scope(ctx, root, items)
+    check_scope(ctx, root, items, [e["commission"]["page"] for e in child.get("pending_figures", [])])
     problems = checks.accounting(child, result)
     if problems:
         raise steps.CheckFailed(problems)
@@ -219,18 +248,3 @@ def needs_recheck(ctx, task):
     if any(c["status"] in ("fixed", "disagree") for c in task.get("correction_result", {}).get("review_closure", [])):
         return True
     return bool(changed_figures(ctx, task))
-
-
-def changed_figures(ctx, task):
-    from ..figures import commissions, context
-    changed = []
-    for state in task.get("inspection_figures", []):
-        brief = state["brief"]
-        candidate = commissions.candidate(ctx.notes_path, brief)
-        if candidate["state"] != "candidate":
-            continue
-        receipt = task.get("inspection_receipts", {}).get(brief["id"], {})
-        previous = next((v["key"] for v in receipt.get("review", {}).get("figures", []) if v["id"] == brief["id"]), None)
-        if context.verdict_key(ctx.notes_path, brief, candidate) != previous:
-            changed.append(brief)
-    return changed

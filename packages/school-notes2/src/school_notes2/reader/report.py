@@ -12,7 +12,8 @@ def locate(repo, finding):
     path = finding["file"]
     text = safefs.read_text(repo, path) if path.endswith((".md", ".svg")) and safefs.is_file(repo, path) else ""
     pattern = r"\s+".join(re.escape(word) for word in quote.split())
-    match = re.search(pattern, text) if quote else None
+    matches = list(re.finditer(pattern, text)) if quote else []
+    match = matches[0] if len(matches) == 1 and not finding.get("unlocated") else None
     return {**finding, "line": text[:match.start()].count("\n") + 1 if match else None,
             "unlocated": not bool(match)}
 
@@ -40,6 +41,9 @@ def list_findings(repo, hits, output):
 
 def prepare(repo, findings, notes, pages=()):
     """Route once before report writing and page verdict decisions (also on replay)."""
+    from ..figures import migration_gate
+    findings = [figure_quote(repo, f) for f in findings]
+    findings = [f for f in findings if not migration_gate.concerns(repo, f)]
     kept, notes, literals = generated.partition(repo, findings, notes)
     return kept, notes, generated.page_verdicts(pages, findings, literals)
 
@@ -108,3 +112,18 @@ def append(repo, path, findings, notes, label):
         "items": items, "item_details": details, "status": files.compute_status(items),
         "supplements": sorted(labels + [label])}))
     return path
+
+
+def figure_quote(repo, finding):
+    from ..figures import commissions
+    quote = finding.get("quote", "")
+    match = re.search(r"(?:reader-preview/)([a-z0-9-]+)\.png", quote)
+    if not match:
+        return finding
+    fid = match[1]
+    found = commissions.markers(repo).get(fid, [])
+    if len(found) != 1 or found[0][0] != finding["file"]:
+        return finding
+    text = safefs.read_text(repo, finding["file"])
+    marker = next(m[0] for m in commissions.MARKER.finditer(text) if m[1] == fid)
+    return {**finding, "quote": marker, "figure_id": fid, "unlocated": False}

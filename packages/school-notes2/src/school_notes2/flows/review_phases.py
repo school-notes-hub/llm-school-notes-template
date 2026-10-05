@@ -1,11 +1,11 @@
 """P2–P6, one forward-only pass per attempt; no model call after finalization."""
 
-from ..figures import insert, pending
+from ..figures import insert, pending, migration_gate
 from ..reader import notices, report, verdicts
 from ..review import relations
 from ..state import safefs
 from ..state.errors import WaitingQuota
-from . import correction, inspection, recheck, steps
+from . import correction, correction_figures, inspection, recheck, steps
 
 PHASES = ("figures", "inspecting", "correcting", "rechecking", "review_ready")
 
@@ -26,7 +26,7 @@ def _advance(ctx, task, notify, edits):
         task.set_phase("inspecting")
     if task.phase == "inspecting":
         inspection.inspect(ctx, task)
-        task.set_phase("correcting" if correction.all_items(ctx, task) and task.get("mode") != "fix"
+        task.set_phase("correcting" if task.get("mode") != "fix" and (correction.all_items(ctx, task) or correction_figures.waiting(ctx, task))
                        else "review_ready")
     if task.phase == "correcting":
         handoff = correction.run(ctx, task, edits)
@@ -49,8 +49,10 @@ def finalize(ctx, task, edits=None):
     repo, written, owners = ctx.notes_path, [], []
     for state in task.get("inspection_figures", []):
         brief = state["brief"]
+        if migration_gate.concerns(repo, brief):
+            continue
         receipt = task.get("inspection_receipts", {}).get(brief["id"], {})
-        verdict = next((v for v in receipt.get("review", {}).get("figures", []) if v["id"] == brief["id"]), {})
+        verdict = correction_figures.verdict_for(receipt, brief["id"])
         if verdict.get("verdict") == "accept" and state["candidate"]["state"] == "candidate":
             replacing = edits is not None and brief.get("replaces")
             try:
@@ -64,15 +66,16 @@ def finalize(ctx, task, edits=None):
                 ctx.log.event("figure.stale", id=brief["id"], reason=str(exc))
         if state["candidate"]["state"] == "no-figure":
             continue
-        defects = verdict.get("defects", [])
-        reason = receipt.get("reason") or state["candidate"].get("reason")
-        if not defects and reason:
-            defects = [{"location": brief["id"], "observed": reason, "expected": "valid reviewed candidate"}]
-        entry = pending.record(repo, brief, task.run_id, defects)
-        written.append(pending.PATH)
-        if entry["owner_required"]:
+        previous = next((e for e in pending.load(repo) if e["commission"]["id"] == brief["id"]), {})
+        defects = correction_figures.defects(state, receipt, previous.get("defects", []))
+        exhausted = correction_figures.mark_exhausted(ctx, {"commission": brief})
+        entry = pending.record(repo, brief, task.run_id, defects,
+                               owner_required=exhausted, review_pending=correction_figures.awaiting(ctx, brief),
+                               attempted=state["attempted"] if "attempted" in state else correction_figures.attempted(ctx, task, brief))
+        written += [pending.PATH, migration_gate.MARK]
+        if entry["owner_required"] and entry["runs"] >= 3 and not exhausted:
             owners.append({"file": brief["page"], "quote": f"<!-- figure: {brief['id']} -->",
-                           "category": "kép–szöveg", "origin": "figure", "chain": 1, "relates_to": None,
+                           "figure_id": brief["id"], "category": "kép–szöveg", "origin": "figure", "chain": 1, "relates_to": None,
                            "problem": "Az ábramegbízás három futás után is függőben van.", "suggestion": ""})
     if owners:
         path = task.get("inspection_report")

@@ -149,3 +149,8 @@ def _save(repo, name, receipt):
 def for_figure(receipt: dict, fid: str) -> dict:
     failure = next((f for f in receipt.get("failed", []) if f["id"] == fid), None)
     return {"status": "pending", "reason": failure["reason"]} if failure else receipt
+
+
+def verdict_for(receipt: dict, fid: str, *, unique=False) -> dict:
+    found = [v for v in receipt.get("review", {}).get("figures", []) if v["id"] == fid]
+    return found[0] if found and (not unique or len(found) == 1) else {}

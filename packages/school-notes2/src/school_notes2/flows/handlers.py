@@ -98,5 +98,8 @@ def public_problems(repo, generated=lambda _: None) -> list[dict]:
 
 def generate(ctx, task, plan_id, note):
     if task.get("mode") == "repair" or task.get("paid_disabled"):
-        return {"state": "disabled", "message": "Repair uses free local figures; paid generation is disabled."}
+        assigned = {e["commission"]["id"] for e in task.get("pending_figures", [])}
+        if plan_id not in assigned or note:
+            return {"state": "disabled", "message": "Repair uses free local figures; paid generation is disabled."}
+        return image_generate.generate(ctx.image_settings(), plan_id, log=ctx.log, paid_disabled=True)
     return image_generate.generate(ctx.image_settings(), plan_id, note, log=ctx.log)

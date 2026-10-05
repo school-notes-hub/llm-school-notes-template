@@ -77,7 +77,7 @@ def test_fix_has_no_ingest_or_whole_page_assignment():
                    'az új órát oda építsd be', 'Az órai jegyzetoldal rövid',
                    'az egész oldalon', 'Minden füzethibát javítottál'):
         assert ingest not in text
-    assert 'kizárólag a kiosztott review-tételeket kezeld' in text
+    assert 'kizárólag a kiosztott review-tételeket és függő ábrákat kezeld' in text
     assert 'Tételen kívüli sort figyelmeztetés miatt sem írsz át' in text
     assert '`coverage[]`' in text
 
@@ -155,3 +155,8 @@ def test_writer_requires_own_svg_source_and_tool_render_for_raster(role):
     assert ('Saját SVG-nél a `source` maga az SVG; saját raszterhez a '
             '`tools/visual_tools.py` rajzolóeszközzel készült render kell.') in text
     assert 'maga az SVG is lehet' not in text
+
+
+def test_targeted_nightly_instruction_is_not_an_owner_quote():
+    line = next(line for line in prompt("reviewer", grade=9).splitlines() if line.startswith("Célzott mód"))
+    assert "„" not in line and "”" not in line

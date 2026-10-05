@@ -131,19 +131,25 @@ def prepare(ctx: Ctx, task: Task, *, new_subject_index) -> None:
     from . import learning
     learning.migrate(ctx, task)
     reviews = calls.select_reviews(review_files.open_items(ctx.notes_path, task.mode),
-                                   ctx.cfg.limits.review_closures_per_run, mode=task.mode)
+                                   ctx.cfg.limits.review_closures_per_run, mode=task.mode, repo=ctx.notes_path) if task.mode == "interactive" else []
     assigned = calls.assignments(ctx.notes_path, packages, pages, reviews, found["pending"],
                                  ctx.cfg.sources.pages_per_call, ctx.cfg.limits.review_closures_per_run,
                                  mode=task.mode)
     from ..figures import pending as figure_pending
-    pending_figures = figure_pending.for_subjects(ctx.notes_path, {c["subject"] for c in assigned})
+    from . import correction_figures
+    subjects = {c["subject"] for c in assigned}
+    waiting = [e for e in figure_pending.load(ctx.notes_path) if e["commission"]["page"].split("/")[1] in subjects]
+    eligible = correction_figures.assignable(ctx, waiting)
+    steps.record_tool_files(task, ctx.notes_path, correction_figures.persist_owners(ctx, waiting))
+    pending_figures = figure_pending.for_subjects(ctx.notes_path, subjects,
+                                                  allowed={e["commission"]["id"] for e in eligible})
     task.set_phase("prepared", base=base, packages=packages, pages=pages,
                    pending_figures=pending_figures,
                    max_agents=ctx.cfg.limits.max_agents, attempt=1,
                    calls=assigned, ranges=calls.ranges(assigned) or [[0, 0]],
                    open_review_items=reviews,
                    pending_images=found["pending"],
-                   skip_writer=bool(pages) and not fresh and not found["pending"] and not reviews,
+                   skip_writer=bool(pages) and not fresh and not found["pending"] and not reviews and not pending_figures,
                    dot_git=safefs.read_text(ctx.notes_path, ".git"))
 
 

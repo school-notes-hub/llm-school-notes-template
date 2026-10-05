@@ -75,6 +75,7 @@ jpeg_quality = 85
 pdf_dpi = 200
 
 [limits]
+fix_runs_per_day = 6
 max_agents = 3
 image_daily_usd = 1.0
 min_free_gb = 5.0

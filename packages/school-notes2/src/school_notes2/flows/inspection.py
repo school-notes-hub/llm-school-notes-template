@@ -2,36 +2,27 @@
 
 import subprocess
 
-from ..figures import commissions, context, inputs as figure_inputs, review as figure_review
-from ..figures.render import Renderer
-from ..llm import launch
+from ..figures import pending, commissions, context, inputs as figure_inputs, review as figure_review, migration_gate
 from ..reader import calls, inputs, report, units, verdicts
 from ..state import safefs
 from ..wiki import banners, frontmatter
-from . import generation_receipts, steps
-
-
-def folder(task):
-    path = task.dir / f"attempt-{task.get('attempt', 1)}"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def role(ctx, task, name="reader"):
-    configured, harness = ctx.cfg.role(name if name == "reader" or name in getattr(ctx.cfg, "roles", {}) else "reviewer")
-    return launch.RoleRun(ctx.name, task.run_id, "reader-1", configured, harness,
-                          ctx.image_tag(), launch.Mounts(), task.dir / "unused.json",
-                          "reader-1", folder(task), grade=ctx.student.grade,
-                          allowed_domains=ctx.cfg.provider_domains,
-                          max_agents=task.get("max_agents", ctx.cfg.limits.max_agents),
-                          lease_dir=ctx.cfg.state_dir / "agent-leases", attempt=task.get("attempt", 1))
+from . import correction_figures, generation_receipts, steps
+from .inspection_runtime import folder, role, render, figures
 
 
 def prepare(ctx, task):
     result = task.get("inspection_result")
     waiting = {e["commission"]["id"]: e["commission"] for e in task.get("pending_figures", [])}
+    assignments = [a for a in commissions.assignments(result, task.get("pending_figures", []))
+                   if not migration_gate.concerns(ctx.notes_path, a)]
+    attempts = task.get("figure_attempts", {})
+    attempt = str(task.get("attempt", 1))
+    if attempt not in attempts:
+        attempts = {**attempts, attempt: {a["id"]: correction_figures.attempted(ctx, task, a) for a in assignments}}
+        task.update(figure_attempts=attempts)
     states = []
-    for assignment in commissions.assignments(result, task.get("pending_figures", [])):
+    for assignment in assignments:
+        attempted = attempts[attempt].get(assignment["id"], False)
         try:
             brief = commissions.validate_assignments(ctx.notes_path, [assignment])[0]
         except (ValueError, OSError) as exc:
@@ -42,13 +33,13 @@ def prepare(ctx, task):
             safefs.write_json(ctx.notes_path, f".school-notes/figures/{brief['id']}/figure.json", candidate)
         else:
             candidate = candidate_state(ctx, task, brief)
-        states.append({"brief": brief, "candidate": candidate})
+        states.append({"brief": brief, "candidate": candidate, "attempted": attempted})
     briefs = [s["brief"] for s in states]
     changed = sorted(steps.llm_snapshot(ctx, task))
     grouped = units.collect(ctx.notes_path, changed, result.get("review_closure", []), briefs)
     task.update(inspection_changed=changed, inspection_all_units=grouped)
     # Retry only changed keys. A unit containing an invalid page is read as a whole.
-    grouped = [u for u in grouped if any(verdicts.valid(ctx.notes_path, p) is None for p in u["pages"])
+    grouped = [u for u in grouped if task.get("mode") == "fix" or any(verdicts.valid(ctx.notes_path, p) is None for p in u["pages"])
                or any(s["brief"]["page"] in u["pages"] and figure_changed(ctx, task, s) for s in states)]
     task.update(inspection_figures=states, inspection_units=grouped)
 
@@ -59,8 +50,7 @@ def figure_changed(ctx, task, state):
     brief = state["brief"]
     key = context.verdict_key(ctx.notes_path, brief, state["candidate"])
     previous = task.get("inspection_receipts", {}).get(brief["id"], {})
-    return not any(v["id"] == brief["id"] and v["key"] == key
-                   for v in previous.get("review", {}).get("figures", []))
+    return figure_review.verdict_for(previous, brief["id"]).get("key") != key
 
 
 def candidate_state(ctx, task, brief):
@@ -90,41 +80,65 @@ def inspect(ctx, task):
     root, repo = folder(task), ctx.notes_path
     saved = safefs.read_json(root, "p3.json")
     if saved is None:
-        briefs = [s["brief"] for s in task.get("inspection_figures", [])]
-        view = root / "reader-view"
-        inputs.preview(repo, view, briefs, render(ctx, task))
-        for unit in task.get("inspection_units", []):
-            for page in unit["pages"]:
-                if frontmatter.split(safefs.read_text(repo, page)).meta.get("banner_from"):
-                    unit["keys"][page] = units.page_key(repo, page, banner_image=banners.candidate_image(repo, page, briefs))
-        findings, notes, pages, receipts, coverage = [], [], [], {}, []
-        for unit in task.get("inspection_units", []):
-            if task.get("mode") != "fix":
-                result = _reader(ctx, task, view, unit)
-                findings += result["findings"]
-                notes += result["notes"]
-                pages += result["pages"]
-                coverage.append({"topic": unit["topic"], **result["coverage"]})
-        candidates = [s["brief"] for s in task.get("inspection_figures", [])
-                      if s["candidate"]["state"] == "candidate"]
-        fresh = []
-        for brief in candidates:
-            previous = task.get("inspection_receipts", {}).get(brief["id"], {})
-            key = context.verdict_key(repo, brief, commissions.candidate(repo, brief))
-            if any(v["id"] == brief["id"] and v["key"] == key
-                   for v in previous.get("review", {}).get("figures", [])):
-                receipts[brief["id"]] = previous
-            else:
-                fresh.append(brief)
-        for name, batch in figure_inputs.batches(repo, fresh):
-            receipt = figures(ctx, task, batch, name)
-            for brief in batch:
-                receipts[brief["id"]] = figure_review.for_figure(receipt, brief["id"])
-            findings += figure_findings(batch, receipt)
-            notes += receipt.get("review", {}).get("owner_notes", [])
-        saved = {"findings": findings, "notes": notes, "pages": pages, "receipts": receipts, "coverage": coverage}
+        view = prepare_view(ctx, task, root)
+        findings, notes, pages, coverage, fixes = inspect_readers(ctx, task, view)
+        receipts, figure_notes = inspect_figures(ctx, task)
+        notes += figure_notes
+        saved = {"findings": findings, "notes": notes, "pages": pages, "receipts": receipts, "coverage": coverage, "fixes": fixes}
         safefs.write_json(root, "p3.json", saved)
     _apply(ctx, task, saved)
+    if saved.get("fixes"):
+        from . import recheck
+        recheck.apply(ctx, task, {"units": saved["fixes"], "receipts": saved["receipts"]})
+
+
+def prepare_view(ctx, task, root):
+    repo = ctx.notes_path
+    briefs = [s["brief"] for s in task.get("inspection_figures", [])]
+    view = root / "reader-view"
+    inputs.preview(repo, view, briefs, render(ctx, task))
+    for unit in task.get("inspection_units", []):
+        for page in unit["pages"]:
+            if frontmatter.split(safefs.read_text(repo, page)).meta.get("banner_from"):
+                unit["keys"][page] = units.page_key(repo, page, banner_image=banners.candidate_image(repo, page, briefs))
+    return view
+
+
+def inspect_readers(ctx, task, view):
+    findings, notes, pages, coverage, fixes = [], [], [], [], []
+    for unit in task.get("inspection_units", []):
+        if task.get("mode") == "fix":
+            from . import recheck
+            closures = [c for c in task.get("inspection_result", {}).get("review_closure", [])
+                        if c["status"] in ("fixed", "disagree")]
+            fixes.append(recheck.check_unit(ctx, task, view, unit, closures))
+        else:
+            result = _reader(ctx, task, view, unit)
+            findings += result["findings"]
+            notes += result["notes"]
+            pages += result["pages"]
+            coverage.append({"topic": unit["topic"], **result["coverage"]})
+    return findings, notes, pages, coverage, fixes
+
+
+def inspect_figures(ctx, task):
+    repo, receipts, notes = ctx.notes_path, {}, []
+    candidates = [s["brief"] for s in task.get("inspection_figures", [])
+                  if s["candidate"]["state"] == "candidate"]
+    fresh = []
+    for brief in candidates:
+        previous = task.get("inspection_receipts", {}).get(brief["id"], {})
+        key = context.verdict_key(repo, brief, commissions.candidate(repo, brief))
+        if figure_review.verdict_for(previous, brief["id"]).get("key") == key:
+            receipts[brief["id"]] = previous
+        else:
+            fresh.append(brief)
+    for name, batch in figure_inputs.batches(repo, fresh):
+        receipt = figures(ctx, task, batch, name)
+        for brief in batch:
+            receipts[brief["id"]] = figure_review.for_figure(receipt, brief["id"])
+        notes += receipt.get("review", {}).get("owner_notes", [])
+    return receipts, notes
 
 
 def _reader(ctx, task, view, unit):
@@ -161,40 +175,11 @@ def _reader(ctx, task, view, unit):
     return {"findings": findings, "notes": notes, "pages": pages, "coverage": coverage}
 
 
-def figures(ctx, task, batch, name):
-    renderer = render(ctx, task)
-    try:
-        return figure_review.run_batch(ctx.notes_path, batch, name, role(ctx, task, "figure-review"),
-                                       render=renderer, log=ctx.log)
-    except (ValueError, OSError, subprocess.TimeoutExpired) as exc:
-        return {"status": "pending", "reason": str(exc)}
-
-
-def render(ctx, task):
-    return Renderer(ctx.release() / "packages/study-site", ctx.cfg.browser,
-                        folder(task) / "render", timeout_s=ctx.cfg.timeouts.rasterize_s)
-
-
-def figure_findings(batch, receipt):
-    result = []
-    by_id = {b["id"]: b for b in batch}
-    for verdict in receipt.get("review", {}).get("figures", []):
-        if verdict["verdict"] == "accept":
-            continue
-        brief = by_id[verdict["id"]]
-        defects = verdict["defects"] + verdict["text_mismatch"]
-        result.append({"file": brief["page"], "quote": f"<!-- figure: {brief['id']} -->",
-                       "origin": "figure", "figure_id": brief["id"], "category": "kép–szöveg",
-                       "problem": str(defects) if defects else verdict["observed"], "suggestion": "",
-                       "relates_to": verdict["relates_to"], "new_evidence": verdict.get("new_evidence", "")})
-    return result
-
-
 def _apply(ctx, task, saved):
     findings, notes, pages = report.prepare(ctx.notes_path, saved["findings"], saved["notes"], saved["pages"])
     saved = {**saved, "findings": findings, "notes": notes, "pages": pages}
     path = f"docs/review/{task.data['created'][:10]}-{task.run_id}-run.md"
-    if not task.get("inspection_figures") and not any(saved[k] for k in ("findings", "notes", "pages", "receipts")):
+    if not task.get("inspection_figures") and not any(saved.get(k) for k in ("findings", "notes", "pages", "receipts", "fixes")):
         task.update(inspection_report=None, inspection_receipts={}, reader_pages=[])
         return
     model = role(ctx, task).role

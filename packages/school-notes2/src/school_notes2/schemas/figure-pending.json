@@ -21,12 +21,12 @@
       },
       "runs": {
         "type": "integer",
-        "minimum": 1,
+        "minimum": 0,
         "maximum": 3
       },
       "run_ids": {
         "type": "array",
-        "minItems": 1,
+        "minItems": 0,
         "maxItems": 3,
         "uniqueItems": true,
         "items": {
@@ -61,6 +61,9 @@
         }
       },
       "owner_required": {
+        "type": "boolean"
+      },
+      "review_pending": {
         "type": "boolean"
       }
     }

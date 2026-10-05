@@ -3,6 +3,7 @@
 import json
 import time
 
+from ..figures.review import verdict_for
 from ..log import now_iso
 from ..mcp.redact import redact
 from ..notify import Notice, pending
@@ -29,7 +30,7 @@ def details(ctx, task):
                 continue
             fid = state["brief"]["id"]
             receipt = task.get("inspection_receipts", {}).get(fid, {})
-            decision = next((v["verdict"] for v in receipt.get("review", {}).get("figures", []) if v["id"] == fid), "pending")
+            decision = verdict_for(receipt, fid).get("verdict", "pending")
             figure_counts[{"accept": "elfogadva", "reject": "elutasítva"}.get(decision, "függő")] += 1
         topics.append({"téma": unit["topic"], "leletek": len(assigned),
                        "lezárt": sum(i["status"] in ("fixed", "settled", "question") for i in assigned),

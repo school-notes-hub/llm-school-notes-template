@@ -36,12 +36,12 @@ def test_interactive_fetch_prioritizes_owner_over_twenty_one_open_items(learning
     task.update(base=wt.out("rev-parse", "HEAD").strip())
     inp = prepare(ctx, task, monkeypatch)
     selected = inp["open_review_items"]
-    assert len(selected) == 20
+    assert len(selected) == 23
     assert [(i["file"], i["status"]) for i in selected[:2]] == [
         (repair, "owner"), ("docs/review/2026-10-04-review.md", "owner")]
-    assert len([i for i in selected if i["status"] == "open"]) == 18
+    assert len([i for i in selected if i["status"] == "open"]) == 21
     assert selected == calls.select_reviews(list(reversed(files.open_items(ctx.notes_path, "interactive"))),
-                                             mode="interactive")
+                                             mode="interactive", limit=30, repo=ctx.notes_path)
     result = {"status": "done", "review_closure": [
         {"file": i["file"], "item_id": i["item_id"], "status": "fixed"} for i in selected[:2]]}
     from school_notes2.wiki.check_result import check_result

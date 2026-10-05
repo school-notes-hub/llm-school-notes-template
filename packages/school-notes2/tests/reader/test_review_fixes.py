@@ -100,7 +100,7 @@ def test_pending_contract_checked_in_p1_and_failed_in_p2(setup, monkeypatch, dam
     ctx, task, page = setup
     brief, _ = figure(ctx, task, page)
     entry = pending.record(ctx.notes_path, brief, "previous", [])
-    task.update(pending_figures=[entry], inspection_result={"status": "done"})
+    task.update(mode="fix", pending_figures=[entry], inspection_result={"status": "done"})
     if damage == "marker":
         safefs.write_text(ctx.notes_path, page, safefs.read_text(ctx.notes_path, page).replace("<!-- figure: f -->", ""))
     else:

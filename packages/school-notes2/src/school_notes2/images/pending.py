@@ -8,7 +8,7 @@ separately for `status` and the one-time e-mail.
 from ..state import safefs
 from . import plans
 from .budget import budget_left, unknown_calls
-from .generate import attempts_used
+from .generate import awaiting_review, exhausted
 from .settings import ImageSettings
 
 
@@ -19,14 +19,20 @@ def scan(settings: ImageSettings) -> dict:
                        settings.monthly_usd)
     result = {"pending": [], "exhausted": [], "missing_plan": [],
               "waiting_unknown": waiting, "budget_left": has_budget}
+    from ..figures import migration_gate
+    frozen = set()
+    if migration_gate.blocked(settings.worktree):
+        frozen = {e["commission"]["id"] for e in safefs.read_json(settings.worktree, migration_gate.PATH, [])}
     for plan_id, pages in sorted(plans.find_markers(settings.worktree).items()):
+        if plan_id in frozen:
+            continue
         item = {"plan_id": plan_id, "page": pages[0]}
         entry = ledger["jobs"].get(plans.job_id(settings.learner, plan_id))
         if not _plan_exists(settings, plan_id):
             result["missing_plan"].append(item)
-        elif entry and attempts_used(entry) >= settings.max_attempts:
+        elif entry and exhausted(entry, settings.max_attempts):
             result["exhausted"].append(item)
-        elif has_budget and not waiting:
+        elif (entry and awaiting_review(entry)) or (has_budget and not waiting):
             result["pending"].append(item)
     return result
 

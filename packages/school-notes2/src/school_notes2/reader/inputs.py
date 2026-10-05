@@ -51,7 +51,7 @@ def preview(repo: Path, destination: Path, briefs: list[dict], render=None) -> N
         safefs.write_text(destination, page, banners.update(destination, page, text))
 
 
-def prepare(repo: Path, view: Path, unit: dict, folder: Path, old_text) -> dict:
+def prepare(repo: Path, view: Path, unit: dict, folder: Path, old_text, *, targeted=False) -> dict:
     folder.mkdir(parents=True, exist_ok=True)
     assigned = {"pages": [{"file": p, "key": unit["keys"][p]} for p in unit["pages"]]}
     inventory = relations.reviewer_inventory(repo)["pages"]
@@ -63,10 +63,13 @@ def prepare(repo: Path, view: Path, unit: dict, folder: Path, old_text) -> dict:
         for qid in ids.get("questions", []):
             match = re.search(r"<!-- q: " + re.escape(qid) + r" -->\s*([^\n]+)", text)
             questions.append({"id": qid, "text": match[1] if match else ""})
+        from ..review import scope
         pages.append({"file": page, "role": "assigned" if page in unit["pages"] else "context",
-                      "text": text, "questions": questions,
+                      "text": "" if targeted else text,
+                      "changed_lines": scope.excerpts(old_text(page), safefs.read_text(repo, page)) if targeted else [],
+                      "questions": [] if targeted else questions,
                       "decisions": frontmatter.split(text).meta.get("decisions", []),
-                      "items": ids.get("items", {}),
+                      "items": {} if targeted else ids.get("items", {}),
                       "diff": "".join(difflib.unified_diff(old_text(page).splitlines(True),
                                                         text.splitlines(True), fromfile=page, tofile=page))})
     safefs.write_json(folder, "assigned.json", assigned)

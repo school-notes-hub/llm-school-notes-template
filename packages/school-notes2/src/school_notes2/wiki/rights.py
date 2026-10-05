@@ -6,6 +6,14 @@ from ..state import safefs
 from .pages import sha256
 
 
+def generated(repo, rel, proof=None):
+    """Generation proof shared by legacy-header checks and candidate review."""
+    if not rel or not safefs.is_file(repo, rel):
+        return None
+    evidence = (proof(rel) if proof else None, media(repo)(rel), lookup(repo, lambda _: None)(rel))
+    return next((found for found in evidence if found and found[0] == "generated"), None)
+
+
 def lookup(repo: Path, fallback, *, known=None, recorded=None):
     """Share publication inheritance and revocable-license precedence with preflight."""
     from ..figures import licenses
@@ -49,8 +57,13 @@ def media(repo: Path):
               authored_candidate(repo, value.get("candidate", {}))):
             authored.append((value.get("output_sha256"), path))
 
+    compressed = compressed_records(repo, {digest for digest, _ in records})
+
     def lookup(rel):
         digest = sha256(repo, rel)
+        for target, recorded, path in compressed:
+            if target == rel and recorded == digest:
+                return "generated", path
         for kind, entries in (("generated", records), ("authored", authored)):
             if kind == "authored" and not rel.endswith(".svg"):
                 continue
@@ -60,6 +73,21 @@ def media(repo: Path):
                 return found
         return None
     return lookup
+
+
+def compressed_records(repo, generated):
+    """v1 WebP receipts link published bytes to a proven generated original."""
+    records = []
+    for path in safefs.glob(repo, "docs/evidence", "docs/evidence/*-banner-compression.json"):
+        value = safefs.read_json(repo, path, [])
+        entries = value.get("images", []) if isinstance(value, dict) else value
+        for entry in entries if isinstance(entries, list) else []:
+            if not isinstance(entry, dict):
+                continue
+            original = entry.get("original_sha256", entry.get("source_sha256"))
+            if original and original in generated:
+                records.append((entry.get("published"), entry.get("published_sha256"), path))
+    return records
 
 
 def authored_candidate(repo: Path, candidate: dict) -> bool:

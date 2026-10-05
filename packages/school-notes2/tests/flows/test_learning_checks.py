@@ -1,5 +1,9 @@
 """Legacy pages through MCP check, finish and real local rebase generation (K-1/K-8)."""
 
+import hashlib
+import io
+
+from PIL import Image
 import json
 from datetime import date
 from pathlib import Path
@@ -33,6 +37,18 @@ def learning_run(tmp_path, local_origin, request):
         "publication/public.json": json.dumps({"version": 1, "mode": "public", "title": learner,
                                                "base": f"/{learner}/", "assets": []}),
     }
+    buffer = io.BytesIO()
+    Image.new("RGB", (100, 30), "blue").save(buffer, "WEBP")
+    header = buffer.getvalue()
+    asset = "wiki/assets/proba/header.webp"
+    files[asset] = header
+    files[TOPIC] = files[TOPIC].replace("---\n\n", "---\n\n![Fejléc](../assets/proba/header.webp)\n\n", 1)
+    files["docs/evidence/image-generation/header.json"] = json.dumps({
+        "rights": "generated", "outputs": [hashlib.sha256(header).hexdigest()]})
+    manifest = json.loads(files["publication/public.json"])
+    manifest["assets"] = [{"path": asset, "sha256": hashlib.sha256(header).hexdigest(),
+                           "rights": "generated", "rightsEvidence": "existing header"}]
+    files["publication/public.json"] = json.dumps(manifest)
     origin = make_origin(tmp_path, files)
     cfg = config.parse({
         "root": str(tmp_path / "srv"), "secrets_dir": str(tmp_path / "secrets"),

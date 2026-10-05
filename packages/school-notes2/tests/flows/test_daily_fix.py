@@ -19,7 +19,7 @@ def test_daily_fix_prepare_crash_and_subject_assignments(tmp_path, log, monkeypa
     wt.run = lambda *a, **kw: None if a[0] == "switch" else original_run(*a, **kw)
     ctx.worktree = lambda kind: wt
     ctx.bare = lambda: wt
-    ctx.cfg.limits = SimpleNamespace(max_agents=3, review_closures_per_run=20)
+    ctx.cfg.limits = SimpleNamespace(max_agents=3, review_closures_per_run=20, fix_runs_per_day=6)
     ctx.cfg.timeouts = SimpleNamespace(fetch_s=1)
     monkeypatch.setattr(fix.repos, "fetch", lambda *a: None)
     files.write_review(ctx.notes_path, "2026-10-04", {"verdict": "changes", "findings": [
@@ -37,7 +37,7 @@ def test_daily_fix_prepare_crash_and_subject_assignments(tmp_path, log, monkeypa
     assert value["open_review_items"][0]["item_id"] == "R1"
     assert value["subject"] == "m"
     resumed.set_phase("done")
-    assert fix.next_task(ctx) is None
+    assert fix.next_task(ctx).get("mode") == "fix"
 
 
 def test_priority_is_new_packages_then_fix_then_repair(monkeypatch):

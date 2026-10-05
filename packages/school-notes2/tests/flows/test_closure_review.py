@@ -70,6 +70,8 @@ def test_p4_request_filing_resumes_without_replacing_its_journal(repo, tmp_path,
 
 def test_check_during_background_generation_preserves_all_task_state(learning_run, monkeypatch):
     ctx, task = learning_run
+    evidence = {p: safefs.read_bytes(ctx.notes_path, p)
+                for p in safefs.walk_files(ctx.notes_path, "docs/evidence/image-generation")}
     started, finish = Event(), Event()
     def generate(*args, **kwargs):
         started.set()
@@ -89,7 +91,8 @@ def test_check_during_background_generation_preserves_all_task_state(learning_ru
             finish.set()
         assert job.result()["state"] == "generated"
     assert phase.load(task.dir).data == before
-    assert not safefs.walk_files(ctx.notes_path, "docs/evidence/image-generation")
+    assert {p: safefs.read_bytes(ctx.notes_path, p)
+            for p in safefs.walk_files(ctx.notes_path, "docs/evidence/image-generation")} == evidence
 
 
 def test_generated_receipts_are_one_sorted_write_and_learner_scoped(repo, tmp_path, monkeypatch):

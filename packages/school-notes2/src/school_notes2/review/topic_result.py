@@ -6,7 +6,7 @@ from ..reader import notices, report, verdicts
 from ..reader.units import page_key
 from ..state import safefs
 from ..wiki import frontmatter, public
-from . import figure_waiting, files, relations, topics, warnings
+from . import figure_waiting, files, relations, scope, topics, warnings
 
 
 def chain(repo, head, finding, *, fix_touched=False):
@@ -61,6 +61,10 @@ def assemble(task, repo, work):
                          "category": "forráskötött", "relates_to": None, "hit_id": row["id"]}
                     own.append(f)
             own += entry.get("figure_findings", [])
+            if unit["mode"] == "targeted":
+                own, outside = scope.partition(own, lambda p: topics.text(repo, unit["base"], p),
+                                               lambda p: topics.text(repo, task.get("H"), p), unit["assigned_pages"])
+                notes += outside
             own, notes, _ = report.prepare(work, own, notes)
             own = [chain(repo, task.get("H"), f, fix_touched=fix_touched) for f in own]
             for f in sorted(own, key=lambda f: (f["file"], f.get("line") or 0, f["problem"], f.get("quote", ""))):
@@ -116,9 +120,17 @@ def apply(task, work, ident):
             written.append(warnings.PATH)
         from . import night_figures
         written += night_figures.apply(work, entry.get("figure_records", []), ident.at)
+    written += _finish_apply(task, work, notes)
+    return sorted(set(written)), owners, notes
+
+
+def _finish_apply(task, work, notes):
+    written = []
     written += figure_waiting.apply(work,
         [p for e in task.get("topic_results", []) for p in e.get("figure_pending", [])],
         [s for e in task.get("topic_results", []) for s in e.get("figure_checked", [])])
+    from ..figures import rejected
+    written += rejected.apply(work, [r for e in task.get("topic_results", []) for r in e.get("figure_retries", [])])
     safefs.write_json(work, topics.STATE, state(task))
     if not safefs.is_file(work, verdicts.PATH):
         safefs.write_json(work, verdicts.PATH, [])
@@ -131,7 +143,7 @@ def apply(task, work, ident):
     except public.PublicError as exc:
         notes.append(f"A public.json újraépítése sikertelen: {exc}")
     written += [topics.STATE, verdicts.PATH]
-    return sorted(set(written)), owners, notes
+    return written
 
 
 def apply_item(work, original, answer):

@@ -60,7 +60,7 @@ The prompts' reader yardstick is the learner's school year: the tool fills `{gra
 the configuration, as it fills `{output_instruction}`.
 
 The source-grounded repair rules and writer/fix prompts support the P1–P6 flow.
-Source-free daily fixes use `fix.txt`; nightly review uses a separate topic contract
+Source-free hourly fixes use `fix.txt`; nightly review uses a separate topic contract
 with exact page, closure and warning accounting and private `owner_notes`.
 Writer `owner_notes` are emitted as `writer.owner_notes` JSONL log events and, at completion,
 in the private task `report.json`, the finish response and the completion summary,
@@ -181,7 +181,7 @@ against the writer. Author text is checked before stamping as well as afterwards
 
 Cron persists the writer assignments in `phase.json`: subjects follow `tools/subjects.json`,
 new subjects follow by path; each call receives only its own packages, pages, card and
-review/image assignments. The tool assigns at most 20 review items per run, in round-2,
+review/image assignments. The tool assigns at most 30 review items per run, keeping each page together, in round-2,
 report-date and numeric item order. Unassigned items do not accrue untouched counts.
 Interactive preparation puts owner items first within the same capacity, so the owner
 can settle them in chat. Both dated report names and repair run IDs supply calendar dates.
@@ -233,7 +233,7 @@ descending actual lesson date, path. Filenames never supply lesson dates. Depend
 logs, chapter summaries and review pages wait for every referenced topic to be `done`.
 Invalid or dependency-blocked targets are rejected against the local `origin/main`
 snapshot before creating a task; they cannot stop another run or the cron.
-The scheduler reads the queue in its stored order after new packages and daily fix work
+The scheduler reads the queue in its stored order after new packages and hourly fix work
 (including eligible pending figures).
 Runs change status without rebuilding or reordering the queue. A direct topic repair
 without a queue is allowed, but does not create one or complete absent entries.
@@ -321,7 +321,8 @@ banner keys bind image bytes, title and description. Rule versions are excluded.
 `pending.record/load/eligible/restore/clear` maintains `docs/figure-pending.json`
 in commission-ID order. It keeps the full commission and latest defects; unique run
 IDs make increments replay-safe. At three runs, `owner_required` is true and the
-commission is no longer eligible. The 2b orchestrator creates/notifies the owner item and the learner-facing pending notice. No owner wording is invented here.
+commission is no longer eligible, except while a generated candidate awaits judgement
+(`review_pending`): its free check remains eligible. The 2b orchestrator creates/notifies the owner item and the learner-facing pending notice. No owner wording is invented here.
 
 ## Reader and shared correction phases (unit 2b)
 
@@ -359,7 +360,7 @@ Reader keys omit machine content and insertion markers. Figure keys keep the 2a
 contract. G4/G5 recompute keys on the final tree, remove stale verdict records and
 refresh fixed pending notices without an LLM or a publication hold. The final
 commit carries `School-Notes-Run`. Pending figures restore into subject-scoped
-fetch inputs; after three runs they become owner items. Unit 5 starts a daily fix run without new sources when writer items or pending figures remain.
+fetch inputs; after three runs they become owner items. The scheduler starts an hourly fix run without new sources when writer items or pending figures remain.
 
 `[limits] max_agents = 3` is a positive integer, pinned for a run. Process-safe
 admission uses global slots and an exclusive lock per learner/home volume.
@@ -504,7 +505,7 @@ feed the real `public.build` manifest into the renderer.
 Set `STUDY_BROWSER` to the installed Chromium executable for both synthetic learners'
 actual HTML/PDF/site-file negative tests; without it those two browser builds skip.
 
-## Topic-based nightly review and daily fixes (unit 5)
+## Topic-based nightly review and hourly fixes (unit 5)
 
 The night pins `claude-reviewed..H`, derives topic units from actual author changes and
 unanswered review closures, and calls the reviewer once per topic in path order. D60's
@@ -541,22 +542,28 @@ Unreviewed embedded figures use the existing independent figure reviewer, includ
 phone rendering, with four figures per topic call. Legacy image identity markers exist
 only in one private review view per night, hardlinked where supported and atomically
 replaced when adapted. A completed snapshot receipt prevents copying it for every topic.
-Receipts bind the original image/context fingerprint; the source page and asset are not
-rewritten. Existing valid figure verdicts skip the call. Missing figure verdicts go to
+Receipts bind the original image/context fingerprint; inspection uses the private
+view, and retry markers are written only when applying the reviewed result. Existing valid figure verdicts skip the call. Missing figure verdicts go to
 owner notes and `docs/review/night-figure-pending.json`, visible in status and generated
-pending notices, without writer assignments. Rejected figures remain ordinary findings
-with readable defect descriptions. Nightly never generates an image or runs an LLM
+pending notices, without writer assignments. Rejected figures enter `docs/figure-pending.json` with their observed defects and a
+replacement marker, without a duplicate review item or a consumed writer attempt. Nightly never generates an image or runs an LLM
 during publication.
 
-A source-free daily `fix` run follows new Drive packages and precedes the one-time
-repair queue. It assigns open/round-2 items and eligible pending figures, uses P1 in fix
-mode, only figure checks in P2/P3, then P6. No reader call or second correction pass is
-introduced. Every new finding is located at H; Git blame determines whether its quote
+A source-free `fix` run follows new Drive packages and precedes the one-time repair
+queue on each hourly round, at most `[limits] fix_runs_per_day = 6` per learner/day.
+It assigns whole pages of open/round-2 items (default capacity 30) and eligible pending
+figures outside that capacity. If the highest-priority page exceeds the configured
+capacity, it receives that many items on its own; the remainder stays queued for the next run. P3 uses targeted reader recheck plus figure review;
+there is no second correction pass. Package writers receive no old review items.
+Targeted reader/nightly inputs contain repaired items and changed lines; findings
+on uniquely located unchanged lines become private owner notes; absent or ambiguous
+quotes remain `unlocated` items. Every new finding is located at H; Git blame determines whether its quote
 was last changed by a fix commit, in full and targeted mode alike. A second search
 strips inline Markdown while preserving blame line numbers. An unlocated quote inherits
 chain 1 when a fix commit touched the topic range; related items always retain the
-maximum inherited chain. Such a finding, or `not-ok` on a fix commit's `fixed` closure,
-goes to owner with chain 1. The fix scope uses the pre-edit unit, including related
+maximum inherited chain. Such a nightly finding, or nightly `not-ok` on an unchecked fix closure, goes to
+owner with chain 1. The fix run's P3 recheck follows P5 instead: `not-ok` reopens
+with unchanged chain and `origin: recheck`; new errors stay open. The fix scope uses the pre-edit unit, including related
 lessons, summaries and image embedding pages. Textbook inputs contain printed-page
 excerpts selected through the book index; ambiguous or unavailable references are
 explicitly marked. `keep` reopens the existing disagreement at round 2. Successful P5
@@ -566,4 +573,77 @@ twice.
 The upgrade tests retain legacy saved-report closure recovery. New fake-harness tests
 cover preparation, valid-output recovery, missing-topic continuation, failed-topic
 blocking/clearing, exact accounting, a report push interrupted before its checkpoint,
-targeted mode, blame routing, daily fix admission and legacy figure inspection.
+targeted mode, blame routing, bounded hourly fix admission and legacy figure inspection.
+
+The pending-figure migration (units 21–25) runs after installing 2.4.0, with
+no open notes tasks. Use the tool user's configured learner names, not worktree paths:
+
+```sh
+/srv/school-notes/current/packages/school-notes2/.venv/bin/python -m school_notes2.figures.migrate_pending --config "$HOME/.config/school-notes/config.toml" <learner> --dry-run
+/srv/school-notes/current/packages/school-notes2/.venv/bin/python -m school_notes2.figures.migrate_pending --config "$HOME/.config/school-notes/config.toml" <learner> --push
+```
+
+Dry-run reads the local snapshot without fetching, switching, logging or creating
+state/lock files; it lists the snapshot commit and the absolute host receipt directory.
+Tracked changes (including staged changes) or untracked files cause exit 2, with every
+path listed and no writes. Each planned pending entry lists its ID, kind, exact image
+job ID (or null for a drawn figure), used paid attempts, post-migration eligibility,
+owner status and whether an existing candidate can be checked for free. Eligibility
+here is before the ordinary daily/monthly admission check. Missing-page entries stay
+unassignable. Job identity is exactly `<learner>-<commission-id>`: a v1 job called
+`learner-topic-banner` does not match a v2 commission `topic-header`; the latter
+uses `learner-topic-header`. No alias or cost reset is inferred from similar names.
+Real execution takes the learner
+lock, refuses open notes runs, fetches main and switches the configured notes worktree
+to detached origin/main with discarded tracked changes. Untracked files must be clean.
+The migration resets pending counters, restores the latest clean historical defects,
+lists missing-page commissions without modifying them, and lists IDs with and without
+clean history. Poisoned defects without history are cleared. Pending banners and
+infographics switch to `image` markers; existing headers without generation proof
+receive replacement commissions with reason `c`, retaining the old image until acceptance.
+Hash-matching `generated` public-manifest entries and v1 compression receipts linked
+to proven generated originals preserve already accepted WebP headers.
+
+The tool rebuilds `public.json` and commits with `School-Notes-Run: fix`. `--push`
+uses the configured deploy key and checks `ls-remote`. Without `--push`, the commit
+stays local; repeat with `--push` to publish it. Neither mode generates images.
+The hash-only migration receipt and the operation journal live in `state/<learner>/`;
+the latter saves the commit before publishing. Repeating after a crash resumes the
+same transaction, including after a successful push whose verification was interrupted.
+The repository flag `docs/figure-pending-migrations.json` prevents another counter
+reset even when the host receipt is lost. If migration inputs changed before commit,
+preserve and inspect the changes, remove the two host receipts named in the error,
+and rerun dry-run followed by the migration command. The same recovery applies when
+main moved after the local commit: preserve that commit and later changes first, then
+remove the two host receipts whose absolute paths the error names and rerun. The tool
+never force-pushes it.
+
+Until `docs/figure-pending-migrations.json` exists, a nonempty pending queue is frozen:
+notes (package, fix and repair-queue runs) and nightly review do not assign its figures,
+count attempts, escalate owners or create related review items; its bytes stay intact.
+Other work proceeds. A log event and a durable `send_once` notice explain the missing
+migration. An initially empty queue gets a `pending_format` marker before its first
+current-format record; this does not claim that the legacy-header migration ran.
+
+Rollback to 2.3.7 also requires restoring each learner repository's compatible
+pre-migration pending records and page markers in a new commit (keep pushed history).
+Stop scheduling and finish/discard open runs first; preserve later learner work and
+the host receipts before restoring the old release. Merely changing the release
+symlink leaves `runs: 0` records that 2.3.7 cannot read.
+
+Generated pending assignments reserve `max_attempts × reservation_usd` per figure
+against both daily and monthly capacity, only for the run’s assigned subjects.
+New content precedes replacements regardless of their IDs. An exhausted paid job
+is excluded and marked `owner_required` only after its last paid attempt was rejected,
+with one durable owner notice;
+if no writer work remains, a tool-only fix persists that flag without an LLM call.
+An unreviewed generated candidate is eligible for free retrieval and independent
+rechecking even at the paid limit or with no remaining budget; no generator call is
+made. Hash-bound independent `repair`/`reject` verdicts update the matching ledger
+attempt without changing its cost. `review_pending` defers run-count escalation until
+that candidate has a verdict, including after an interrupted third run.
+A generated figure counts a run only with a candidate or a paid host-ledger attempt
+for the same learner/plan since the serialized run's creation. Budget refusals consume
+no attempt. P4 assignments and attempt decisions are checkpointed before continuation.
+The mandatory generated-header gate covers touched topics, chapter summaries and
+subject indexes; unassigned and exhausted pending header markers remain valid.

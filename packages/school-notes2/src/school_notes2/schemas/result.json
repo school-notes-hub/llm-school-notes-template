@@ -21,7 +21,7 @@
     "figures": {"type": "array", "items": {"type": "object", "additionalProperties": false,
       "required": ["id", "kind", "page"],
       "properties": {"id": {"$ref": "#/$defs/id"}, "page": {"$ref": "#/$defs/page"},
-                     "kind": {"enum": ["notebook-drawing", "teacher-drawing", "figure", "banner"]}}}},
+                     "kind": {"enum": ["notebook-drawing", "teacher-drawing", "figure", "banner", "infographic"]}}}},
     "notebook_drawings": {"type": "array", "items": {"type": "object", "additionalProperties": false,
       "required": ["source", "crop", "figure"],
       "properties": {"source": {"$ref": "#/$defs/source"}, "crop": {"$ref": "#/$defs/text"},

@@ -90,7 +90,7 @@ def test_pending_damage_is_writer_error_only_when_base_was_valid(setup, monkeypa
     entry = pending.record(ctx.notes_path, brief, "previous", [])
     if not inherited:
         brief = copy.deepcopy(brief)
-    task.update(pending_figures=[entry], inspection_result={"status": "done"})
+    task.update(mode="fix", pending_figures=[entry], inspection_result={"status": "done"})
     base = {p: safefs.read_bytes(ctx.notes_path, p) for p in safefs.walk_files(ctx.notes_path)}
     if damage in ("page", "source", "replacement"):
         safefs.unlink(ctx.notes_path, {"page": page, "source": candidate["asset"],
@@ -103,8 +103,9 @@ def test_pending_damage_is_writer_error_only_when_base_was_valid(setup, monkeypa
         safefs.write_text(ctx.notes_path, page, safefs.read_text(ctx.notes_path, page).replace(old, new))
     if inherited:
         base = {p: safefs.read_bytes(ctx.notes_path, p) for p in safefs.walk_files(ctx.notes_path)}
-    # Candidate is run-local, so its absence must not make a previously valid brief invalid.
-    safefs.unlink(ctx.notes_path, ".school-notes/figures/f/figure.json")
+    # Even inherited damage requires an explicit failed attempt in this run.
+    safefs.write_json(ctx.notes_path, ".school-notes/figures/f/figure.json",
+                      {"state": "failed", "reason": "Inherited damage"})
     fetch = {"packages": [], "pages": [], "pending_figures": [entry]}
     problems = check_result(ctx.notes_path, {"status": "done"}, fetch, set(), base_content=base.get)
     assert bool(problems) is not inherited
@@ -135,6 +136,7 @@ def test_inherited_broken_notebook_drawing_is_not_a_p1_accounting_error(setup):
     ctx, task, page = setup
     brief, candidate = figure(ctx, task, page)
     brief.update(kind="notebook-drawing", source_image={"path": candidate["asset"], "crop": [0, 0, 20, 10]})
+    safefs.write_json(ctx.notes_path, ".school-notes/figures/f/figure.json", {"state": "failed", "reason": "Missing source"})
     safefs.write_json(ctx.notes_path, ".school-notes/figures/f.json", brief)
     entry = pending.record(ctx.notes_path, brief, "previous", [])
     safefs.unlink(ctx.notes_path, page)
@@ -210,11 +212,11 @@ def test_malformed_base_yaml_is_inherited_damage(setup, monkeypatch):
     ctx, task, page = setup
     brief, _ = figure(ctx, task, page)
     entry = pending.record(ctx.notes_path, brief, "previous", [])
-    task.update(pending_figures=[entry], inspection_result={"status": "done"})
+    task.update(mode="fix", pending_figures=[entry], inspection_result={"status": "done"})
     base = {p: safefs.read_bytes(ctx.notes_path, p) for p in safefs.walk_files(ctx.notes_path)}
     base[page] = base[page].replace(b"title: ", b"title: [")
     assert not pending.valid_at(brief, base.get)
-    safefs.unlink(ctx.notes_path, ".school-notes/figures/f/figure.json")
+    safefs.write_json(ctx.notes_path, ".school-notes/figures/f/figure.json", {"state": "failed", "reason": "Broken YAML"})
     fetch = {"packages": [], "pages": [], "pending_figures": [entry]}
     assert check_result(ctx.notes_path, {"status": "done"}, fetch, set(), base_content=base.get) == []
     install_reader(monkeypatch, page)

@@ -27,6 +27,16 @@ def check_result(repo: Path, result: dict, fetch: dict, open_items: set[tuple[st
     for s in result.get("new_subjects") or []:
         if s["subject"] not in new:
             out.append(item(RESULT, None, f"new_subjects: {s['subject']!r} is not new in this run"))
+    out += check_closures(repo, result, open_items, closure_limit)
+    out += check_figures(repo, result, fetch, base_content, generated)
+    out += check_checks(repo, result, fetch)
+    from ..repair import check as repair_check
+    out += repair_check.coverage(result, fetch)
+    return out
+
+
+def check_closures(repo, result, open_items, closure_limit):
+    out = []
     closures = result.get("review_closure") or []
     if len([c for c in closures if c["status"] != "open"]) > closure_limit:
         out.append(item(RESULT, None, f"review_closure: at most {closure_limit} items per run"))
@@ -39,6 +49,11 @@ def check_result(repo: Path, result: dict, fetch: dict, open_items: set[tuple[st
             out.append(item(RESULT, None, f"review_closure: {c['file']} does not exist"))
         elif (c["file"], c["item_id"]) not in open_items:
             out.append(item(RESULT, None, f"review_closure: {c['file']} {c['item_id']} is not open"))
+    return out
+
+
+def check_figures(repo, result, fetch, base_content, generated):
+    out = []
     from ..figures import commissions, pending, requests, licenses
     licenses.preflight(repo)
     requested = []
@@ -51,15 +66,34 @@ def check_result(repo: Path, result: dict, fetch: dict, open_items: set[tuple[st
     except (ValueError, OSError) as exc:
         out.append(item(RESULT, None, str(exc)))
     inherited = fetch.get("pending_figures", [])
+    out += check_pending(repo, inherited, generated)
     invalid = {e["commission"]["id"] for e in inherited
                if base_content is not None and not pending.valid_at(e["commission"], base_content)}
     assignments = [a for a in commissions.assignments(result, inherited) if a["id"] not in invalid]
     out += commissions.check(repo, assignments,
                              [d for d in result.get("notebook_drawings", []) if d["figure"] not in invalid],
                              generated=generated, requests=requested)
-    out += check_checks(repo, result, fetch)
-    from ..repair import check as repair_check
-    out += repair_check.coverage(result, fetch)
+    return out
+
+
+def check_pending(repo, inherited, generated):
+    from ..figures import commissions, machine
+    out = []
+    for entry in inherited:
+        fid = entry["commission"]["id"]
+        path = f".school-notes/figures/{fid}/figure.json"
+        if not safefs.is_file(repo, path):
+            out.append(item(path, None, "pending figure needs a new candidate or explicit failed reason in this run"))
+        else:
+            try:
+                candidate = commissions.candidate(repo, entry["commission"])
+                if candidate["state"] == "candidate":
+                    out += [item(path, None, message) for message in
+                            machine.generation_errors(repo, entry["commission"], candidate, generated)]
+                if candidate["state"] == "no-figure":
+                    raise ValueError("pending figure needs a new candidate or explicit failed reason")
+            except (ValueError, OSError) as exc:
+                out.append(item(path, None, str(exc)))
     return out
 
 

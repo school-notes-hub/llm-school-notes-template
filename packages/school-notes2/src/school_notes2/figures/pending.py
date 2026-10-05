@@ -6,8 +6,14 @@ import yaml
 
 from ..schemas import validate
 from ..state import safefs
+from . import migration_gate
 
 PATH = "docs/figure-pending.json"
+
+
+def assignment_order(entry):
+    brief = entry["commission"]
+    return bool(brief.get("replaces")), brief["page"], brief.get("anchor", ""), brief["id"]
 
 
 def load(repo: Path) -> list[dict]:
@@ -19,7 +25,7 @@ def load(repo: Path) -> list[dict]:
         ids.append(entry["commission"]["id"])
         if (entry.get("status") != "pending" or not isinstance(entry.get("run_ids"), list)
                 or entry.get("runs") != len(set(entry["run_ids"]))
-                or entry["owner_required"] != (entry["runs"] >= 3)
+                or (entry["runs"] >= 3 and not entry["owner_required"] and not entry.get("review_pending"))
                 or entry["run_ids"] != sorted(entry["run_ids"])):
             raise ValueError("invalid pending figure record")
     if len(set(ids)) != len(ids):
@@ -27,33 +33,49 @@ def load(repo: Path) -> list[dict]:
     return sorted(entries, key=lambda e: e["commission"]["id"])
 
 
-def record(repo: Path, brief: dict, run_id: str, defects: list[dict]) -> dict:
+def record(repo: Path, brief: dict, run_id: str, defects: list[dict], *, attempted: bool | None = None,
+           owner_required=False, review_pending=False) -> dict:
+    if migration_gate.blocked(repo):
+        return next((e for e in load(repo) if e["commission"]["id"] == brief["id"]),
+                    {"commission": brief, "runs": 0, "run_ids": [], "owner_required": False})
     from .commissions import check_identity
     validate("figure-commission", brief)
     check_identity(repo, brief)
     if not run_id:
         raise ValueError("pending figures need a run id")
+    if attempted is None:
+        attempted = has_attempt(repo, brief)
     entries = {e["commission"]["id"]: e for e in load(repo)}
     previous = entries.get(brief["id"], {})
     runs = previous.get("run_ids", [])
-    if run_id not in runs and len(runs) < 3:
+    if attempted and run_id not in runs and len(runs) < 3:
         runs = sorted([*runs, run_id])
     entry = {"commission": brief, "status": "pending", "runs": len(runs),
-             "run_ids": runs, "defects": defects, "owner_required": len(runs) >= 3}
+             "run_ids": runs, "defects": defects,
+             "owner_required": owner_required or previous.get("owner_required", False) or (len(runs) >= 3 and not review_pending)}
+    if review_pending:
+        entry["review_pending"] = True
     validate("figure-pending", [entry])
     entries[brief["id"]] = entry
+    if not safefs.is_file(repo, migration_gate.MARK):
+        # An empty/new queue has no legacy counters. Header migration remains separate.
+        safefs.write_json(repo, migration_gate.MARK, {"pending_format": "attempted-runs"})
     safefs.write_json(repo, PATH, [entries[k] for k in sorted(entries)])
     return entry
 
 
 def clear(repo: Path, figure_id: str) -> None:
+    if migration_gate.blocked(repo):
+        return
     entries = load(repo)
     if any(e["commission"]["id"] == figure_id for e in entries):
         safefs.write_json(repo, PATH, [e for e in entries if e["commission"]["id"] != figure_id])
 
 
 def eligible(repo: Path, pages: set[str]) -> list[dict]:
-    return [e for e in load(repo) if e["runs"] < 3 and e["commission"]["page"] in pages]
+    if migration_gate.blocked(repo):
+        return []
+    return [e for e in load(repo) if not e["owner_required"] and e["commission"]["page"] in pages]
 
 
 def restore(repo: Path, pages: set[str]) -> list[dict]:
@@ -64,10 +86,14 @@ def restore(repo: Path, pages: set[str]) -> list[dict]:
     return entries
 
 
-def for_subjects(repo: Path, subjects: set[str]) -> list[dict]:
+def for_subjects(repo: Path, subjects: set[str], *, allowed=None) -> list[dict]:
     """Restore only eligible commissions for subjects already assigned to this run."""
-    entries = [e for e in load(repo) if e["runs"] < 3 and
-               e["commission"]["page"].split("/")[1] in subjects]
+    if migration_gate.blocked(repo):
+        return []
+    entries = [e for e in load(repo) if not e["owner_required"] and
+               e["commission"]["page"].split("/")[1] in subjects
+               and (allowed is None or e["commission"]["id"] in allowed)]
+    entries.sort(key=assignment_order)
     for entry in entries:
         brief = entry["commission"]
         safefs.write_json(repo, f".school-notes/figures/{brief['id']}.json", brief)
@@ -107,3 +133,22 @@ def valid_at(brief: dict, read) -> bool:
     except (ValueError, OSError, yaml.YAMLError):
         return False
     return True
+
+
+def generated(repo: Path, brief: dict) -> bool:
+    return brief["kind"] in ("banner", "infographic") or (
+        safefs.is_file(repo, brief["page"]) and
+        f"<!-- image: {brief['id']} -->" in safefs.read_text(repo, brief["page"]))
+
+
+def has_attempt(repo: Path, brief: dict, *, paid=False) -> bool:
+    from .commissions import candidate
+    if paid:
+        return True
+    if not safefs.is_file(repo, f".school-notes/figures/{brief['id']}/figure.json"):
+        return False
+    try:
+        state = candidate(repo, brief)["state"]
+        return state == "candidate" or (state == "failed" and not generated(repo, brief))
+    except (ValueError, OSError):
+        return False

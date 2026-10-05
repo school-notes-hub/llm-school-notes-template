@@ -21,9 +21,28 @@ def review_order(item):
             int(item["item_id"][1:]), item["file"], item["item_id"])
 
 
-def select_reviews(reviews, limit=20, *, mode="cron"):
-    return sorted(reviews, key=lambda i: (
-        mode == "interactive" and i.get("status") != "owner", *review_order(i)))[:limit]
+def review_groups(reviews, *, mode="cron", repo=None):
+    ordered = sorted(reviews, key=lambda i: (
+        mode == "interactive" and i.get("status") != "owner", *review_order(i)))
+    inventory = relations.inventory(repo)["items"] if repo is not None and reviews else {}
+    embedded = relations.related_pages(repo) if inventory else {}
+    groups = {}
+    for item in ordered:
+        key = item["file"] + "#" + item["item_id"]
+        page = inventory.get(key, {}).get("file") or key
+        page = min(embedded.get(page, {page}))
+        groups.setdefault(page, []).append(item)
+    return groups
+
+
+def select_reviews(reviews, limit=20, *, mode="cron", repo=None):
+    selected = []
+    for number, group in enumerate(review_groups(reviews, mode=mode, repo=repo).values()):
+        if number == 0 and len(group) > limit:
+            return group[:limit]
+        if len(selected) + len(group) <= limit:
+            selected.extend(group)
+    return selected
 
 
 def assignments(repo, packages: list[dict], pages: list[dict], reviews: list[dict],
@@ -31,7 +50,7 @@ def assignments(repo, packages: list[dict], pages: list[dict], reviews: list[dic
                 mode: str = "cron") -> list[dict]:
     config = safefs.read_json(repo, "tools/subjects.json") or {}
     order = list(config.get("subjects", {}))
-    reviews = select_reviews(reviews, review_limit, mode=mode)
+    reviews = select_reviews(reviews, review_limit, mode=mode, repo=repo)
     inventory = relations.inventory(repo)["items"] if reviews else {}
     embedded = relations.related_pages(repo)
     review_subjects = {i["file"] + "#" + i["item_id"]:

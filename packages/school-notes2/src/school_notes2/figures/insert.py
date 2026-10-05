@@ -7,7 +7,7 @@ from ..state import safefs
 from ..wiki import markers, rights
 from ..wiki.pages import relative
 from . import commissions, context, pending, licenses
-from .review import validate_output
+from .review import verdict_for, validate_output
 
 VERDICTS = "docs/review/verdicts.json"
 
@@ -24,10 +24,9 @@ def insert(repo: Path, brief: dict, receipt: dict, *, at: str) -> list[str]:
     commissions.validate_assignments(repo, [{k: brief[k] for k in ("id", "page", "kind")}])
     commissions.check_identity(repo, brief)
     fid = brief["id"]
-    verdicts = [v for v in receipt["review"]["figures"] if v["id"] == fid]
-    if len(verdicts) != 1 or verdicts[0]["verdict"] != "accept":
+    verdict = verdict_for(receipt, fid, unique=True)
+    if verdict.get("verdict") != "accept":
         raise ValueError("one independent accept verdict is required")
-    verdict = verdicts[0]
     validate_output({"figures": [verdict], "owner_notes": receipt["review"]["owner_notes"]},
                     {"figures": [{"id": fid, "key": verdict["key"]}]}, repo, [brief])
     candidate = commissions.candidate(repo, brief)
@@ -45,7 +44,7 @@ def insert(repo: Path, brief: dict, receipt: dict, *, at: str) -> list[str]:
             raise ValueError("licensed insertion needs current public permission")
         record.update(license_request=request, license=grant, rights="licensed")
     elif candidate.get("asset"):
-        known = rights.media(repo)(candidate["asset"])
+        known = rights.generated(repo, candidate["asset"])
         if known and known[0] == "generated":
             record["rights"] = "generated"
         elif rights.authored_candidate(repo, candidate):

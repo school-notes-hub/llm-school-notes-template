@@ -11,7 +11,7 @@ from school_notes2.state.files import write_json
 
 
 @pytest.mark.parametrize("student", ["benedek", "barna"])
-@pytest.mark.parametrize("attempts", [[], [{"number": 1, "state": "generated", "cost_usd": "0.05",
+@pytest.mark.parametrize("attempts", [[], [{"number": 1, "state": "rejected", "cost_usd": "0.05",
                                           "started_at": "2026-10-03T10:00:00+02:00"}]])
 def test_zero_budget_queues_nothing_and_preserves_attempts(tmp_path, student, attempts):
     repo = tmp_path / "repo"

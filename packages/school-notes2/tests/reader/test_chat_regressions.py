@@ -327,5 +327,8 @@ def test_base_candidate_failure_does_not_look_like_an_edit(guarded_session, monk
         task.set_phase("done")
         return "done"
     monkeypatch.setattr(finish.git_finish, "run", commit)
-    assert chat.session_finish(ctx)["state"] == "done"
+    assert chat.session_finish(ctx)["state"] == "review_items"
+    from school_notes2.flows import correction_chat
+    child = correction_chat.active(phase.load(task.dir))
+    assert child.get("pending_figures")[0]["commission"]["id"] == "f"
     assert "generated figure-f" not in safefs.read_text(ctx.notes_path, page)

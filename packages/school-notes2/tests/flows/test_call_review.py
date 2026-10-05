@@ -31,10 +31,10 @@ def test_two_subjects_share_twenty_closures_without_untouched_overflow(tmp_path,
     details["R24"]["round"] = 2
     safefs.write_text(tmp_path, rel, frontmatter.set_keys(text, {"item_details": details}))
     reviews = files.open_items(tmp_path, "cron")
-    selected = calls.select_reviews(list(reversed(reviews)))
+    selected = calls.select_reviews(list(reversed(reviews)), repo=tmp_path)
     assert selected[0]["item_id"] == "R24"
     assigned = calls.assignments(tmp_path, packages, pages, reviews, [])
-    assert [len(c["open_review_items"]) for c in assigned] == [8, 12]
+    assert [len(c["open_review_items"]) for c in assigned] == [12, 0]
     assert assigned == calls.assignments(tmp_path, packages, pages, list(reversed(reviews)), [])
     task = phase.create(tmp_path / "tasks", student, "notes", "cron", "prepared")
     task.update(calls=assigned, ranges=calls.ranges(assigned), packages=packages, pages=pages,
@@ -49,11 +49,11 @@ def test_two_subjects_share_twenty_closures_without_untouched_overflow(tmp_path,
                                 {(i["file"], i["item_id"]) for i in c["open_review_items"]}, 20,
                                 whole_run=False)
     whole = fetch.fetch_json(task, 2, grade=9, whole_run=True)
-    assert len(whole["open_review_items"]) == len(closures) == 20
+    assert len(whole["open_review_items"]) == len(closures) == 12
     files.apply_closure(tmp_path, "test", closures, whole["open_review_items"], 5)
     final = safefs.read_text(tmp_path, rel)
     assert files.open_counts(final) == {}
-    assert {i["item_id"] for i in files.open_items(tmp_path, "cron")} == {"R20", "R21", "R22", "R23"}
+    assert {i["item_id"] for i in files.open_items(tmp_path, "cron")} == {f"R{n}" for n in range(1, 13)}
 
 
 def test_review_capacity_orders_round_then_date_then_numeric_id():

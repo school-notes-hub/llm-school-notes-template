@@ -96,6 +96,8 @@ def candidate(repo: Path, brief: dict) -> dict:
     if value is None:
         return {"state": "failed", "reason": "missing figure.json"}
     validate("figure-candidate", value)
+    if brief["kind"] == "banner" and value["state"] == "no-figure":
+        raise ValueError("a required banner cannot be replaced by no-figure")
     if brief["kind"] in ("notebook-drawing", "teacher-drawing"):
         if value["state"] == "no-figure":
             raise ValueError("a source drawing cannot be replaced by no-figure")
@@ -175,7 +177,8 @@ def preflight(repo: Path, brief: dict, *, generated=None, request=None) -> list[
     if value["state"] != "candidate":
         context.embedding(repo, brief, {"alt": "", "caption": ""})
         return []
-    errors = machine.report(repo, brief, value, generated=generated, request=request)["errors"]
+    errors = machine.generation_errors(repo, brief, value, generated)
+    errors += machine.report(repo, brief, value, generated=generated, request=request)["errors"]
     context.embedding(repo, brief, value)
     if not errors:
         context.verdict_key(repo, brief, value)

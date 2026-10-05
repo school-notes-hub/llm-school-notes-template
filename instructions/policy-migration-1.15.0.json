@@ -121,7 +121,7 @@
       "heading": "Workflows",
       "destination": "instructions/wiki-workflows.md",
       "source_sha256": "4002b650b71d3afec1c296105ed32cc47d22be691ef1ca640204d1a696c97abc",
-      "migrated_sha256": "72ff9c9b196b3c0b169db37a26f2ea6c622006b58215feaf029c51cff5ccd4b8",
+      "migrated_sha256": "5e3f6d215c59d2eb22c23794c292ff53f23802f04809b2277a659acc4c23cf4b",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
       "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: public-safe anchored questions/decisions; private readings and coverage; independent reader check before machine list; 1.18.2: in a tool run the build checks formulas; MCP check checks delimiters only"
     },
@@ -129,7 +129,7 @@
       "heading": "Choosing and replacing authored visuals",
       "destination": "instructions/visual-policy.md",
       "source_sha256": "d6180905164864ce436be307edf626132fea3f122b9f5ba0596dad6208c27ba5",
-      "migrated_sha256": "f8155c59a011f647b1f68c3e59b136f62449ddb64835caac4eab469c62d48414",
+      "migrated_sha256": "cfc141e4f3871dac0590fc61cc521d46d61297483c71e51f853edcf5e31dc175",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
       "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: same notebook drawing, correct; independent acceptance; named replacement reasons"
     },

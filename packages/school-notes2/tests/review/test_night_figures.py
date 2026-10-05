@@ -180,7 +180,12 @@ def test_rejected_figure_problem_is_readable(tmp_path, log, monkeypatch):
              "text_mismatch": []}]}}
     monkeypatch.setattr(review, "run_batch", rejected)
     result = night_figures.run(repo, {"topic": page, "pages": [page]}, folder, run, lambda *a: png(), log)
-    assert result["findings"][0]["problem"] == "Nyíl: Balra mutat → Jobbra mutasson"
+    assert result["findings"] == []
+    assert result["retries"][0]["defects"] == [{"location": "Nyíl", "observed": "Balra mutat", "expected": "Jobbra mutasson"}]
+    from school_notes2.figures import pending, rejected
+    rejected.apply(repo, result["retries"])
+    rejected.apply(repo, result["retries"])
+    assert len(pending.load(repo)) == 1 and pending.load(repo)[0]["runs"] == 0
 
 
 def test_real_rejection_replaces_previous_missing_verdict(tmp_path):

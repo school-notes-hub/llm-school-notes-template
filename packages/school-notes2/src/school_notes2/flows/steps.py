@@ -200,6 +200,8 @@ def check_items(ctx: Ctx, task: Task) -> list[dict]:
     inherited = repair_check.inherited_learning_problems(ctx, task, paths)
     items += [i for i in wiki_check.check_files(ctx.notes_path, paths, today=today)
               if (i["file"], i["message"]) not in inherited]
+    from ..wiki import banners
+    items += banners.check_required(ctx.notes_path, paths)
     checks.tool_errors(ctx, task, items)
     return checks.identify(items + checks.source_warnings(ctx, task, changed_paths(ctx, task)), ctx.notes_path)
 

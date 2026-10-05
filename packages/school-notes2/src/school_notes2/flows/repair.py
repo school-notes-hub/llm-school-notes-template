@@ -100,7 +100,13 @@ def prepare(ctx, task):
         steps.record_tool_files(task, repo, [queue.PATH])
     failure.write_item(ctx, task)
     from ..figures import pending as figure_pending
-    pending_figures = figure_pending.for_subjects(repo, {c["subject"] for c in calls})
+    from . import correction_figures
+    subjects = {c["subject"] for c in calls}
+    entries = [e for e in figure_pending.load(repo) if e["commission"]["page"].split("/")[1] in subjects]
+    eligible = correction_figures.assignable(ctx, entries, paid_disabled=True)
+    steps.record_tool_files(task, repo, correction_figures.persist_owners(ctx, entries))
+    pending_figures = figure_pending.for_subjects(repo, subjects,
+        allowed={e["commission"]["id"] for e in eligible})
     task.set_phase("prepared", calls=calls, repair_targets=targets, packages=[], pages=[],
                    pending_figures=pending_figures,
                    ranges=[[0, 0]], open_review_items=[], pending_images=[],

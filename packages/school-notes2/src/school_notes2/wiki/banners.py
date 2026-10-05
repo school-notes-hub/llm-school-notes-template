@@ -100,3 +100,58 @@ def candidate_image(repo: Path, page: str, briefs: list[dict]) -> str | None:
         alt = candidate["alt"].replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
         return f'![{alt}](<{relative(page, candidate["asset"])}>)'
     return None
+
+
+def required(path: str, meta: dict) -> bool:
+    return meta.get("type") in ("topic", "chapter-summary") or (
+        len(Path(path).parts) == 3 and path.startswith("wiki/") and
+        not path.startswith("wiki/assets/") and path.endswith("/index.md"))
+
+
+def asset(page: str, text: str) -> str | None:
+    match = LINK.fullmatch(leading(text))
+    return resolve(page, match["target"].strip("<>")) if match else None
+
+
+def generated_header(repo, path, text, proof=None):
+    from . import rights
+    image = asset(path, text)
+    from ..state import safefs
+    if not image or not safefs.is_file(repo, image):
+        return False
+    return bool(rights.generated(repo, image, proof))
+
+
+def pending_header(repo, path, text, waiting):
+    from ..figures import commissions
+    for marker in commissions.MARKER.finditer(text):
+        brief = waiting.get(marker[1])
+        if brief is None:
+            try:
+                brief = commissions.read(repo, marker[1])
+            except (ValueError, OSError):
+                continue
+        if brief["kind"] == "banner" and brief["page"] == path:
+            prefix = markers.BLOCK.sub("", text[:marker.start()]).strip()
+            if not prefix:
+                return True
+    return False
+
+
+def check_required(repo: Path, paths: list[str], *, generated=None) -> list[dict]:
+    """Author-touched topics, summaries and subject indexes need generated headers."""
+    from ..figures import pending
+    from ..state import safefs
+    from .check import item
+    waiting = {e["commission"]["id"]: e["commission"] for e in pending.load(repo)}
+    result = []
+    for path in sorted(set(paths)):
+        if not path.endswith(".md") or not safefs.is_file(repo, path):
+            continue
+        page = read_page(repo, path)
+        if not required(path, page.meta) or generated_header(repo, path, page.body, generated):
+            continue
+        if not pending_header(repo, path, page.body, waiting):
+            result.append(item(path, None, "page needs a generated leading banner or a banner commission marker; "
+                               "replace an ungenerated header with replaces and decision_reason code c"))
+    return result

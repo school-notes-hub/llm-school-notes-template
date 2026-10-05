@@ -49,12 +49,12 @@ def test_prepare_persists_only_allocated_review_capacity(tmp_path, monkeypatch):
     task.update(selected=[])
     fetch.prepare(ctx, task, new_subject_index=fetch.new_subject)
     task = phase.load(task.dir)
-    assert len(task.get("open_review_items")) == 20
-    assert task.get("calls")[0]["open_review_items"] == task.get("open_review_items")
+    assert task.get("open_review_items") == []
+    assert task.get("calls") == []
     assert not task.get("skip_writer")
     files.apply_closure(repo, task.run_id, [], task.get("open_review_items"), 5)
     counts = files.open_counts(safefs.read_text(repo, report.relative_to(repo).as_posix()))
-    assert set(counts) == {f"R{n}" for n in range(1, 21)}
+    assert counts == {}
 
 
 @pytest.mark.parametrize("student", LEARNERS)
@@ -284,6 +284,6 @@ def test_legacy_literals_migrate_before_assignment_and_resume(tmp_path, monkeypa
         fetch.prepare(ctx, task, new_subject_index=fetch.new_subject)
     task = phase.load(task.dir)
     fetch.prepare(ctx, task, new_subject_index=fetch.new_subject)
-    assert [(i["file"], i["item_id"]) for i in task.get("open_review_items")] == [(report, "R2")]
+    assert task.get("open_review_items") == []  # Old items belong to fix runs only.
     assert report in task.get("tool_writes")
     assert task.get("learning_pending") is None

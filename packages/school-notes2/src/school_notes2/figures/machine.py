@@ -101,3 +101,13 @@ def svg_hints(text: str, brief: dict, embedding: dict) -> list[dict]:
     if any(pattern.search(labels) for pattern in source_refs.PATTERNS):
         warnings.append({"code": "source-pattern", "message": "Source-reference pattern in SVG labels"})
     return warnings
+
+
+def generation_errors(repo, brief, candidate, generated=None):
+    if brief["kind"] not in ("banner", "infographic"):
+        return []
+    asset = candidate.get("asset")
+    proof = rights.generated(repo, asset, generated)
+    if not asset or not asset.endswith(".webp") or not proof or proof[0] != "generated":
+        return ["banner/infographic needs a generated .webp candidate with a generation receipt"]
+    return []

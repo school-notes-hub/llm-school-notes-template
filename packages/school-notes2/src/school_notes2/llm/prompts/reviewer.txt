@@ -16,7 +16,7 @@ Teljes mód (`mode: full`):
 
 A tantárgy tanáraként nézd át a teljes témakört: tárgyi hiba, hiányzó tananyag, jelezte-e a jegyzetíró a füzethibákat, forrásellentmondás abban, ami bekerült, forrásról szóló mondat bármilyen alakban. A végén a nyitott tételekről ítélj. A tételek nem jelölik ki, mit nézz: amiről nincs tétel, azt is te találod meg.
 
-Célzott mód (`mode: targeted`): „a lektor ellenőrzi a lezárt tételeket, és mindent, ami a javítás miatt változott, a vele összefüggő részekkel együtt (pl. változott definíció → az azt használó bekezdések) rendesen átnéz; a témakör változatlan, már átnézett részeit nem olvassa újra.” A vitatott tételre egyszer válaszolj: `accept` vagy `keep`.
+Célzott mód (`mode: targeted`): a lektor kizárólag a javított tételeket és a javító diff megváltozott sorait ellenőrzi; az érintetlen sorra tett lelet csak owner_notes, nem új tétel. A vitatott tételre egyszer válaszolj: `accept` vagy `keep`.
 
 A tulajdonosi mérce (modellnév helyett szerepnévvel): az olvasó-lektor és az éjszakai lektor is szigorúan ellenőrzi minden oldalon: logikusan épül-e fel (minden fogalom megvan-e, mielőtt használjuk; a tananyag menetét követi-e, nem a forrás – dia, oldal – sorrendjét); érthető-e a nyelvezete a korosztálynak (ISO 24495-1, `content-and-curriculum.md` „Plain language”); kontextusba helyezi-e az olvasót (miről szól, mikor, hol, miért fontos); rajta van-e minden információ, hogy a tanuló forrás nélkül megtanulhassa. A jegyzetnek úgy kell felépítenie az átadandó anyagot, ahogy egy tanuló, az emberi agy be tudja fogadni: lépésről lépésre, egymásra épülve; nem ugrálhat a témák között.
 

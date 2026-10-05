@@ -50,6 +50,8 @@ def _placements(text, items, waiting, nightly_waiting, page, page_notice):
     headings = list(re.finditer(r"^#{1,6} .+$", text, re.M))
     blocks = markers.spans(text)
     for item in items:
+        if item.get("figure_id") or item.get("origin") == "figure" or commissions.MARKER.search(item.get("quote", "")):
+            continue
         found = generated.matches(text, item.get("quote", ""))
         # Prefer an authored occurrence when the same words also occur in tool text.
         found = [m for m in found if not any(a <= m.start() and m.end() <= b for a, b, _ in blocks)]
@@ -66,6 +68,11 @@ def _placements(text, items, waiting, nightly_waiting, page, page_notice):
         add(lesson_log.header_end(text), 1, "pending", PAGE)
     elif frontmatter.split(text).meta.get("status") == "draft":
         add(lesson_log.header_end(text), 4, "pending", drafts.NOTICE)
+    _figure_placements(text, waiting, nightly_waiting, page, headings, add)
+    return placements
+
+
+def _figure_placements(text, waiting, nightly_waiting, page, headings, add):
     for entry in waiting:
         brief = entry["commission"]
         if brief["page"] == page:
@@ -79,4 +86,3 @@ def _placements(text, items, waiting, nightly_waiting, page, page_notice):
             cut = heading.end() + int(text[heading.end():heading.end() + 1] == "\n") if heading \
                 else lesson_log.header_end(text)
             add(cut, 0, "pending-figure-" + spec["id"], FIGURE)
-    return placements

@@ -14,7 +14,7 @@ from .workbranch import branch_name
 
 MAX_PUSH_ROUNDS = 3
 COMMIT_PATHS = ("wiki", "sources", "docs/review", "docs/evidence", "publication",
-                "tools/subjects.json", "docs/repair-queue.json", "docs/figure-pending.json",
+                "tools/subjects.json", "docs/repair-queue.json", "docs/figure-pending.json", "docs/figure-pending-migrations.json",
                 "docs/figure-requests.json", "docs/licenses.json")
 
 

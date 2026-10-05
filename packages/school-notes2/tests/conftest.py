@@ -12,7 +12,7 @@ def log(tmp_path):
     return Log(tmp_path / "logs" / "main.log", run_id="t-run", student="tester", console=False)
 
 
-def make_origin(tmp_path: Path, files: dict[str, str]) -> Path:
+def make_origin(tmp_path: Path, files: dict[str, str | bytes]) -> Path:
     """A bare 'origin' with one commit on main holding `files`."""
     seed = tmp_path / "seed"
     seed.mkdir()
@@ -23,7 +23,10 @@ def make_origin(tmp_path: Path, files: dict[str, str]) -> Path:
     for rel, text in files.items():
         path = seed / rel
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
+        if isinstance(text, bytes):
+            path.write_bytes(text)
+        else:
+            path.write_text(text, encoding="utf-8")
     subprocess.run(["git", "-C", str(seed), "add", "-A"], check=True, env=env)
     subprocess.run(["git", "-C", str(seed), "commit", "-q", "-m", "seed"], check=True, env=env)
     origin = tmp_path / "origin.git"

@@ -7,10 +7,36 @@ text stay untouched; a fingerprint of the original embedding binds the receipt.
 from dataclasses import replace
 import hashlib
 
-from ..figures import commissions, context, inputs, insert, review
+from ..figures import commissions, context, inputs, insert, review, migration_gate
 from ..state import safefs
 from ..wiki import frontmatter, pages, public
-from . import relations
+from . import relations, scope, topics
+
+
+def targeted(repo, work, unit, items):
+    selected = []
+    for spec in discover(work, unit):
+        page = spec["page"]
+        old, new = topics.text(repo, unit["base"], page), safefs.read_text(work, page)
+        lines = scope.changed(old, new)
+        assigned = any(i.get("figure_id") == spec["id"] or
+                       spec.get("asset") and i.get("file") == spec["asset"] for i in items)
+        if spec.get("asset"):
+            before = repo.run("show", f"{unit['base']}:{spec['asset']}", check=False)
+            changed = before.returncode != 0 or not safefs.is_file(work, spec["asset"]) or before.stdout != safefs.read_bytes(work, spec["asset"])
+            changed |= any(l.image and pages.resolve(page, l.target) == spec["asset"] and l.line in lines
+                           for l in pages.links(new))
+            assigned |= any(i.get("file") == page and any(
+                l.image and pages.resolve(page, l.target) == spec["asset"] for l in pages.links(i.get("quote", "")))
+                for i in items)
+        else:
+            changed = spec["source"] not in old
+        if spec["kind"] == "banner":
+            before, after = frontmatter.split(old).meta, frontmatter.split(new).meta
+            changed |= any(before.get(k) != after.get(k) for k in ("title", "description"))
+        if changed or assigned:
+            selected.append(spec)
+    return selected
 
 
 def fingerprint(repo, spec):
@@ -79,7 +105,7 @@ def discover(repo, unit):
                 result.append({"page": page, "source": match[1], "kind": "figure", "anchor": heads[-1][2], "alt": "Ábra"})
     for spec in result:
         spec["id"] = spec.get("commission", {}).get("id") or "night-" + context.digest(spec)[:24]
-    return result
+    return [s for s in result if not migration_gate.concerns(repo, s)]
 
 
 def valid(repo, spec, records):
@@ -102,14 +128,16 @@ def valid(repo, spec, records):
     return False
 
 
-def run(repo, unit, folder, configured, render, log, *, view_folder=None):
+def run(repo, unit, folder, configured, render, log, *, view_folder=None, selected=None):
     folder.mkdir(parents=True, exist_ok=True)
     saved = safefs.read_json(folder, "night-figures.json")
     if saved is not None:
         return saved
     records = safefs.read_json(repo, insert.VERDICTS, [])
     specs = []
-    for spec in discover(repo, unit):
+    for spec in discover(repo, unit) if selected is None else selected:
+        if migration_gate.concerns(repo, spec):
+            continue
         try:
             if valid(repo, spec, records):
                 continue
@@ -135,7 +163,7 @@ def prepare_view(repo, view):
     view.mkdir(parents=True, exist_ok=True)
     if safefs.read_json(view, "snapshot.json") is not None:
         return
-    for prefix in ("wiki", "docs", "sources"):
+    for prefix in ("wiki", "docs", "sources", "publication"):
         for path in safefs.walk_files(repo, prefix):
             safefs.link_or_copy(repo, view, path)
     safefs.write_json(view, "snapshot.json", {"ready": True})
@@ -152,11 +180,9 @@ def _merge(repo, unit, name, batch, receipt, by_id, result):
                                       "key": key, "verdict": "accept", "model": receipt["model"],
                                       "night_spec": spec, "observed": verdict["observed"]})
         else:
-            result["findings"].append({"file": spec["page"], "quote": spec.get("source", spec.get("alt", "")),
-                                       "problem": "; ".join(f"{d['location']}: {d['observed']} → {d['expected']}"
-                                                             for d in verdict["defects"] + verdict["text_mismatch"]) or verdict["observed"],
-                                       "category": "kép–szöveg", "relates_to": verdict["relates_to"],
-                                       "new_evidence": verdict.get("new_evidence", ""), "figure_id": spec["id"]})
+            from ..figures import rejected
+            brief = next(b for b in batch if b["id"] == verdict["id"])
+            result.setdefault("retries", []).append(rejected.request(spec, brief, verdict, key))
     if receipt["status"] != "reviewed" or receipt.get("failed"):
         result["notes"].append(f"Hiányzó ábraítélet: {unit['topic']} ({name}).")
         judged = {v["id"] for v in receipt.get("review", {}).get("figures", [])}
@@ -198,6 +224,7 @@ def _adapt(view, spec):
 
 
 def apply(repo, records, at):
+    records = [r for r in records if not migration_gate.concerns(repo, r.get("night_spec", r))]
     existing = safefs.read_json(repo, insert.VERDICTS, [])
     for record in records:
         try:

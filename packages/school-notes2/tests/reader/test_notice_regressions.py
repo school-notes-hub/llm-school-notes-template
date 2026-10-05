@@ -264,13 +264,13 @@ def test_recheck_tool_hit_does_not_spoil_repaired_page_verdict(setup):
              "items": [{"key": key, "file": page}], "review": {
                  "items": [{"key": key, "verdict": "ok", "answer": "Javítva."}],
                  "hits": [{"hit_id": "H1", "verdict": "hiba", "reason": "Sablonhiba."}], "owner_notes": []}}]}
-    recheck._apply(ctx, task, saved)
+    recheck.apply(ctx, task, saved)
     assert verdicts.valid(ctx.notes_path, page)["verdict"] == "ok"
     assert len(relations.inventory(ctx.notes_path)["items"]) == 1
     assert len(task.get("recheck_owner_notes")) == 1
     assert "Tool-sablon" in safefs.read_text(ctx.notes_path, path)
     before = safefs.read_bytes(ctx.notes_path, path)
-    recheck._apply(ctx, phase.load(task.dir), saved)
+    recheck.apply(ctx, phase.load(task.dir), saved)
     assert safefs.read_bytes(ctx.notes_path, path) == before
 
 

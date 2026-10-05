@@ -11,7 +11,7 @@ from ..wiki.pages import CODE_FENCE, LINK, links, relative, resolve, wiki_pages
 from .commissions import MARKER, MERMAID, markers as figure_markers
 
 HEAD = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$", re.M)
-DESCRIPTION = re.compile(r"\s*<!-- image-description\n.*?-->", re.S)
+DESCRIPTION = re.compile(r"\s*<!-- image-description(?:\n|:).*?-->", re.S)
 
 
 def digest(value) -> str:
@@ -25,7 +25,7 @@ def without_replaced(text: str, page: str, asset: str | None) -> str:
     def remove(match):
         return "" if match["img"] and resolve(page, match["target"].strip("<>")) == asset else match[0]
     # Only remove the comment belonging to this image, never another image's evidence.
-    pattern = re.compile(LINK.pattern + r"(?:\s*<!-- image-description\n.*?-->)?", re.S)
+    pattern = re.compile(LINK.pattern + r"(?:\s*<!-- image-description(?:\n|:).*?-->)?", re.S)
     def old_block(match):
         if any(link.image and resolve(page, link.target) == asset for link in links(match["body"])):
             return ""
@@ -74,7 +74,8 @@ def embedding(repo: Path, brief: dict, candidate: dict) -> dict:
     meta = frontmatter.split(text).meta
     if brief["kind"] == "banner":
         return {"page": page, "title": meta.get("title", ""),
-                "description": meta.get("description", "")}
+                "description": meta.get("description", ""),
+                "alt": candidate["alt"], "caption": candidate["caption"].rstrip("\n")}
     body, around = section(text, brief["anchor"])
     if f"<!-- figure: {brief['id']} -->" not in body:
         raise ValueError("figure marker is outside the commission section")
@@ -93,6 +94,9 @@ def verdict_key(repo: Path, brief: dict, candidate: dict) -> str:
             raise ValueError("figure has no unique insertion marker or inserted block")
     candidate = embedded_candidate(repo, brief, candidate)
     context = embedding(repo, brief, candidate)
+    if brief["kind"] == "banner":
+        context.pop("alt", None)
+        context.pop("caption", None)
     context.pop("context", None)  # neighbours are context, not the embedding section
     if "mermaid" in candidate:
         image = mermaid_source(repo, brief, candidate)

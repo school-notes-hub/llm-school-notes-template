@@ -6,6 +6,21 @@ from school_notes2.state import phase, safefs
 from tests.e2e.test_run_e2e import world, show
 
 
+def pending_banner(ctx, page):
+    from school_notes2.wiki import frontmatter
+    text = safefs.read_text(ctx.notes_path, page)
+    parsed = frontmatter.split(text)
+    cut = len(text) - len(parsed.body)
+    safefs.write_text(ctx.notes_path, page, text[:cut] + "\n<!-- image: header -->\n" + text[cut:])
+    brief = {"id": "header", "page": page, "anchor": "Cím", "kind": "banner", "purpose": "Bevezetés",
+             "must_show": [], "avoid_misreading": "Jól olvasható cím.", "taught_conventions": [],
+             "text_complete_without_figure": True}
+    safefs.write_json(ctx.notes_path, ".school-notes/figures/header.json", brief)
+    safefs.write_json(ctx.notes_path, ".school-notes/figures/header/figure.json",
+                      {"state": "failed", "reason": "Repair has no paid generation"})
+    return [{k: brief[k] for k in ("id", "page", "kind")}]
+
+
 def test_repair_trial_commits_only_locally_then_finish_resumes(world, monkeypatch):
     ctx, origin, drive, package = world
     before = show(origin, "main:wiki/proba/elso.md")
@@ -18,7 +33,8 @@ def test_repair_trial_commits_only_locally_then_finish_resumes(world, monkeypatc
         assert fetch["repair_targets"][0]["page"] == "wiki/proba/elso.md"
         safefs.write_text(ctx.notes_path, "wiki/proba/elso.md", before + "\nTovábbi tárgyi magyarázat.\n")
         safefs.write_text(ctx.notes_path, "wiki/log.md", "# Napló\n\n* **Update**: Javítás.\n")
-        return {"status": "done", "owner_notes": ["Kihagyott lépés, indok, javaslat."]}
+        return {"status": "done", "owner_notes": ["Kihagyott lépés, indok, javaslat."],
+                "figures": pending_banner(ctx, "wiki/proba/elso.md")}
     monkeypatch.setattr(writer, "_call", write)
     assert repair.repair(ctx, topic="wiki/proba/elso.md", no_push=True) == 0, ctx.cfg.log_path.read_text()[-3000:]
     task = phase.open_task(ctx.task_root(), ctx.name, "notes")
@@ -94,7 +110,7 @@ def test_new_packages_precede_queue_and_next_run_repairs_one_item(world, monkeyp
             return original(ctx, task, k, *args)
         rel = task.get("repair_topic")
         safefs.write_text(ctx.notes_path, rel, safefs.read_text(ctx.notes_path, rel) + "\nÚj magyarázat.\n")
-        return {"status": "done"}
+        return {"status": "done", "figures": pending_banner(ctx, rel)}
     monkeypatch.setattr(writer, "_call", write)
     assert run.run(ctx) == 0, ctx.cfg.log_path.read_text()[-3000:]
     assert invoked == ["cron"]
