@@ -2,6 +2,13 @@
 
 Newest first. Each entry says what changed in the shared files and what an existing wiki must do when it applies the update (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)). A wiki records the version it is on in `PROFILE.md`.
 
+## 1.20.0 - 2026-10-05
+
+- School-notes run (Fixed prompt): errors that already existed at the run base (`kind: inherited-check`) do not block the run and are never fixed on an unassigned page; the tool records them as review items.
+- School-notes run (`review_closure`, pending figures): every assigned item is decided, with no per-run closure cap; a fix run takes the complete assignable list in page groups of at most 30 items per call, all pending figures first.
+- Wiki workflows (Review handoff and closure): the nightly reviewer examines only new material (`run`, `chat` commits); findings carry `severity: hiba | javaslat`, only errors become items, suggestions go to the private report; every existing backlog item stays assignable; up to three correction/recheck rounds in one run; no daily fix-run cap.
+- Migration (controller-owned): synchronize the changed instructions through Template updates; no learner content changes.
+
 ## 1.19.3 - 2026-10-05
 
 - Learning images (Learning image execution): after a rejected or lost image the plan may be changed; the tool generates it as a linked job version, and all versions of one target share the three paid attempts. A plan awaiting a verdict or already accepted stays unchanged.
