@@ -2,6 +2,7 @@
 
 import hashlib
 
+from ..log import Log
 from ..state import safefs
 from ..wiki import markers
 from ..wiki.pages import links, resolve
@@ -24,8 +25,10 @@ def request(spec, brief, verdict, key):
     return {"spec": spec, "key": key, "commission": brief, "defects": defects}
 
 
-def apply(repo, entries):
+def apply(repo, entries, *, log=None):
     if migration_gate.blocked(repo):
+        for fid in sorted({e["commission"]["id"] for e in entries}):
+            (log or Log(None)).event("figure.migration_dropped", target=fid)
         return []
     from ..review import night_figures
     written = []

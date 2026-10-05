@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from ..figures import pending, migration_gate
+from ..figures import pending, migration_gate, rechecks
 from ..figures.review import verdict_for
 from ..images import budget, plans
 from ..images.generate import awaiting_review, exhausted
@@ -58,11 +58,13 @@ def mark_exhausted(ctx, entry, settings=None, ledger=None):
     settings = settings or ctx.image_settings()
     ledger = settings.ledger() if ledger is None else ledger
     job = ledger.get("jobs", {}).get(plans.job_id(settings.learner, brief["id"]), {"attempts": []})
-    if not exhausted(job, settings.max_attempts):
+    review_limit = awaiting_review(job) and rechecks.exhausted(ctx, brief["id"])
+    if not exhausted(job, settings.max_attempts) and not review_limit:
         return False
     entry["owner_required"] = True
+    reason = "Az ábra ingyenes újraellenőrzési kiosztásai elfogytak" if review_limit else "Az ábra fizetős próbái elfogytak"
     owner_notices.send(ctx, Notice(ctx.name, f"image_exhausted:{brief['id']}", "", "images", "owner",
-        f"Az ábra fizetős próbái elfogytak: {brief['id']} ({brief['page']}).",
+        f"{reason}: {brief['id']} ({brief['page']}).",
         f"Dönts a függő ábráról a school-notes chat {ctx.name} munkamenetben."))
     return True
 

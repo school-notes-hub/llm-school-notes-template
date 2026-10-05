@@ -137,7 +137,7 @@ def close(task: phase.Task, repo: Git, wt: Git, ident: Identity, t: Timeouts = T
         extra = []
         if task.get("topic_review"):
             from . import topic_result
-            extra, closure_owners, notes = topic_result.apply(task, worktree, ident)
+            extra, closure_owners, notes = topic_result.apply(task, worktree, ident, log=repo.log)
             owners += closure_owners
             notes = [" ".join(n.split()) for n in notes if n not in review.get("owner_notes", [])]
             if notes:

@@ -624,6 +624,8 @@ count attempts, escalate owners or create related review items; its bytes stay i
 Other work proceeds. A log event and a durable `send_once` notice explain the missing
 migration. An initially empty queue gets a `pending_format` marker before its first
 current-format record; this does not claim that the legacy-header migration ran.
+New failed commissions and nightly retry requests dropped during this window log
+`figure.migration_dropped` with the commission ID.
 
 Rollback to 2.3.7 also requires restoring each learner repository's compatible
 pre-migration pending records and page markers in a new commit (keep pushed history).
@@ -634,14 +636,19 @@ symlink leaves `runs: 0` records that 2.3.7 cannot read.
 Generated pending assignments reserve `max_attempts × reservation_usd` per figure
 against both daily and monthly capacity, only for the run’s assigned subjects.
 New content precedes replacements regardless of their IDs. An exhausted paid job
-is excluded and marked `owner_required` only after its last paid attempt was rejected,
-with one durable owner notice;
+is excluded and marked `owner_required` when no generated candidate awaits review
+(including a rejected or lost last attempt), with one durable owner notice;
 if no writer work remains, a tool-only fix persists that flag without an LLM call.
 An unreviewed generated candidate is eligible for free retrieval and independent
 rechecking even at the paid limit or with no remaining budget; no generator call is
 made. Hash-bound independent `repair`/`reject` verdicts update the matching ledger
 attempt without changing its cost. `review_pending` defers run-count escalation until
 that candidate has a verdict, including after an interrupted third run.
+Free rechecking is limited to two assignments per commission; exhaustion requires
+an owner decision with one notice. `state/<learner>/figure-rechecks.json` records
+assignment run IDs before writer input is handed over. Resumes and ranges of the
+same assignment share a receipt; P4 uses its child run ID. Worktree rollback cannot
+reset this limit. These receipts do not consume paid generation attempts.
 A generated figure counts a run only with a candidate or a paid host-ledger attempt
 for the same learner/plan since the serialized run's creation. Budget refusals consume
 no attempt. P4 assignments and attempt decisions are checkpointed before continuation.

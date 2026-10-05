@@ -81,8 +81,7 @@ def execute(ctx, push):
     if saved.get("commit"):
         return publish(ctx, wt, saved, head, push)
     if saved and saved["base"] != head:
-        raise ValueError("migration input changed: origin/main; inspect and preserve changes, then remove "
-                         f"{state / migration.RECEIPT} and {state / JOURNAL}; rerun --dry-run")
+        raise ValueError(f"migration input changed: origin/main; {migration.recovery(state)}")
     if saved:
         clean_interrupted(work, state, saved)
     wt.run("switch", "--detach", "--discard-changes", MAIN)

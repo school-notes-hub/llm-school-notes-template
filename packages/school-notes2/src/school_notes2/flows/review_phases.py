@@ -70,6 +70,7 @@ def finalize(ctx, task, edits=None):
         defects = correction_figures.defects(state, receipt, previous.get("defects", []))
         exhausted = correction_figures.mark_exhausted(ctx, {"commission": brief})
         entry = pending.record(repo, brief, task.run_id, defects,
+                               log=getattr(ctx, "log", None),
                                owner_required=exhausted, review_pending=correction_figures.awaiting(ctx, brief),
                                attempted=state["attempted"] if "attempted" in state else correction_figures.attempted(ctx, task, brief))
         written += [pending.PATH, migration_gate.MARK]

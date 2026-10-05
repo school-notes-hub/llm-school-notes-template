@@ -18,11 +18,12 @@ from .session import mcp
 
 def write_inputs(ctx: Ctx, task: Task, k: int) -> None:
     """fetch.json and changes.json for range k; the old result.json is removed (5.3)."""
-    from ..figures import licenses
+    from ..figures import licenses, rechecks
     licenses.preflight(ctx.notes_path)
     root, workdir = ctx.notes_path, workbranch.WORKDIR
-    safefs.write_json(root, f"{workdir}/fetch.json",
-                      fetch_flow.fetch_json(task, k, grade=ctx.student.grade, repo=ctx.notes_path))
+    fetch = fetch_flow.fetch_json(task, k, grade=ctx.student.grade, repo=ctx.notes_path)
+    rechecks.record(ctx, task, fetch.get("pending_figures", []))
+    safefs.write_json(root, f"{workdir}/fetch.json", fetch)
     write_changes(ctx, task)
     call_scope.write_check(ctx, task, k)
     safefs.unlink(root, f"{workdir}/result.json")

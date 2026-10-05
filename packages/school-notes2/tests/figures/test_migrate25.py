@@ -36,6 +36,14 @@ def test_main_moved_names_both_receipts_and_rerun(ctx):
     assert "remove" in message and "rerun the migration command" in message
 
 
+def test_main_moved_before_commit_uses_common_recovery(ctx):
+    state = ctx.cfg.state_dir / ctx.name
+    write_json(state / operation.JOURNAL, {"base": "0" * 40})
+    with pytest.raises(ValueError) as caught:
+        operation.execute(ctx, False)
+    assert str(caught.value) == f"migration input changed: origin/main; {migration.recovery(state)}"
+
+
 @pytest.mark.parametrize("stage", ["check", "apply"])
 def test_input_changed_names_receipt_directory(ctx, stage):
     state = ctx.cfg.state_dir / ctx.name

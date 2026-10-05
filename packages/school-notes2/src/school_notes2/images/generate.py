@@ -87,8 +87,7 @@ def attempts_used(entry: dict) -> int:
 
 
 def exhausted(entry: dict, maximum: int) -> bool:
-    paid = [a for a in entry["attempts"] if a["state"] != "failed"]
-    return len(paid) >= maximum and paid[-1]["state"] == "rejected"
+    return attempts_used(entry) >= maximum and not awaiting_review(entry)
 
 
 def awaiting_review(entry: dict) -> bool:

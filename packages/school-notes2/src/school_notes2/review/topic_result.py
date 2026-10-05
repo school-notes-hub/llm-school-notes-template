@@ -95,7 +95,7 @@ def state(task):
         "failed_topics": sorted(task.get("failed_topics", []), key=lambda r: r["topic"])})
 
 
-def apply(task, work, ident):
+def apply(task, work, ident, *, log=None):
     """Replayed on each fresh main during atomic close; keys remain bound to H."""
     written, owners, notes = [], [], []
     for entry in task.get("topic_results", []):
@@ -120,17 +120,17 @@ def apply(task, work, ident):
             written.append(warnings.PATH)
         from . import night_figures
         written += night_figures.apply(work, entry.get("figure_records", []), ident.at)
-    written += _finish_apply(task, work, notes)
+    written += _finish_apply(task, work, notes, log=log)
     return sorted(set(written)), owners, notes
 
 
-def _finish_apply(task, work, notes):
+def _finish_apply(task, work, notes, *, log=None):
     written = []
     written += figure_waiting.apply(work,
         [p for e in task.get("topic_results", []) for p in e.get("figure_pending", [])],
         [s for e in task.get("topic_results", []) for s in e.get("figure_checked", [])])
     from ..figures import rejected
-    written += rejected.apply(work, [r for e in task.get("topic_results", []) for r in e.get("figure_retries", [])])
+    written += rejected.apply(work, [r for e in task.get("topic_results", []) for r in e.get("figure_retries", [])], log=log)
     safefs.write_json(work, topics.STATE, state(task))
     if not safefs.is_file(work, verdicts.PATH):
         safefs.write_json(work, verdicts.PATH, [])

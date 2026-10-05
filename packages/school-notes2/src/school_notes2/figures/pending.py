@@ -5,10 +5,11 @@ from pathlib import Path
 import yaml
 
 from ..schemas import validate
+from ..log import Log
 from ..state import safefs
 from . import migration_gate
 
-PATH = "docs/figure-pending.json"
+PATH = migration_gate.PATH
 
 
 def assignment_order(entry):
@@ -34,10 +35,12 @@ def load(repo: Path) -> list[dict]:
 
 
 def record(repo: Path, brief: dict, run_id: str, defects: list[dict], *, attempted: bool | None = None,
-           owner_required=False, review_pending=False) -> dict:
+           owner_required=False, review_pending=False, log=None) -> dict:
     if migration_gate.blocked(repo):
-        return next((e for e in load(repo) if e["commission"]["id"] == brief["id"]),
-                    {"commission": brief, "runs": 0, "run_ids": [], "owner_required": False})
+        previous = next((e for e in load(repo) if e["commission"]["id"] == brief["id"]), None)
+        if previous is None:
+            (log or Log(None)).event("figure.migration_dropped", target=brief["id"])
+        return previous or {"commission": brief, "runs": 0, "run_ids": [], "owner_required": False}
     from .commissions import check_identity
     validate("figure-commission", brief)
     check_identity(repo, brief)

@@ -19,10 +19,10 @@ def scan(settings: ImageSettings) -> dict:
                        settings.monthly_usd)
     result = {"pending": [], "exhausted": [], "missing_plan": [],
               "waiting_unknown": waiting, "budget_left": has_budget}
-    from ..figures import migration_gate
-    frozen = set()
-    if migration_gate.blocked(settings.worktree):
-        frozen = {e["commission"]["id"] for e in safefs.read_json(settings.worktree, migration_gate.PATH, [])}
+    from ..figures import migration_gate, pending
+    blocked = migration_gate.blocked(settings.worktree)
+    frozen = {e["commission"]["id"] for e in pending.load(settings.worktree)
+              if blocked or e["owner_required"]}
     for plan_id, pages in sorted(plans.find_markers(settings.worktree).items()):
         if plan_id in frozen:
             continue

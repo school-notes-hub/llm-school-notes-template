@@ -21,7 +21,8 @@ def test_unreviewed_last_image_gets_free_recheck(repo, make_figure, learner, pai
     entry = pending.record(repo, brief, "old", [], attempted=True)
     config = settings(learner, ["rejected", "rejected", "generated"])
     config.daily_usd = Decimal(0)
-    ctx = SimpleNamespace(notes_path=repo, image_settings=lambda: config)
+    ctx = SimpleNamespace(notes_path=repo, image_settings=lambda: config,
+                          name=learner, cfg=SimpleNamespace(state_dir=repo.parent / "state"))
     assert not correction_figures.mark_exhausted(ctx, entry)
     assert correction_figures.assignable(ctx, [entry], paid_disabled=paid_disabled) == [entry]
     assert generate._blocked(config, f"{learner}-forces") is None
@@ -35,7 +36,8 @@ def test_third_unreviewed_run_resumes_without_owner(repo, make_figure, monkeypat
         pending.record(repo, brief, rid, [], attempted=True)
     config = settings("one", ["rejected", "rejected", "generated"])
     config.daily_usd = Decimal(0)
-    ctx = SimpleNamespace(notes_path=repo, image_settings=lambda: config)
+    ctx = SimpleNamespace(notes_path=repo, image_settings=lambda: config,
+                          name="one", cfg=SimpleNamespace(state_dir=repo.parent / "state"))
     task = phase.create(repo.parent, "one", "notes", "cron", "review_ready")
     task.update(inspection_figures=[{"brief": brief, "candidate": {"state": "candidate"}, "attempted": True}])
     monkeypatch.setattr(review_phases.steps, "generate_all", lambda *a: None)
@@ -49,9 +51,9 @@ def test_third_unreviewed_run_resumes_without_owner(repo, make_figure, monkeypat
 
 
 @pytest.mark.parametrize("last", ["unknown", "lost", "accepted", "generated"])
-def test_only_rejected_last_paid_attempt_is_exhausted(last):
+def test_exhaustion_requires_no_unreviewed_candidate(last):
     entry = {"attempts": [{"state": "rejected"}, {"state": "rejected"}, {"state": last}]}
-    assert not generate.exhausted(entry, 3)
+    assert generate.exhausted(entry, 3) == (last != "generated")
     entry["attempts"][-1]["state"] = "rejected"
     entry["attempts"].append({"state": "failed"})
     assert generate.exhausted(entry, 3)
