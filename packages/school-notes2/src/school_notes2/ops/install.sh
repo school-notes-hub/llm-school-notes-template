@@ -58,10 +58,20 @@ hold_locks() {
     exec 18>>"$ROOT/state/operations/install.lock"
     flock 18
     LOCK_FDS+=(18)
-    touch "$ROOT/state/operations/install-pending"
     trap 'rm -f "$ROOT/state/operations/install-pending"' EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
+    closed python3 - "$ROOT/state/operations/install-pending" "$$" <<'PY'
+import json, os, sys
+from datetime import datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
+path = Path(sys.argv[1])
+temporary = path.with_suffix(".new")
+temporary.write_text(json.dumps({"pid": int(sys.argv[2]),
+    "since": datetime.now(ZoneInfo("Europe/Budapest")).isoformat()}) + "\n")
+os.replace(temporary, path)
+PY
     exec 19>>"$ROOT/state/operations/vm/lock"
     echo "waiting for the VM lock ..."
     flock 19

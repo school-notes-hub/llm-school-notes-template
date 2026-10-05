@@ -102,7 +102,9 @@ def test_a_python_without_tomllib_gets_a_plain_message(tmp_path):
 
 def test_install_waits_for_round_vm_lock_before_taking_learner_locks(tmp_path):
     import fcntl
+    import json
     import select
+    from datetime import datetime
     vm = tmp_path / "srv/state/operations/vm/lock"
     vm.parent.mkdir(parents=True)
     with vm.open("a") as lock:
@@ -115,7 +117,9 @@ def test_install_waits_for_round_vm_lock_before_taking_learner_locks(tmp_path):
             assert select.select([proc.stdout], [], [], 5)[0]
             assert proc.stdout.readline().strip() == "waiting for the VM lock ..."
             assert proc.poll() is None
-            assert (tmp_path / "srv/state/operations/install-pending").exists()
+            marker = json.loads((tmp_path / "srv/state/operations/install-pending").read_text())
+            assert marker["pid"] == proc.pid
+            assert 0 <= (datetime.now().astimezone() - datetime.fromisoformat(marker["since"])).total_seconds() < 10
             assert not (tmp_path / "srv/state/benedek/lock").exists()
             fcntl.flock(lock, fcntl.LOCK_UN)
             stdout, stderr = proc.communicate(timeout=10)

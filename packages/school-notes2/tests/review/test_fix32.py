@@ -130,7 +130,7 @@ def test_migration_interrupted_write_resumes_once(tmp_path, monkeypatch, learner
     assert page.meta["items"]["R16"] == "open"
     assert page.meta["item_details"]["R16"]["repair_attempts"] == 0
     assert all(page.meta["items"][k] == "owner" for k in ("R17", "R19"))
-    assert page.meta["items"]["R18"] == "open"
+    assert page.meta["items"]["R18"] == "settled"
 
 
 def test_rollback_counts_once_after_restore_and_escalates(tmp_path):
@@ -199,3 +199,24 @@ def test_reviewer_contract_names_real_source_conflict_category(role):
     text = resources("school_notes2").joinpath(f"llm/prompts/{role}.txt").read_text()
     assert "Valódi tulajdonosi döntést igénylő forrásellentmondást `forrásellentmondás` kategóriával jelezz" in text
     assert "szakmailag egyértelműen javítható hibát" in text
+
+
+@pytest.mark.parametrize("owner_required", [False, True])
+@pytest.mark.parametrize("attempts", ["absent", 0, None])
+def test_legacy_figure_settles_only_without_attempt_key_and_current_owner(tmp_path, owner_required, attempts):
+    rel = legacy(tmp_path)
+    safefs.write_json(tmp_path, "docs/figure-pending.json", [
+        {"commission": {"id": "exhausted"}, "owner_required": owner_required}])
+    page = frontmatter.split(safefs.read_text(tmp_path, rel))
+    if attempts != "absent":
+        page.meta["item_details"]["R18"]["repair_attempts"] = attempts
+        safefs.write_text(tmp_path, rel, frontmatter.set_keys(page, page.meta))
+    # No figure-migration receipt is required for an obsolete owner item.
+    (tmp_path / "docs/figure-pending-migrations.json").unlink()
+    for path, text in repair_migration.updates(tmp_path):
+        safefs.write_text(tmp_path, path, text)
+    page = frontmatter.split(safefs.read_text(tmp_path, rel))
+    expected = "settled" if attempts == "absent" and not owner_required else "owner"
+    assert page.meta["items"]["R18"] == expected
+    assert page.meta["items"]["R1"] == "settled"  # Completed: no longer in pending.
+    assert page.meta["item_details"]["R1"]["migration_note"] == repair_migration.REASON

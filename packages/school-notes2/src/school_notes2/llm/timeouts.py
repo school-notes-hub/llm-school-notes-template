@@ -68,6 +68,10 @@ def success(ctx, run):
         state.setdefault("reviewer_units", {})[run.label] = {"count": 0, "suspended": False}
         state[role]["suspended"] = any(u.get("suspended") for u in state["reviewer_units"].values())
     write_json(path(ctx), state)
+    if role == "reviewer":
+        for incident in incidents.active(ctx):
+            if incident["scope"].startswith("timeout:reviewer:"):
+                incidents.resolve(ctx, incident["scope"])
     if role != "reviewer" or not any(unit.get("suspended") for unit in state.get("reviewer_units", {}).values()):
         incidents.resolve(ctx, "timeout:" + role)
 

@@ -481,10 +481,12 @@ responsibility, queue sizes and the remaining daily/monthly image budget in Hung
 completed round atomically saves the short view to `state/allapot.txt`, with a `Készült:` timestamp. A broken learner
 state is reported without hiding the other learners. Installation takes the VM lock
 before learner locks and retains them through the atomic release switch. Before waiting
-it writes `state/operations/install-pending`; round releases its lock instead of starting
-another cycle while that flag exists. Installers serialize, write lock-holder metadata,
-and remove the flag after switching (or on a handled failure). After an uncatchable crash,
-rerunning the installer recovers the pending handoff.
+it atomically writes `state/operations/install-pending` with its PID and start time;
+round logs and releases its lock while that installer is alive and the flag is at most
+two hours old. A dead installer, older flag or unreadable legacy flag is logged and
+removed before the round continues, with one VM incident mail and a durable last-error
+record. Installers serialize, write lock-holder metadata, and remove the flag after
+switching (or on a handled failure).
 Review inventory parses each report once; nightly closure batches changes by report,
 using `CSafeLoader` when available. Machine-only changes without items or hits do not
 start recheck. `review.finalize`, `review.final_keys`, `review.close` and
@@ -718,9 +720,10 @@ findings inherit the consumed budget. Interactive closures do not consume it.
 item notifications stay suppressed, and status shows one owner-item count.
 
 The journaled chain-policy migration runs before notes assignment. Legacy chain-1
-owner items reopen with zero attempts except genuine decisions/tool defects; migrated
-pending-figure owner records settle with “elavult: a függő ábra újra sorban van” when
-the matching commission is queued again. Independent figure exhaustion stays under
+owner items reopen with zero attempts except genuine decisions/tool defects; figure
+owner records without a `repair_attempts` key settle with “elavult: az ábra elkészült
+vagy újra sorban van” unless their pending commission currently requires its owner.
+Completed figures no longer on the pending list also settle. Independent figure exhaustion stays under
 the existing figure policy. `repair_policy` marks each migrated report, so replay or
 rebase does not reset counters. A tool-only fix can persist migration without writer
 work, and review metadata alone does not create a nightly topic.

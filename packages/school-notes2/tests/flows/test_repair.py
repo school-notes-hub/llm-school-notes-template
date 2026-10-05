@@ -109,6 +109,9 @@ def test_second_bad_repair_retires_target_without_reordering_queue(tmp_path, log
     assert queue.next_item(data)["page"] == "wiki/m/b.md"
     record = frontmatter.split(safefs.read_text(ctx.notes_path, task.get("repair_owner_item"))).meta
     assert record["items"] == {"R1": "owner"}
+    from school_notes2.review import repair_migration
+    assert record["repair_policy"] == repair_migration.POLICY
+    assert not list(repair_migration.updates(ctx.notes_path))
     report.completion(ctx, task)
     assert not mailed
     assert_suppressed(log, "repair_owner:")

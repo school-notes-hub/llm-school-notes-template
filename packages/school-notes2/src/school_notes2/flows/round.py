@@ -7,7 +7,7 @@ from ..log import Log, TZ
 from ..notify import Mailer
 from ..state import phase
 from ..state.files import read_json, write_json
-from . import context, nightly, operation, run
+from . import context, install_pending, nightly, operation, run
 
 
 def now():
@@ -37,7 +37,7 @@ def round(cfg):
         if not acquired:
             return 0
         while True:
-            if (cfg.state_dir / "operations/install-pending").exists():
+            if install_pending.waiting(operation.vm_context(contexts[0])):
                 return 0
             started = now()
             _cycle(cfg, contexts, started)

@@ -28,7 +28,8 @@ def active(ctx):
 
 
 def wording(name, kind, step, *, task=None, exc=None, role=None):
-    return "a futás megállt: " + _reason(name, kind, step, task=task, exc=exc, role=role)
+    prefix = "a telepítés ellenőrzést igényel: " if step == "install" else "a futás megállt: "
+    return prefix + _reason(name, kind, step, task=task, exc=exc, role=role)
 
 
 def _reason(name, kind, step, *, task=None, exc=None, role=None):
@@ -60,6 +61,8 @@ def _reason(name, kind, step, *, task=None, exc=None, role=None):
             return "hiányzik egy előfeltétel (a konténerfuttató nem indul); teendőd: podman info"
         return f"hiányzik egy előfeltétel ({reason}); teendőd: school-notes status {name} --details"
     if kind in ("program", "report_failed", "round_step"):
+        if step == "install":
+            return "beragadt telepítési jelzőt törölt a tool; a kör folytatódik, a telepítés állapotát a kontroller ellenőrzi"
         reason = STEPS.get(step, "a tool ellenőrzése")
         if any(i.get("kind") in ("browser", "browser-link") for i in details.get("items", [])):
             reason = "a kiadás előtti linkellenőrzés"
@@ -135,6 +138,8 @@ def task_error(ctx, task, step="run", exc=None):
     error = task.data.get("needs_owner") or {}
     if not error:
         return None
+    if error.get("class") == "timeout":
+        return _task_timeout(ctx, task)
     existing = [i for i in active(ctx) if i["scope"] == "task:" + task.run_id
                 and i["class"] == error.get("class") and i["message"].startswith("a futás megállt:")
                 and (exc is None or meaning(i["message"]) == meaning(wording(
@@ -143,10 +148,21 @@ def task_error(ctx, task, step="run", exc=None):
         return existing[0]
     # Retire pre-upgrade intermediate incidents before recording the owner stop.
     resolve(ctx, "task:" + task.run_id)
-    if error.get("class") == "timeout":
-        role = "reviewer" if task.kind == "review" else "writer"
-        return record(ctx, "timeout", role, role=role, scope="timeout:" + role, run_id=task.run_id)
     return record(ctx, error.get("class", "program"), step, task=task, exc=exc)
+
+
+def _task_timeout(ctx, task):
+    from ..llm import timeouts
+    resolve(ctx, "task:" + task.run_id)
+    for value in active(ctx):
+        if value["scope"].startswith("timeout:") and (
+                value["run_id"] == task.run_id or value["run_id"].startswith(task.run_id + "-fix-a")):
+            return value
+    state = read_json(timeouts.path(ctx), {})
+    suspended = [role for role in timeouts.ROLES if state.get(role, {}).get("suspended")]
+    matching = [role for role in suspended if state[role].get("run_id") == task.run_id]
+    role = next(iter(matching or suspended), "reviewer" if task.kind == "review" else "writer")
+    return record(ctx, "timeout", role, role=role, scope="timeout:" + role, run_id=task.run_id)
 
 
 def completed(ctx, task):

@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import datetime, timedelta
+import os
 
 import pytest
 
@@ -12,7 +13,7 @@ from school_notes2.notify import incidents
 from school_notes2.review import files
 from school_notes2.state import phase
 from school_notes2.state.errors import Prerequisite
-from school_notes2.state.files import read_json
+from school_notes2.state.files import read_json, write_json
 from school_notes2.wiki import lesson_log
 from tests.conftest import recording_mailer
 from tests.operations.test_round import cfg  # noqa: F401
@@ -22,15 +23,17 @@ from tests.operations.test_round import cfg  # noqa: F401
 def test_round_yields_vm_lock_to_pending_install(cfg, monkeypatch, before_first):
     marker = cfg.state_dir / "operations/install-pending"
     marker.parent.mkdir(parents=True)
+    def mark():
+        write_json(marker, {"pid": os.getpid(), "since": datetime.now(TZ).isoformat()})
     if before_first:
-        marker.touch()
+        mark()
     clock = [datetime(2026, 10, 5, 8, tzinfo=TZ)]
     monkeypatch.setattr(scheduler, "now", lambda: clock[0])
     cycles = []
     def cycle(*args):
         cycles.append(1)
         clock[0] += timedelta(hours=2)
-        marker.touch()
+        mark()
     monkeypatch.setattr(scheduler, "_cycle", cycle)
     assert scheduler.round(cfg) == 0
     assert len(cycles) == (0 if before_first else 1)

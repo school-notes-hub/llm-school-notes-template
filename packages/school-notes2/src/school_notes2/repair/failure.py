@@ -3,6 +3,7 @@
 from ..git import discard, repos
 from ..notify import Notice
 from ..notify import pending
+from ..review.repair_migration import POLICY
 from ..state import safefs
 from ..state.errors import BadWork
 from ..wiki import frontmatter
@@ -44,7 +45,7 @@ def write_item(ctx, task):
     topic = task.get("repair_topic")
     text = frontmatter.set_keys(
         f"# Egyszeri javítás\n\n### R1 - {topic}\n\nKét sikertelen átdolgozás; tulajdonosi döntés szükséges.\n",
-        {"status": "owner", "items": {"R1": "owner"}, "item_details": {
+        {"status": "owner", "repair_policy": POLICY, "items": {"R1": "owner"}, "item_details": {
             "R1": {"file": topic, "origin": "repair", "round": 1, "chain": 0}}})
     safefs.write_text(ctx.notes_path, rel, text)
     steps.record_tool_files(task, ctx.notes_path, [rel])
