@@ -7,7 +7,7 @@ This file holds everything that belongs to **this** wiki; the rules shared by ev
 # Template
 
 * **Template repository**: https://github.com/dlaszlo/llm-school-notes-template (or the fork this wiki was made from).
-* **Template version**: `1.19.0`.
+* **Template version**: `1.19.1`.
 * **Template commit**: `<exact template commit recorded at bootstrap and every template update>`.
 
 Updates are optional and happen only when the user asks (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)).
