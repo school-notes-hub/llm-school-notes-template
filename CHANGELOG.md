@@ -2,6 +2,12 @@
 
 Newest first. Each entry says what changed in the shared files and what an existing wiki must do when it applies the update (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)). A wiki records the version it is on in `PROFILE.md`.
 
+## 1.20.1 - 2026-10-05
+
+- School-notes run (Fixed prompt, result.json): calls and page groups describe the work focus, not page permissions; every wiki page may be edited as needed, without unjustified rewrites. P3 reviews all changed pages and P5 judges every changed author line, including changes outside assigned items. A failed machine check is fixed by the writer on the same tree; finished work is not rolled back.
+- Repair mode: start from the assigned page and edit any wiki pages the repair needs; related lesson logs and summaries may be edited too.
+- Migration (controller-owned): synchronize the changed instructions through Template updates; no learner content changes.
+
 ## 1.20.0 - 2026-10-05
 
 - School-notes run (Fixed prompt): errors that already existed at the run base (`kind: inherited-check`) do not block the run and are never fixed on an unassigned page; the tool records them as review items.
