@@ -44,8 +44,8 @@ def test_book_places_writes_readme_table_and_map(setup, repo, capsys):
 
 def test_book_refuses_an_existing_book_and_needs_an_offset(setup):
     local, source = setup
-    with pytest.raises(SystemExit):
+    with pytest.raises(book.Refused):
         book.run(local, "irodalom", "OH-X11TB", source, None)
     book.run(local, "irodalom", "OH-X11TB", source, 1)
-    with pytest.raises(SystemExit):
+    with pytest.raises(book.Refused):
         book.run(local, "irodalom", "OH-X11TB", source, 1)

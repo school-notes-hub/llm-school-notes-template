@@ -15,7 +15,8 @@ the clean-up step (plan 7, step 4) but have no command any more.
 | `sn book <t> <subject> <code> [<source>] [--offset N]` | a converted textbook into `references/`, README table, map | `local/book.py` |
 | `sn check <t> <page…>` | page check, read-only (`check_files(fix=False)`) | `local/check.py` |
 | `sn gen <t> <id> [--note f]`, `--settle`, `--grant` | one paid image generation through the host ledger | `local/gen.py` |
-| `sn close <t> [--subject a,b] [--check]` | hand-overs in `.school-notes/out/<subject>/` → insertion, machine blocks, STOP on invalidated verdicts (exit 2), indexes, `public.json`, content check | `local/close.py` |
+| `sn close <t> --subject s --snapshot [--only id,…]` | before the reviewer (and before the confirmation pass for the named figures): `keys.json` (the verdict key of each figure's content now) and `diff.patch` into the hand-over folder | `local/close.py` |
+| `sn close <t> [--subject a,b] [--check]` | hand-overs in `.school-notes/out/<subject>/` → STOP (exit 2) when an accept does not match its snapshot key, a `replaces` differs from the commission or an inserted figure vanished → insertion, renewals, machine blocks, STOP on invalidated verdicts, indexes, `public.json`, content check; never deletes a figure verdict | `local/close.py` |
 | `sn done <t>` | is the content finished (exit 0/1) | `local/done.py` |
 | `sn publish <t> [--reviewed] [--build-only DIR]` | clean tree + `sn done` 0 → push main → build → public gate → gh-pages → live check | `local/publish.py` |
 

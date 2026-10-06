@@ -13,8 +13,25 @@ from .. import config
 from ..flows import context
 from ..git.run import Git, HttpsToken
 from ..log import TZ, Log
-from ..state.errors import Prerequisite
+from ..state.errors import NeedsOwner, Prerequisite, SnError
 from . import keys
+
+class Refused(SnError):
+    """The command will not do it (wrong arguments, a hand-over that does not fit): exit 1."""
+
+    kind = "refused"
+
+
+GITHUB = "https://github.com/"
+
+
+def require_github(url: str, what: str) -> str:
+    """The token goes only to GitHub over HTTPS: any other effective remote stops the command."""
+    if not url.startswith(GITHUB):
+        raise NeedsOwner(f"{what} is not an https://github.com/ address: {url}",
+                         todo="set the remote to https://github.com/<org>/<repo>.git")
+    return url
+
 
 # local/common.py → local → school_notes2 → src → school-notes2 → packages → the template root
 RELEASE = Path(__file__).resolve().parents[5]

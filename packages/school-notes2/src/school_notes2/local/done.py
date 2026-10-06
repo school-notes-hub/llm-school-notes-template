@@ -1,6 +1,7 @@
 """`sn done <t>` (plan 3.2): is the learner's notes content finished? Read-only; exit 0/1.
 
-Counted: pending and invalidated figures, orphan figure places, textbook placeholder lines,
+Counted: pending and invalidated figures, inserted figures gone from their page (their
+verdict is kept), orphan figure places, textbook placeholder lines,
 figure places without an accepted figure, broken image links, and every page-check error on
 every wiki page (`check_files(..., fix=False)`: unlike `check_text` it also checks links).
 The worktree's cleanliness is not looked at here (`sn publish` checks it)."""
@@ -9,6 +10,7 @@ from pathlib import Path
 
 from ..figures import insert, pending
 from ..flows import orphan_places, textbook_lines, work_pending
+from ..state import safefs
 from ..wiki import check
 from ..wiki.pages import wiki_pages
 
@@ -20,6 +22,9 @@ def problems(repo: Path) -> list[tuple[str, list[str]]]:
     return [
         ("függő ábra", sorted(e["commission"]["id"] for e in pending.load(repo))),
         ("érvénytelenedett ábraítélet", sorted(f"{r['file']}#{r['id']}" for r in insert.invalidated(repo))),
+        ("beillesztett ábra eltűnt a lapról", sorted(
+            f"{r['file']}#{r['id']}" for r in safefs.read_json(repo, insert.VERDICTS, [])
+            if r.get("role") == "figure-review" and not r.get("night_spec") and insert.removed(repo, r))),
         ("árva ábrahely", sorted(f"{p['page']}:{p['line']} {p['id']}" for p in orphan_places.places(repo))),
         ("tankönyvi helyőrző sor", sorted(f"{p['page']}:{p['line']}" for p in textbook_lines.places(repo))),
         ("ábrahely elfogadott ábra nélkül", sorted(places)),

@@ -31,6 +31,9 @@ PERMANENT = (
     "Permission denied (publickey)", "Host key verification failed", "Repository not found",
     "protected branch", "pre-receive hook declined", "GH0", "exceeds GitHub's file size limit",
     "large files detected",
+    # HTTPS: a refused or missing credential never passes by itself (owner: gh auth login)
+    "Authentication failed", "returned error: 401", "returned error: 403",
+    "could not read Username", "could not read Password", "Invalid username or password",
 )
 RACE = ("(fetch first)", "(non-fast-forward)")
 RETRY_DELAYS = (15, 60, 180)
@@ -75,7 +78,12 @@ class HttpsToken:
         return {"SN_GIT_TOKEN": self.token}
 
     def config(self) -> tuple[str, ...]:
-        return ('credential.helper=!f() { echo username=x-access-token; echo "password=$SN_GIT_TOKEN"; }; f',)
+        """The helper answers only for https://github.com, and git may speak only HTTPS (a
+        specific `protocol.<name>.allow` still wins, e.g. the tests' local file origins)."""
+        return ("protocol.allow=never", "protocol.https.allow=always",
+                "credential.https://github.com.helper=",
+                'credential.https://github.com.helper=!f() { echo username=x-access-token; '
+                'echo "password=$SN_GIT_TOKEN"; }; f')
 
 
 @dataclass(frozen=True)

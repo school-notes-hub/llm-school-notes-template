@@ -44,11 +44,47 @@ def test_https_url():
     assert https_url("https://github.com/org/x.git") == "https://github.com/org/x.git"
 
 
-def test_https_token_lives_only_in_the_environment(log):
+def test_https_token_lives_only_in_the_environment_and_goes_only_to_github(log):
     from pathlib import Path
     from school_notes2.git.run import Git, HttpsToken
     git = Git(Path("/x/.git"), "n", "e", log, HttpsToken("secret-token"), Path("/x"))
-    assert all("secret-token" not in a for a in git.argv(["push"]))
-    assert any(a.startswith("credential.helper=!f()") for a in git.argv(["push"]))
+    argv = git.argv(["push"])
+    assert all("secret-token" not in a for a in argv)
+    helpers = [a for a in argv if "credential" in a and "helper" in a]
+    assert "credential.helper=" in helpers                      # every generic helper reset
+    assert any(a.startswith("credential.https://github.com.helper=!f()") for a in helpers)
+    assert not any(a.startswith("credential.helper=!") for a in helpers)
+    assert "protocol.allow=never" in argv and "protocol.https.allow=always" in argv
     assert git.env()["SN_GIT_TOKEN"] == "secret-token" and "GIT_SSH_COMMAND" not in git.env()
     assert "secret-token" not in repr(HttpsToken("secret-token"))
+
+
+def test_auth_failures_need_the_owner():
+    from school_notes2.git.run import classify
+    from school_notes2.state.errors import NeedsOwner
+    for text in ("fatal: Authentication failed for 'https://github.com/x/y.git/'",
+                 "fatal: unable to access 'https://github.com/x/': The requested URL returned error: 403",
+                 "fatal: could not read Username for 'https://github.com': terminal prompts disabled"):
+        assert isinstance(classify("push", text, 128), NeedsOwner)
+
+
+def test_local_git_network_branch_carries_gh_token(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from school_notes2.git.run import HttpsToken
+    from school_notes2.local import common
+    monkeypatch.setattr(common, "gh_token", lambda: "tok")
+    (tmp_path / ".git").mkdir()
+    cfg = SimpleNamespace(git_name="n", git_email="e", log_path=tmp_path / "log")
+    local = common.Local(SimpleNamespace(cfg=cfg, name="t"), tmp_path)
+    assert local.git(network=True).remote == HttpsToken("tok")
+    assert local.git().remote is None
+
+
+def test_require_github():
+    from school_notes2.local.common import require_github
+    from school_notes2.state.errors import NeedsOwner
+    assert require_github("https://github.com/o/r.git", "x")
+    for url in ("http://github.com/o/r.git", "https://github.com.evil/o", "/tmp/origin.git",
+                "git@github.com:o/r.git", "https://gitlab.com/o/r.git"):
+        with pytest.raises(NeedsOwner):
+            require_github(url, "x")

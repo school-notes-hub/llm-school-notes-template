@@ -30,3 +30,35 @@ def test_cli_arguments():
 def test_gen_needs_a_figure_unless_settling(argv):
     with pytest.raises(SystemExit):
         cli.main(argv)
+
+
+def test_config_and_prerequisite_errors_are_one_line_not_a_traceback(tmp_path, capsys):
+    missing = tmp_path / "none.toml"
+    assert cli.main(["--config", str(missing), "done", "barna"]) == 1
+    err = capsys.readouterr().err
+    assert err.startswith("Hiba: configuration missing") and "Traceback" not in err
+
+
+def test_refusals_are_logged(monkeypatch, tmp_path, capsys):
+    from school_notes2.local import common
+    records = []
+
+    class Stub:
+        def record(self, command, outcome="ok", **fields):
+            records.append((command, outcome, fields.get("error_class")))
+    monkeypatch.setattr(common, "load", lambda learner, config=None: Stub())
+
+    def refuse(local, args):
+        raise common.Refused("nincs átadás")
+    monkeypatch.setattr(cli, "_dispatch", refuse)
+    assert cli.main(["close", "barna"]) == 1
+    assert records == [("close", "error", "refused")]
+
+
+def test_only_belongs_to_snapshot():
+    with pytest.raises(SystemExit):
+        cli.main(["close", "barna", "--only", "a"])
+    args = cli._parser().parse_args(["close", "barna", "--subject", "a", "--snapshot", "--only", "x,y"])
+    assert args.snapshot and args.only == "x,y"
+    with pytest.raises(SystemExit):
+        cli._parser().parse_args(["close", "barna", "--snapshot", "--check"])

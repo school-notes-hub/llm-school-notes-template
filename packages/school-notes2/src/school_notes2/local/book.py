@@ -15,6 +15,7 @@ from pathlib import Path
 from ..sources.naming import slug
 from ..sources.toolload import load_tool
 from ..state import safefs
+from .common import Refused
 
 ORIGINALS = (".pdf", ".pptx", ".ppt", ".docx", ".doc")
 
@@ -28,9 +29,9 @@ def readme(code: str, offset: int, rows) -> str:
 
 def place(repo: Path, rel: str, source: Path, code: str, offset: int) -> list[str]:
     if safefs.exists(repo, rel):
-        raise SystemExit(f"{rel} már létezik; a térkép újragenerálása: sn book <tanuló> <tantárgy> <kód>")
+        raise Refused(f"{rel} már létezik; a térkép újragenerálása: sn book <tanuló> <tantárgy> <kód>")
     if not (source / "document.md").is_file():
-        raise SystemExit(f"{source}: nincs document.md (doc-extract mappa kell)")
+        raise Refused(f"{source}: nincs document.md (doc-extract mappa kell)")
     written = []
     for path in sorted(p for p in source.rglob("*") if p.is_file()):
         if path.suffix.lower() in ORIGINALS:
@@ -51,11 +52,11 @@ def run(local, subject: str, code: str, source: Path | None, offset: int | None)
     rel = f"references/{slug(subject)}/{slug(code)}"
     if source is not None:
         if offset is None:
-            raise SystemExit("új könyvhöz kell az --offset N (nyomtatott oldal = PDF-oldal - N)")
+            raise Refused("új könyvhöz kell az --offset N (nyomtatott oldal = PDF-oldal - N)")
         written = place(repo, rel, source, code, offset)
         print(f"elhelyezve: {rel} ({len(written)} fájl)")
     elif not safefs.is_file(repo, f"{rel}/README.md"):
-        raise SystemExit(f"{rel}/README.md nincs meg")
+        raise Refused(f"{rel}/README.md nincs meg")
     argv = [sys.executable, "tools/book_index.py", rel] + (["--offset", str(offset)] if offset is not None and source is None else [])
     proc = subprocess.run(argv, cwd=repo, capture_output=True, text=True, timeout=300)
     print(proc.stdout.strip() or proc.stderr.strip())

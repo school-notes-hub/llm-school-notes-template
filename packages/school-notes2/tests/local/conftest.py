@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from school_notes2.config import Role, Sources, Timeouts
-from school_notes2.git.run import Git
+from school_notes2.git.run import Git, HttpsToken
 from school_notes2.local.common import git_dir
 from school_notes2.log import Log
 from tests.figures.conftest import make_figure, repo  # noqa: F401 - shared fixtures
@@ -27,6 +27,7 @@ class FakeLocal:
     def __init__(self, repo: Path, root: Path, name="barna", drive=None, drive_root="root",
                  site_repo="file:///nonexistent", ledger=None):
         self.repo, self.name, self.records, self._drive = repo, name, [], drive
+        self.git_calls = []
         self._ledger = ledger or {"jobs": {}}
         self.cfg = SimpleNamespace(timeouts=Timeouts(), sources=Sources(), root=root,
                                    git_name="T", git_email="t@example.com",
@@ -39,8 +40,11 @@ class FakeLocal:
         self.records.append((command, outcome, fields))
 
     def git(self, path=None, *, network=False):
+        """With `network` the token-bearing remote, as in production (a fake token)."""
         path = path or self.repo
-        return Git(git_dir(path), "T", "t@example.com", self.quiet, None, path)
+        self.git_calls.append((Path(path), network))
+        remote = HttpsToken("test-token") if network else None
+        return Git(git_dir(path), "T", "t@example.com", self.quiet, remote, path)
 
     def image_settings(self, worktree=None):
         return SimpleNamespace(learner=self.name, worktree=worktree or self.repo, ledger=lambda: self._ledger)

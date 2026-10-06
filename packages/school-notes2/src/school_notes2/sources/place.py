@@ -45,12 +45,13 @@ class Placed:
 
 
 def place_package(repo: Path, pkg: Downloaded, start_seq: int, known: Known,
-                  settings: Settings = Settings()) -> Placed:
+                  settings: Settings = Settings(), folder: Path | None = None) -> Placed:
     """Store the package; `known` is updated so later packages of the run see its pages.
 
-    The target folder must not exist yet (a repeated preparation starts from a clean worktree).
+    The target folder must not exist yet (a repeated preparation starts from a clean worktree),
+    or be given as `folder` (empty; the caller reserved it).
     """
-    folder = unique_dir(repo / "sources" / pkg.subject, slug(pkg.drive_folder), repo)
+    folder = folder or unique_dir(repo / "sources" / pkg.subject, slug(pkg.drive_folder), repo)
     entry = {"drive_folder": pkg.drive_folder, "subject": pkg.subject, "role": pkg.role,
              "new_subject": pkg.new_subject, "preconverted": pkg.preconverted, "files": []}
     card = cards.load(repo, pkg.subject)

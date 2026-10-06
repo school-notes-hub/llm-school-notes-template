@@ -27,7 +27,7 @@ from ..git import repos
 from ..site import build as site_build
 from ..site import publish as site_publish
 from . import done
-from .common import https_url, today
+from .common import https_url, require_github, today
 
 
 def preconditions(local, git, out) -> str | None:
@@ -43,10 +43,17 @@ def preconditions(local, git, out) -> str | None:
     return None
 
 
+def effective_remote(git, what: str) -> None:
+    """Both the fetch and the push address of `origin` (after any `insteadOf`/`pushurl`) must
+    be https://github.com/…; only then may git get the token."""
+    for args in (("remote", "get-url", "origin"), ("remote", "get-url", "--push", "origin")):
+        require_github(git.out(*args).strip(), what)
+
+
 def site_git(local):
     """The learner's single gh-pages clone (created on first use, HTTPS remote)."""
     path = local.site_clone()
-    url = https_url(local.ctx.student.site_repo)
+    url = require_github(https_url(local.ctx.student.site_repo), "the site repo")
     if not (path / ".git").exists():
         path.mkdir(parents=True, exist_ok=True)
         local.git(path).run("init", "--quiet", str(path), cwd=path)
@@ -55,6 +62,7 @@ def site_git(local):
     if current != url:
         git.run("remote", "remove", "origin", check=False)
         git.run("remote", "add", "origin", url)
+    effective_remote(git, "the site clone's origin")
     return git
 
 
@@ -72,6 +80,8 @@ def run(local, reviewed: bool = False, build_only: Path | None = None, out=print
         out(f"build: {record.output / 'site'} ({record.pages} lap, {record.duration_s} s)")
         local.record("publish", "built", target=head, pages=record.pages)
         return 0
+    effective_remote(git, "the working copy's origin")
+    require_github(https_url(local.ctx.student.site_repo), "the site repo")
     net = local.git(network=True)
     net.run("push", "--porcelain", "origin", "HEAD:refs/heads/main", timeout=local.cfg.timeouts.push_s)
     if repos.ls_remote(net, "refs/heads/main", local.cfg.timeouts.ls_remote_s) != head:

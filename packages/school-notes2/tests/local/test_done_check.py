@@ -1,3 +1,5 @@
+import pytest
+
 from school_notes2.figures import context, insert
 from school_notes2.local import check, done
 from school_notes2.state import safefs
@@ -64,3 +66,11 @@ def test_check_files_is_called_with_fix_false(repo, make_figure, fake_local, mon
     seen.clear()
     done.problems(repo)
     assert seen["fix"] is False
+
+
+@pytest.mark.parametrize("path", ["wiki/physics/missing.md", "sources/x/a.md", "wiki/assets/x.md",
+                                  "wiki/physics/forces.txt", "/etc/passwd"])
+def test_check_refuses_missing_or_non_wiki_paths(repo, make_figure, fake_local, capsys, path):
+    make_figure()
+    assert check.run(fake_local(repo), [path]) == 1
+    assert "hiba:" in capsys.readouterr().out
