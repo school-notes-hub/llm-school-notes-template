@@ -47,16 +47,20 @@ def _figure(ctx, fid, entry, paid, generated) -> tuple[str | None, str | None]:
                           "(another stop); --paid has nothing to approve")
         return "paid", None
     until = _parked_until(ctx, "figure:" + fid)
+    from . import unjudged
+    if fid in unjudged.stopped(ctx):
+        # This stop holds the figure whether it is parked or not: lifting only the parking would
+        # promise work that no run does (fix-52b).
+        return None, (f"stopped after runs without a figure verdict: "
+                      f"school-notes status --clear {ctx.name} unjudged --continue"
+                      + (f"; it is also parked until {until[:16].replace('T', ' ')}: after the clear, "
+                         f"school-notes status --reopen {ctx.name} figure:{fid}" if until else ""))
     if until:
-        if _used_up(ctx, entry, generated):
+        if used_up(ctx, entry, generated):
             return None, (f"parked until {until[:16].replace('T', ' ')}, and its attempts are used up: freeing it "
                           "brings no new attempt; a run after the parking hands it to the owner"
                           + (", then --paid" if generated else ""))
         return "unpark", None
-    from . import unjudged
-    if fid in unjudged.stopped(ctx):
-        return None, (f"stopped after runs without a figure verdict: "
-                      f"school-notes status --clear {ctx.name} unjudged --continue")
     return None, "not waiting for the owner and not parked: the next fix run works on it; nothing to reopen"
 
 
@@ -66,7 +70,8 @@ def _parked_until(ctx, key) -> str | None:
     return read_json(fix_progress.path(ctx), {}).get(key) if key in fix_progress.parked(ctx) else None
 
 
-def _used_up(ctx, entry, generated) -> bool:
+def used_up(ctx, entry, generated) -> bool:
+    """The figure's attempts are used up: freeing it from parking brings no new attempt."""
     if generated:
         return paid_used_up(ctx, entry["commission"]["id"])
     return entry["runs"] >= 3 and not entry.get("review_pending")

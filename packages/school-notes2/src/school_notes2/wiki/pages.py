@@ -75,16 +75,16 @@ def subjects(repo: Path) -> list[str]:
                   if rel.split("/")[1] != "assets")
 
 
-def _blank(match: re.Match) -> str:
+def blank(match: re.Match) -> str:
     # Keep line numbers stable while hiding the text from the link scanner.
     return re.sub(r"[^\n]", " ", match.group(0))
 
 
 def links(text: str) -> list[Link]:
     """Inline links and images outside code and HTML comments, with 1-based line numbers."""
-    body = CODE_FENCE.sub(_blank, text)
-    body = COMMENT.sub(_blank, body)
-    body = INLINE_CODE.sub(_blank, body)
+    body = CODE_FENCE.sub(blank, text)
+    body = COMMENT.sub(blank, body)
+    body = INLINE_CODE.sub(blank, body)
     found = []
     for m in LINK.finditer(body):
         target, _, fragment = m.group("target").strip("<>").partition("#")

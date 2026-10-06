@@ -13,7 +13,7 @@ from pathlib import Path
 
 from ..state import safefs
 from . import decisions, drafts, frontmatter, lesson_log, markers
-from .pages import CODE_FENCE, _blank, links, resolve
+from .pages import CODE_FENCE, COMMENT, INLINE_CODE, blank, links, resolve
 
 TYPES_WITH_CHAPTER = ("topic", "chapter-summary")
 LESSON_SUFFIX = "-jegyzet.md"
@@ -37,10 +37,16 @@ BLOCKING = "blocking"
 CONFLICT = re.compile(r"^(<<<<<<<|>>>>>>>)( |$)", re.M)
 TAG = re.compile(r"^(?=.*[a-z])[a-z0-9-]+(/[a-z0-9-]+)*$")
 FILE_NAME = re.compile(r"^[a-z0-9][a-z0-9-]*\.md$")
-# The 🔖 textbook pointer up to the next middle dot, tag or line end (fix-52).
-TEXTBOOK = re.compile(r"🔖([^·<\n]*)")
+# One 🔖 textbook pointer: up to the next 🔖, tag or line end, or a middle dot that starts the
+# next emoji label (`· 🗓️ Óra: …`); a middle dot inside the pointer (`A reformáció · 45-47.
+# oldal`) does not end it (fix-52b).
+TEXTBOOK = re.compile(r"🔖((?:(?!·\s*[\u2600-\u27bf\U0001f300-\U0001faff])[^🔖<\n])*)")
+# A lesson or page number: any digit, or a Roman numeral with "fejezet"/"lecke" (`III. fejezet`,
+# `lecke IV`). Machine signs only, the words are never interpreted.
+TEXTBOOK_NUMBER = re.compile(r"\d|\b[IVXLC]+\.?\s+(?i:fejezet|lecke)|(?i:fejezet|lecke)\s+[IVXLC]+\b")
 TEXTBOOK_MESSAGE = ("the 🔖 textbook line names no lesson or page number: give the identified lesson and "
-                    "page, or leave the line out")
+                    "page, or state that the learner's textbook (named by its grade) does not cover the topic, "
+                    "or leave the line out")
 
 
 def item(file: str, line: int | None, message: str, severity: str = "error", kind: str | None = None) -> dict:
@@ -322,14 +328,15 @@ def check_files(repo: Path, paths: list[str], *, today: date | None = None, fs=s
 
 
 def textbook_lines(rel: str, text: str) -> list[int]:
-    """Lines of a subject page whose 🔖 textbook pointer has no digit at all (fix-52). Only
-    the presence of a lesson or page number is looked at, never the words; the root legend
-    and the indexes explain the line and are not checked."""
+    """Lines of a subject page with a 🔖 textbook pointer that has no lesson or page number
+    (fix-52). Every pointer of a line is looked at on its own; only the presence of a number
+    counts, never the words. Code and HTML comments are not visible text; the root legend and
+    the indexes explain the line and are not checked."""
     if rel.count("/") < 2 or rel.endswith("/index.md"):
         return []
-    body = CODE_FENCE.sub(_blank, text)
+    body = INLINE_CODE.sub(blank, COMMENT.sub(blank, CODE_FENCE.sub(blank, text)))
     return [n for n, line in enumerate(body.split("\n"), start=1)
-            if any(not re.search(r"\d", part) for part in TEXTBOOK.findall(line))]
+            if any(not TEXTBOOK_NUMBER.search(part) for part in TEXTBOOK.findall(line))]
 
 
 def check_learning(repo: Path, rel: str, page: frontmatter.Page, *, fs=safefs) -> list[dict]:

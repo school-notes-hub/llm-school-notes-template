@@ -70,7 +70,21 @@ def collect(ctx, now=None):
                 "figure:" + e["commission"]["id"] + " (--paid)" for e in pending
                 if e["owner_required"] and figures.generated(ctx.notes_path, e["commission"])
                 and paid_used_up(ctx, e["commission"]["id"])),
+            "parked_figures": parked_figures(ctx, pending),
             "last_round": read_json(ctx.cfg.state_dir / "round.json", {}).get("finished")}
+
+
+def parked_figures(ctx, pending) -> list[str]:
+    """Parked figures that `--reopen figure:<id>` frees without a paid frame (fix-52b): not
+    with the owner, not stopped by unjudged runs (that stop has its own `--clear`), and with
+    attempts left."""
+    from . import fix_progress, unjudged
+    from .reopen_targets import used_up
+    parked, stopped = fix_progress.parked(ctx), set(unjudged.stopped(ctx))
+    return sorted("figure:" + e["commission"]["id"] for e in pending
+                  if not e["owner_required"] and "figure:" + e["commission"]["id"] in parked
+                  and e["commission"]["id"] not in stopped
+                  and not used_up(ctx, e, figures.generated(ctx.notes_path, e["commission"])))
 
 
 def _reopen(ctx):
@@ -190,6 +204,9 @@ def render(data):
         lines.append(f"    Ha az akadály megszűnt: school-notes status --reopen {data['name']} <…>; "
                      f"újranyitható: {', '.join(data['reopenable'])}. Tulajdonosi döntéssel lezárás: "
                      f"school-notes status --close {data['name']} <tétel>… --note \"<indok>\".")
+    if data.get("parked_figures"):
+        lines.append(f"    Parkoló ábra (fizetős keret nélkül feloldható): school-notes status --reopen {data['name']} "
+                     f"{' '.join(data['parked_figures'])}")
     if data.get("reopen"):
         lines.append(f"  Újranyitásra vár (a következő javító futás végzi): {', '.join(data['reopen'])}.")
     lines.append(f"  Képkeret: {data['budget']}.")

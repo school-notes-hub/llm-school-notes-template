@@ -2,7 +2,8 @@
 (a placeholder such as "the lesson is not identified yet" on the public site). The check
 warns on the pages a run changes; this scan makes each such page a machine item of the next
 fix run, so the lines already there come out too. The tool only states the fact (page, line);
-the writer gives the identified lesson and page or leaves the line out. One item per page:
+the writer gives the identified lesson and page, states that the learner's textbook does not
+cover the topic, or leaves the line out. One item per page:
 a page that already has an item (any status) gets no second one, so nothing comes back run
 after run."""
 
@@ -12,10 +13,12 @@ from ..wiki.check import textbook_lines
 from ..wiki.pages import wiki_pages
 
 PREFIX = "textbook-line:"
-PROBLEM = ("Tankönyvi sor lecke- és oldalszám nélkül: „{quote}”. A `🔖 Tankönyv:` sor csak azonosított "
-           "leckével és oldalszámmal áll. Ha a lecke azonosítható, add meg a leckét és az oldalt; ha nem, "
-           "töröld a sort (a hiány a bizonyítékrekordba, és ha a tanuló segíthet, a nyitott kérdések közé "
-           "kerül). Az oldal minden ilyen sorára vonatkozik.")
+PROBLEM = ("Tankönyvi sor lecke- és oldalszám nélkül: „{quote}”. A `🔖 Tankönyv:` sor vagy azonosított "
+           "leckét és oldalt ad, vagy kimondja, hogy a tanuló tankönyve a témát nem tárgyalja (a könyvet "
+           "évfolyamával megnevezve, például „a 9. évfolyamos tankönyv ezt a témát nem tárgyalja”). Ha a lecke "
+           "azonosítható, add meg a leckét és az oldalt; ha a könyv a témát nem tárgyalja, ezt írd; ha egyik sem "
+           "állapítható meg, töröld a sort (a hiány a bizonyítékrekordba, és ha a tanuló segíthet, a nyitott "
+           "kérdések közé kerül). Az oldal minden ilyen sorára vonatkozik.")
 
 
 def places(repo) -> list[dict]:

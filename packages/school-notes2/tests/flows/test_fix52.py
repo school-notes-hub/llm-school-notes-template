@@ -223,7 +223,7 @@ def test_an_empty_textbook_line_becomes_one_machine_item_per_page(world):
     assert len(items) == 1
     detail = relations.inventory(ctx.notes_path)["items"][items[0]["key"]]
     assert detail["file"] == TOPIC and detail["hit_id"] == f"textbook-line:{TOPIC}" and detail["quote"] == EMPTY
-    assert "csak azonosított leckével és oldalszámmal áll" in (ctx.notes_path / items[0]["file"]).read_text()
+    assert "vagy azonosított leckét és oldalt ad" in (ctx.notes_path / items[0]["file"]).read_text()
     assert textbook_lines.new(ctx.notes_path) == []
     rel = items[0]["file"]                                   # a closed item never brings the page back
     safefs.write_text(ctx.notes_path, rel, safefs.read_text(ctx.notes_path, rel).replace(
@@ -235,8 +235,10 @@ def test_an_empty_textbook_line_becomes_one_machine_item_per_page(world):
 def test_the_writer_prompts_and_rules_leave_an_unidentified_textbook_line_out(role):
     from pathlib import Path
     from school_notes2.llm import argv
-    assert "A `🔖 Tankönyv:` sor csak azonosított leckével és oldalszámmal áll; ha a lecke nem azonosítható, " \
-           "a sor elmarad" in argv.prompt(role, "file", grade=9)
+    text = argv.prompt(role, "file", grade=9)
+    assert "A `🔖 Tankönyv:` sor vagy azonosított leckét és oldalt ad, vagy kimondja, hogy a tanuló tankönyve " \
+           "a témát nem tárgyalja" in text and "„a 9. évfolyamos tankönyv ezt a témát nem tárgyalja”" in text
+    assert "Ha egyik sem állapítható meg, a sor elmarad" in text
     root = Path(__file__).resolve().parents[4]
-    assert "The `🔖 Tankönyv:` line stands only with an identified lesson and page." in (
-        root / "instructions/note-formatting.md").read_text(encoding="utf-8")
+    assert "The `🔖 Tankönyv:` line either gives an identified lesson and page, or states that the learner's " \
+           "textbook does not cover the topic" in (root / "instructions/note-formatting.md").read_text(encoding="utf-8")
