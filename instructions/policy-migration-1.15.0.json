@@ -83,9 +83,9 @@
       "heading": "Sources",
       "destination": "instructions/sources-and-evidence.md",
       "source_sha256": "666eba81e2908049ac684ac9238acd1008b77d14afc370bec536d9045bb5c503",
-      "migrated_sha256": "f9baef50aea3f4b2e8ecbb17077c730feef6152a69a506a5d0348e809f08898e",
+      "migrated_sha256": "5548054d22bf6230ac10e96f6a8376fdb03a6db5dbad03feb0e9964ab5f01c68",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
-      "updated_in": "1.16.1: original teaching files stay on Drive; 1.16.2: the public view leaves out links and citations of private files; 1.17.0: neutral catch-up wording, private source observations, explicit teacher-image permission/request route"
+      "updated_in": "1.16.1: original teaching files stay on Drive; 1.16.2: the public view leaves out links and citations of private files; 1.17.0: neutral catch-up wording, private source observations, explicit teacher-image permission/request route; 1.21.7: a factual question is checked on the web before it is left open; the reliable source in a footnote of its own"
     },
     {
       "heading": "References",
@@ -107,9 +107,9 @@
       "heading": "Content rules",
       "destination": "instructions/content-and-curriculum.md",
       "source_sha256": "fb9b41871eef463014980a429f09a3829ff52863aa004db22e05debaeedc8683",
-      "migrated_sha256": "62a303dfa136427707fba227dba284e781a8522828cd396d6f26b08f10fc277d",
+      "migrated_sha256": "0cc83f340bfc7baf34e3b43cb31c1dc9fed4e985b5a4b886a06b0a910b3bf613",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
-      "updated_in": "1.17.0: remove transcription and plain-language exemption; teach corrected content, model-free labels, integrate updates, subject-only quiz"
+      "updated_in": "1.17.0: remove transcription and plain-language exemption; teach corrected content, model-free labels, integrate updates, subject-only quiz; 1.21.7: Never invent facts refers to the web check"
     },
     {
       "heading": "Curriculum-aware learning",
@@ -122,9 +122,9 @@
       "heading": "Workflows",
       "destination": "instructions/wiki-workflows.md",
       "source_sha256": "4002b650b71d3afec1c296105ed32cc47d22be691ef1ca640204d1a696c97abc",
-      "migrated_sha256": "76b4a784c204f1eee515aa4665c4e16e11163769959331305246cf3b3e6f79bc",
+      "migrated_sha256": "814fe28c17ee8298fff7c95216dcef29afd193ccb783257c1bfe1e8b4fc1084f",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
-      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: public-safe anchored questions/decisions; private readings and coverage; independent reader check before machine list; 1.18.2: in a tool run the build checks formulas; MCP check checks delimiters only; 1.19.0: banner and infographic are generated images; pending figures and the recheck scope in a correction; 2.5.1 (fix-45): fix-mode checks cover every own change, including necessary edits on other pages; 2.6.1 (fix-49): the nightly reviewer reads the wiki diff of every commit and decides; a writer question in a fix call is an owner item; the 24-hour no-progress brake; the owner reopens what waits for him"
+      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: public-safe anchored questions/decisions; private readings and coverage; independent reader check before machine list; 1.18.2: in a tool run the build checks formulas; MCP check checks delimiters only; 1.19.0: banner and infographic are generated images; pending figures and the recheck scope in a correction; 2.5.1 (fix-45): fix-mode checks cover every own change, including necessary edits on other pages; 2.6.1 (fix-49): the nightly reviewer reads the wiki diff of every commit and decides; a writer question in a fix call is an owner item; the 24-hour no-progress brake; the owner reopens what waits for him; 1.21.7: a fact in doubt is checked on the web; an open question settled that way is removed without a decisions entry"
     },
     {
       "heading": "Choosing and replacing authored visuals",
