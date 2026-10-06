@@ -58,6 +58,9 @@ def nightly(ctx: Ctx) -> int:
         return 1
     finally:
         ctx.log = original_log
+        # The report was pushed from the review worktree: the notes worktree follows (fix-51).
+        from . import notes_sync
+        notes_sync.catch_up(ctx)
         lock.release()
 
 

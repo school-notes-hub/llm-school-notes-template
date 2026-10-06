@@ -66,6 +66,10 @@ def clear(ctx: Ctx, kind: str, action: str) -> str:
     lock.acquire("discard", on_wait=lambda h: print(f"várok a zárra ({h.get('kind')})…"))
     try:
         discard(ctx, task)
+        if task.kind == "review":
+            # A timeout report was pushed from the review worktree (fix-51).
+            from . import notes_sync
+            notes_sync.catch_up(ctx)
     finally:
         lock.release()
     return f"{task.run_id}: eldobva"

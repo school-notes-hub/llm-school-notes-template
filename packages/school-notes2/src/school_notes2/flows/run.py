@@ -66,6 +66,9 @@ def run(ctx: Ctx) -> int:
                         mailer=ctx.mailer)
         return 1
     finally:
+        # A Drive check or a release may have fetched a newer origin/main (fix-51).
+        from . import notes_sync
+        notes_sync.catch_up(ctx)
         lock.release()
 
 

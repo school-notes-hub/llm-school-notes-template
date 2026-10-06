@@ -351,6 +351,15 @@ def generation_job(ledger, job):
     return job, changed
 
 
+def current_frame(entry):
+    """Attempts since the owner's last explicit exception (a `grants` record: a new frame of
+    max_attempts); every attempt without one. The attempt bound counts only these."""
+    grants = entry.get('grants') or []
+    if not grants:
+        return list(entry['attempts'])
+    return [a for a in entry['attempts'] if a['number'] >= grants[-1]['first_attempt']]
+
+
 def current_attempts(entry):
     start = entry['variants'][-1]['first_attempt'] if entry.get('variants') else 1
     return [a for a in entry['attempts'] if a['number'] >= start]
@@ -381,7 +390,7 @@ def run_generate(config, job_path, repair=None, transport=None):
             return {'state': 'needs-review', **last, 'folder': str(attempt_folder(config, job, last))}
         if last and (not repair or last['state'] not in ('generated', 'rejected')):
             raise ValueError('Repair requires a generated or rejected candidate and targeted instructions')
-        if entry and len(counted(entry['attempts'])) >= int(config.get('max_attempts', 3)):
+        if entry and len(counted(current_frame(entry))) >= int(config.get('max_attempts', 3)):
             raise ValueError('Attempt bound reached; select a usable candidate or request a specific exception')
         if repair and not last and not (changed or lost or entry and entry.get('variants')):
             raise ValueError('No initial attempt to repair')
@@ -499,7 +508,7 @@ def revise(config, previous_job_path, job_path, reason):
         if any(a.get('cost_usd') is None or a['state'] == 'unknown'
                for j in ledger['jobs'].values() for a in j['attempts']):
             raise ValueError('Resolve unknown provider charges before revision')
-        if len(counted(entry['attempts'])) >= int(config.get('max_attempts', 3)):
+        if len(counted(current_frame(entry))) >= int(config.get('max_attempts', 3)):
             raise ValueError('Attempt bound reached; a specific exception is required')
         reserve = money(config['reservation_usd'])
         learner_spent = sum((money(a['cost_usd']) for j in ledger['jobs'].values()

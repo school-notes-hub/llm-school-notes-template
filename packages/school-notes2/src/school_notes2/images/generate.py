@@ -93,7 +93,39 @@ def _blocked(settings: ImageSettings, job_id: str, *, repairing: bool = False) -
 
 
 def attempts_used(entry: dict) -> int:
-    return sum(1 for a in entry["attempts"] if a["state"] not in ("failed", "unknown"))
+    """Paid attempts of the current frame: an owner grant starts a new one (fix-51)."""
+    return sum(1 for a in frame(entry) if a["state"] not in ("failed", "unknown"))
+
+
+def frame(entry: dict) -> list[dict]:
+    """The attempts since the owner's last grant; all of them without a grant. The same rule
+    as `current_frame` in tools/learning_image.py, which enforces the bound."""
+    grants = entry.get("grants") or []
+    if not grants:
+        return list(entry["attempts"])
+    return [a for a in entry["attempts"] if a["number"] >= grants[-1]["first_attempt"]]
+
+
+def grant(settings: ImageSettings, plan_id: str, request_id: str) -> dict | None:
+    """The owner's explicit approval opens one new frame of `max_attempts` paid attempts for an
+    image; the old attempts and their costs stay in the ledger, the budgets still apply. Once
+    per request (a repeated run preparation grants nothing). Returns (grant, new) or None when
+    the image has no ledger entry."""
+    from ..log import now_iso
+    from ..state.files import write_json
+    with images_lock(settings.lock_path, settings.lock_timeout_s):
+        ledger = settings.ledger()
+        entry = ledger.get("jobs", {}).get(plans.job_id(settings.learner, plan_id))
+        if entry is None:
+            return None
+        known = next((g for g in entry.get("grants", []) if g.get("request") == request_id), None)
+        if known is not None:
+            return known, False
+        value = {"request": request_id, "at": now_iso(), "attempts": settings.max_attempts,
+                 "first_attempt": max((a["number"] for a in entry["attempts"]), default=0) + 1}
+        entry.setdefault("grants", []).append(value)
+        write_json(settings.state_dir / "ledger.json", ledger)
+        return value, True
 
 
 def exhausted(entry: dict, maximum: int) -> bool:

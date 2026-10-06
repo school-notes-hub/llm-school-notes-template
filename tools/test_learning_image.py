@@ -88,6 +88,28 @@ class ExecutorTest(unittest.TestCase):
         self.assertEqual(self.calls, 3)
         self.assertFalse(any((self.repo / 'wiki').rglob('*.webp')))
 
+    def test_owner_grant_opens_one_new_frame_and_keeps_the_old_attempts(self):
+        """Fix-51: only an explicit owner exception (a `grants` record) allows further paid
+        attempts; the old attempts and costs stay, and the new frame is bounded again."""
+        repair = self.root / 'repair.txt'
+        repair.write_text('Correct the title')
+        self.generate()
+        for _ in (2, 3):
+            self.generate(repair)
+        with self.assertRaisesRegex(ValueError, 'Attempt bound'):
+            self.generate(repair)
+        ledger_path = Path(self.config['state_dir']) / 'ledger.json'
+        ledger = m.read(ledger_path)
+        ledger['jobs'][self.job['id']]['grants'] = [{'request': 'reopen-x', 'first_attempt': 4, 'attempts': 3}]
+        m.write(ledger_path, ledger)
+        for number in (4, 5, 6):
+            self.assertEqual(self.generate(repair)['number'], number)
+        with self.assertRaisesRegex(ValueError, 'Attempt bound'):
+            self.generate(repair)
+        entry = m.read(ledger_path)['jobs'][self.job['id']]
+        self.assertEqual([a['number'] for a in entry['attempts']], [1, 2, 3, 4, 5, 6])
+        self.assertEqual(self.calls, 6)
+
     def report(self, result, decision='accepted'):
         p=self.root/'review.json'
         m.write(p, {'sha256':result['sha256'],'verifier':'test','checked_at':m.now(),'observed':'Synthetic near-white test image, not teaching content','decision':decision,'checks':dict.fromkeys(m.CHECKS,'pass'),'material_defects':['test rejection'] if decision=='rejected' else []})

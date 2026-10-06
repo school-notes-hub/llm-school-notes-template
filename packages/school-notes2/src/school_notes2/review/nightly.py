@@ -103,10 +103,12 @@ def commits(repo: Git, base: str, head: str) -> list[dict]:
 
 
 def open_closures(work: Path) -> list[dict]:
-    """Writer closures no independent check has judged yet, read from the item records."""
+    """Writer closures no independent check has judged yet, read from the item records. The
+    owner's own closure (`status --close`, fix-51) is a decision, not a writer closure."""
     found = []
     for key, item in relations.inventory(work)["items"].items():
-        if (item["status"] == "fixed" and not item.get("recheck") and not item.get("nightly")) or (
+        if (item["status"] == "fixed" and not item.get("recheck") and not item.get("nightly")
+                and not item.get("owner_closed")) or (
                 item["status"] == "disagree" and not item.get("response")):
             found.append({**item, "key": key})
     return found

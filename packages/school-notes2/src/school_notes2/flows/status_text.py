@@ -65,14 +65,17 @@ def collect(ctx, now=None):
             "round_pending": round_pending(ctx), "reopen": _reopen(ctx),
             "reopenable": sorted(i["key"] for i in items if i["status"] == "owner") + sorted(
                 "figure:" + e["commission"]["id"] for e in pending
-                if e["owner_required"] and not figures.generated(ctx.notes_path, e["commission"])),
+                if e["owner_required"] and not figures.generated(ctx.notes_path, e["commission"])) + sorted(
+                "figure:" + e["commission"]["id"] + " (--paid)" for e in pending
+                if e["owner_required"] and figures.generated(ctx.notes_path, e["commission"])),
             "last_round": read_json(ctx.cfg.state_dir / "round.json", {}).get("finished")}
 
 
 def _reopen(ctx):
     """Requests a coming run applies; a finished run's request is no longer shown."""
     from .reopen import waiting
-    return [target for value in waiting(ctx)[0] for target in value["items"] + ["figure:" + f for f in value["figures"]]]
+    return [target for value in waiting(ctx)[0] for target in value["items"] + ["figure:" + f for f in value["figures"]]
+            + [key + " (lezárás)" for key in value.get("close", [])]]
 
 
 def task_error(task):
@@ -183,7 +186,8 @@ def render(data):
     lines += [f"    A jegyzetíró kérdése ({', '.join(keys)}): {text}" for keys, text in data.get("questions", [])]
     if data.get("reopenable"):
         lines.append(f"    Ha az akadály megszűnt: school-notes status --reopen {data['name']} <…>; "
-                     f"újranyitható: {', '.join(data['reopenable'])}.")
+                     f"újranyitható: {', '.join(data['reopenable'])}. Tulajdonosi döntéssel lezárás: "
+                     f"school-notes status --close {data['name']} <tétel>… --note \"<indok>\".")
     if data.get("reopen"):
         lines.append(f"  Újranyitásra vár (a következő javító futás végzi): {', '.join(data['reopen'])}.")
     lines.append(f"  Képkeret: {data['budget']}.")

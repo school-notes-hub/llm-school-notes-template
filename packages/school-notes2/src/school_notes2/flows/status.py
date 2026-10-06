@@ -48,6 +48,7 @@ def summary(ctx: Ctx) -> dict:
         "needs_owner": [{"kind": t.kind, "run_id": t.run_id, **t.data["needs_owner"]}
                         for t in tasks if t.open and t.data.get("needs_owner")],
         "worktree_dirty_outside_run": _dirty_outside_run(ctx, tasks),
+        "notes_behind": _behind(ctx),
         "drive": read_json(ctx.cfg.state_dir / ctx.name / "last-run.json", {}),
         "images": _images(ctx),
         "review_items": _review_items(ctx),
@@ -100,6 +101,11 @@ def _dirty_outside_run(ctx: Ctx, tasks: list[phase.Task]) -> bool:
         return workbranch.worktree_dirty(ctx.worktree("notes"))
     except Exception:  # noqa: BLE001 - status never fails on a missing worktree
         return False
+
+
+def _behind(ctx: Ctx) -> int:
+    from .notes_sync import behind
+    return behind(ctx) or 0
 
 
 def _images(ctx: Ctx) -> dict:
@@ -232,6 +238,9 @@ def render(data: dict) -> str:
         lines.append(f"TULAJDONOSRA VÁR ({n['kind']} {n['run_id']}): {n['reason']} → {n['todo']}")
     if data["worktree_dirty_outside_run"]:
         lines.append("futáson kívüli változás a notes worktree-ben (school-notes chat)")
+    if data.get("notes_behind"):
+        lines.append(f"a notes worktree {data['notes_behind']} committal az origin/main mögött; a fenti számok "
+                     "a régi állapotot mutatják, a következő futás vagy éjszakai review előreállítja")
     drive = data["drive"]
     if drive:
         lines.append(f"Drive ({drive.get('at')}): kész {len(drive.get('ready', []))}, "

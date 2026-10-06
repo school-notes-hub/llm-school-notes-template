@@ -51,6 +51,11 @@ def _parser() -> argparse.ArgumentParser:
     status.add_argument("--clear", nargs=2, metavar=("LEARNER", "KIND"))
     status.add_argument("--reopen", nargs="+", metavar="LEARNER TARGET",
                         help="docs/review/<file>.md#R<n> or figure:<id>, waiting for the owner")
+    status.add_argument("--paid", action="store_true",
+                        help="with --reopen: the owner approves one new frame of paid attempts for a generated image")
+    status.add_argument("--close", nargs="+", metavar="LEARNER TARGET",
+                        help="docs/review/<file>.md#R<n> waiting for the owner: fixed by the owner's decision")
+    status.add_argument("--note", help="with --close: the owner's reason, one line")
     action = status.add_mutually_exclusive_group()
     action.add_argument("--continue", dest="action", action="store_const", const="continue")
     action.add_argument("--discard", dest="action", action="store_const", const="discard")
@@ -164,9 +169,16 @@ def _status(cfg, args, context) -> int:
         if len(args.reopen) < 2:
             raise SystemExit("usage: status --reopen <learner> <docs/review/<file>.md#R<n> | figure:<id>>...")
         from .flows import reopen
-        result = reopen.request(context.make(cfg, args.reopen[0]), args.reopen[1:])
-        if isinstance(result, int):
-            return result
+        result = reopen.request(context.make(cfg, args.reopen[0]), args.reopen[1:], paid=args.paid)
+        print(result)
+        return 1 if result.startswith("Nem rögzítettem") else 0
+    if args.paid:
+        raise SystemExit("--paid belongs to --reopen")
+    if args.close:
+        if len(args.close) < 2 or not args.note:
+            raise SystemExit('usage: status --close <learner> <docs/review/<file>.md#R<n>>... --note "<text>"')
+        from .flows import reopen
+        result = reopen.close(context.make(cfg, args.close[0]), args.close[1:], args.note)
         print(result)
         return 1 if result.startswith("Nem rögzítettem") else 0
     learners = [args.learner] if args.learner else list(cfg.students)
