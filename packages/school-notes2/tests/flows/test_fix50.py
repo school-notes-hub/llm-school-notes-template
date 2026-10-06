@@ -124,6 +124,44 @@ def test_an_orphan_figure_place_becomes_one_machine_item(world):
     assert orphan_places.new(ctx.notes_path) == []
 
 
+def test_a_marker_waiting_for_a_licence_is_not_an_orphan_place(world):
+    """Review M1: a `figure-request` marker waits for its licence in docs/figure-requests.json."""
+    from school_notes2.figures import licenses, requests
+    from school_notes2.flows import orphan_places
+    from school_notes2.state import safefs
+    ctx, _ = world
+    _orphan(ctx)
+    repo = ctx.notes_path
+    source = "sources/m/grafok.png"
+    safefs.write_bytes(repo, source, b"PNG")
+    safefs.write_text(repo, ORPHAN_PAGE, safefs.read_text(repo, ORPHAN_PAGE).replace(
+        ORPHAN, "<!-- figure-request: grafok-engedely -->"))
+    request = {"id": "grafok-engedely", "page": ORPHAN_PAGE, "source": source, "crop": "0,0,10,10",
+               "purpose": "Gráf", "origin": "third-party"}
+    safefs.write_json(repo, requests.PATH, requests.collect(repo, [request], [{"path": source, "original_sha256": "a" * 64}]))
+    before = safefs.read_bytes(repo, requests.PATH)
+    [active] = requests.active(repo)
+    assert active["id"] == "grafok-engedely" and licenses.permission(repo, active) is None   # licence pending
+    assert orphan_places.places(repo) == [] and orphan_places.new(repo) == []
+    assert safefs.read_bytes(repo, requests.PATH) == before
+    assert "<!-- figure-request: grafok-engedely -->" in safefs.read_text(repo, ORPHAN_PAGE)
+
+
+def test_a_repeated_marker_on_one_page_is_one_place_and_the_quote_is_its_line(world):
+    """Review m1 and m2: one item per key, and line and quote come from the same split."""
+    from school_notes2.flows import orphan_places
+    from school_notes2.state import safefs
+    ctx, _ = world
+    _orphan(ctx)
+    repo = ctx.notes_path
+    # A form feed is a line break for str.splitlines() but not for the line count.
+    safefs.write_text(repo, ORPHAN_PAGE, safefs.read_text(repo, ORPHAN_PAGE).replace(
+        "# G\n", "# G \x0c fej\n") + f"\nMég.\n\n{ORPHAN}\n")
+    every = orphan_places.places(repo)
+    assert every == [{"id": "grafok-fejlec", "page": ORPHAN_PAGE, "line": 8, "quote": ORPHAN}]
+    assert len({orphan_places.key(p) for p in every}) == len(every)
+
+
 def test_an_orphan_place_alone_starts_a_fix_run(tmp_path, held, monkeypatch):
     from types import SimpleNamespace
     from school_notes2.flows import fix

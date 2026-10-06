@@ -16,21 +16,29 @@ PROBLEM = ("Árva ábrahely: a(z) `{marker}` jelölőhöz nem tartozik függő �
            "be); ha a jelölő elavult, távolítsd el.")
 
 
+REQUEST = "<!-- figure-request: "
+
+
 def places(repo) -> list[dict]:
-    """Every orphan place, in page/line order: {id, page, line, quote}."""
+    """Every orphan place, in page/line order: {id, page, line, quote}. A `figure-request`
+    marker is never an orphan place: it waits for a licence through docs/figure-requests.json.
+    A marker id repeated on one page is one place (its first line), so one item per key."""
     from .work_pending import missing_parts
     if migration_gate.blocked(repo):
         return []
     missing, _ = missing_parts(repo)
     queued = {e["commission"]["id"] for e in pending.load(repo)}
     found = commissions.markers(repo)
-    out = []
+    out = {}
     for fid in sorted(missing - queued):
-        for page, position in found.get(fid, []):
+        for page, position in sorted(found.get(fid, [])):
             text = safefs.read_text(repo, page)
+            if text.startswith(REQUEST, position):
+                continue
             line = text.count("\n", 0, position) + 1
-            out.append({"id": fid, "page": page, "line": line, "quote": text.splitlines()[line - 1].strip()})
-    return sorted(out, key=lambda p: (p["page"], p["line"], p["id"]))
+            place = {"id": fid, "page": page, "line": line, "quote": text.split("\n")[line - 1].strip()}
+            out.setdefault(key(place), place)
+    return sorted(out.values(), key=lambda p: (p["page"], p["line"], p["id"]))
 
 
 def key(place) -> str:
