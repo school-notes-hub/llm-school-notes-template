@@ -41,14 +41,18 @@ class StudentLock:
             os.close(fd)
         return True
 
-    def acquire(self, kind: str, poll_s: float = 5.0, on_wait=None) -> None:
-        """Blocking acquire for `chat` and `--discard`; `on_wait(holder)` is told who holds it."""
-        told = False
+    def acquire(self, kind: str, poll_s: float = 5.0, on_wait=None, timeout_s: float | None = None) -> bool:
+        """Blocking acquire for `chat` and `--discard`; `on_wait(holder)` is told who holds it.
+        With `timeout_s` it gives up after that long and returns False (fix-52)."""
+        told, deadline = False, None if timeout_s is None else time.monotonic() + timeout_s
         while not self.try_acquire(kind):
+            if deadline is not None and time.monotonic() >= deadline:
+                return False
             if on_wait and not told:
                 on_wait(self.holder())
                 told = True
             time.sleep(poll_s)
+        return True
 
     def _held(self, fd: int, kind: str) -> None:
         os.set_inheritable(fd, True)

@@ -59,6 +59,8 @@ Use a small metadata line. When lesson date and textbook location apply to the s
 <sub>🗓️ Óra: 2026-09-11 · 🔖 Tankönyv: 1. lecke, 12-13. oldal.</sub>
 ```
 
+The `🔖 Tankönyv:` line stands only with an identified lesson and page. When the lesson cannot be identified, leave the line out; a placeholder such as "a kapcsolódó lecke még nincs azonosítva" tells the learner nothing. The gap goes to the private evidence record, or to the open questions when the learner can help. The check warns about a 🔖 line without any lesson or page number, and the next fix run makes such a page an item.
+
 Use one standalone `<br />` between substantial sections or adjacent callout blocks where needed for the agreed spacious layout. Avoid stacked breaks and a break immediately after a heading. Place a passage's label before the larger gap so it remains visibly attached to that passage. Do not shrink teaching prose, use custom CSS/colors or replace searchable labels with badge images. Rendered size and theme remain the viewer's choice.
 
 ## Expandable self-tests

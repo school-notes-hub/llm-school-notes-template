@@ -13,7 +13,7 @@ from pathlib import Path
 
 from ..state import safefs
 from . import decisions, drafts, frontmatter, lesson_log, markers
-from .pages import CODE_FENCE, links, resolve
+from .pages import CODE_FENCE, _blank, links, resolve
 
 TYPES_WITH_CHAPTER = ("topic", "chapter-summary")
 LESSON_SUFFIX = "-jegyzet.md"
@@ -37,6 +37,10 @@ BLOCKING = "blocking"
 CONFLICT = re.compile(r"^(<<<<<<<|>>>>>>>)( |$)", re.M)
 TAG = re.compile(r"^(?=.*[a-z])[a-z0-9-]+(/[a-z0-9-]+)*$")
 FILE_NAME = re.compile(r"^[a-z0-9][a-z0-9-]*\.md$")
+# The 🔖 textbook pointer up to the next middle dot, tag or line end (fix-52).
+TEXTBOOK = re.compile(r"🔖([^·<\n]*)")
+TEXTBOOK_MESSAGE = ("the 🔖 textbook line names no lesson or page number: give the identified lesson and "
+                    "page, or leave the line out")
 
 
 def item(file: str, line: int | None, message: str, severity: str = "error", kind: str | None = None) -> dict:
@@ -310,10 +314,22 @@ def check_files(repo: Path, paths: list[str], *, today: date | None = None, fs=s
         out += check_meta(repo, rel, page.meta, fs=fs)
         out += check_learning(repo, rel, page, fs=fs)
         out += check_links(repo, rel, text, fs=fs)
+        out += [item(rel, line, TEXTBOOK_MESSAGE, "warning") for line in textbook_lines(rel, text)]
     if fs is safefs and not errors(out):
         out += [item(rel, None, message, "warning")
                 for rel, message in drafts.warnings(repo, today or date.today(), paths=paths)]
     return out + check_renders(repo, fs=fs)
+
+
+def textbook_lines(rel: str, text: str) -> list[int]:
+    """Lines of a subject page whose 🔖 textbook pointer has no digit at all (fix-52). Only
+    the presence of a lesson or page number is looked at, never the words; the root legend
+    and the indexes explain the line and are not checked."""
+    if rel.count("/") < 2 or rel.endswith("/index.md"):
+        return []
+    body = CODE_FENCE.sub(_blank, text)
+    return [n for n, line in enumerate(body.split("\n"), start=1)
+            if any(not re.search(r"\d", part) for part in TEXTBOOK.findall(line))]
 
 
 def check_learning(repo: Path, rel: str, page: frontmatter.Page, *, fs=safefs) -> list[dict]:

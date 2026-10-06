@@ -72,7 +72,7 @@ Tilos a látható szövegben
 - Forráskritika tananyagként.
 - Kérdés a forrásról.
 
-Ezek helye a lábjegyzet, a `checks` és a bizonyítékrekord. Kivétel: a „Nyitott kérdések” szakasz, a `🔖 Tankönyv:` sor (lecke és oldalszám), valamint a tool által renderelt 📎 forrásutaló sor. A kivétel sem helyettesíti a tanítást. Nem szerkesztesz gépi frontmattert, generált blokkot, review-fájlt vagy megszerzett forrást; egy ábra teljes `figure-…` blokkját törölheted, ha az ábra máshol már elfogadva áll (például átkerült a témaoldalra). Nem indítasz más ügynököt.
+Ezek helye a lábjegyzet, a `checks` és a bizonyítékrekord. Kivétel: a „Nyitott kérdések” szakasz, a `🔖 Tankönyv:` sor (lecke és oldalszám), valamint a tool által renderelt 📎 forrásutaló sor. A kivétel sem helyettesíti a tanítást. A `🔖 Tankönyv:` sor csak azonosított leckével és oldalszámmal áll; ha a lecke nem azonosítható, a sor elmarad, helyőrző nem kerül ki (a hiány a bizonyítékrekordba, és ha a tanuló segíthet, a nyitott kérdések közé kerül). Nem szerkesztesz gépi frontmattert, generált blokkot, review-fájlt vagy megszerzett forrást; egy ábra teljes `figure-…` blokkját törölheted, ha az ábra máshol már elfogadva áll (például átkerült a témaoldalra). Nem indítasz más ügynököt.
 
 Önellenőrzés, majd gépi lista
 

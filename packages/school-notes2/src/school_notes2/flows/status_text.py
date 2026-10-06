@@ -55,6 +55,7 @@ def collect(ctx, now=None):
     items = files.open_items(ctx.notes_path, "interactive") if ctx.notes_path.is_dir() else []
     pending = figures.load(ctx.notes_path) if ctx.notes_path.is_dir() else []
     drive = read_json(ctx.cfg.state_dir / ctx.name / "last-run.json", {})
+    from .reopen_targets import paid_used_up
     from .work_pending import completion
     return {"completion": completion(ctx, tasks=tasks, held=held), "name": ctx.name, "now": now, "held": held, "holder": lock.holder(), "live": live,
             "current": current, "today": today, "errors": sorted(errors, key=lambda e: (e["at"], e["message"])),
@@ -67,7 +68,8 @@ def collect(ctx, now=None):
                 "figure:" + e["commission"]["id"] for e in pending
                 if e["owner_required"] and not figures.generated(ctx.notes_path, e["commission"])) + sorted(
                 "figure:" + e["commission"]["id"] + " (--paid)" for e in pending
-                if e["owner_required"] and figures.generated(ctx.notes_path, e["commission"])),
+                if e["owner_required"] and figures.generated(ctx.notes_path, e["commission"])
+                and paid_used_up(ctx, e["commission"]["id"])),
             "last_round": read_json(ctx.cfg.state_dir / "round.json", {}).get("finished")}
 
 

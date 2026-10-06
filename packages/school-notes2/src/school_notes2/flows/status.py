@@ -18,6 +18,7 @@ from ..state import safefs
 from ..state.files import read_json
 from ..wiki import drafts
 from ..wiki.pages import PageError, subjects as wiki_subjects
+from . import notes_sync
 from .context import Ctx
 
 OPEN_QUESTIONS = re.compile(r"^#+\s.*Nyitott kérdések", re.M)
@@ -49,6 +50,7 @@ def summary(ctx: Ctx) -> dict:
                         for t in tasks if t.open and t.data.get("needs_owner")],
         "worktree_dirty_outside_run": _dirty_outside_run(ctx, tasks),
         "notes_behind": _behind(ctx),
+        "notes_behind_reason": _behind_reason(ctx),
         "drive": read_json(ctx.cfg.state_dir / ctx.name / "last-run.json", {}),
         "images": _images(ctx),
         "review_items": _review_items(ctx),
@@ -106,6 +108,10 @@ def _dirty_outside_run(ctx: Ctx, tasks: list[phase.Task]) -> bool:
 def _behind(ctx: Ctx) -> int:
     from .notes_sync import behind
     return behind(ctx) or 0
+
+
+def _behind_reason(ctx: Ctx) -> str | None:
+    return notes_sync.hindrance(ctx)
 
 
 def _images(ctx: Ctx) -> dict:
@@ -239,8 +245,9 @@ def render(data: dict) -> str:
     if data["worktree_dirty_outside_run"]:
         lines.append("futáson kívüli változás a notes worktree-ben (school-notes chat)")
     if data.get("notes_behind"):
+        step = notes_sync.behind_text(data.get("notes_behind_reason"), data["learner"])
         lines.append(f"a notes worktree {data['notes_behind']} committal az origin/main mögött; a fenti számok "
-                     "a régi állapotot mutatják, a következő futás vagy éjszakai review előreállítja")
+                     f"a régi állapotot mutatják; {step}")
     drive = data["drive"]
     if drive:
         lines.append(f"Drive ({drive.get('at')}): kész {len(drive.get('ready', []))}, "

@@ -25,7 +25,8 @@ def ready(ctx):
         return False
     items, figures = assignments(ctx)
     from .orphan_places import new as orphans
-    if items or orphans(ctx.notes_path) or any(not pending.generated(ctx.notes_path, e["commission"]) or
+    from .textbook_lines import new as textbook_lines
+    if items or orphans(ctx.notes_path) or textbook_lines(ctx.notes_path) or any(not pending.generated(ctx.notes_path, e["commission"]) or
                     correction_figures.awaiting(ctx, e["commission"]) for e in figures) or (
                     figures and not fix_progress.image_wait(ctx, figures)):
         return True

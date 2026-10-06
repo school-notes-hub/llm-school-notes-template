@@ -36,6 +36,14 @@ def _catch_up(ctx) -> str:
     wt = ctx.worktree("notes")
     if not repos.has_ref(wt, MAIN):
         return "current"
+    obstacle = _obstacle(wt)
+    if obstacle:
+        return obstacle
+    wt.run("switch", "--detach", repos.rev(wt, MAIN), timeout=600)
+    return "moved"
+
+
+def _obstacle(wt) -> str | None:
     head, main = repos.rev(wt, "HEAD"), repos.rev(wt, MAIN)
     if head == main:
         return "current"
@@ -43,8 +51,19 @@ def _catch_up(ctx) -> str:
         return "refused_dirty"            # edits outside a run: `school-notes chat` decides
     if not repos.is_ancestor(wt, head, main):
         return "refused_diverged"         # a commit not on origin/main is never left behind
-    wt.run("switch", "--detach", main, timeout=600)
-    return "moved"
+    return None
+
+
+def hindrance(ctx) -> str | None:
+    """Status (read-only): why the idle worktree is not moved forward, `refused_dirty` or
+    `refused_diverged`; None when nothing stops it (fix-52)."""
+    try:
+        if phase.open_task(ctx.task_root(), ctx.name, "notes") is not None:
+            return None
+        found = _obstacle(ctx.worktree("notes"))
+    except Exception:  # noqa: BLE001 - status never fails on a missing worktree or ref
+        return None
+    return found if found in ("refused_dirty", "refused_diverged") else None
 
 
 def behind(ctx) -> int | None:
@@ -57,3 +76,14 @@ def behind(ctx) -> int | None:
         return int(wt.out("rev-list", "--count", f"HEAD..{MAIN}").strip() or 0)
     except Exception:  # noqa: BLE001 - status never fails on a missing worktree or ref
         return None
+
+
+def behind_text(reason: str | None, learner: str) -> str:
+    """Status: what moves the idle notes worktree forward, or what stops it and the owner's step."""
+    chat = f"school-notes chat {learner}"
+    if reason == "refused_diverged":
+        return ("nem állítható elő, mert benne olyan commit van, ami nincs az origin/main-en (a munka "
+                f"megmarad, a gép nem dönt róla); teendő: {chat}")
+    if reason == "refused_dirty":
+        return f"nem állítható elő, mert futáson kívüli, nem commitolt változás van benne; teendő: {chat}"
+    return "a következő futás vagy éjszakai review előreállítja"

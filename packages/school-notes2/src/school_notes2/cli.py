@@ -50,7 +50,7 @@ def _parser() -> argparse.ArgumentParser:
     status.add_argument("--details", action="store_true")
     status.add_argument("--clear", nargs=2, metavar=("LEARNER", "KIND"))
     status.add_argument("--reopen", nargs="+", metavar="LEARNER TARGET",
-                        help="docs/review/<file>.md#R<n> or figure:<id>, waiting for the owner")
+                        help="docs/review/<file>.md#R<n> or figure:<id>, waiting for the owner (a figure only parked is freed)")
     status.add_argument("--paid", action="store_true",
                         help="with --reopen: the owner approves one new frame of paid attempts for a generated image")
     status.add_argument("--close", nargs="+", metavar="LEARNER TARGET",
@@ -165,6 +165,10 @@ def _status(cfg, args, context) -> int:
             return result
         print(result)
         return 0
+    if args.reopen and args.close:
+        raise SystemExit("--reopen and --close are separate commands; give one of them")
+    if args.note is not None and not args.close:
+        raise SystemExit("--note belongs to --close")
     if args.reopen:
         if len(args.reopen) < 2:
             raise SystemExit("usage: status --reopen <learner> <docs/review/<file>.md#R<n> | figure:<id>>...")
@@ -177,8 +181,8 @@ def _status(cfg, args, context) -> int:
     if args.close:
         if len(args.close) < 2 or not args.note:
             raise SystemExit('usage: status --close <learner> <docs/review/<file>.md#R<n>>... --note "<text>"')
-        from .flows import reopen
-        result = reopen.close(context.make(cfg, args.close[0]), args.close[1:], args.note)
+        from .flows import owner_close
+        result = owner_close.close(context.make(cfg, args.close[0]), args.close[1:], args.note)
         print(result)
         return 1 if result.startswith("Nem rögzítettem") else 0
     learners = [args.learner] if args.learner else list(cfg.students)

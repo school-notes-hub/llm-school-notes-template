@@ -66,10 +66,15 @@ def test_a_run_holding_the_worktree_and_stray_edits_are_never_moved(world, tmp_p
     (ctx.notes_path / "wiki/proba/elso.md").write_text("kézi szerkesztés\n", encoding="utf-8")
     assert notes_sync.catch_up(ctx) == "refused_dirty"
     assert (ctx.notes_path / "wiki/proba/elso.md").read_text(encoding="utf-8") == "kézi szerkesztés\n"
-    assert "1 committal az origin/main mögött" in status.render(status.summary(ctx))
+    text = status.render(status.summary(ctx))
+    assert "1 committal az origin/main mögött" in text
+    assert "futáson kívüli, nem commitolt változás van benne; teendő: school-notes chat benedek" in text
     git(ctx.notes_path, "commit", "-qam", "helyi commit")
     local = git(ctx.notes_path, "rev-parse", "HEAD")
     assert notes_sync.catch_up(ctx) == "refused_diverged" and git(ctx.notes_path, "rev-parse", "HEAD") == local
+    text = status.render(status.summary(ctx))                # fix-52: the reason and the owner's step
+    assert "olyan commit van, ami nincs az origin/main-en" in text and "teendő: school-notes chat benedek" in text
+    assert "előreállítja" not in text
     git(ctx.notes_path, "reset", "-q", "--hard", seed)
     assert notes_sync.catch_up(ctx) == "moved" and git(ctx.notes_path, "rev-parse", "HEAD") == main
     assert notes_sync.catch_up(ctx) == "current"
@@ -87,7 +92,7 @@ def test_a_finished_run_leaves_the_worktree_current_without_refusals(world):
 
 def test_an_owner_closure_alone_starts_a_fix_run_that_commits_it(world, tmp_path, monkeypatch):
     """Benedek R2/R4 (owner, 2026-10-06): closed "javítva a toolban"; no other work."""
-    from school_notes2.flows import reopen
+    from school_notes2.flows import owner_close, reopen
     from school_notes2.review import files
     from tests.flows.test_fix49 import REPORT, REVIEW
     ctx, origin, drive, package = world
@@ -100,7 +105,7 @@ def test_an_owner_closure_alone_starts_a_fix_run_that_commits_it(world, tmp_path
     subprocess.run(["git", "-C", str(clone), "push", "-q", "origin", "main"], check=True, env=ENV)
     subprocess.run(["git", f"--git-dir={ctx.cfg.bare(ctx.name)}", "fetch", "-q", "origin",
                     "refs/heads/main:refs/remotes/origin/main"], check=True, env=ENV)
-    assert "1 tétel, javítva" in reopen.close(ctx, [f"{REVIEW}#R38"], "javítva a toolban")
+    assert "1 tétel, javítva" in owner_close.close(ctx, [f"{REVIEW}#R38"], "javítva a toolban")
     assert run_flow.run(ctx) == 0, ctx.cfg.log_path.read_text()[-3000:]
     task = phase.all_tasks(ctx.task_root(), "benedek")[-1]
     assert task.get("mode") == "fix" and task.phase == "done", task.phase

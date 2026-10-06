@@ -4,7 +4,7 @@ attempts), the owner's own closure of an item, and both commands without the VM 
 import json
 import threading
 
-from school_notes2.flows import fix_progress, operation, reopen, status_text
+from school_notes2.flows import fix_progress, operation, owner_close, reopen, status_text
 from school_notes2.images import generate, plans
 from school_notes2.review import files
 from school_notes2.state import phase, safefs
@@ -89,10 +89,10 @@ def test_the_owner_closes_an_item_with_a_note(world):
     from school_notes2.review import nightly
     ctx, _ = world
     _seed(ctx)
-    assert "--note is required" in reopen.close(ctx, [f"{REVIEW}#R38"], "  ")
-    assert "not waiting for the owner (fixed)" in reopen.close(ctx, [f"{REVIEW}#R37"], "x")
+    assert "--note is required" in owner_close.close(ctx, [f"{REVIEW}#R38"], "  ")
+    assert "not waiting for the owner (fixed)" in owner_close.close(ctx, [f"{REVIEW}#R37"], "x")
     assert reopen.load(ctx) == []
-    answer = reopen.close(ctx, [f"{REVIEW}#R38"], "javítva a  toolban\n(2.6.0)")
+    answer = owner_close.close(ctx, [f"{REVIEW}#R38"], "javítva a  toolban\n(2.6.0)")
     assert "1 tétel, javítva" in answer
     [value] = reopen.load(ctx)
     assert value["close"] == [f"{REVIEW}#R38"] and value["note"] == "javítva a toolban (2.6.0)"
@@ -129,7 +129,7 @@ def test_the_commands_need_no_vm_lock_and_wait_for_the_learner_lock(world):
     released.start()
     try:
         assert "1 tétel, 0 ábra" in reopen.request(ctx, [f"{REVIEW}#R38"])
-        assert "1 tétel, javítva" in reopen.close(ctx, [f"{REVIEW}#R38"], "javítva a toolban")
+        assert "1 tétel, javítva" in owner_close.close(ctx, [f"{REVIEW}#R38"], "javítva a toolban")
     finally:
         released.join()
         vm.release()
