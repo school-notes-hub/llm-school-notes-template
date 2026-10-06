@@ -2,6 +2,12 @@
 
 Newest first. Each entry says what changed in the shared files and what an existing wiki must do when it applies the update (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)). A wiki records the version it is on in `PROFILE.md`.
 
+## 1.21.2 - 2026-10-06
+
+- Visual tools (`tools/visual_tools.py`): font and matplotlib caches go to a private temporary directory that is removed after the render; nothing is written under the output folder in `wiki/assets/` except the figure and its render record.
+- School-notes run (fix calls): an item whose figure is a pending figure of the run is worked in that figure's call, so one figure is assigned once; an orphan figure place (a marker with no pending or accepted figure) becomes one machine item: embed an accepted figure with its commission or remove the stale marker – the writer decides. A `figure-request` marker waiting for a licence decision is never such an item.
+- Migration (controller-owned): synchronize the changed shared files through Template updates; no learner content changes.
+
 ## 1.21.1 - 2026-10-06
 
 - School-notes run and Wiki workflows: the rules now describe the 2.6 one-pass run throughout – no in-run correction rounds; P3 or P5 checks every change once; an unchecked page holds the release until a later run rechecks it; a writer question in a fix call becomes an owner item; the nightly reviewer decides from the git diff; an owner item can be reopened by the controller when its obstacle is gone.
