@@ -24,7 +24,8 @@ def ready(ctx):
     if not ctx.notes_path.is_dir():
         return False
     items, figures = assignments(ctx)
-    if items or any(not pending.generated(ctx.notes_path, e["commission"]) or
+    from .orphan_places import new as orphans
+    if items or orphans(ctx.notes_path) or any(not pending.generated(ctx.notes_path, e["commission"]) or
                     correction_figures.awaiting(ctx, e["commission"]) for e in figures) or (
                     figures and not fix_progress.image_wait(ctx, figures)):
         return True
@@ -65,8 +66,15 @@ def completion(ctx, *, tasks=None, held=False):
     else:
         automatic = "lezárult"
     # "Hiányzó kép" is wider than the status's "függő ábra" (the pending queue): it also
-    # counts a figure place no pending figure belongs to and a broken image link.
-    parts = [(len(queued), "függő ábra"), (len(markers - queued), "ábrahely, amely nincs a függő ábrák között"),
+    # counts a figure place no pending figure belongs to and a broken image link. Such an
+    # orphan place becomes a machine item of the next fix run (fix-50/4).
+    from .orphan_places import split
+    fresh, itemized = split(ctx.notes_path) if ctx.notes_path.is_dir() else ([], [])
+    rest = markers - queued - {p["id"] for p in fresh + itemized}
+    parts = [(len(queued), "függő ábra"),
+             (len({p["id"] for p in fresh}), "árva ábrahely, a következő javító futás gépi tételként kiosztja"),
+             (len({p["id"] for p in itemized} - {p["id"] for p in fresh}), "árva ábrahely, amelynek már van gépi tétele"),
+             (len(rest), "ábrahely, amely nincs a függő ábrák között"),
              (len(broken), "törött képlink")]
     detail = "; ".join(f"{count} {label}" for count, label in parts if count)
     return [f"Automatikus feldolgozás: {automatic}",

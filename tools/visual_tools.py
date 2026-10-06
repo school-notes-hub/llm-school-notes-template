@@ -15,6 +15,7 @@ import signal
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 import xml.etree.ElementTree as ET
 
@@ -196,8 +197,7 @@ def render(args, config):
     for file in outputs:
         (out / file).parent.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
-    env.update(VISUAL_OUTPUT_DIR=str(out), PYTHONDONTWRITEBYTECODE='1', MPLBACKEND='Agg',
-               MPLCONFIGDIR=str(out / '.matplotlib'), XDG_CACHE_HOME=str(out / '.cache'))
+    env.update(VISUAL_OUTPUT_DIR=str(out), PYTHONDONTWRITEBYTECODE='1', MPLBACKEND='Agg')
     stdin = None
     if args.engine == 'python':
         command = [sys.executable, str(source)]
@@ -226,6 +226,11 @@ def render(args, config):
     if args.engine == 'plantuml':
         record['plantuml_jar_sha256'] = digest(paths['plantuml_jar'])
     receipt = out / 'render.json'
+    # Font and matplotlib caches go to a private temporary directory outside the output and
+    # are removed afterwards: the output usually lies in the wiki, where a cache file would be
+    # a stray change (fix-50: fontconfig wrote wiki/assets/**/.cache/fontconfig/*.cache-9).
+    cache = Path(tempfile.mkdtemp(prefix='visual-cache-'))
+    env.update(MPLCONFIGDIR=str(cache / 'matplotlib'), XDG_CACHE_HOME=str(cache / 'xdg'))
     try:
         code, stdout, stderr, seconds = run_process(command, out, env, args.timeout, stdin)
         (out / 'stderr.log').write_bytes(stderr)
@@ -249,6 +254,7 @@ def render(args, config):
         record.update(state='failed', error=str(exc))
         raise
     finally:
+        shutil.rmtree(cache, ignore_errors=True)
         receipt.write_text(json.dumps(record, indent=2, ensure_ascii=False) + '\n')
     return {'state': record['state'], 'receipt': str(receipt), 'outputs': list(record['outputs'])}
 

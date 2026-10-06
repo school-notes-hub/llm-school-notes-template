@@ -13,7 +13,6 @@ def record(ctx, task, problems):
     problems = checks.ordered(problems)
     if not problems:
         return
-    path = task.get("inspection_report") or f"docs/review/{task.data['created'][:10]}-{task.run_id}-run.md"
     known = relations.inventory(ctx.notes_path)["items"]
     active = {i.get("hit_id") for i in known.values() if i.get("status") in ("open", "owner")}
     findings = []
@@ -33,8 +32,14 @@ def record(ctx, task, problems):
     others = [p for p in problems if not p["file"].startswith("wiki/")]
     if others:
         ctx.log.event("check.not_items", "warning", items=others[:20])
+    append(ctx, task, findings)
+
+
+def append(ctx, task, findings):
+    """The findings become items of this run's report (created when missing)."""
     if not findings:
         return
+    path = task.get("inspection_report") or f"docs/review/{task.data['created'][:10]}-{task.run_id}-run.md"
     # Recorded before each write (journal), so a crash can never restore it away.
     write = lambda repo, rel, text: journal.write(ctx, task, rel, text, whole=True)
     journal.settle(ctx, task)

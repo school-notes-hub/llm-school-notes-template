@@ -5,7 +5,7 @@ from ..figures import pending, migration_gate
 from ..review import files
 from ..sources import calls
 from ..state import phase, safefs
-from . import correction_figures, fix_progress, reopen, steps
+from . import correction_figures, fix_progress, orphan_places, reopen, steps
 
 
 def next_task(ctx):
@@ -22,7 +22,8 @@ def next_task(ctx):
     items, waiting = fix_progress.available(ctx, items, waiting)
     waiting = fix_progress.runnable_images(ctx, waiting)
     from . import unchecked
-    recheck_only = not owners and not items and not waiting and not reopen.pending(ctx)
+    recheck_only = (not owners and not items and not waiting and not reopen.pending(ctx)
+                    and not orphan_places.new(ctx.notes_path))
     if recheck_only and (getattr(ctx, "recheck_started", False) or not unchecked.startable(ctx)):
         # Pages past their last recheck tell the owner once even when no run starts (e.g. a
         # page exhausted under 2.6.0); a pending bookkeeping migration alone starts no run (R5).
@@ -49,6 +50,8 @@ def prepare(ctx, task):
     # The owner's reopened items and figures (`status --reopen`) join this run's work.
     written, figures = reopen.apply(ctx, task)
     steps.record_tool_files(task, ctx.notes_path, written)
+    # A figure place no figure belongs to becomes a machine item of this run (fix-50/4).
+    orphan_places.record(ctx, task)
     # Reopened legacy items join this first repair run, after the journaled migration.
     reviews = [i for i in files.open_items(ctx.notes_path, "cron") if not migration_gate.concerns(ctx.notes_path, i)]
     reviews, _ = fix_progress.available(ctx, reviews, [])

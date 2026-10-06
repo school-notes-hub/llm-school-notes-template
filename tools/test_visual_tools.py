@@ -58,6 +58,34 @@ class VisualExecutionTests(unittest.TestCase):
         self.assertEqual(receipt.read_bytes(), before)
         self.assertEqual(list(self.home.iterdir()), [])
 
+    def test_renderer_caches_stay_outside_the_output_and_are_removed(self):
+        # fix-50: fontconfig wrote its cache into wiki/assets/**/.cache/fontconfig/, which the
+        # path guard rightly refuses; caches belong to a private temporary directory.
+        tmp = self.base / 'tmp'
+        tmp.mkdir()
+        self.env['TMPDIR'] = str(tmp)
+        source = self.repo / 'caches.py'
+        source.write_text(
+            "import os\nfrom pathlib import Path\n"
+            "for key, name in (('XDG_CACHE_HOME', 'fontconfig/x.cache-9'), ('MPLCONFIGDIR', 'fontlist.json')):\n"
+            "    path = Path(os.environ[key], name)\n"
+            "    path.parent.mkdir(parents=True, exist_ok=True)\n"
+            "    path.write_text('cache')\n"
+            "    print(path)\n"
+            "Path(os.environ['VISUAL_OUTPUT_DIR'], 'figure.svg').write_text("
+            "'<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"/>')\n")
+        result = self.render(source=source)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        files = sorted(str(p.relative_to(self.out)) for p in self.out.rglob('*'))
+        self.assertEqual(files, ['figure.svg', 'render.json', 'stderr.log', 'stdout.log'])
+        written = (self.out / 'stdout.log').read_text().split()
+        self.assertEqual(len(written), 2)
+        for path in map(Path, written):
+            self.assertTrue(path.is_relative_to(tmp), path)
+            self.assertFalse(path.exists())
+        self.assertEqual(list(tmp.iterdir()), [])
+        self.assertEqual(list(self.home.iterdir()), [])
+
     def test_sources_outside_checkout_and_raw_sources_rejected(self):
         for parent in [self.base, self.repo / 'sources', self.repo / 'references']:
             parent.mkdir(exist_ok=True)

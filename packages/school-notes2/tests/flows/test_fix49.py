@@ -217,7 +217,8 @@ def test_missing_images_say_what_they_count(world):
     safefs.write_text(repo, "docs/figure-pending.json", json.dumps([pending_entry(owner=False)]))
     safefs.write_json(repo, migration_gate.MARK, {"pending_format": "attempted-runs"})
     line = work_pending.completion(ctx)[1]
-    assert line.endswith("3 hiányzó kép (1 függő ábra; 1 ábrahely, amely nincs a függő ábrák között; 1 törött képlink)")
+    assert line.endswith("3 hiányzó kép (1 függő ábra; 1 árva ábrahely, a következő javító futás gépi tételként "
+                         "kiosztja; 1 törött képlink)")  # fix-50/4
 
 
 # Fix-49b: the review's majors (M1–M5) and minors (m2–m4).

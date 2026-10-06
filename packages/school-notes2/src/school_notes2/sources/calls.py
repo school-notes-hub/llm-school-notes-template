@@ -101,7 +101,19 @@ def ranges(calls: list[dict]) -> list[list[int]]:
 
 
 def fix_assignments(repo, reviews, pending, limit=30):
-    """Every item once; whole page groups where possible; figures in separate calls."""
+    """Every item once; whole page groups where possible; figures in separate calls.
+
+    An item about a pending figure of this run (its `figure_id`) goes with that figure into
+    the figure's call: one figure, one assignment (fix-50: a reopened item and its reopened
+    figure went to two calls, and the figure was listed twice)."""
+    pending_ids = {entry["commission"]["id"] for entry in pending}
+    inventory = relations.inventory(repo)["items"] if reviews and pending_ids else {}
+    bound = {}
+    for item in reviews:
+        fid = inventory.get(item["file"] + "#" + item["item_id"], {}).get("figure_id")
+        if fid in pending_ids:
+            bound.setdefault(fid, []).append(item)
+    reviews = [i for i in reviews if not any(i in items for items in bound.values())]
     groups = review_groups(reviews, repo=repo)
     embedded = relations.related_pages(repo)
     out, chunk, name = [], [], None
@@ -122,8 +134,9 @@ def fix_assignments(repo, reviews, pending, limit=30):
     for entry in pending:
         by_subject.setdefault(subject(entry["commission"]["page"], embedded), []).append(entry["commission"]["id"])
     for name in sorted(by_subject):
-        call = _fix_call(repo, name, [])
-        call["pending_figure_ids"] = sorted(by_subject[name])
+        ids = sorted(set(by_subject[name]))
+        call = _fix_call(repo, name, sorted((i for fid in ids for i in bound.get(fid, [])), key=review_order))
+        call["pending_figure_ids"] = ids
         out.append(call)
     return out
 

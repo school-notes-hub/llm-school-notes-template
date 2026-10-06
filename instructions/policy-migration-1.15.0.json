@@ -121,7 +121,7 @@
       "heading": "Workflows",
       "destination": "instructions/wiki-workflows.md",
       "source_sha256": "4002b650b71d3afec1c296105ed32cc47d22be691ef1ca640204d1a696c97abc",
-      "migrated_sha256": "72f8e1cf73b7e2a98a6f7646ee142dc7c334676dd9a9441be2b3d048e25e3a01",
+      "migrated_sha256": "76b4a784c204f1eee515aa4665c4e16e11163769959331305246cf3b3e6f79bc",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
       "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: public-safe anchored questions/decisions; private readings and coverage; independent reader check before machine list; 1.18.2: in a tool run the build checks formulas; MCP check checks delimiters only; 1.19.0: banner and infographic are generated images; pending figures and the recheck scope in a correction; 2.5.1 (fix-45): fix-mode checks cover every own change, including necessary edits on other pages; 2.6.1 (fix-49): the nightly reviewer reads the wiki diff of every commit and decides; a writer question in a fix call is an owner item; the 24-hour no-progress brake; the owner reopens what waits for him"
     },

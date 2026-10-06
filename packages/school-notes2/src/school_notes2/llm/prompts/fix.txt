@@ -62,7 +62,7 @@ Infografikát ott kérj (`kind: infographic` megbízás), ahol egy áttekintés 
 
 Függő ábrák
 
-A `fetch.json.pending_figures` kiosztott munka, külön hívásban, a szöveges tételektől függetlenül. Mindegyikhez a `defects[]` alapján készíts új jelöltet vagy indokolt `failed` eredményt a `.school-notes/figures/<id>/figure.json` fájlban; amelyikhez nem jutsz el, függőben marad. A korábbi jelölt nem új próba. A banner és az infografika generált úton készül. A képkeret továbbra is érvényes; ha elfogyott, indokolt failed eredményt adj, ez nem fogyaszt generálási próbát.
+A `fetch.json.pending_figures` kiosztott munka, külön hívásban, a szöveges tételektől függetlenül; az ugyanerre az ábrára vonatkozó review-tétel ugyanebben a hívásban érkezik, és a kettő egy feladat: egy új jelölt rendezi a tételt és a `defects[]`-et, a `figures` listában az ábra legfeljebb egyszer szerepel. Mindegyikhez a `defects[]` alapján készíts új jelöltet vagy indokolt `failed` eredményt a `.school-notes/figures/<id>/figure.json` fájlban; amelyikhez nem jutsz el, függőben marad. A korábbi jelölt nem új próba. A banner és az infografika generált úton készül. A képkeret továbbra is érvényes; ha elfogyott, indokolt failed eredményt adj, ez nem fogyaszt generálási próbát.
 
 Tilos a látható szövegben
 

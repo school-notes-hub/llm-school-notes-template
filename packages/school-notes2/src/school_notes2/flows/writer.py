@@ -135,7 +135,8 @@ def results(task: Task, required: bool = True) -> list[dict]:
 
 
 def merge(results_: list[dict]) -> dict:
-    """4.5: notes by file with page union, closures last-wins per item, lists concatenated."""
+    """4.5: notes by file with page union, closures last-wins per item, lists concatenated
+    (an identical figure entry once)."""
     notes: dict[str, set] = {}
     closures: dict[tuple, dict] = {}
     lists = ("questions", "new_subjects", "checks", "owner_notes", "figures",
@@ -151,6 +152,9 @@ def merge(results_: list[dict]) -> dict:
             notes.setdefault(note["file"], set()).update(note["pages"])
         for c in r.get("review_closure", []):
             closures[(c["file"], c["item_id"])] = c
+    # The same commission named by two calls is one assignment (fix-50); a different page
+    # or kind under one id stays a duplicate for the check.
+    merged["figures"] = [f for n, f in enumerate(merged["figures"]) if f not in merged["figures"][:n]]
     merged["notes"] = [{"file": f, "pages": sorted(p)} for f, p in sorted(notes.items())]
     merged["review_closure"] = [closures[k] for k in sorted(closures)]
     warnings = {w["id"]: w for w in merged["warnings"]}
