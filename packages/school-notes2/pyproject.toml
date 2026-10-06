@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "school-notes2"
-version = "2.6.0"
+version = "2.6.1"
 description = "School Notes v2: hourly notebook ingest, nightly review and public site for the learner wikis"
 requires-python = ">=3.12"
 dependencies = [

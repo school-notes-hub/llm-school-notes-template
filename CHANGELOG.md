@@ -2,6 +2,13 @@
 
 Newest first. Each entry says what changed in the shared files and what an existing wiki must do when it applies the update (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)). A wiki records the version it is on in `PROFILE.md`.
 
+## 1.21.1 - 2026-10-06
+
+- School-notes run and Wiki workflows: the rules now describe the 2.6 one-pass run throughout – no in-run correction rounds; P3 or P5 checks every change once; an unchecked page holds the release until a later run rechecks it; a writer question in a fix call becomes an owner item; the nightly reviewer decides from the git diff; an owner item can be reopened by the controller when its obstacle is gone.
+- Figures (run module, writer and fix prompts): a whole `figure-…` block may be removed when the figure is accepted elsewhere; the block's content stays tool-owned.
+- Wiki structure: an explicit `<a id>` anchor must not repeat an id the page already has (a heading's id); the check reports it in the writer's call.
+- Migration (controller-owned): synchronize the changed instructions through Template updates; no learner content changes.
+
 ## 1.21.0 - 2026-10-05
 
 - School-notes run (Fixed prompt, result.json): each run has one pass – the writer works, the machine check runs, P5 judges every changed author line once; there are no in-run correction rounds, and findings of the independent check become items for the next run. An undecided item and a `fixed` closure without a text change stay open. Pending figures come in their own writer calls after the text work. `infographic_decisions` and `warnings` are removed; the optional `review_requests` asks the nightly reviewer to look at a page and removes nothing from the review.
