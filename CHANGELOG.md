@@ -2,6 +2,12 @@
 
 Newest first. Each entry says what changed in the shared files and what an existing wiki must do when it applies the update (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)). A wiki records the version it is on in `PROFILE.md`.
 
+## 1.21.5 - 2026-10-06
+
+- Visual policy (*Decide before drawing*): the visual decision and its figures are part of the writer's pass, not a separate round; the one independent review checks text and figures together and gives the figure verdict; a rejected figure is repaired once and the same reviewer confirms only that figure (no new review round). The owner may ask for the decision, figures and review on named pages only. Media workflows (*In a school-notes run*) refers to it.
+- Sources and evidence (*Inspect available evidence*, *Reading a book*), references README: a textbook image without a description is decoration, a photograph or the like and is not opened by default; its OCR text may be read, and the image is opened only when that OCR text gives a concrete reason; otherwise a point that depends on it stays an open question. Notebook and teacher source images are still inspected directly.
+- Migration (controller-owned): synchronize the changed instructions through Template updates; no learner content changes.
+
 ## 1.21.4 - 2026-10-06
 
 - Textbook line (Note formatting, Sources and evidence, run module): the `🔖 Tankönyv:` line either names an identified lesson and page or states that the learner's grade-N textbook does not cover the topic; a "not yet identified" placeholder is never published – the line is left out and the gap goes to the evidence record or the open questions. The check warns about a textbook line without a lesson or page number, and an existing placeholder becomes one machine item.

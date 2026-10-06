@@ -91,17 +91,17 @@
       "heading": "References",
       "destination": "instructions/sources-and-evidence.md",
       "source_sha256": "aad819296059375afe07ddda3ae972d790d79a39660b329b463e896fa185bb07",
-      "migrated_sha256": "3f56521998488b0c7df218b902c0eec539f8ccc4fb72cbba74464a4a80c67ead",
+      "migrated_sha256": "c710586fc9d8e837128a44760a7f2a58e4bac3a73c4db842fb671cddf9908c99",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
-      "updated_in": "2.6.4 (fix-52): the textbook line gives an identified lesson and printed pages, or states that the learner's textbook (named by its grade) does not cover the topic; otherwise it is left out, no placeholder"
+      "updated_in": "2.6.4 (fix-52): the textbook line gives an identified lesson and printed pages, or states that the learner's textbook (named by its grade) does not cover the topic; otherwise it is left out, no placeholder; 1.21.5: an image without a description follows Inspect available evidence"
     },
     {
       "heading": "Visual evidence checks",
       "destination": "instructions/sources-and-evidence.md",
       "source_sha256": "71e9c646327f405920b5a2b4331118f077bb5ba5e336f7f834864d732cae9bca",
-      "migrated_sha256": "79c8daf82b14a4eb8733e317d5b9fff8fddf00afc369dc838737f93fee967b8e",
+      "migrated_sha256": "6dde513ea2785c0b5059294accb2bc41b424204c704fcd38b8ac9168b16aa952",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
-      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: observations stay private; source-item order does not dictate teaching-section order"
+      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: observations stay private; source-item order does not dictate teaching-section order; 1.21.5: a textbook image without a description is not opened by default; its OCR text may be read, and only a concrete reason from it opens the image, otherwise a dependent point stays an open question; notebook and teacher images are still inspected directly"
     },
     {
       "heading": "Content rules",
@@ -130,9 +130,9 @@
       "heading": "Choosing and replacing authored visuals",
       "destination": "instructions/visual-policy.md",
       "source_sha256": "d6180905164864ce436be307edf626132fea3f122b9f5ba0596dad6208c27ba5",
-      "migrated_sha256": "ccc9c9ece89c9e274edc325ae0655d413c5f3d574286c09be7b1c793ce507e02",
+      "migrated_sha256": "b2108f06cb3bbd044d2b0804a13b082786851bb9ea5c317e5b48711f9f73c07a",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
-      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: same notebook drawing, correct; independent acceptance; named replacement reasons; 1.19.0: banner and infographic are always generated images, never authored SVG"
+      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: same notebook drawing, correct; independent acceptance; named replacement reasons; 1.19.0: banner and infographic are always generated images, never authored SVG; 1.21.5: the visual decision and its figures are part of the writer's pass with one joint text-and-figure review; on request for named pages only"
     },
     {
       "heading": "Printable study notes",
@@ -144,8 +144,9 @@
     {
       "heading": "In a school-notes run",
       "destination": "instructions/media-workflows.md",
-      "migrated_sha256": "108816724a92f77c3750fddecffc8115684556a7cf4791cc95935b0f14ad777a",
-      "change": "Section added after the original migration; now audited with the exact image-plan schema, commission distinction and validated example (fix-27)."
+      "migrated_sha256": "9dd1374795f18ef7f7cf366b1fa8a02b78a61a1ee685c37fff2aa85395cde8da",
+      "change": "Section added after the original migration; now audited with the exact image-plan schema, commission distinction and validated example (fix-27).",
+      "updated_in": "1.21.5: refers to Decide before drawing for when figures are decided, made and reviewed"
     },
     {
       "heading": "Subject cards and figure handoff",
