@@ -152,9 +152,9 @@ def _status(cfg, args, context) -> int:
     if args.clear:
         learner, kind = args.clear
         if kind not in ("notes", "review", "publish", "writer", "reader", "figure-review", "figure", "reviewer",
-                        "unchecked") or not args.action:
+                        "unchecked", "unjudged") or not args.action:
             raise SystemExit("usage: status --clear <learner> notes|review|publish|writer|reader|figure-review|figure|reviewer"
-                             "|unchecked --continue|--discard")
+                             "|unchecked|unjudged --continue|--discard")
         result = clear.clear(context.make(cfg, learner), kind, args.action)
         if isinstance(result, int):
             return result

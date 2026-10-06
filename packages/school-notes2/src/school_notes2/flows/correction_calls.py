@@ -58,17 +58,17 @@ def run(ctx, task, k, invoke, recover):
         # A transient error (e.g. the provider's outage) is not the writer's failure: without
         # usable output the call simply starts again, no try is counted (fix-49, REJT-18).
         transient = state.pop("transient", False)
+        # After a transient error the problems still reach the next call (check.json), uncounted.
+        record = _noted if transient else _failed
         try:
             candidate = recover()
         except steps.CheckFailed as exc:
-            if not transient:
-                state = _failed(ctx, root, state, exc.items, unusable=_unusable(exc.items))
-                if not state["unusable"]:
-                    safefs.write_json(root, "candidate-kept.json", True)
+            state = record(ctx, root, state, exc.items, unusable=_unusable(exc.items))
+            if not state["unusable"]:
+                safefs.write_json(root, "candidate-kept.json", True)
         except (BadWork, ValueError) as exc:
-            if not transient:
-                items = [_result_error(exc)] + _file_problems(ctx, task)
-                state = _failed(ctx, root, state, items, unusable=_unusable(items))
+            items = [_result_error(exc)] + _file_problems(ctx, task)
+            state = record(ctx, root, state, items, unusable=_unusable(items))
         else:
             if candidate is not None:
                 return _done(root, state, _answered(ctx, task, k, candidate))
@@ -160,9 +160,14 @@ def _failed(ctx, root, state, items, *, unusable):
         ctx.log.event("writer.unusable_rollback", call=root.name)
         restore(ctx.notes_path, root)
         safefs.unlink(root, "candidate-kept.json")
+    return _noted(ctx, root, {**state, "failures": state["failures"] + 1}, items, unusable=unusable)
+
+
+def _noted(ctx, root, state, items, *, unusable):
+    """The problems go to the next call (check.json); no failure is counted here."""
     safefs.unlink(ctx.notes_path, ".school-notes/result.json")
     steps.write_check_items(ctx, items)
-    state = {**state, "failures": state["failures"] + 1, "running": False, "items": items, "unusable": unusable}
+    state = {**state, "running": False, "items": items, "unusable": unusable}
     safefs.write_json(root, "call.json", state)
     return state
 

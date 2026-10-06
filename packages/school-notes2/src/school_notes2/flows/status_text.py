@@ -37,8 +37,11 @@ def collect(ctx, now=None):
     from .operation import vm_context
     errors += incidents.active(vm_context(ctx))
     known = {e["scope"] for e in errors}
+    timed_out = any(scope.startswith("timeout:") for scope in known)
     for task in opened:
-        if task.data.get("needs_owner") and "task:" + task.run_id not in known:
+        # A role's suspension has its own line (`timeout:<role>`) with the exact clear command.
+        if task.data.get("needs_owner") and "task:" + task.run_id not in known and not (
+                timed_out and task.data["needs_owner"].get("class") == "timeout"):
             error = task.data["needs_owner"]
             errors.append({"at": error["at"], "message": incidents.wording(ctx.name, error["class"], "run", task=task)})
     last = read_json(ctx.cfg.state_dir / ctx.name / "last-error.json", {})
@@ -67,8 +70,9 @@ def collect(ctx, now=None):
 
 
 def _reopen(ctx):
-    from .reopen import load
-    return [target for value in load(ctx) for target in value["items"] + ["figure:" + f for f in value["figures"]]]
+    """Requests a coming run applies; a finished run's request is no longer shown."""
+    from .reopen import waiting
+    return [target for value in waiting(ctx)[0] for target in value["items"] + ["figure:" + f for f in value["figures"]]]
 
 
 def task_error(task):

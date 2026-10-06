@@ -67,20 +67,23 @@ def test_figure_brake_after_three_runs_is_a_notice_not_an_item(repo, make_figure
     assert not relations.inventory(repo)["items"]
 
 
-@pytest.mark.parametrize("receipt,counted", [
-    ({"status": "pending", "reason": "figure reviewer timed out"}, False),
-    ({}, False),
+@pytest.mark.parametrize("receipt,counted,unjudged", [
+    ({"status": "pending", "reason": "figure reviewer timed out", "timed_out": True}, False, 0),
+    ({"status": "pending", "reason": "invalid output", "timed_out": False}, False, 3),
+    ({}, False, 3),
     ({"status": "reviewed", "model": "m", "review": {"figures": [{"id": "forces", "verdict": "reject",
-      "key": "k", "defects": [], "text_mismatch": []}], "owner_notes": []}}, True)])
-def test_an_unjudged_drawn_figure_is_no_try(repo, make_figure, tmp_path, log, receipt, counted):
+      "key": "k", "defects": [], "text_mismatch": []}], "owner_notes": []}}, True, 0)])
+def test_an_unjudged_drawn_figure_is_no_try(repo, make_figure, tmp_path, log, monkeypatch, receipt, counted, unjudged):
     """Fix-49/4 (REJT-17): without the figure reviewer's verdict a run is no try; three such
-    runs never make a drawn figure an owner matter."""
+    runs never make a drawn figure an owner matter. A lasting failure other than a timeout
+    is counted apart (fix-49b): after three runs the figure is not assigned any more."""
     from types import SimpleNamespace
     from school_notes2.figures import pending
-    from school_notes2.flows import review_phases
+    from school_notes2.flows import review_phases, unjudged as unjudged_runs
     from school_notes2.state import phase
     brief, candidate = make_figure()
-    ctx = SimpleNamespace(name="one", notes_path=repo, log=log)
+    monkeypatch.setattr("school_notes2.notify.pending.send", lambda ctx_, notice: True)
+    ctx = SimpleNamespace(name="one", notes_path=repo, log=log, cfg=SimpleNamespace(state_dir=tmp_path / "vm"))
     for _ in range(3):
         task = phase.create(tmp_path / "state", "one", "notes", "cron", "review_ready")
         task.update(attempt=1, inspection_receipts={brief["id"]: receipt},
@@ -88,3 +91,4 @@ def test_an_unjudged_drawn_figure_is_no_try(repo, make_figure, tmp_path, log, re
         review_phases.record_figures(ctx, task)
     entry = pending.load(repo)[0]
     assert entry["runs"] == (3 if counted else 0) and entry["owner_required"] == counted
+    assert len(unjudged_runs.load(ctx).get(brief["id"], {}).get("run_ids", [])) == unjudged

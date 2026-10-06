@@ -218,3 +218,140 @@ def test_missing_images_say_what_they_count(world):
     safefs.write_json(repo, migration_gate.MARK, {"pending_format": "attempted-runs"})
     line = work_pending.completion(ctx)[1]
     assert line.endswith("3 hiányzó kép (1 függő ábra; 1 ábrahely, amely nincs a függő ábrák között; 1 törött képlink)")
+
+
+# Fix-49b: the review's majors (M1–M5) and minors (m2–m4).
+
+def _seed(ctx):
+    from school_notes2.figures import migration_gate
+    from school_notes2.state import safefs
+    repo = ctx.notes_path
+    repo.mkdir(parents=True, exist_ok=True)
+    for rel, text in origin().items():
+        safefs.write_text(repo, rel, text)
+    safefs.write_json(repo, migration_gate.MARK, {"pending_format": "attempted-runs"})
+    ctx.bare = lambda: Bare(origin())
+
+
+def test_a_discarded_runs_reopen_is_applied_by_the_next_run_with_other_work(world):
+    """M1: the next run applies it although `next_task` (other work) never asked `pending`."""
+    from school_notes2.flows import reopen
+    from school_notes2.review import files
+    ctx, _ = world
+    _seed(ctx)
+    reopen.request(ctx, [f"{REVIEW}#R38"])
+    first = phase.create(ctx.task_root(), ctx.name, "notes", "cron", "moved")
+    reopen.apply(ctx, first)
+    first.data["closed"] = True                # discarded: the worktree is back at origin/main
+    first.save()
+    _seed(ctx)
+    second = phase.create(ctx.task_root(), ctx.name, "notes", "cron", "moved")
+    written, figures = reopen.apply(ctx, second)
+    assert written == [REVIEW] and figures == []
+    assert files.read_report(ctx.notes_path, ctx.notes_path / REVIEW).meta["items"]["R38"] == "open"
+    assert reopen.load(ctx)[0]["run_id"] == second.run_id
+
+
+def test_an_items_generated_image_is_not_reopened(world):
+    """M2: through the item a generated (paid) image stays with the owner; the item reopens."""
+    from school_notes2.flows import reopen
+    ctx, _ = world
+    table = origin(kind="banner")
+    table[REVIEW] = REPORT.replace("owner_question: Mi legyen?", "owner_question: Mi legyen?, figure_id: hellasz-terkep")
+    ctx.bare = lambda: Bare(table)
+    assert "1 tétel, 0 ábra" in reopen.request(ctx, [f"{REVIEW}#R38"])
+    [value] = reopen.load(ctx)
+    assert value["items"] == [f"{REVIEW}#R38"] and value["figures"] == []
+    table = origin()                           # a drawn figure is reopened with its item
+    table[REVIEW] = REPORT.replace("owner_question: Mi legyen?", "owner_question: Mi legyen?, figure_id: hellasz-terkep")
+    ctx.bare = lambda: Bare(table)
+    assert "1 tétel, 1 ábra" in reopen.request(ctx, [f"{REVIEW}#R38"])
+
+
+def test_reopen_ids_are_unique_within_one_second(world, monkeypatch):
+    """m4: two requests in the same second on the same review file both stay apart."""
+    from school_notes2.flows import reopen
+    ctx, _ = world
+    ctx.bare = lambda: Bare(origin())
+    monkeypatch.setattr(reopen, "now_iso", lambda: "2026-10-06T10:00:00+02:00")
+    reopen.request(ctx, [f"{REVIEW}#R38"])
+    reopen.request(ctx, ["figure:hellasz-terkep"])
+    ids = [v["id"] for v in reopen.load(ctx)]
+    assert ids == ["reopen-20261006T100000-1", "reopen-20261006T100000-2"]
+
+
+def test_status_shows_only_reopens_still_to_carry(world):
+    """m3: a finished run's request is not "Újranyitásra vár"; a discarded run's is."""
+    from school_notes2.flows import reopen, status_text
+    ctx, _ = world
+    _seed(ctx)
+    reopen.request(ctx, [f"{REVIEW}#R38"])
+    task = phase.create(ctx.task_root(), ctx.name, "notes", "cron", "moved")
+    reopen.apply(ctx, task)
+    task.data["closed"] = True
+    task.save()
+    assert status_text._reopen(ctx) == [f"{REVIEW}#R38"]
+    task2 = phase.create(ctx.task_root(), ctx.name, "notes", "cron", "moved")
+    reopen.apply(ctx, task2)
+    task2.set_phase("done")
+    assert status_text._reopen(ctx) == [] and len(reopen.load(ctx)) == 1   # status writes nothing
+
+
+def test_a_suspended_reader_has_one_status_line_with_its_own_clear(world):
+    """M3: the short status names the suspended role and its clear, once."""
+    from school_notes2.flows import status_text
+    from school_notes2.notify import incidents
+    ctx, _ = world
+    task = phase.create(ctx.task_root(), ctx.name, "notes", "cron", "inspecting")
+    task.mark_needs_owner("Két egymás utáni időtúllépés; a munka megállt.",
+                          f"school-notes status --clear {ctx.name} reader --continue", "timeout")
+    task.data["needs_owner"]["role"] = "reader"
+    task.save()
+    text = incidents.wording(ctx.name, "timeout", "run", task=task)
+    assert "olvasó-lektor" in text and f"--clear {ctx.name} reader --continue" in text
+    incidents.record(ctx, "timeout", "reader", role="reader", scope="timeout:reader", run_id=task.run_id)
+    lines = [line for line in status_text.overview(ctx).splitlines() if "időtúllépés" in line]
+    assert len(lines) == 1 and f"--clear {ctx.name} reader --continue" in lines[0]
+
+
+def test_lasting_unjudged_figure_runs_stop_with_one_mail(world):
+    """M4: a lasting figure-review failure (not a timeout) is counted apart from the tries;
+    after three runs the figure is not assigned any more, one mail; the owner gives it back."""
+    from school_notes2.flows import fix_progress, unjudged
+    from school_notes2.notify import incidents
+    ctx, notices = world
+    waiting = [pending_entry(owner=False)]
+    for n in range(unjudged.LIMIT):
+        for _ in range(2):                     # a replayed step counts once
+            unjudged.update(ctx, f"r{n}", {"hellasz-terkep"}, set())
+        assert len(notices) == (1 if n == unjudged.LIMIT - 1 else 0)
+        assert fix_progress.available(ctx, [], waiting)[1] == ([] if n == unjudged.LIMIT - 1 else waiting)
+    unjudged.update(ctx, "r9", {"hellasz-terkep"}, set())
+    assert len(notices) == 1
+    text = notices[0].get_content()
+    assert "háromszor" in text and f"status --clear {ctx.name} unjudged --continue" in text
+    assert "1 ábra" in clear.clear(ctx, "unjudged", "continue")
+    assert fix_progress.available(ctx, [], waiting)[1] == waiting
+    assert not [i for i in incidents.active(ctx) if i["scope"] == unjudged.SCOPE]
+    unjudged.update(ctx, "s1", {"hellasz-terkep"}, set())
+    unjudged.update(ctx, "s2", set(), {"hellasz-terkep"})     # a verdict ends the count
+    assert unjudged.load(ctx) == {}
+
+
+def test_an_exhausted_unchecked_page_mails_even_when_no_run_starts(world, monkeypatch):
+    """M5: a page past its third recheck (e.g. under 2.6.0) tells the owner once although
+    `next_task` starts nothing."""
+    from school_notes2.state.files import write_json
+    ctx, notices = world
+    write_json(unchecked.path(ctx), {PAGE: {"base": "b1", "tries": unchecked.LIMIT, "run_id": "old"}})
+    ctx.worktree = lambda _: SimpleNamespace(run=lambda *a, **kw: None)
+    ctx.bare = lambda: None
+    monkeypatch.setattr(fix.repos, "fetch", lambda *a: None)
+    monkeypatch.setattr(fix.repos, "rev", lambda *a: "main")
+    monkeypatch.setattr(fix.files, "open_items", lambda *a: [])
+    monkeypatch.setattr(fix.pending, "load", lambda *a: [])
+    monkeypatch.setattr(fix.correction_figures, "assignable", lambda *a: [])
+    monkeypatch.setattr(fix.fix_progress, "runnable_images", lambda ctx, waiting: waiting)
+    for _ in range(2):
+        assert fix.next_task(ctx) is None
+    assert len(notices) == 1 and "status --clear third unchecked --continue" in notices[0].get_content()

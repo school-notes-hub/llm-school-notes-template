@@ -47,14 +47,15 @@ def request(ctx: Ctx, targets: list[str]) -> str:
                 problems.append(f"{target}: not waiting for the owner ({status or 'no such item'})")
                 continue
             items.append(target)
-            fid = detail.get("figure_id")
-            if fid and pending_entries.get(fid, {}).get("owner_required") and "figure:" + fid not in targets:
-                figures.append(fid)       # the item's own figure is reopened with it
+            fid, own = detail.get("figure_id"), pending_entries.get(detail.get("figure_id"))
+            if (own and own["owner_required"] and "figure:" + fid not in targets
+                    and not figure_pending.generated_at(own["commission"], show)):
+                figures.append(fid)       # the item's own drawn figure is reopened with it
         elif figure:
             entry_ = pending_entries.get(figure[1])
             if not entry_ or not entry_["owner_required"]:
                 problems.append(f"{target}: no pending figure waiting for the owner")
-            elif _generated(show, entry_["commission"]):
+            elif figure_pending.generated_at(entry_["commission"], show):
                 problems.append(f"{target}: a generated image; its paid attempts are in the image ledger, "
                                 "a new image needs a new commission")
             else:
@@ -64,8 +65,7 @@ def request(ctx: Ctx, targets: list[str]) -> str:
     if problems:
         return "Nem rögzítettem semmit:\n" + "\n".join(problems)
     requests = load(ctx)
-    value = {"id": "reopen-" + now_iso()[:19].replace(":", "").replace("-", ""), "at": now_iso(),
-             "items": sorted(set(items)), "figures": sorted(set(figures))}
+    value = {"id": _new_id(requests), "at": now_iso(), "items": sorted(set(items)), "figures": sorted(set(figures))}
     write_json(path(ctx), requests + [value])
     _unpark(ctx, value)
     ctx.log.event("owner.reopen_requested", target=value["id"], items=value["items"], figures=value["figures"])
@@ -73,28 +73,47 @@ def request(ctx: Ctx, targets: list[str]) -> str:
             f"({len(value['items'])} tétel, {len(value['figures'])} ábra)")
 
 
-def pending(ctx) -> list[dict]:
-    """Requests no finished run carried yet; a discarded run's request is applied again."""
-    requests, tasks = load(ctx), {t.run_id: t for t in phase.all_tasks(ctx.task_root(), ctx.name)}
-    kept, changed = [], False
-    for value in requests:
+def _new_id(requests) -> str:
+    """Unique among the recorded requests, also within one second (a sequence suffix)."""
+    stamp, known = "reopen-" + now_iso()[:19].replace(":", "").replace("-", ""), {v["id"] for v in requests}
+    n = len(requests) + 1
+    while f"{stamp}-{n}" in known:
+        n += 1
+    return f"{stamp}-{n}"
+
+
+def waiting(ctx) -> tuple[list[dict], list[tuple[dict, str]]]:
+    """Read-only: (requests still to carry, (request, run id) pairs a finished run carried).
+    A request whose run was closed without finishing (discarded) is free again."""
+    tasks = {t.run_id: t for t in phase.all_tasks(ctx.task_root(), ctx.name)}
+    kept, done = [], []
+    for value in load(ctx):
         task = tasks.get(value.get("run_id"))
         if task is not None and task.phase == "done":
-            ctx.log.event("owner.reopen_done", target=value["id"], run_id=task.run_id)
-            changed = True
-            continue
-        if value.get("run_id") and (task is None or not task.open):
-            value = {k: v for k, v in value.items() if k != "run_id"}
-            changed = True
-        kept.append(value)
-    if changed:
+            done.append((value, task.run_id))
+        elif value.get("run_id") and (task is None or not task.open):
+            kept.append({k: v for k, v in value.items() if k != "run_id"})
+        else:
+            kept.append(value)
+    return kept, done
+
+
+def pending(ctx) -> list[dict]:
+    """Requests no run carries now; a finished run's request is done, a discarded run's
+    request is applied again."""
+    kept, done = waiting(ctx)
+    for value, run_id in done:
+        ctx.log.event("owner.reopen_done", target=value["id"], run_id=run_id)
+    if kept != load(ctx):
         write_json(path(ctx), kept)
     return [v for v in kept if not v.get("run_id")]
 
 
 def apply(ctx, task) -> tuple[list[str], list[str]]:
-    """In the fix run's worktree: returns (written paths, reopened figure ids)."""
+    """In the fix run's worktree: returns (written paths, reopened figure ids). A discarded
+    run's request is freed here too: `next_task` asks `pending` only when it has no other work."""
     repo, written, reopened = ctx.notes_path, set(), []
+    pending(ctx)
     requests = load(ctx)
     for value in requests:
         if value.get("run_id") not in (None, task.run_id):
@@ -183,8 +202,3 @@ def _pending_at(show):
     text = show(figure_pending.PATH)
     return json.loads(text) if text else []
 
-
-def _generated(show, brief):
-    if brief["kind"] in ("banner", "infographic"):
-        return True
-    return f"<!-- image: {brief['id']} -->" in (show(brief["page"]) or "")

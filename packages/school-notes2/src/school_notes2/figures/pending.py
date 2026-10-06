@@ -139,9 +139,15 @@ def valid_at(brief: dict, read) -> bool:
 
 
 def generated(repo: Path, brief: dict) -> bool:
-    return brief["kind"] in ("banner", "infographic") or (
-        safefs.is_file(repo, brief["page"]) and
-        f"<!-- image: {brief['id']} -->" in safefs.read_text(repo, brief["page"]))
+    return generated_at(brief, lambda rel: safefs.read_text(repo, rel) if safefs.is_file(repo, rel) else None)
+
+
+def generated_at(brief: dict, read) -> bool:
+    """A generated (paid) image: a banner or infographic, or a page with its image marker.
+    `read(rel)` gives a page's text or None (the worktree, or a commit)."""
+    if brief["kind"] in ("banner", "infographic"):
+        return True
+    return f"<!-- image: {brief['id']} -->" in (read(brief["page"]) or "")
 
 
 def has_attempt(repo: Path, brief: dict, *, paid=False) -> bool:

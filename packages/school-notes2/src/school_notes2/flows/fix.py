@@ -24,7 +24,10 @@ def next_task(ctx):
     from . import unchecked
     recheck_only = not owners and not items and not waiting and not reopen.pending(ctx)
     if recheck_only and (getattr(ctx, "recheck_started", False) or not unchecked.startable(ctx)):
-        return None  # A pending bookkeeping migration alone never starts a run (R5).
+        # Pages past their last recheck tell the owner once even when no run starts (e.g. a
+        # page exhausted under 2.6.0); a pending bookkeeping migration alone starts no run (R5).
+        unchecked.notify(ctx)
+        return None
     task = phase.create(ctx.task_root(), ctx.name, "notes", "cron", "moved")
     if recheck_only:
         # Only carried pages: one such run per round, and it is no progress of the round.

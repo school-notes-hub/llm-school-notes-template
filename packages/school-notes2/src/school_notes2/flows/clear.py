@@ -23,6 +23,12 @@ def clear(ctx: Ctx, kind: str, action: str) -> str:
         from . import unchecked
         pages = unchecked.reset(ctx)
         return f"ellenőrizetlen oldalak: a következő kör újraellenőrzi ({len(pages)} oldal várt rád)"
+    if kind == "unjudged":
+        if action != "continue":
+            return "El nem bírált ábra csak --continue paranccsal oldható fel."
+        from . import unjudged
+        figures = unjudged.reset(ctx)
+        return f"el nem bírált ábrák: a következő javító futás újra kiosztja ({len(figures)} ábra várt rád)"
     if kind in timeouts.ROLES:
         if action != "continue":
             return "Időtúllépési szerep csak --continue paranccsal oldható fel."

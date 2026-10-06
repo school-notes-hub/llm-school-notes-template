@@ -28,7 +28,8 @@ def parked(ctx, now=None):
 
 
 def available(ctx, items, waiting):
-    stopped = parked(ctx)
+    from . import unjudged
+    stopped = parked(ctx) | {"figure:" + fid for fid in unjudged.stopped(ctx)}
     return ([i for i in items if i["file"] + "#" + i["item_id"] not in stopped],
             [e for e in waiting if "figure:" + e["commission"]["id"] not in stopped])
 

@@ -40,6 +40,10 @@ def wording(name, kind, step, *, task=None, exc=None, role=None):
         return ("a kiadás visszatartva: egy változás független ellenőrzése háromszor sem futott le, ezért "
                 "ezt az ellenőrzést magától nem próbálja újra; teendőd: nézd meg az okát (school-notes "
                 f"status {name} --details), majd school-notes status --clear {name} unchecked --continue")
+    if kind == "unjudged_limit":
+        return ("egy rajzolt ábrát az ábraellenőr háromszor sem tudott elbírálni (nem időtúllépés miatt), "
+                "ezért a tool nem osztja ki újra; teendő: nézd meg az okát (school-notes status "
+                f"{name} --details), majd school-notes status --clear {name} unjudged --continue")
     if kind == "publish_held":
         return "a kiadás visszatartva: " + HELD.get(step, HELD["build"]).format(name=name)
     prefix = "a telepítés ellenőrzést igényel: " if step == "install" else "a futás megállt: "
@@ -55,6 +59,8 @@ def _reason(name, kind, step, *, task=None, exc=None, role=None):
     details = getattr(exc, "details", {}) or {}
     raw = str(exc or "")
     if kind == "timeout":
+        # A task stopped by a role's suspension names that role (fix-49b): its clear lifts it.
+        role = role or ((task.data.get("needs_owner") or {}).get("role") if task is not None else None)
         role = role if role in ROLES else "writer"
         return f"időtúllépés ({ROLES[role]}); teendőd: dönts az időkorlátról, majd school-notes status --clear {name} {role} --continue"
     questions = details.get("questions") or (task.get("question", []) if task else [])

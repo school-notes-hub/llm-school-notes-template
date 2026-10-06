@@ -91,7 +91,10 @@ def _resume(repo, briefs, name, run, folder, assigned, state, log, invoke):
             _save(repo, name, saved)
             return saved
         if state["status"] == "pending":
-            return {"status": "pending", "reason": state["reason"], "failed": state.get("failed", [])}
+            # `timed_out`: the timeout brake (T-125) covers it; other failures are counted
+            # as unjudged runs (fix-49b).
+            return {"status": "pending", "reason": state["reason"], "failed": state.get("failed", []),
+                    "timed_out": state["attempts"][-1:] == ["timeout"]}
         if state["attempts"] and state["attempts"][-1] == "running":
             try:
                 output = safefs.read_json(folder, "out/review.json")

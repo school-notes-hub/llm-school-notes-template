@@ -87,12 +87,15 @@ def _finalize(ctx, task, edits=None):
 def record_figures(ctx, task):
     """Pending figures stay pending; after three runs the owner is told (status and one
     mail), never through a review item (A3)."""
-    written = []
+    from . import unjudged as unjudged_runs
+    written, counted, judged = [], set(), set()
     for state in task.get("inspection_figures", []):
         brief = state["brief"]
         if migration_gate.concerns(ctx.notes_path, brief):
             continue
         receipt = task.get("inspection_receipts", {}).get(brief["id"], {})
+        if receipt.get("status") == "reviewed":
+            judged.add(brief["id"])
         verdict = correction_figures.verdict_for(receipt, brief["id"])
         if verdict.get("verdict") == "accept" or state["candidate"]["state"] == "no-figure":
             continue
@@ -104,6 +107,8 @@ def record_figures(ctx, task):
         # image keeps its own brake: `review_pending` and the free rechecks.
         unjudged = (state["candidate"]["state"] == "candidate" and receipt.get("status") != "reviewed"
                     and not pending.generated(ctx.notes_path, brief))
+        if unjudged and not receipt.get("timed_out"):
+            counted.add(brief["id"])    # a lasting failure must not come back daily without end
         entry = pending.record(ctx.notes_path, brief, task.run_id,
             correction_figures.defects(state, receipt, previous.get("defects", [])),
             owner_required=exhausted, review_pending=correction_figures.awaiting(ctx, brief),
@@ -114,6 +119,8 @@ def record_figures(ctx, task):
             owner_notices.send(ctx, Notice(ctx.name, f"figure_owner:{brief['id']}", "", "figures", "owner",
                 f"Az ábramegbízás három próba után is függőben van: {brief['id']} ({brief['page']}).",
                 f"Dönts a függő ábráról a school-notes chat {ctx.name} munkamenetben."))
+    if counted or judged:
+        unjudged_runs.update(ctx, task.run_id, counted, judged)
     steps.record_tool_files(task, ctx.notes_path, written)
     return written
 

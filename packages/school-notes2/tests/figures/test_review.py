@@ -152,6 +152,7 @@ def test_retry_is_bounded_and_stays_bounded_after_resume(repo, make_figure, tmp_
     for _ in range(2):
         result = review.run_batch(repo, [brief], "physics-1", run, render=fake_render, log=log, invoke=fail)
         assert result["status"] == "pending"
+        assert result["timed_out"] == (kind == "timeout")   # fix-49b: only other failures count as unjudged
     assert len(calls) == expected
 
 

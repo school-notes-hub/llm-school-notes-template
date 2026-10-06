@@ -247,3 +247,25 @@ def test_a_transient_interruption_with_output_recovers_it(call):
         run_call(ctx, task, interrupted)
     result = {"status": "done", "review_closure": [{"file": rel, "item_id": "R1", "status": "fixed"}]}
     assert run_call(ctx, task, lambda: pytest.fail("valid output is reused"), lambda: result) == result
+
+
+def test_a_check_failure_found_after_a_transient_error_reaches_the_next_call(call):
+    """Fix-49b (m2): the recovered output fails the check after a transient error: no try is
+    counted, but the next call gets the problem list (check.json)."""
+    from school_notes2.state.errors import Transient
+    ctx, task, rel = call
+    def interrupted():
+        edit(ctx)
+        raise Transient("lost connection after writing")
+    with pytest.raises(Transient):
+        run_call(ctx, task, interrupted)
+    seen = []
+    def failing_recover():
+        raise steps.CheckFailed([item(PAGE, 8, "link target does not exist: 'x.md'")])
+    def invoke():
+        seen.append(safefs.read_json(ctx.notes_path, ".school-notes/check.json"))
+        return {"status": "done", "review_closure": []}
+    assert run_call(ctx, task, invoke, failing_recover) == {"status": "done", "review_closure": []}
+    assert seen[0][0]["message"] == "link target does not exist: 'x.md'"
+    assert safefs.read_json(task.dir / "call-1", "call.json")["failures"] == 0
+    assert "Új, kész mondat." in safefs.read_text(ctx.notes_path, PAGE)

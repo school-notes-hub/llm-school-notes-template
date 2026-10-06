@@ -59,6 +59,7 @@ def summary(ctx: Ctx) -> dict:
         "parked": _parked(ctx),
         "publish_held": read_json(ctx.cfg.state_dir / ctx.name / "publish-held.json", {}),
         "unchecked": read_json(ctx.cfg.state_dir / ctx.name / "unchecked.json", {}),
+        "unjudged": read_json(ctx.cfg.state_dir / ctx.name / "unjudged.json", {}),
         "references_without_map": _unmapped(ctx.notes_path),
         "pack_mb": _pack_mb(ctx.cfg.bare(ctx.name)),
         "log": str(ctx.cfg.log_path),
@@ -208,6 +209,16 @@ def render(data: dict) -> str:
         if owner:
             lines.append(f"ellenőrizetlen oldal, {LIMIT} sikertelen újraellenőrzés után rád vár (school-notes "
                          f"status --clear {data['learner']} unchecked --continue): " + ", ".join(owner))
+    if data.get("unjudged"):
+        from .unjudged import LIMIT
+        counts = {fid: len(e["run_ids"]) for fid, e in sorted(data["unjudged"].items())}
+        owner = [fid for fid, n in counts.items() if n >= LIMIT]
+        if owner:
+            lines.append(f"rajzolt ábra, amelyet az ábraellenőr {LIMIT} futásban sem bírált el, rád vár (school-notes "
+                         f"status --clear {data['learner']} unjudged --continue): " + ", ".join(owner))
+        if len(owner) < len(counts):
+            lines.append("el nem bírált rajzolt ábra (futások): " + ", ".join(
+                f"{fid} ({n})" for fid, n in counts.items() if n < LIMIT))
     lock = data["lock"]
     lines.append(f"zár: {'foglalt – ' + str(lock.get('kind')) + ' óta ' + str(lock.get('since')) if lock['held'] else 'szabad'}")
     for t in data["open"]:
