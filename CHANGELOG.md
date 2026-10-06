@@ -2,6 +2,11 @@
 
 Newest first. Each entry says what changed in the shared files and what an existing wiki must do when it applies the update (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)). A wiki records the version it is on in `PROFILE.md`.
 
+## 1.21.4 - 2026-10-06
+
+- Textbook line (Note formatting, Sources and evidence, run module): the `🔖 Tankönyv:` line either names an identified lesson and page or states that the learner's grade-N textbook does not cover the topic; a "not yet identified" placeholder is never published – the line is left out and the gap goes to the evidence record or the open questions. The check warns about a textbook line without a lesson or page number, and an existing placeholder becomes one machine item.
+- Migration (controller-owned): synchronize the changed instructions through Template updates; no learner content changes.
+
 ## 1.21.3 - 2026-10-06
 
 - Learning images (`tools/learning_image.py`, Learning image execution): an owner-approved reopen (`status --reopen … --paid`) records a grant in the image ledger; the paid-attempt limit counts the attempts since the latest grant, so one approval opens exactly one new frame of three paid attempts. The monthly image budget still applies.
