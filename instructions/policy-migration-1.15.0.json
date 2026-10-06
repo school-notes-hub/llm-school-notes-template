@@ -130,9 +130,9 @@
       "heading": "Choosing and replacing authored visuals",
       "destination": "instructions/visual-policy.md",
       "source_sha256": "d6180905164864ce436be307edf626132fea3f122b9f5ba0596dad6208c27ba5",
-      "migrated_sha256": "b2108f06cb3bbd044d2b0804a13b082786851bb9ea5c317e5b48711f9f73c07a",
+      "migrated_sha256": "ce8bd854fd72b22a4fca11956059d41a6f623627a82ea4e6c4a47d5f7f030cbe",
       "change": "Preserved with relative documentation links rebased; semantic changes, if any, listed below.",
-      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: same notebook drawing, correct; independent acceptance; named replacement reasons; 1.19.0: banner and infographic are always generated images, never authored SVG; 1.21.5: the visual decision and its figures are part of the writer's pass with one joint text-and-figure review; on request for named pages only"
+      "updated_in": "1.16.0: section rewritten for the v2 run model (school-notes tool does filing, hashes, indexes, Git); 1.17.0: same notebook drawing, correct; independent acceptance; named replacement reasons; 1.19.0: banner and infographic are always generated images, never authored SVG; 1.21.5: the visual decision and its figures are part of the writer's pass with one joint text-and-figure review; on request for named pages only; 1.21.6: an inserted figure in an edited section is looked at again by that one review against the new text, only its accept renews the verdict; no regeneration unless the figure's content is outdated or wrong"
     },
     {
       "heading": "Printable study notes",

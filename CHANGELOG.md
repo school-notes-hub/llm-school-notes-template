@@ -2,6 +2,11 @@
 
 Newest first. Each entry says what changed in the shared files and what an existing wiki must do when it applies the update (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)). A wiki records the version it is on in `PROFILE.md`.
 
+## 1.21.6 - 2026-10-06
+
+- Visual policy (*Decide before drawing*, *Inserted figures in edited sections*): when a pass changes the text of a section that holds an inserted figure, the figure's verdict no longer holds; the one review of the change actually looks at that figure against the new text and gives its verdict, and only its `accept` renews the verdict. Only the figures whose verdict the edit invalidated are looked at, only for what the edit could change; a sentence the reviewer proposes with its acceptance needs no further look. Nothing is regenerated for this: a replacement only when the figure's content is outdated or no longer correct (`decision_reason` `a` or `b`); a text clarification that resolves the mismatch is the fix. No new review round (in a tool run the run module applies).
+- Migration (controller-owned): synchronize the changed instructions through Template updates; no learner content changes.
+
 ## 1.21.5 - 2026-10-06
 
 - Visual policy (*Decide before drawing*): the visual decision and its figures are part of the writer's pass, not a separate round; the one independent review checks text and figures together and gives the figure verdict; a rejected figure is repaired once and the same reviewer confirms only that figure (no new review round). The owner may ask for the decision, figures and review on named pages only. Media workflows (*In a school-notes run*) refers to it.
