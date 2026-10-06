@@ -2,6 +2,11 @@
 
 Newest first. Each entry says what changed in the shared files and what an existing wiki must do when it applies the update (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)). A wiki records the version it is on in `PROFILE.md`.
 
+## 1.21.3 - 2026-10-06
+
+- Learning images (`tools/learning_image.py`, Learning image execution): an owner-approved reopen (`status --reopen … --paid`) records a grant in the image ledger; the paid-attempt limit counts the attempts since the latest grant, so one approval opens exactly one new frame of three paid attempts. The monthly image budget still applies.
+- Migration (controller-owned): synchronize the changed shared files through Template updates; no learner content changes.
+
 ## 1.21.2 - 2026-10-06
 
 - Visual tools (`tools/visual_tools.py`): font and matplotlib caches go to a private temporary directory that is removed after the render; nothing is written under the output folder in `wiki/assets/` except the figure and its render record.
