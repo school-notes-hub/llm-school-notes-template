@@ -3,7 +3,7 @@
 
 import subprocess
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..log import Log, Timer
@@ -57,6 +57,26 @@ class Remote:
             parts += ["-p", str(self.port)]
         return " ".join(parts)
 
+    def env(self) -> dict:
+        return {"GIT_SSH_COMMAND": self.ssh_command()}
+
+    def config(self) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class HttpsToken:
+    """GitHub over HTTPS with the token `gh auth token` gave at run time: the token lives only
+    in git's environment; the helper on argv names the variable, never the value."""
+
+    token: str = field(repr=False)
+
+    def env(self) -> dict:
+        return {"SN_GIT_TOKEN": self.token}
+
+    def config(self) -> tuple[str, ...]:
+        return ('credential.helper=!f() { echo username=x-access-token; echo "password=$SN_GIT_TOKEN"; }; f',)
+
 
 @dataclass(frozen=True)
 class Git:
@@ -66,7 +86,7 @@ class Git:
     name: str
     email: str
     log: Log
-    remote: Remote | None = None
+    remote: Remote | HttpsToken | None = None
     work_tree: Path | None = None
 
     def at(self, work_tree: Path) -> "Git":
@@ -78,14 +98,15 @@ class Git:
                "GIT_EDITOR": "true", "GIT_MERGE_AUTOEDIT": "no", "GIT_PAGER": "cat",
                "LC_ALL": "C", "PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/nonexistent"}
         if self.remote:
-            env["GIT_SSH_COMMAND"] = self.remote.ssh_command()
+            env.update(self.remote.env())
         return env
 
     def argv(self, args: list[str], gc: bool = False) -> list[str]:
         argv = ["git", f"--git-dir={self.git_dir}"]
         if self.work_tree:
             argv.append(f"--work-tree={self.work_tree}")
-        for item in FIXED_C + (f"user.name={self.name}", f"user.email={self.email}"):
+        remote = self.remote.config() if self.remote else ()
+        for item in FIXED_C + remote + (f"user.name={self.name}", f"user.email={self.email}"):
             argv += ["-c", item]
         if not gc:
             argv += ["-c", "gc.auto=0"]

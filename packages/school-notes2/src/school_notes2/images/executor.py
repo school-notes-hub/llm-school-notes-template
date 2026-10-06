@@ -25,8 +25,16 @@ class ExecutorTimeout(ExecutorError):
 
 
 def read_key(key_file: Path) -> str:
-    """`openrouter.key` holds the bare key or an `OPENROUTER_API_KEY=...` line."""
-    for line in key_file.read_text(encoding="utf-8").splitlines():
+    """The key file holds the bare key, or is a dotenv file (the ops `.env`) with an
+    `OPENROUTER_API_KEY=...` entry among others (quoted or multi-line values included)."""
+    from ..local.keys import parse_env
+    text = key_file.read_text(encoding="utf-8")
+    values = parse_env(text)
+    if values.get("OPENROUTER_API_KEY"):
+        return values["OPENROUTER_API_KEY"]
+    if values:
+        raise ExecutorError("OpenRouter key missing in the secrets file")
+    for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue

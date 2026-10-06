@@ -24,6 +24,7 @@ class Student:
     drive_root: str      # Drive folder id of `Tanulási anyagok/<Tanuló>`
     grade: int           # school year: lesson-notes pages, fetch.json `learner`, prompt yardstick
     publish: bool = False
+    local_repo: Path | None = None   # the owner's working copy (`sn`); default ~/jegyzet/school-notes-<name>-active
 
 
 @dataclass(frozen=True)
@@ -186,7 +187,8 @@ def _student(name: str, t: dict) -> Student:
         return Student(name=name, repo=t["repo"], repo_key=_path(t["repo_key"]),
                        site_repo=t["site_repo"], site_key=_path(t["site_key"]),
                        drive_root=t["drive_root"], grade=grade,
-                       publish=bool(t.get("publish", False)))
+                       publish=bool(t.get("publish", False)),
+                       local_repo=_path(t["local_repo"]) if "local_repo" in t else None)
     except KeyError as exc:
         raise ConfigError(f"[students.{name}] missing {exc.args[0]}") from None
 

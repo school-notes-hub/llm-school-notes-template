@@ -3,7 +3,6 @@ from datetime import datetime
 
 import pytest
 
-from school_notes2 import cli
 from school_notes2.flows import context, status_text
 from school_notes2.flows import round as scheduler
 from school_notes2.log import TZ
@@ -48,7 +47,7 @@ def test_hungarian_running_idle_today_queues_and_budget(cfg, monkeypatch, learne
     assert "Tulajdonosi döntésre vár: 1 review-tétel." in text
 
 
-def test_round_snapshot_matches_cli_and_keeps_other_learner_on_corrupt_state(cfg, monkeypatch, capsys):
+def test_round_snapshot_keeps_other_learner_on_corrupt_state(cfg, monkeypatch, capsys):
     fixed = datetime.now(TZ).replace(minute=10)
     monkeypatch.setattr(scheduler, "now", lambda: fixed)
     monkeypatch.setattr(scheduler.nightly, "nightly", lambda c: None)
@@ -56,11 +55,7 @@ def test_round_snapshot_matches_cli_and_keeps_other_learner_on_corrupt_state(cfg
     scheduler.round(cfg)
     saved = (cfg.state_dir / "allapot.txt").read_text()
     assert saved == status_text.snapshot(cfg)
-    monkeypatch.setattr(cli.config, "load", lambda _: cfg)
-    assert cli.main(["status"]) == 0
-    assert capsys.readouterr().out == saved.split("\n\n", 1)[1]
     assert saved.splitlines()[0] == f"Készült: {datetime.now(TZ):%Y-%m-%d %H:%M}"
-    assert cli._parser().parse_args(["status", "--details"]).details
     ctx = context.make(cfg, "third", console=False)
     task = phase.create(ctx.task_root(), ctx.name, "notes", "cron", "writing")
     task.path.write_text("broken json")

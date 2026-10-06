@@ -1,0 +1,112 @@
+import json
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from school_notes2.local import publish
+from school_notes2.site import build as site_build
+from tests.conftest import make_origin
+from tests.local.conftest import ENV, git
+
+
+@pytest.fixture
+def world(tmp_path, fake_local, local_origin, monkeypatch):
+    (tmp_path / "o").mkdir()
+    origin = make_origin(tmp_path / "o", {"wiki/index.md": "# Kezdőlap\n", ".gitignore": ".school-notes/\n"})
+    (tmp_path / "s").mkdir()
+    site = make_origin(tmp_path / "s", {"README.md": "site\n"})
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "clone", "-q", str(origin), str(repo)], check=True, env=ENV)
+    (repo / "wiki/index.md").write_text("# Kezdőlap\n\nÚj.\n")
+    git(repo, "commit", "-qam", "notes")
+    local = fake_local(repo, site_repo=str(site))
+    builds = []
+
+    def fake_build(git_, commit, task_dir, renderer, *, changed, log, browser_filter=None):
+        out = Path(task_dir) / "build"
+        (out / "site").mkdir(parents=True)
+        (out / "site" / "index.html").write_text(f"<p>{commit}</p>")
+        (out / "payload.json").write_text(json.dumps({"site": "", "base": "/t/", "pages": []}))
+        builds.append(out)
+        return site_build.BuildRecord(commit, out, 0.1, 1)
+    monkeypatch.setattr(publish.site_build, "build", fake_build)
+    monkeypatch.setattr(publish.finish, "renderer", lambda ctx: None)
+    monkeypatch.setattr(publish.done, "report", lambda repo, out=print: 0)
+    return {"local": local, "repo": repo, "origin": origin, "site": site, "builds": builds}
+
+
+def ref(bare, name):
+    return subprocess.run(["git", f"--git-dir={bare}", "rev-parse", "--verify", "--quiet", name],
+                          capture_output=True, text=True, env=ENV).stdout.strip() or None
+
+
+def head(repo):
+    return git(repo, "rev-parse", "HEAD").strip()
+
+
+def test_publish_pushes_main_builds_gates_and_pushes_gh_pages(world):
+    lines = []
+    assert publish.run(world["local"], out=lines.append) == 0
+    h = head(world["repo"])
+    assert ref(world["origin"], "refs/heads/main") == h
+    pages = ref(world["site"], "refs/heads/gh-pages")
+    record = json.loads(subprocess.run(["git", f"--git-dir={world['site']}", "show", f"{pages}:publish.json"],
+                                       capture_output=True, text=True).stdout)
+    assert record["source_commit"] == h
+    assert ref(world["origin"], "refs/heads/claude-reviewed") is None
+    assert not world["builds"][0].exists()                       # the temporary build is gone
+    assert (world["local"].site_clone() / ".git").is_dir()
+    assert [r[:2] for r in world["local"].records] == [("publish", "ok")]
+
+
+def test_reviewed_moves_claude_reviewed(world):
+    assert publish.run(world["local"], reviewed=True, out=lambda *_: None) == 0
+    assert ref(world["origin"], "refs/heads/claude-reviewed") == head(world["repo"])
+
+
+def test_nothing_new_publishes_nothing(world):
+    publish.run(world["local"], out=lambda *_: None)
+    pages = ref(world["site"], "refs/heads/gh-pages")
+    lines = []
+    assert publish.run(world["local"], out=lines.append) == 0
+    assert ref(world["site"], "refs/heads/gh-pages") == pages and len(world["builds"]) == 1
+    assert any("nincs teendő" in line for line in lines)
+
+
+@pytest.mark.parametrize("why", ["dirty", "untracked", "done", "branch"])
+def test_preconditions_refuse_before_any_push(world, monkeypatch, why):
+    repo = world["repo"]
+    if why == "dirty":
+        (repo / "wiki/index.md").write_text("changed\n")
+    elif why == "untracked":
+        (repo / "wiki/new.md").write_text("# New\n")
+    elif why == "done":
+        monkeypatch.setattr(publish.done, "report", lambda repo, out=print: 1)
+    else:
+        git(repo, "switch", "-q", "-c", "other")
+    lines = []
+    assert publish.run(world["local"], out=lines.append) == 1
+    assert lines[-1].startswith("nem adom ki")
+    assert ref(world["origin"], "refs/heads/main") != head(repo)
+    assert ref(world["site"], "refs/heads/gh-pages") is None and not world["builds"]
+    assert world["local"].records[-1][1] == "refused"
+
+
+def test_gate_failure_stops_before_gh_pages(world, monkeypatch):
+    def failing(*a, **k):
+        raise site_build.BuildContentError([{"file": "wiki/index.md", "line": None,
+                                             "message": "public output matches forbidden pattern"}])
+    monkeypatch.setattr(publish.site_build, "build", failing)
+    lines = []
+    assert publish.run(world["local"], out=lines.append) == 1
+    assert ref(world["site"], "refs/heads/gh-pages") is None
+    assert ref(world["origin"], "refs/heads/main") == head(world["repo"])      # main goes first
+    assert world["local"].records[-1][1] == "held"
+
+
+def test_build_only_pushes_nothing(world, tmp_path):
+    assert publish.run(world["local"], build_only=tmp_path / "b", out=lambda *_: None) == 0
+    assert (tmp_path / "b" / "build" / "site" / "index.html").is_file()
+    assert ref(world["origin"], "refs/heads/main") != head(world["repo"])
+    assert ref(world["site"], "refs/heads/gh-pages") is None

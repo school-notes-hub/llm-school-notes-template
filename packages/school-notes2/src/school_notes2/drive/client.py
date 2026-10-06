@@ -5,6 +5,7 @@ network failures are transient, other 4xx need the owner.
 """
 
 import hashlib
+import json
 import time
 import urllib.error
 import urllib.parse
@@ -38,13 +39,18 @@ class Transport(Protocol):
 class DriveMediaTransport:
     """Production transport: drive_media.Drive does the token refresh and the requests."""
 
-    def __init__(self, secrets_dir: Path, timeout_s: float, token_name: str = "drive-token.json",
-                 tools_dir: Path | None = None):
+    def __init__(self, secrets_dir: Path | None, timeout_s: float, token_name: str = "drive-token.json",
+                 tools_dir: Path | None = None, saved: dict | None = None):
+        """`saved` (the authorized-user token as a dict, read by the caller at run time) keeps
+        the credentials in memory: nothing is read from or written to a token file."""
         dm = load_tool("drive_media", tools_dir)
         self.dm = dm
         try:
-            self.drive = dm.Drive(Path(secrets_dir), scope=FULL_SCOPE, token_name=token_name,
-                                  timeout=timeout_s)
+            if saved is not None:
+                self.drive = _memory_drive(dm, saved, timeout_s)
+            else:
+                self.drive = dm.Drive(Path(secrets_dir), scope=FULL_SCOPE, token_name=token_name,
+                                      timeout=timeout_s)
         except dm.ApiError as exc:
             # The token endpoint answers 400/401 (invalid_grant) for a revoked or expired grant.
             if exc.status in (400, 401):
@@ -76,6 +82,34 @@ class DriveMediaTransport:
             raise _mapped(exc.code) from None
         except (urllib.error.URLError, TimeoutError, OSError):
             raise Transient("Drive download connection failed") from None
+
+
+def _memory_drive(dm, saved: dict, timeout_s: float):
+    """drive_media.Drive with the token refreshed from `saved`, never from or into a file."""
+
+    class MemoryDrive(dm.Drive):
+        def __init__(self):
+            self.home, self.scope, self.token_name, self.timeout = None, FULL_SCOPE, None, timeout_s
+            self.opener = urllib.request.build_opener(dm.NoRedirect)
+            if saved.get("scopes") != [FULL_SCOPE]:
+                raise dm.Refused("Only drive credentials are accepted.")
+            form = urllib.parse.urlencode({"client_id": saved["client_id"],
+                                           "client_secret": saved["client_secret"],
+                                           "refresh_token": saved["refresh_token"],
+                                           "grant_type": "refresh_token"}).encode()
+            req = urllib.request.Request("https://oauth2.googleapis.com/token", data=form)
+            try:
+                with self.opener.open(req, timeout=min(60, self.timeout)) as response:
+                    result = json.load(response)
+            except urllib.error.HTTPError as exc:
+                raise dm.ApiError(exc.code) from None
+            except (urllib.error.URLError, TimeoutError):
+                raise dm.Refused("Token refresh connection failed.") from None
+            if result.get("scope", FULL_SCOPE).split() != [FULL_SCOPE]:
+                raise dm.Refused("Unexpected refreshed scope.")
+            self.token = result["access_token"]
+
+    return MemoryDrive()
 
 
 def _mapped(status: int) -> Exception:

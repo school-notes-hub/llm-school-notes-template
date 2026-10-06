@@ -7,7 +7,6 @@ from datetime import datetime
 
 import pytest
 
-from school_notes2 import cli
 from school_notes2.flows import chat, context, operation, operational_report, policy, repair, round as scheduler
 from school_notes2.llm import launch, quota
 from school_notes2.log import TZ
@@ -46,52 +45,6 @@ def test_chat_below_two_percent_and_mid_call_quota_resume(world, monkeypatch):
     assert chat.chat(ctx, None, ask=lambda _: pytest.fail("unexpected question")) == 0
     assert seen == ["writing", "writing"] and not probes
     assert phase.load(task.dir).data["llm_failures"] == 0
-
-
-@pytest.mark.parametrize("command", ["fetch", "finish", "repair"])
-def test_host_commands_are_manual(world, monkeypatch, command):
-    ctx, task, call, _ = world
-    seen = []
-    monkeypatch.setattr(quota, "probe", lambda *a: pytest.fail("manual command probed quota"))
-    monkeypatch.setattr(launch, "_admitted", lambda *a, **kw: seen.append(operation.CURRENT.get()[1]))
-    def work(*args, **kwargs):
-        launch.run_headless(call, log=ctx.log, snapshot=lambda: None)
-        return {}
-    if command == "repair":
-        task.update(mode="repair", repair_topic="wiki/m/topic.md")
-        monkeypatch.setattr(repair.setup, "ensure", lambda c: None)
-        monkeypatch.setattr(chat.run_flow, "advance", work)
-        args = cli._parser().parse_args([command, ctx.name, "--topic", "wiki/m/topic.md"])
-    else:
-        monkeypatch.setattr(chat, "session_" + command, work)
-        args = cli._parser().parse_args([command, ctx.name])
-    assert cli._dispatch(ctx, args) == 0
-    assert seen == [True]
-
-
-@pytest.mark.parametrize("args", [
-    ["run", "third", "--manual"], ["nightly", "third", "--manual"],
-    ["chat", "third"], ["fetch", "third"], ["finish", "third"],
-    ["repair", "third", "--topic", "wiki/m/a.md"],
-    ["status", "--clear", "third", "notes", "--continue"],
-    ["status", "--clear", "third", "notes", "--discard"],
-])
-def test_busy_vm_cli_is_tempfail_with_hungarian_message(cfg, monkeypatch, capsys, args):
-    monkeypatch.setattr(cli.config, "load", lambda _: cfg)
-    lock = operation.vm_lock(cfg)
-    assert lock.try_acquire("round")
-    since = lock.holder()["since"]
-    try:
-        assert cli.main(args) == 75
-        output = capsys.readouterr()
-        assert output.out == ""
-        assert "VM-zár foglalt" in output.err and since in output.err
-        assert "round" in output.err and "próbáld újra a kör vége után" in output.err
-        assert cli.main(["round"]) == 0
-    finally:
-        lock.release()
-    events = [json.loads(line) for line in cfg.log_path.read_text().splitlines()]
-    assert all(e["student"] == "VM" for e in events if e["action"] == "round.skip")
 
 
 @pytest.mark.parametrize("failure", ["due", "before", "action", "report"])

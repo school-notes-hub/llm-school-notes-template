@@ -1,18 +1,31 @@
-"""Entry points (plan 9.2): a thin layer over the flows."""
+"""`sn` – the local, interactive command line (local pipeline plan 3.2). It knows only these
+commands; each lives in `school_notes2/local/<command>.py`:
+
+  sn fetch <t> [--apply]                     Drive inbox: list; --apply: download, place, move
+  sn book <t> <subject> <code> [<source>] [--offset N]   a textbook into references/
+  sn check <t> <page…>                       page check, read-only
+  sn gen <t> <figure-id> [--note FILE]       one paid image generation (ledger, ≤ 3 attempts)
+  sn gen [<t>] --settle                      settle interrupted (unknown-outcome) attempts
+  sn gen <t> <figure-id> --grant             a new frame of attempts – only on the owner's word
+  sn close <t> [--subject a,b] [--check]     insert accepted figures, machine blocks, indexes
+  sn done <t>                                content finished? exit 0/1
+  sn publish <t> [--reviewed] [--build-only DIR]   push main, build, gate, gh-pages, live
+
+Exit codes: 0 done, 1 not done or an error, 2 `sn close` stopped (invalidated figure verdict).
+"""
 
 import argparse
-import json
 import os
 import resource
 import sys
 from pathlib import Path
 
-from . import VERSION, config
-from .state import phase
+from . import VERSION
+from .state.errors import SnError
 
 
 def _harden() -> None:
-    """No core dumps of a process that holds secrets (7.2); files private by default."""
+    """No core dumps of a process that holds secrets; files private by default."""
     os.umask(0o077)
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     try:
@@ -23,189 +36,89 @@ def _harden() -> None:
 
 
 def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="school-notes", description=f"School Notes v2 ({VERSION})")
+    p = argparse.ArgumentParser(prog="sn", description=f"School Notes, local ({VERSION})",
+                                formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     p.add_argument("--config", type=Path, default=None)
     sub = p.add_subparsers(dest="command", required=True)
-    for name in ("run", "nightly", "setup", "fetch", "finish"):
-        command = sub.add_parser(name)
-        command.add_argument("learner")
-        if name in ("run", "nightly"):
-            command.add_argument("--manual", action="store_true")
-    sub.add_parser("round")
-    repair = sub.add_parser("repair")
-    repair.add_argument("learner")
-    selection = repair.add_mutually_exclusive_group(required=True)
-    selection.add_argument("--topic")
-    selection.add_argument("--queue", action="store_true")
-    repair.add_argument("--no-push", action="store_true")
-    login = sub.add_parser("login")
-    login.add_argument("learner")
-    login.add_argument("role", choices=("writer", "reviewer"))
-    chat = sub.add_parser("chat")
-    chat.add_argument("learner")
-    chat.add_argument("harness", nargs="?", choices=("codex", "claude"))
-    status = sub.add_parser("status")
-    status.add_argument("learner", nargs="?")
-    status.add_argument("--json", action="store_true")
-    status.add_argument("--details", action="store_true")
-    status.add_argument("--clear", nargs=2, metavar=("LEARNER", "KIND"))
-    status.add_argument("--reopen", nargs="+", metavar="LEARNER TARGET",
-                        help="docs/review/<file>.md#R<n> or figure:<id>, waiting for the owner (a figure only parked is freed)")
-    status.add_argument("--paid", action="store_true",
-                        help="with --reopen: the owner approves one new frame of paid attempts for a generated image")
-    status.add_argument("--close", nargs="+", metavar="LEARNER TARGET",
-                        help="docs/review/<file>.md#R<n> waiting for the owner: fixed by the owner's decision")
-    status.add_argument("--note", help="with --close: the owner's reason, one line")
-    action = status.add_mutually_exclusive_group()
-    action.add_argument("--continue", dest="action", action="store_const", const="continue")
-    action.add_argument("--discard", dest="action", action="store_const", const="discard")
-    mcp = sub.add_parser("mcp")
-    mcp.add_argument("--student", required=True)
-    mcp.add_argument("--mode", choices=("cron", "interactive"), required=True)
-    mcp.add_argument("--socket", type=Path, required=True)
-    sub.add_parser("verify-tasks")
+    fetch = sub.add_parser("fetch", help="Drive inbox")
+    fetch.add_argument("learner")
+    fetch.add_argument("--apply", action="store_true")
+    book = sub.add_parser("book", help="a textbook into references/")
+    book.add_argument("learner")
+    book.add_argument("subject")
+    book.add_argument("code", help="the book's stock number, e.g. OH-MIR11TB")
+    book.add_argument("source", nargs="?", type=Path, help="the doc-extract folder; without it the map is regenerated")
+    book.add_argument("--offset", type=int, help="printed page = PDF page - N")
+    check = sub.add_parser("check", help="page check, read-only")
+    check.add_argument("learner")
+    check.add_argument("pages", nargs="+")
+    gen = sub.add_parser("gen", help="one paid image generation")
+    gen.add_argument("learner", nargs="?")
+    gen.add_argument("figure_id", nargs="?")
+    gen.add_argument("--note", type=Path, help="repair note for the next attempt")
+    gen.add_argument("--settle", action="store_true")
+    gen.add_argument("--grant", action="store_true", help="only on the owner's explicit word")
+    close = sub.add_parser("close", help="close a learner after the passes")
+    close.add_argument("learner")
+    close.add_argument("--subject", help="comma-separated subjects (default: every hand-over)")
+    close.add_argument("--check", action="store_true", help="dry run on a private copy")
+    done = sub.add_parser("done", help="is the content finished?")
+    done.add_argument("learner")
+    publish = sub.add_parser("publish", help="release HEAD")
+    publish.add_argument("learner")
+    publish.add_argument("--reviewed", action="store_true", help="move claude-reviewed to HEAD")
+    publish.add_argument("--build-only", type=Path, metavar="DIR", help="build into DIR, push nothing")
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     _harden()
-    args = _parser().parse_args(argv)
-    cfg = config.load(args.config)
-    from .flows import context
-    if args.command == "round":
-        from .flows.round import round
-        return round(cfg)
-    if args.command == "verify-tasks":
-        return _verify_tasks(cfg)
-    if args.command == "status":
-        return _status(cfg, args, context)
-    ctx = context.make(cfg, getattr(args, "learner", None) or args.student)
-    return _dispatch(ctx, args)
-
-
-def _dispatch(ctx, args) -> int:
-    from .flows import chat, nightly, run, setup
-    if args.command == "repair":
-        from .flows import repair
-        return repair.repair(ctx, topic=args.topic, build_queue=args.queue, no_push=args.no_push, manual=True)
-    if args.command == "run":
-        return run.run(ctx, manual=args.manual)
-    if args.command == "nightly":
-        return nightly.nightly(ctx, manual=args.manual)
-    if args.command == "setup":
-        setup.setup(ctx)
-        return 0
-    if args.command == "chat":
-        return chat.chat(ctx, args.harness)
-    if args.command in ("fetch", "finish"):
-        return _owner_step(ctx, args.command)
-    if args.command == "mcp":
-        return _mcp(ctx, args)
-    if args.command == "login":
-        return _login(ctx, args.role)
-    raise SystemExit(f"unknown command {args.command}")
-
-
-from .flows.operation import entry
-
-
-@entry("owner", manual=True)
-def _owner_step(ctx, command: str) -> int:
-    """`fetch`/`finish` from the host shell: the same functions as the session's MCP."""
-    from .flows import chat, policy
-    lock = ctx.lock()
-    lock.acquire(command, on_wait=lambda h: print(f"várok a zárra ({h.get('kind')})…"))
+    parser = _parser()
+    args = parser.parse_args(argv)
+    if args.command == "gen":
+        if args.settle and args.grant:
+            parser.error("--settle and --grant are separate")
+        if not args.settle and not (args.learner and args.figure_id):
+            parser.error("sn gen <learner> <figure-id> (or --settle)")
+    from .local import common
+    learner = args.learner
+    if learner is None:                          # `sn gen --settle`: the ledger is shared
+        learner = common.learners(args.config)[0]
+    local = common.load(learner, args.config)
     try:
-        answer = chat.session_fetch(ctx) if command == "fetch" else chat.session_finish(ctx)
-    except Exception as exc:  # noqa: BLE001 - one error policy for every entry point (8)
-        policy.on_error(exc, task=None, student=ctx.name, step=command, log=ctx.log,
-                        mailer=None, interactive=True)
-        print(f"Hiba: {exc}", file=sys.stderr)
+        return _dispatch(local, args)
+    except (SnError, ValueError, OSError) as exc:
+        todo = getattr(exc, "todo", "")
+        print(f"Hiba: {exc}" + (f"\nTeendő: {todo}" if todo else ""), file=sys.stderr)
+        local.record(args.command, "error", error_class=getattr(exc, "kind", type(exc).__name__),
+                     message=str(exc)[:300])
         return 1
-    finally:
-        lock.release()
-    print(json.dumps(answer, ensure_ascii=False, indent=2))
-    return 0
 
 
-def _login(ctx, role_name: str) -> int:
-    """The owner's one-off harness login on the role's home volume (7.4, 10.4)."""
-    from .llm import launch
-    role, harness = ctx.cfg.role(role_name)
-    return launch.run_login(learner=ctx.name, role=role_name, harness=harness,
-                            image=ctx.image_tag(), log=ctx.log,
-                            allowed_domains=ctx.cfg.provider_domains + ctx.cfg.login_domains,
-                            max_agents=ctx.cfg.limits.max_agents, lease_dir=ctx.cfg.state_dir / "agent-leases")
-
-
-def _mcp(ctx, args) -> int:
-    """A standalone MCP server (normally the launcher starts it in-process)."""
-    from .flows import handlers
-    from .flows.session import secret_values
-    from .mcp.server import McpServer
-    task = phase.open_task(ctx.task_root(), ctx.name, "notes")
-    server = McpServer(student=ctx.name, mode=args.mode, handlers=handlers.build(ctx, None),
-                       log=ctx.log, jobs_dir=(task.dir if task else ctx.cfg.state_dir) / "jobs",
-                       run_id=lambda: task.run_id if task else "", log_path=str(ctx.cfg.log_path),
-                       secrets=secret_values(ctx), wait_s=ctx.cfg.limits.mcp_wait_s)
-    server.serve(args.socket)
-    return 0
-
-
-def _status(cfg, args, context) -> int:
-    from .flows import clear, status
-    if args.clear:
-        learner, kind = args.clear
-        if kind not in ("notes", "review", "publish", "writer", "reader", "figure-review", "figure", "reviewer",
-                        "unchecked", "unjudged") or not args.action:
-            raise SystemExit("usage: status --clear <learner> notes|review|publish|writer|reader|figure-review|figure|reviewer"
-                             "|unchecked|unjudged --continue|--discard")
-        result = clear.clear(context.make(cfg, learner), kind, args.action)
-        if isinstance(result, int):
-            return result
-        print(result)
-        return 0
-    if args.reopen and args.close:
-        raise SystemExit("--reopen and --close are separate commands; give one of them")
-    if args.note is not None and not args.close:
-        raise SystemExit("--note belongs to --close")
-    if args.reopen:
-        if len(args.reopen) < 2:
-            raise SystemExit("usage: status --reopen <learner> <docs/review/<file>.md#R<n> | figure:<id>>...")
-        from .flows import reopen
-        result = reopen.request(context.make(cfg, args.reopen[0]), args.reopen[1:], paid=args.paid)
-        print(result)
-        return 1 if result.startswith("Nem rögzítettem") else 0
-    if args.paid:
-        raise SystemExit("--paid belongs to --reopen")
-    if args.close:
-        if len(args.close) < 2 or not args.note:
-            raise SystemExit('usage: status --close <learner> <docs/review/<file>.md#R<n>>... --note "<text>"')
-        from .flows import owner_close
-        result = owner_close.close(context.make(cfg, args.close[0]), args.close[1:], args.note)
-        print(result)
-        return 1 if result.startswith("Nem rögzítettem") else 0
-    learners = [args.learner] if args.learner else list(cfg.students)
-    if not args.json and not args.details:
-        from .flows import status_text
-        print("\n\n".join(status_text.overview(context.make(cfg, name, console=False))
-                          for name in learners))
-        return 0
-    data = [status.summary(context.make(cfg, name, console=False)) for name in learners]
-    print(json.dumps(data, ensure_ascii=False, indent=2) if args.json
-          else "\n\n".join(status.render(d) for d in data))
-    return 0
-
-
-def _verify_tasks(cfg) -> int:
-    """For install.sh: every open task must be readable by this release (10.1)."""
-    for name in cfg.students:
-        try:
-            phase.all_tasks(cfg.root, name)
-        except RuntimeError as exc:
-            print(f"{name}: {exc}", file=sys.stderr)
-            return 1
-    return 0
+def _dispatch(local, args) -> int:
+    if args.command == "fetch":
+        from .local import fetch
+        return fetch.run(local, args.apply)
+    if args.command == "book":
+        from .local import book
+        return book.run(local, args.subject, args.code, args.source, args.offset)
+    if args.command == "check":
+        from .local import check
+        return check.run(local, args.pages)
+    if args.command == "gen":
+        from .local import gen
+        return gen.run(local, args.figure_id, args.note, settle=args.settle, grant=args.grant)
+    if args.command == "close":
+        from .local import close
+        subjects = sorted(s.strip() for s in args.subject.split(",") if s.strip()) if args.subject else None
+        return close.run(local, subjects, args.check)
+    if args.command == "done":
+        from .local import done
+        return done.run(local)
+    if args.command == "publish":
+        from .local import publish
+        return publish.run(local, args.reviewed, args.build_only)
+    raise SystemExit(f"unknown command {args.command}")
 
 
 if __name__ == "__main__":

@@ -3,20 +3,24 @@
 The host-side tool of School Notes v2 (plan: `school-notes-ops/docs/v2/2026-10-02-school-notes-v2-terv.md`).
 It does every mechanical step; the LLM runs in a container and asks for mechanical work only through MCP.
 
-## Flows
+## Commands (local pipeline, `school-notes-ops/docs/v2/helyi/terv-helyi-pipeline.md` 3.2)
+
+`~/.local/bin/sn` runs `school-notes` from a tagged release worktree. The command line knows only these;
+each is one module under `local/`, thin over the library. The VM flows below remain in the package until
+the clean-up step (plan 7, step 4) but have no command any more.
 
 | Command | What it does | Code |
 |---|---|---|
-| `school-notes run <learner>` | hourly: Drive → sources → writer (container) → `finish` (check, generation, commit, rebase, build, push, release) | `flows/run.py`, `flows/fetch.py`, `flows/writer.py`, `flows/finish.py`, `flows/steps.py` |
-| `school-notes repair <learner> --topic wiki/<subject>/<page>.md [--no-push]` | existing-page repair with the writer and finish chain, without Drive or paid generation | `flows/repair.py`, `repair/` |
-| `school-notes repair <learner> --queue [--no-push]` | build/reorder the private repair queue and SVG inventory, without an LLM | `repair/queue.py` |
-| `school-notes nightly <learner>` | nightly: review of `claude-reviewed..main`, report commit, atomic push | `flows/nightly.py`, `review/` |
-| `school-notes chat <learner> [codex\|claude]` | the owner's session in the same container; `fetch`/`finish` through MCP | `flows/chat.py`, `flows/handlers.py`, `flows/session.py` |
-| `school-notes status [<learner>]` | short Hungarian local state (`--details` keeps the full view); `--clear <learner> notes\|review\|publish --continue\|--discard`; `--clear <learner> unchecked --continue` after three failed rechecks; `--clear <learner> unjudged --continue` after three runs whose drawn figure the figure reviewer could not judge; `--reopen <learner> docs/review/<file>.md#R<n> figure:<id>` reopens what waits for the owner (the next fix run applies it) | `flows/status.py`, `flows/clear.py`, `flows/reopen.py` |
-| `school-notes setup <learner>` | bare clones and the three durable worktrees, once | `flows/setup.py` |
-| `school-notes fetch\|finish <learner>` | the MCP operations, from the host shell | `cli.py` |
-| `school-notes verify-tasks` | the installer checks that this release can read every open task | `cli.py` |
-| `python -m school_notes2.migration` | the one-time v1 → v2 migration and the T1 difference list | `migration.py` |
+| `sn fetch <t> [--apply]` | Drive inbox list; `--apply`: download → place in the working copy → move on Drive → delete the download; resumable | `local/fetch.py` |
+| `sn book <t> <subject> <code> [<source>] [--offset N]` | a converted textbook into `references/`, README table, map | `local/book.py` |
+| `sn check <t> <page…>` | page check, read-only (`check_files(fix=False)`) | `local/check.py` |
+| `sn gen <t> <id> [--note f]`, `--settle`, `--grant` | one paid image generation through the host ledger | `local/gen.py` |
+| `sn close <t> [--subject a,b] [--check]` | hand-overs in `.school-notes/out/<subject>/` → insertion, machine blocks, STOP on invalidated verdicts (exit 2), indexes, `public.json`, content check | `local/close.py` |
+| `sn done <t>` | is the content finished (exit 0/1) | `local/done.py` |
+| `sn publish <t> [--reviewed] [--build-only DIR]` | clean tree + `sn done` 0 → push main → build → public gate → gh-pages → live check | `local/publish.py` |
+
+Keys come only from `school-notes-ops/.env` at run time (`local/keys.py`); git runs over HTTPS with `gh`'s
+token in git's environment (`git/run.py` `HttpsToken`); each command writes one line to `logs/school-notes.log`.
 
 ## Folders
 

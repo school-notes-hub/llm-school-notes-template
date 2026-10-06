@@ -169,17 +169,6 @@ def test_the_learner_lock_wait_is_bounded(world, monkeypatch):
     assert reopen.load(ctx) == []
 
 
-@pytest.mark.parametrize("argv,message", [
-    (["status", "--note", "x"], "--note belongs to --close"),
-    (["status", "--reopen", "barna", "figure:a", "--close", "barna", "docs/review/a.md#R1", "--note", "x"],
-     "separate commands"),
-])
-def test_the_cli_refuses_a_note_without_close_and_reopen_with_close(argv, message):
-    from school_notes2 import cli
-    with pytest.raises(SystemExit, match=message):
-        cli._status(None, cli._parser().parse_args(argv), None)
-
-
 TOPIC = "wiki/tortenelem/athen.md"
 EMPTY = "<sub>🔖 Tankönyv: a kapcsolódó kötet és lecke még nincs azonosítva.</sub>"
 GOOD = "<sub>🗓️ Óra: 2026-09-11 · 🔖 Tankönyv: 1. lecke, 12-13. oldal.</sub>"

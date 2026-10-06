@@ -13,7 +13,7 @@ from .client import FOLDER, DriveClient
 
 ROLES = {"Füzet": "fuzet", "Tanári-tanulni": "tanari"}
 READY, PROCESSED = "Feltöltés_Kész", "Feldolgozva"
-IMAGES = (".jpg", ".jpeg", ".png", ".heic", ".heif")
+IMAGES = (".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp")   # phones save .webp too
 PDF = ".pdf"
 DOCUMENT = "document.md"
 OFFICE = (".pptx", ".ppt", ".docx", ".doc")
@@ -144,10 +144,11 @@ def build_package(client: DriveClient, folder: dict, subject: dict, role: str,
     items = walk(client, folder["id"])
     times = [parse_time(t) for _, i in items for t in (i.get("createdTime"), i.get("modifiedTime")) if t]
     names = {rel for rel, i in items if i["mimeType"] != FOLDER}
+    prefix = wrapper(names)
     pkg = Package(id=folder["id"], name=nfc(folder["name"]), subject_name=nfc(subject["name"]),
                   role=role, description=folder.get("description", "") or "",
                   ready_folder_id=ready_id, subject_folder_id=subject["id"],
-                  preconverted=DOCUMENT in names,
+                  preconverted=DOCUMENT in names or bool(prefix),
                   latest=max(times, default=parse_time(folder.get("createdTime", "1970-01-01T00:00:00Z"))))
     for rel, item in items:
         if item["mimeType"] == FOLDER:
@@ -157,12 +158,24 @@ def build_package(client: DriveClient, folder: dict, subject: dict, role: str,
         if reason:
             pkg.ignored.append({"path": rel, "reason": reason})
         else:
-            pkg.files.append(DriveFile(item["id"], rel, int(item.get("size", 0)),
+            pkg.files.append(DriveFile(item["id"], rel[len(prefix):], int(item.get("size", 0)),
                                        item.get("md5Checksum", ""), item["mimeType"]))
     pkg.listed.sort()
     _refuse_duplicate_names(pkg)
     pkg.files.sort(key=lambda f: (f.rel, f.id))
     return pkg
+
+
+def wrapper(names: set[str]) -> str:
+    """The owner's doc-extract layout may nest the output in one subfolder
+    (`<package>/<subfolder>/document.md`, manifest, provenance, figures): that subfolder's
+    prefix, so its files are taken with paths relative to it; "" for any other layout. The
+    snapshot (`listed`) keeps the full paths, so the move compares what is really on Drive."""
+    tops = {name.split("/", 1)[0] for name in names}
+    if len(tops) != 1 or not all("/" in name for name in names):
+        return ""
+    top = tops.pop()
+    return f"{top}/" if f"{top}/{DOCUMENT}" in names else ""
 
 
 def _refuse_duplicate_names(pkg: Package) -> None:

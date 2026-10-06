@@ -199,3 +199,19 @@ def test_equal_packages_are_ordered_by_id(fake, client, tree):
     fake.items = dict(reversed(list(fake.items.items())))       # Drive answers in another order
     assert [p.id for p in inventory.scan(client, tree["root"], now=NOW).ready] == first
     assert first == sorted(first)
+
+
+def test_webp_photos_are_taken_and_a_nested_doc_extract_is_unwrapped(fake, client, tree):
+    from school_notes2.drive import inventory
+    photos = fake.folder("telefon", tree["ready"])
+    fake.file("1.webp", photos, b"webp", mime="image/webp")
+    nested = fake.folder("dia", tree["ready"])
+    inner = fake.folder("dia-extract", nested)
+    fake.file("document.md", inner, b"# Dia\n", mime="text/markdown")
+    fake.file("p.png", fake.folder("figures", inner), b"png", mime="image/png")
+    inv = inventory.scan(client, tree["root"], ready_after_s=0)
+    by_name = {p.name: p for p in inv.ready + inv.waiting}
+    assert [f.rel for f in by_name["telefon"].files] == ["1.webp"]
+    doc = by_name["dia"]
+    assert doc.preconverted and [f.rel for f in doc.files] == ["document.md", "figures/p.png"]
+    assert sorted(e[1] for e in doc.listed) == ["dia-extract/document.md", "dia-extract/figures/p.png"]

@@ -69,21 +69,7 @@ def test_writer_timeout_defaults_to_two_hours_but_explicit_override_survives():
     assert config.parse(BASE).role("writer")[0].timeout_s == 5400
 
 
-def test_repair_cli_requires_exactly_one_target_mode():
-    from school_notes2.cli import _parser
-    args = _parser().parse_args(["repair", "barna", "--topic", "wiki/m/a.md", "--no-push"])
-    assert args.topic == "wiki/m/a.md" and args.no_push and not args.queue
-    assert _parser().parse_args(["repair", "benedek", "--queue"]).queue
-    for argv in (["repair", "barna"], ["repair", "barna", "--queue", "--topic", "a"]):
-        with pytest.raises(SystemExit):
-            _parser().parse_args(argv)
-
-
-def test_operational_cli_and_reader_stage_timeouts():
-    from school_notes2.cli import _parser
-    for command in ("run", "nightly"):
-        assert _parser().parse_args([command, "synthetic", "--manual"]).manual
-    assert _parser().parse_args(["round"]).command == "round"
+def test_reader_stage_timeouts():
     data = {**BASE, "nightly_after": "04:20", "roles": {**BASE["roles"], "reader": {
         **BASE["roles"]["reviewer"], "timeout_s": 1800, "list_timeout_s": 700, "recheck_timeout_s": 1300}}}
     cfg = config.parse(data)
