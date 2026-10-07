@@ -29,7 +29,6 @@ package-lock.json
 # Local credentials and environment overrides
 .env
 .env.*
-!.env.example
 
 # Private generated request state and optional Drive credentials
 .learning-images-state/
@@ -42,7 +41,7 @@ visual-tools.local.json
 # Reproducible page-check dependency lock (other ad-hoc npm locks stay ignored).
 !tools/page-check/package-lock.json
 
-# School Notes v2: the run's working files and renderer logs are never committed.
+# The pass's working and hand-over files and renderer logs are never committed.
 .school-notes/
 wiki/assets/**/stdout.log
 wiki/assets/**/stderr.log

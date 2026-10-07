@@ -21,7 +21,7 @@ Source images and relevant textbook figures are checked directly, including crop
 
 Optional [curriculum references](references/curriculum/README.md) guide relevant depth without turning every requirement into homework. Precise diagrams keep editable SVG; useful overview infographics can use a configured image generator, with checked labels/arrows and a factual image-description comment. Printable study notes are a separate A4 PDF output with selectable text and separate self-check answers. These rules do not install bots, grant account access or authorize unlimited generation.
 
-For optional generated banners and infographics, follow the [repository-local setup](instructions/install-learning-images.md). All programs and instructions run from this checkout. No global skill, Hermes installation, Discord account or machine-specific configuration is required. Ordinary notes and SVG diagrams work without paid image generation.
+Generated banners and infographics go through the `sn` command line (`sn gen`, see [the local pass](instructions/helyi-menet.md)). Ordinary notes and SVG diagrams work without paid image generation.
 
 ## Getting started
 
@@ -62,13 +62,9 @@ There is one set of rules plus one profile, so Claude Code and Codex do not main
 
 Updates are opt-in. When you request one, the agent follows [CHANGELOG.md](CHANGELOG.md), preserves local settings and copies the complete set in [shared-files.json](shared-files.json). Shared files are byte-identical across linked wikis on the same release; settings stay in `PROFILE.md`, `tools/subjects.json` and `tools/book-index.json`. Run `uv run tools/check_shared.py --template <template-checkout>` to detect drift. Every linked wiki profile records the canonical template URL, release and commit.
 
-The common [media workflows](instructions/media-workflows.md), [prompts](instructions/media-prompts.md) and [handoff contract](instructions/media-handoff.md) apply to authorized work with locally configured tools. The template remains uninitialized; bootstrap supplies the learner and language settings.
+The common [media workflows](instructions/media-workflows.md) and [prompts](instructions/media-prompts.md) apply to authorized work with locally configured tools. The template remains uninitialized; bootstrap supplies the learner and language settings.
 
 ## Credits
 
 * The LLM-wiki pattern is by [Andrej Karpathy](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f), preserved in [llm-wiki.md](llm-wiki.md).
 * The OKF specification is from [Google Cloud Platform knowledge-catalog](https://github.com/GoogleCloudPlatform/knowledge-catalog), pinned in [SPEC.md](SPEC.md).
-
-## System handbook
-
-For optional integrations, start with the [system handbook](instructions/system-guide.md) to learn the architecture, find operating/configuration details, prepare a blog article, or follow the rebuild instructions. It covers Hermes and the bot roles, the wiki, media generation, Drive and scheduled review, with explicit implemented/planned status.

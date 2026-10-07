@@ -1,6 +1,6 @@
 # Optional local visual tools
 
-This is the installation and execution entry point for deterministic visuals. The [selection guide](technical-visuals.md) determines what to draw; installed programs do not decide the teaching task. The visual tool code stays in this Git checkout. No agent-specific program or globally installed skill is needed. An optional [repository skill](../.agents/skills/learning-visuals/SKILL.md) routes agents to the same instructions.
+This is the installation and execution entry point for deterministic visuals. The [selection guide](technical-visuals.md) determines what to draw; installed programs do not decide the teaching task. The visual tool code stays in this Git checkout. No agent-specific program or globally installed skill is needed.
 
 ## Installation proposal and boundaries
 
@@ -28,18 +28,18 @@ Always include `--group visuals` for plotting commands so `uv` can select the op
 
 ## Concrete Ubuntu workstation proposal (2026-09-28)
 
-This is a proposal until a private deployment receipt records execution. It is not a claim about every Ubuntu version or a future VM.
+This is a proposal until a private deployment receipt records execution. It is not a claim about every Ubuntu version.
 
 * Graphviz `14.1.2-1ubuntu1`, POV-Ray `1:3.7.0.10-3build7`, plus the dependencies shown by `apt-get -s --no-install-recommends install graphviz povray`. The observed dry run requested 11 new packages, no upgrades/removals. Proposed actual command: `sudo apt-get --no-install-recommends install graphviz=14.1.2-1ubuntu1 povray=1:3.7.0.10-3build7`. The unversioned dry run and versioned install should be compared immediately before execution. Distribution snapshots may be required to reproduce older package versions later; a moving mirror is not an indefinite archive.
 * PlantUML `1.2026.8`: [official JAR](https://github.com/plantuml/plantuml/releases/download/v1.2026.8/plantuml.jar), 29,871,497 bytes, SHA-256 `5e1ecfa8ecd32c90b03bbf3b1eb6f020943f98ab0fcf4032be31a0002ee2c462`. Proposed location: `${XDG_DATA_HOME:-$HOME/.local/share}/school-notes-runtimes/plantuml/1.2026.8/plantuml.jar`. Existing OpenJDK 21 is available on the workstation. The older OS PlantUML package is not part of this proposal.
 * FreeCAD `1.1.3`: use the official AppImage and verified hash already recorded in the [pilot](../examples/technical-visuals/README.md), extracted under `${XDG_DATA_HOME:-$HOME/.local/share}/school-notes-runtimes/freecad/1.1.3/`. The extracted bundle occupies about 3.1 GiB; retaining its download too takes about 3.9 GiB. Reconstruction downloads/extracts the official artifact and checks its digest first. The workstation reused its verified download, extracting a fresh persistent runtime. No project script or secret is transferred with the runtime.
 * Plotting: the repository lock selects Matplotlib `3.11.2` and NumPy `2.5.3` for the current Python 3.14 environment. Lower supported Python versions have separate compatible locked resolutions. Install in this checkout's `.venv` only.
 
-Record actual commands, resulting versions, tests and residual limits in a private deployment receipt. Do not put this workstation's paths into the shared example configuration. On the VM, inspect its OS and existing tools before proposing equivalent installation; do not copy the workstation runtime or invent measured performance.
+Record actual commands, resulting versions, tests and residual limits in a private deployment receipt. Do not put this workstation's paths into the shared example configuration. On another machine, inspect its OS and existing tools before proposing equivalent installation; do not copy the workstation runtime or invent measured performance.
 
 ## Rebuild the external runtimes
 
-Prefer supported packages rather than extracting OS package archives to avoid administrator access. On Ubuntu, inspect `apt-cache policy graphviz povray` and a simulated install, then install with the administrator's approved `sudo apt-get --no-install-recommends install graphviz povray`. Add a compatible headless Java package (for example `openjdk-21-jre-headless`) if Java is absent. These packages may bring graphical libraries even when invoked without a display; do not equate a library dependency with GPU rendering. Record `dpkg-query -W` versions. The workstation and Ubuntu 24.04 VM can legitimately have different distribution package versions.
+Prefer supported packages rather than extracting OS package archives to avoid administrator access. On Ubuntu, inspect `apt-cache policy graphviz povray` and a simulated install, then install with the administrator's approved `sudo apt-get --no-install-recommends install graphviz povray`. Add a compatible headless Java package (for example `openjdk-21-jre-headless`) if Java is absent. These packages may bring graphical libraries even when invoked without a display; do not equate a library dependency with GPU rendering. Record `dpkg-query -W` versions. Different machines can legitimately have different distribution package versions.
 
 For the following Linux x86_64 versions, a separately versioned official JAR/AppImage provides the tested runtime where the OS has an obsolete PlantUML or no FreeCAD candidate. These upstream distributions need no agent modifications. Commands use a fresh version directory; do not overwrite an existing installation blindly. Verify enough disk space first. A checksum mismatch stops installation, never execution with a warning.
 
@@ -98,8 +98,8 @@ The five adapters are convenient execution paths, not a list of permitted diagra
 
 ## Verify a deployment
 
-Run `uv run --locked --group visuals python -m unittest discover -s tools -p test_visual_tools.py`, then the representative render commands above. View their actual output, check the FreeCAD numeric assertions and Matplotlib domain handling, and record runtime versions and timings separately per machine. Keep the `.visual-runs` receipts in the private deployment inventory; a VM timing must not be inferred from workstation performance. Install own scripts/skills only by Git checkout/pull on the destination, then rebuild its environment. No environment/credential copy is part of this procedure.
+Run `uv run --locked --group visuals python -m unittest discover -s tools -p test_visual_tools.py`, then the representative render commands above. View their actual output, check the FreeCAD numeric assertions and Matplotlib domain handling, and record runtime versions and timings separately per machine. Keep the `.visual-runs` receipts in the private deployment inventory; one machine's timing must not be inferred from another's. Install own scripts/skills only by Git checkout/pull on the destination, then rebuild its environment. No environment/credential copy is part of this procedure.
 
 ## Cleanup
 
-Project code is reverted through Git. A checkout's optional environment can be rebuilt from `uv.lock`. Remove a separately installed PlantUML/FreeCAD version directory only after confirming that no other checkout uses it and retaining any needed models/results. For OS packages, inspect a removal simulation and remove only packages installed for this work that are no longer needed; do not blindly autoremove dependencies or purge pre-existing programs. No Hermes rollback is needed because no Hermes program/skill is modified.
+Project code is reverted through Git. A checkout's optional environment can be rebuilt from `uv.lock`. Remove a separately installed PlantUML/FreeCAD version directory only after confirming that no other checkout uses it and retaining any needed models/results. For OS packages, inspect a removal simulation and remove only packages installed for this work that are no longer needed; do not blindly autoremove dependencies or purge pre-existing programs.
