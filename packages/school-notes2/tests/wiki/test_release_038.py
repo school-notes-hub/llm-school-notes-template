@@ -15,7 +15,7 @@ def test_short_hungarian_dates():
     assert hu_dates.short("2027-06-15", 2026) == "jún. 15."
     assert hu_dates.full("2026-10-04") == "2026. 10. 04."
     assert hu_dates.part("2026-09-23", 2026) == "szept. vége"
-    assert hu_dates.between("szept. 10.", "szept. 19.") == "szept. 10. – 19."
+    assert hu_dates.between("szept. 10.", "szept. 19.") == "szept. 10–19."
     assert hu_dates.between("szept. eleje", "okt. eleje") == "szept. eleje – okt. eleje"
     assert hu_dates.range_text("2026-09-23", "2026-10-04", 2026) == "szept. 23. – okt. 4."
     assert hu_dates.range_text("", "2026-10-04", 2026) == "legkésőbb okt. 4."

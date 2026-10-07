@@ -5,15 +5,15 @@ def test_subject_blocks(repo):
     text = generate.subject_index(repo, "proba")
     chapters = markers.read(text, "chapters")
     assert chapters == (
-        "# 📘 9. évfolyam: Alapok\n\n<span class=\"study-when study-when-unsure\" title=\"Nem biztos: a vége dátum nélküli óra (szept. 3. – 10.)\">~szept. eleje</span>\n\n"
+        "# 📘 9. évfolyam: Alapok\n\n<span class=\"study-when study-when-unsure\" title=\"Nem biztos: a vége dátum nélküli óra (szept. 3–10.)\">~szept. eleje</span>\n\n"
         "* ⚡ [Összefoglaló: Alapok](osszefoglalo-alapok.md) - Rövid.\n"
         "* [Első](elso.md) - Az első téma.\n"
         "\n<br />\n\n"
-        "# 📘 9. évfolyam: Haladó\n\n<span class=\"study-when study-when-unsure\" title=\"Nem biztos: a kezdete dátum nélküli óra (szept. 3. – 10.)\">~szept. eleje óta</span>\n\n"
+        "# 📘 9. évfolyam: Haladó\n\n<span class=\"study-when study-when-unsure\" title=\"Nem biztos: a kezdete dátum nélküli óra (szept. 3–10.)\">~szept. eleje óta</span>\n\n"
         "* [Második](masodik.md) - A második téma.\n")
     lessons = markers.read(text, "lessons").splitlines()
     assert lessons[0] == "| Dátum | Óra | Jegyzet | Témakörök |"
-    assert lessons[2].startswith("| <span class=\"study-when study-when-unsure\" title=\"Dátum nélküli óra: szept. 3. – 10.\">~szept. eleje</span> | Folytatás |")
+    assert lessons[2].startswith("| <span class=\"study-when study-when-unsure\" title=\"Dátum nélküli óra: szept. 3–10.\">~szept. eleje</span> | Folytatás |")
     assert "[Második](masodik.md#resz)" in lessons[2]
     assert lessons[3].startswith("| <span class=\"study-when\">szept. 3.</span> | Bevezetés | [jegyzet](2026-09-10-elso-jegyzet.md)")
     assert markers.read(text, "review").startswith("# 🔁 Ismétlés\n\n* [Dolgozatra]")
@@ -56,7 +56,7 @@ def test_equal_undated_lessons_follow_the_notebook():
     note = {"date_note": "2026-09-15 után, legkésőbb 2026-09-26", "title": "x"}
     found = teaching_order.ordered([
         ("2026-09-26-erorendszer-jegyzet.md", {"source_file": "sources/f/page-15.jpeg", "lessons": [note]}),
-        ("2026-09-26-vetuletek-jegyzet.md", {"source_file": "sources/f/page-10.jpeg", "lessons": [note]})])
+        ("2026-09-26-vetuletek-jegyzet.md", {"source_file": "sources/f/page-10.jpeg", "lessons": [note]})], {"f"})
     assert [lesson.file for lesson in found] == ["2026-09-26-vetuletek-jegyzet.md", "2026-09-26-erorendszer-jegyzet.md"]
     assert not any(lesson.uncertain for lesson in found)    # one folder: the notebook order is known
 
@@ -73,7 +73,7 @@ def test_catch_up_list_and_lesson_marks_are_neutral_and_stable(repo):
     assert markers.read(text, "catch-up") == (
         "# 📝 Pótolandó\n\n"
         "Ezeknek az óráknak az anyagát pótolnod kell: írd be a füzetedbe (vagy tanuld meg), és szólj, ha megvan.\n\n"
-        "* [Első óra](2026-09-10-elso-jegyzet.md) - Dátum: <span class=\"study-when\">szept. 3.</span>, <span class=\"study-when study-when-unsure\" title=\"Dátum nélküli óra: szept. 3. – 10.\">~szept. eleje</span>. "
+        "* [Első óra](2026-09-10-elso-jegyzet.md) - Dátum: <span class=\"study-when\">szept. 3.</span>, <span class=\"study-when study-when-unsure\" title=\"Dátum nélküli óra: szept. 3–10.\">~szept. eleje</span>. "
         "Témakörök: [Első](elso.md), [Második](masodik.md#resz).\n")
     assert text.index("../index.md") < text.index("# 📝 Pótolandó") < text.index("# 📘")
     assert markers.read(text, "lessons").startswith(

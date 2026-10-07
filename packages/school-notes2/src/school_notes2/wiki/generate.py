@@ -31,6 +31,7 @@ class Subject:
     index_meta: dict
     index_title: str     # the index's first `# ` heading
     pages: list[SubjectPage] = field(default_factory=list)
+    notebooks: set[str] = field(default_factory=set)   # source folders that hold one notebook
 
     def by_type(self, kind: str) -> list[SubjectPage]:
         return [p for p in self.pages if p.meta.get("type") == kind]
@@ -47,7 +48,36 @@ def load_subject(repo: Path, slug: str) -> Subject:
         name = rel.rsplit("/", 1)[1]
         if name != "index.md":
             subject.pages.append(SubjectPage(name, read_page(repo, rel).meta))
+    subject.notebooks = notebook_folders(repo, {teaching_order.first_folder(p.meta)
+                                                for p in subject.by_type("lesson-notes")} - {""})
     return subject
+
+
+NOTEBOOK_PAGE = re.compile(r"^(?:p\d{4}|page-\d+)\.(?:jpe?g|png|webp)$", re.I)
+
+
+def notebook_folders(repo: Path, folders: set[str]) -> set[str]:
+    """The source folders whose page order is the order of one notebook (teaching-order
+    evidence): every stored page split from one PDF (its manifest), or, for a folder without a
+    manifest, only PDF-page files (`p0001.jpg`, `page-07.jpeg`). A catch-up folder of separate
+    photos may mix notebooks: its order is no evidence."""
+    out = set()
+    for folder in sorted(folders):
+        base = f"sources/{folder}"
+        if safefs.is_file(repo, f"{base}/sn-fetch.json"):
+            try:
+                pages = [p for p in json.loads(read_text(repo, f"{base}/sn-fetch.json")).get("pages", [])
+                         if not p.get("duplicate_of")]
+            except ValueError:
+                continue
+            if pages and all(p.get("page") for p in pages) and len({p.get("file") for p in pages}) == 1:
+                out.add(folder)
+        elif safefs.is_dir(repo, base):
+            files = [n for n in safefs.listdir(repo, base) if not n.startswith(".")]
+            if any(NOTEBOOK_PAGE.match(n) for n in files) and all(
+                    NOTEBOOK_PAGE.match(n) or n.lower().endswith(".pdf") for n in files):
+                out.add(folder)
+    return out
 
 
 def chapter_pages(subject: Subject, chapter_id: str) -> list[SubjectPage]:
@@ -99,7 +129,7 @@ notebook_position = teaching_order.notebook_position
 def ordered_lessons(subject: Subject) -> list[teaching_order.Lesson]:
     """Every lesson of the subject, oldest first (`teaching_order`: an undated lesson by the lower
     bound of its range), with its `uncertain` mark."""
-    return teaching_order.ordered([(p.file, p.meta) for p in subject.by_type("lesson-notes")])
+    return teaching_order.ordered([(p.file, p.meta) for p in subject.by_type("lesson-notes")], subject.notebooks)
 
 
 def lessons(subject: Subject) -> list[tuple[SubjectPage, dict]]:
@@ -124,17 +154,21 @@ def lesson_link(page: SubjectPage, lesson: dict) -> str:
     return f"{page.file}#{lesson['anchor']}" if lesson.get("anchor") else page.file
 
 
+PARTLY = re.compile(r"\d{4}-\d{2}-(?:\d\?|\?\d|\?\?)|\bvagy\b|részben olvasható")
+
+
 def when(lesson: teaching_order.Lesson, year: int) -> str:
     """The lesson's day as a quiet date item (`hu_dates.meta`): `okt. 6.` (a note on a dated
-    lesson as its tooltip); an undated lesson `~` + the part of the month of its lower bound,
-    its range only in the tooltip."""
+    lesson as its tooltip); an undated lesson `~` + its approximate day (`hu_dates.approximate`),
+    the range only in the tooltip – `Bizonytalan dátum: …` for a partly legible date or two
+    possible days, `Dátum nélküli óra: …` otherwise."""
     note = str(lesson.data.get("date_note") or "")
     if lesson.dated:
         return hu_dates.meta(hu_dates.short(lesson.lo, year), hu_dates.in_text(note, year))
-    day = lesson.lo or (lesson.hi if lesson.hi != teaching_order.NEVER else "")
-    title = f"Dátum nélküli óra: {hu_dates.range_text(lesson.lo, lesson.hi, year)}" + (
+    what = "Bizonytalan dátum" if PARTLY.search(note) else "Dátum nélküli óra"
+    title = f"{what}: {hu_dates.range_text(lesson.lo, lesson.hi, year)}" + (
         "; a helye a sorban nem biztos" if lesson.uncertain else "")
-    return hu_dates.meta(hu_dates.part(day, year) if day else "?", title, unsure=True)
+    return hu_dates.meta(hu_dates.approximate(lesson.lo, lesson.hi, year), title, unsure=True)
 
 
 def after(text: str, lesson: teaching_order.Lesson, year: int) -> str:

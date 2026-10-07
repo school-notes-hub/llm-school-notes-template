@@ -124,10 +124,10 @@ def assignments(result: dict, pending: list[dict]) -> list[dict]:
 
 
 def _inserted(repo: Path, brief: dict) -> bool:
-    from .context import verdict_key
+    from .context import key_matches
     fid = brief["id"]
     if blocks.read(safefs.read_text(repo, brief["page"]), f"figure-{fid}") is None:
         return False
     evidence = safefs.read_json(repo, f"docs/evidence/media/{fid}/figure.json", {})
     return (evidence.get("verdict", {}).get("verdict") == "accept" and
-            evidence["verdict"]["key"] == verdict_key(repo, brief, candidate(repo, brief)))
+            key_matches(repo, brief, candidate(repo, brief), evidence["verdict"]["key"]))

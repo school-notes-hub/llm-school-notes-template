@@ -96,12 +96,12 @@ def test_one_folder_keeps_its_notebook_order_and_a_lesson_without_lower_bound_ma
              for i, n in ((5, "szechenyi"), (3, "rendi"), (7, "vita"))]
     pages.append(("2026-10-03-forras-jegyzet.md", {"source_file": "t/2026-10-02/", "content_sha256": {"p0001.jpg": "x"},
                                                    "lessons": [{"date_note": "legkésőbb 2026-10-03", "title": "forras"}]}))
-    found = teaching_order.ordered(pages)
+    found = teaching_order.ordered(pages, {"t/2026-10-03", "t/2026-10-02"})
     assert [lesson.data["title"] for lesson in found] == ["forras", "rendi", "szechenyi", "vita"]
     assert [lesson.uncertain for lesson in found] == [True, False, False, False]
     # the first page of the same folder is certainly the first lesson (0.3.7): no ↕ at all
     pages[-1][1]["source_file"] = "t/2026-10-03/"
-    assert not any(lesson.uncertain for lesson in teaching_order.ordered(pages))
+    assert not any(lesson.uncertain for lesson in teaching_order.ordered(pages, {"t/2026-10-03"}))
 
 
 def test_the_now_block_names_the_chapter_the_latest_lesson_and_the_ones_before(tmp_path):
@@ -132,7 +132,7 @@ def test_each_chapter_shows_when_it_was_taught(tmp_path):
         teaching_order.Lesson("a.md", 0, {}, "2026-09-03", "2026-09-03", True, "f", ()),
         teaching_order.Lesson("a.md", 1, {}, "2026-09-10", "2026-09-10", True, "f", ())])
     later = teaching_order.Lesson("b.md", 0, {}, "2026-10-01", "2026-10-01", True, "f", ())
-    assert teaching_order.span(two, later) == "<span class=\"study-when\">szept. 3. – 10.</span>"
+    assert teaching_order.span(two, later) == "<span class=\"study-when\">szept. 3–10.</span>"
 
 
 def test_a_revisit_is_the_latest_lesson_but_moves_no_chapter(tmp_path):

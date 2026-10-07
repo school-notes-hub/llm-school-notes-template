@@ -12,6 +12,10 @@ from .commissions import MARKER, MERMAID, markers as figure_markers
 
 HEAD = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$", re.M)
 DESCRIPTION = re.compile(r"\s*<!-- image-description(?:\n|:).*?-->", re.S)
+# A section's lesson line and textbook line (`🗓️ Óra: …`, `🔖 Tankönyv: …`, also inside `<sub>`):
+# when and where the material was taught, never what the figure must show. Left out of the key
+# since sn 0.3.9, so a date-form edit does not invalidate a figure's verdict.
+META_LINE = re.compile(r"^[ \t]*(?:<(?:sub|small)>[ \t]*)?(?:🗓️|🔖)[^\n]*$", re.M)
 
 
 def digest(value) -> str:
@@ -34,10 +38,13 @@ def without_replaced(text: str, page: str, asset: str | None) -> str:
     return sub_links(text, remove, pattern)
 
 
-def canonical(text: str, page: str, brief: dict) -> str:
+def canonical(text: str, page: str, brief: dict, legacy: bool = False) -> str:
     # Other figures and tool bookkeeping cannot invalidate this figure's context.
-    # Its own image, alt and caption are bound separately in verdict_key.
+    # Its own image, alt and caption are bound separately in verdict_key. `legacy`: the key of
+    # sn 0.3.8 and before, which still held the lesson and textbook lines (`rekey`).
     text = markers.BLOCK.sub("", text)
+    if not legacy:
+        text = META_LINE.sub("", text)
     text = DESCRIPTION.sub("", text)
     text = sub_links(text, lambda m: "" if m["img"] else m[0])
     text = MARKER.sub("", text)
@@ -68,7 +75,7 @@ def section(text: str, anchor: str) -> tuple[str, str]:
     return body[start:end].strip(), "\n\n".join(before + [body[start:end].strip()] + after)
 
 
-def embedding(repo: Path, brief: dict, candidate: dict) -> dict:
+def embedding(repo: Path, brief: dict, candidate: dict, legacy: bool = False) -> dict:
     page = brief["page"]
     text = with_markers(safefs.read_text(repo, page))
     meta = frontmatter.split(text).meta
@@ -81,11 +88,11 @@ def embedding(repo: Path, brief: dict, candidate: dict) -> dict:
         raise ValueError("figure marker is outside the commission section")
     if "mermaid" in candidate and mermaid_source(repo, brief, candidate) not in body:
         raise ValueError("Mermaid block is outside the commission section")
-    return {"page": page, "section": canonical(body, page, brief), "context": around,
+    return {"page": page, "section": canonical(body, page, brief, legacy), "context": around,
             "alt": candidate["alt"], "caption": candidate["caption"].rstrip("\n")}
 
 
-def verdict_key(repo: Path, brief: dict, candidate: dict) -> str:
+def verdict_key(repo: Path, brief: dict, candidate: dict, legacy: bool = False) -> str:
     fid = brief["id"]
     text = safefs.read_text(repo, brief["page"])
     if markers.read(text, f"figure-{fid}") is None:
@@ -93,7 +100,7 @@ def verdict_key(repo: Path, brief: dict, candidate: dict) -> str:
         if len(found) != 1 or found[0][0] != brief["page"]:
             raise ValueError("figure has no unique insertion marker or inserted block")
     candidate = embedded_candidate(repo, brief, candidate)
-    context = embedding(repo, brief, candidate)
+    context = embedding(repo, brief, candidate, legacy)
     if brief["kind"] == "banner":
         context.pop("alt", None)
         context.pop("caption", None)
@@ -104,8 +111,64 @@ def verdict_key(repo: Path, brief: dict, candidate: dict) -> str:
     else:
         sha = hashlib.sha256(safefs.read_bytes(repo, candidate["asset"])).hexdigest()
     if brief["kind"] != "banner":
-        context["other_uses"] = usage_keys(repo, brief, candidate)
+        context["other_uses"] = usage_keys(repo, brief, candidate, legacy)
     return digest({"image_sha256": sha, **context})
+
+
+def key_matches(repo: Path, brief: dict, candidate: dict, stored: str) -> bool:
+    """A recorded verdict key is valid for the content as it is now: the current key, or the
+    sn 0.3.8 key a verdict recorded before 0.3.9 carries (until `rekey` renews it)."""
+    try:
+        if stored == verdict_key(repo, brief, candidate):
+            return True
+        return stored == verdict_key(repo, brief, candidate, legacy=True)
+    except (OSError, ValueError):
+        return False
+
+
+def rekey(repo: Path) -> list[str]:
+    """One mechanical step (sn close): a figure verdict whose recorded key is the sn 0.3.8 key of
+    the content exactly as it is now gets the current key – safe, because the two keys differ only
+    by the lesson and textbook lines. In `docs/review/verdicts.json` and the figure's evidence
+    record; returns the paths written."""
+    from .insert import VERDICTS, removed
+    records = safefs.read_json(repo, VERDICTS, []) if safefs.is_file(repo, VERDICTS) else []
+    written, renewed = [], {}
+    for record in records:
+        if record.get("role") != "figure-review" or record.get("night_spec") or removed(repo, record):
+            continue
+        try:
+            new = verdict_key(repo, record["commission"], record["candidate"])
+            if record.get("key") != new and record.get("key") == verdict_key(
+                    repo, record["commission"], record["candidate"], legacy=True):
+                renewed[record["key"]] = new
+                record["key"] = new
+        except (OSError, ValueError, KeyError):
+            continue
+    if renewed:
+        safefs.write_json(repo, VERDICTS, sorted(records, key=lambda r: (r["file"], r["key"], r["role"])))
+        written.append(VERDICTS)
+    media = "docs/evidence/media"
+    for fid in sorted(safefs.listdir(repo, media)) if safefs.is_dir(repo, media) else []:
+        rel = f"{media}/{fid}/figure.json"
+        if not safefs.is_file(repo, rel):
+            continue
+        evidence = safefs.read_json(repo, rel, {})
+        old = evidence.get("verdict", {}).get("key")
+        if not old:
+            continue
+        new = renewed.get(old)
+        if new is None and evidence.get("commission") and evidence.get("candidate"):
+            try:
+                current = verdict_key(repo, evidence["commission"], evidence["candidate"])
+                if old != current and old == verdict_key(repo, evidence["commission"], evidence["candidate"], legacy=True):
+                    new = current
+            except (OSError, ValueError, KeyError):
+                new = None
+        if new and new != old:
+            safefs.write_json(repo, rel, {**evidence, "verdict": {**evidence["verdict"], "key": new}})
+            written.append(rel)
+    return written
 
 
 def mermaid_source(repo: Path, brief: dict, candidate: dict) -> str:
@@ -159,7 +222,7 @@ def embedded_candidate(repo: Path, brief: dict, candidate: dict) -> dict:
     return {**candidate, "asset": asset, "alt": alt, "caption": caption}
 
 
-def usage_keys(repo: Path, brief: dict, candidate: dict) -> list[dict]:
+def usage_keys(repo: Path, brief: dict, candidate: dict, legacy: bool = False) -> list[dict]:
     result = []
     asset = candidate.get("asset")
     if not asset:
@@ -180,5 +243,5 @@ def usage_keys(repo: Path, brief: dict, candidate: dict) -> list[dict]:
             caption = embedded_candidate(repo, {"page": page, "id": block["name"][7:]}, candidate)["caption"] if block else ""
             result.append({"page": page, "alt": link.text,
                            "caption": caption,
-                           "section_sha256": digest(canonical(body, page, brief))})
+                           "section_sha256": digest(canonical(body, page, brief, legacy))})
     return result

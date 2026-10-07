@@ -130,21 +130,26 @@ test('print preserves an authored hourglass paragraph', async () => {
   assert.match(print.html, /⏳ Mérd meg az időt!/);
 });
 
-test('a lesson date is a quiet meta item; an uncertain one keeps its range only as tooltip (sn 0.3.8)', async () => {
+test('a lesson date is a quiet meta item; an uncertain one keeps its range only as tooltip, reachable by tap (sn 0.3.8, 0.3.9)', async () => {
   const { renderMarkdown } = await import('../lib/markdown.mjs');
   const md = '# T\n\n* [Pótolt óra](a.md) <span class="study-when study-when-unsure" title="Dátum nélküli óra: szept. 23. – okt. 4.">~szept. vége</span>\n\n'
     + '| Dátum | Óra |\n|---|---|\n| <span class="study-when">szept. 22.</span> | X |\n\n'
+    + '<sub>🗓️ Óra: [<span class="study-when study-when-unsure" title="Bizonytalan dátum: szept. 10–19.">~szept. eleje</span>](a.md)</sub>\n\n'
     + '<span class="evil" onclick="x()" title="t">y</span>\n';
   for (const publicView of [false, true]) {
     const out = await renderMarkdown(md, { resolveUrl: async h => h, publicView });
     const html = out.html ?? String(out);
-    assert.ok(html.includes('<span class="study-when study-when-unsure" title="Dátum nélküli óra: szept. 23. – okt. 4.">~szept. vége</span>'), html);
+    assert.ok(html.includes('<span class="study-when study-when-unsure" title="Dátum nélküli óra: szept. 23. – okt. 4." tabindex="0"><span class="study-tilde" aria-hidden="true">~</span>szept. vége</span>'), html);
     assert.ok(html.includes('<span class="study-when">szept. 22.</span>'), html);
+    assert.ok(html.includes('title="Bizonytalan dátum: szept. 10–19." tabindex="0"><span class="study-tilde"'), html);
     assert.ok(!html.includes('evil') && !html.includes('onclick'), html);
   }
   const fs = await import('node:fs');
   const css = fs.readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
   assert.match(css, /\.study-content \.study-when \{[^}]*font-size: \.85rem[^}]*var\(--sl-color-gray-3/);
   assert.match(css, /\.study-content \.study-when::before \{[^}]*background-color: currentColor[^}]*mask:/);
-  assert.match(css, /@media print[\s\S]*\.study-content \.study-when-unsure \{ display: none; \}/);
+  assert.match(css, /\.study-content \.study-when\[title\]:focus::after \{ content: attr\(title\)/);
+  // paper: no `~`, no bubble, and the uncertain item stays (its month part), so no lesson line is left empty
+  assert.match(css, /@media print[\s\S]*\.study-content \.study-tilde, \.study-content \.study-when\[title\]:focus::after \{ display: none; \}/);
+  assert.doesNotMatch(css, /study-when-unsure \{ display: none/);
 });

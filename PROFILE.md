@@ -7,7 +7,7 @@ This file holds everything that belongs to **this** wiki; the rules shared by ev
 # Template
 
 * **Template repository**: https://github.com/dlaszlo/llm-school-notes-template (or the fork this wiki was made from).
-* **Template version**: `1.22.6`.
+* **Template version**: `1.22.7`.
 * **Template commit**: `<exact template commit recorded at bootstrap and every template update>`.
 
 Updates are optional and happen only when the user asks (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)).
@@ -43,21 +43,22 @@ Every reader-facing string the rules prescribe lives here, in the wiki language 
 | back link | `[⬅️ Back to the home page](../index.md)` | `[⬅️ Vissza a kezdőlapra](../index.md)` |
 | subjects (root index) | `# 📚 Subjects` | `# 📚 Tantárgyak` |
 | legend (root index) | `# 🔎 Legend` | `# 🔎 Jelmagyarázat` |
+| lesson-line legend (root index) | `* 🗓️ **Lesson**: which lesson taught the part; without an exact date `~` marks it, and pointing at it shows the period.` | `* 🗓️ **Óra**: melyik órán tanultátok az adott részt; ha nincs pontos dátum, `~` jelzi, az időszakot az egér rávitelekor látod.` |
 | catch-up | `# 📝 To catch up` | `# 📝 Pótolandó` |
 | homework | `# 📌 Homework` - columns `Deadline \| Task \| Status`, values `open` / `✅ done` | `# 📌 Házi feladat` - oszlopok `Határidő \| Feladat \| Állapot`, értékek `nyitott` / `✅ kész` |
 | chapter | `# 📘 Grade <grade>: <chapter>` | `# 📘 <grade>. évfolyam: <chapter>` |
 | lessons | `# 🗓️ Lessons` | `# 🗓️ Órák` |
 | review | `# 🔁 Review` | `# 🔁 Ismétlés` |
 | notes | `# 📝 Notes` | `# 📝 Jegyzetek` |
-| undated lesson | `? (after <earliest>, at the latest <latest>)` | `? (<legkorábbi> után, legkésőbb <legkésőbbi>)` |
-| uncertain date | `~` before the date item; its range and reason only in the hover tooltip (`Undated lesson: Sept 23 – Oct 4`); never visible text; left out on paper | `~` a dátum előtt; az időszak és az ok csak a felugró súgóban (`Dátum nélküli óra: szept. 23. – okt. 4.`), sosem látható szövegként; papíron elmarad |
+| undated lesson | `~late Sept` (the range in the tooltip, `Undated lesson: Sept 23 – Oct 4`) | `~szept. vége` (az időszak a súgóban: `Dátum nélküli óra: szept. 23. – okt. 4.`; részben olvasható dátumnál `Bizonytalan dátum: …`) |
+| uncertain date | `~` before the approximate day (the part of the month when both bounds fall in it, else the month, else the part of the month of the lower bound); its range and reason only in the tooltip (hover; a tap on a phone): `Undated lesson: Sept 23 – Oct 4`, a partly legible date `Uncertain date: Sept 10–19`; never visible text; paper prints the approximate day without `~` and range | `~` a közelítő nap előtt (a hónaprész, ha mindkét határ abba esik, különben a hónap, különben az alsó határ hónaprésze); az időszak és az ok csak a súgóban (egérrel rámutatva, telefonon koppintva): `Dátum nélküli óra: szept. 23. – okt. 4.`, részben olvasható dátumnál `Bizonytalan dátum: szept. 10–19.`; sosem látható szövegként; papíron a közelítő nap `~` és időszak nélkül |
 | where we are | `# 📍 Where we are` | `# 📍 Itt tartunk` |
 | current chapter | `**Now:** <chapter> <date item>` | `**Most:** <fejezet> <dátum>` |
 | latest lesson | `**Latest:** <lesson> <date item> · <topics>` | `**Legutóbb:** <óra> <dátum> · <témakörök>` |
 | earlier chapters | `**Before:** <chapter> <date item> → …` | `**Előtte:** <fejezet> <dátum> → …` |
 | lesson order | `So far, in this order, newest first:` | `Eddig ebben a sorrendben vettük, a legújabb elöl:` |
 | lesson date | a quiet date item after the important information (small clock, small grey text): `Oct 4`, outside the school year `2025 Oct 4`, an undated lesson `~late Sept` | csendes dátum a fontos információ után (kis óra, kis szürke szöveg): `okt. 4.`, a tanéven kívül `2025. okt. 4.`, dátum nélküli óra `~szept. vége`; ISO dátum soha, teljes dátum `2026. 10. 04.` |
-| chapter span | `early Sept – early Oct`, one or two dated lessons `Sept 3 – 10`; the current chapter `since late Sept` | `szept. eleje – okt. eleje`, egy-két datált óránál `szept. 3. – 10.`; a mostani fejezet `szept. vége óta` (eleje 1-10., közepe 11-20., vége 21-) |
+| chapter span | `early Sept – early Oct`, one or two dated lessons `Sept 3–10`; the current chapter `since late Sept` | `szept. eleje – okt. eleje`, egy-két datált óránál `szept. 3–10.`, egy hónapon belül `szept. eleje–közepe`; a mostani fejezet `szept. vége óta` (eleje 1-10., közepe 11-20., vége 21-) |
 | textbook line | `🔖 Textbook: <lesson>, pages <pages>` | `🔖 Tankönyv: <lecke>, <oldalak>. oldal` |
 | index-based note | `(from the table of contents)` | `(a tartalomjegyzék alapján)` |
 | in short | `⚡ **In short**` | `⚡ **Röviden**` |

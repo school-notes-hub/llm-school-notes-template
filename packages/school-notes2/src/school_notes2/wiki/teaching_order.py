@@ -6,8 +6,12 @@
 `<X> és <Y> között`, `<X> vagy <Y>`); no lower bound is "", no upper bound NEVER.
 
 **Evidence of order.** A lesson certainly comes before another when they stand in one lesson
-log in that order (the notebook order), when their pages are successive pages of one source
-folder (the page positions of one notebook), or when its range ends before the other's begins.
+log in that order (the notebook order), when their pages are successive pages of one notebook
+folder (a source folder that holds one notebook – one PDF, or pages split from one; a catch-up
+folder of separate photos mixes notebooks and is no evidence), when the later one names the
+earlier in its `after` (`<lesson log>.md`: after its last lesson; `<lesson log>.md#<n>`: after its
+n-th lesson, from 1; for lessons the dates cannot order), or when its range ends before the
+other's begins.
 The ranges are narrowed along that evidence: an undated lesson is never earlier than a lesson
 that certainly comes before it, nor later than one that certainly comes after it. A file name,
 an alphabetical folder order or two pages at the same position are no evidence: they only keep
@@ -39,7 +43,7 @@ from . import hu_dates
 ISO = re.compile(r"\d{4}-\d{2}-\d{2}")
 LATEST = re.compile(r"legkésőbb\s+(\d{4}-\d{2}-\d{2})")
 GRADE = re.compile(r"^\d{1,2}\. évfolyam: ")
-NEVER = "9999-12-31"
+NEVER = hu_dates.NEVER
 
 
 @dataclass
@@ -54,16 +58,14 @@ class Lesson:
     position: tuple         # where the page starts in that folder
     uncertain: bool = False
     topics: list[str] = field(default_factory=list)
+    notebook: bool = False  # the folder holds one notebook: its page order is evidence
+    before: set = field(default_factory=set)       # ids of the lessons `after` puts before it
+    after_problem: str = ""                         # an `after` that names no lesson or closes a circle
 
     @property
     def key(self) -> tuple:
         """Presentation order: chronology, then a deterministic fallback (no evidence)."""
         return (self.lo, self.hi, self.folder, self.position, self.file, self.index)
-
-    @property
-    def day(self) -> str:
-        """The day that stands for the lesson: its date, else its lower (else upper) bound."""
-        return self.lo or (self.hi if self.hi != NEVER else "")
 
 
 def _next_day(day: str) -> str:
@@ -141,17 +143,28 @@ def page_lessons(file: str, meta: dict) -> list[Lesson]:
 
 
 def _sequences(found: list[Lesson]) -> list[list[list[list[Lesson]]]]:
-    """The evidence chains: per source folder, its pages by position (pages at one position
-    side by side), each page's lessons in notebook order; a page without a folder alone."""
+    """The evidence chains: per notebook folder, its pages by position (pages at one position
+    side by side), each page's lessons in notebook order; any other page alone."""
     by_folder: dict[str, dict[tuple, dict[str, list[Lesson]]]] = {}
     for lesson in found:
-        folder = lesson.folder or f"\0{lesson.file}"
+        folder = lesson.folder if lesson.folder and lesson.notebook else f"\0{lesson.file}"
         by_folder.setdefault(folder, {}).setdefault(lesson.position, {}).setdefault(lesson.file, []).append(lesson)
     return [[list(pages.values()) for _, pages in sorted(positions.items())]
             for _, positions in sorted(by_folder.items())]
 
 
 def _narrow(found: list[Lesson]) -> None:
+    for _ in range(len(found) + 1):            # `after` links chain lessons across logs
+        changed = False
+        for lesson in found:
+            for other in found:
+                if id(other) in lesson.before:
+                    if not lesson.dated and other.lo > lesson.lo:
+                        lesson.lo, changed = other.lo, True
+                    if not other.dated and lesson.hi < other.hi:
+                        other.hi, changed = lesson.hi, True
+        if not changed:
+            break
     for chain in _sequences(found):
         floor = ""
         for group in chain:                     # forward: never earlier than what came before
@@ -182,16 +195,75 @@ def known_before(a: Lesson, b: Lesson) -> bool:
     folder, or ranges that do not overlap."""
     if a.file == b.file:
         return a.index < b.index
-    if a.folder and a.folder == b.folder and a.position != b.position:
+    if id(a) in b.before:
+        return True
+    if a.notebook and b.notebook and a.folder and a.folder == b.folder and a.position != b.position:
         return a.position < b.position
     return a.hi < b.lo
 
 
-def ordered(pages: list[tuple[str, dict]]) -> list[Lesson]:
-    """Every lesson of a subject, oldest first, with its `uncertain` mark."""
+AFTER = re.compile(r"^([^#\s]+\.md)(?:#(\d+))?$")
+
+
+def resolve_after(found: list[Lesson]) -> list[tuple[Lesson, str]]:
+    """Link every `after` to the lesson it names (the closure: a lesson after B after C is after
+    C); (lesson, problem) for a reference that names no lesson or closes a circle."""
+    by_file: dict[str, list[Lesson]] = {}
+    for lesson in found:
+        by_file.setdefault(lesson.file, []).append(lesson)
+    problems = []
+    for lesson in found:
+        ref = lesson.data.get("after")
+        if ref in (None, ""):
+            continue
+        m = AFTER.match(str(ref))
+        target = None
+        if m and m[1] in by_file:
+            logs = sorted(by_file[m[1]], key=lambda x: x.index)
+            n = int(m[2]) if m[2] else len(logs)
+            target = logs[n - 1] if 1 <= n <= len(logs) else None
+        if target is None or target is lesson:
+            problems.append((lesson, f"`after: {ref}` names no lesson of this subject (`<lesson log>.md` or "
+                                     "`<lesson log>.md#<n>`, n from 1)"))
+            continue
+        # after the named lesson, and so after every lesson before it in that log
+        lesson.before |= {id(x) for x in by_file[target.file] if x.index <= target.index}
+    for _ in range(len(found)):                 # transitive closure
+        grown = False
+        for lesson in found:
+            more = set().union(*(o.before for o in found if id(o) in lesson.before)) - lesson.before
+            if more:
+                lesson.before |= more
+                grown = True
+        if not grown:
+            break
+    for lesson in found:
+        if id(lesson) in lesson.before:
+            problems.append((lesson, f"`after: {lesson.data.get('after')}` closes a circle"))
+            lesson.before.discard(id(lesson))
+    return problems
+
+
+def ordered(pages: list[tuple[str, dict]], notebooks: set[str] | None = None) -> list[Lesson]:
+    """Every lesson of a subject, oldest first, with its `uncertain` mark (`notebooks`: the
+    source folders that hold one notebook)."""
     found = [lesson for file, meta in pages for lesson in page_lessons(file, meta)]
+    for lesson in found:
+        lesson.notebook = lesson.folder in (notebooks or set())
+    for lesson, problem in resolve_after(found):
+        lesson.after_problem = problem
     _narrow(found)
     found.sort(key=lambda lesson: lesson.key)
+    for _ in range(len(found)):                 # an `after` is kept even where the keys tie
+        moved = False
+        for i, lesson in enumerate(found):
+            j = max((k for k, other in enumerate(found) if id(other) in lesson.before), default=-1)
+            if j > i:
+                found.insert(j, found.pop(i))
+                moved = True
+                break
+        if not moved:
+            break
     for lesson in found:
         # A lesson with no lower bound is itself uncertain; it does not make the others so.
         lesson.uncertain = not lesson.dated and any(
@@ -317,7 +389,8 @@ def spans(found: list[Chapter], year: int = 0) -> dict[str, str]:
 
 
 def order_warnings(repo: Path, paths: list[str]) -> list[dict]:
-    """Teaching-order warnings for the pages in `paths` (`sn check`, `sn done`): on the subject
+    """Teaching-order items for the pages in `paths` (`sn check`, `sn done`): an error for an
+    `after` that names no lesson or closes a circle; warnings on the subject
     index every chapter the `chapters` list puts after one it certainly started before (with the
     place it belongs); on a topic page that no lesson's `topics` names; on a lesson log an
     undated lesson without a lower bound, or with a `legkésőbb` bound earlier than a dated lesson
@@ -352,6 +425,10 @@ def order_warnings(repo: Path, paths: list[str]) -> list[dict]:
                     "no lesson's `topics` names this topic page, so it has no place in the teaching "
                     "order: list it in `topics` of the lesson that taught it")))
         for lesson in found:
+            if lesson.after_problem:
+                out.append({**_warn(f"wiki/{slug}/{lesson.file}",
+                                    f"lessons[{lesson.index}] ({lesson.data.get('title', '')}): {lesson.after_problem}"),
+                            "severity": "error"})
             if lesson.dated:
                 continue
             rel, raw = f"wiki/{slug}/{lesson.file}", bounds(lesson.data)

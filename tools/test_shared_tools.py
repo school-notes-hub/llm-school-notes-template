@@ -8,6 +8,7 @@ import unittest
 
 import book_index
 import check_shared
+import sync_wording
 
 
 class SharedToolsTest(unittest.TestCase):
@@ -83,6 +84,28 @@ class SharedToolsTest(unittest.TestCase):
                 self.assertIn('| Checked lesson | 2-8 |', result)
                 self.assertNotIn('Unverified', result)
                 self.assertEqual((book / 'document.md').read_text(), doc)
+
+
+    def test_wording_sync_replaces_only_the_wording_rows(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            head = '| Key | English | Magyar |\n|---|---|---|\n'
+            (base / 't').mkdir()
+            (base / 'c').mkdir()
+            (base / 't' / 'PROFILE.md').write_text('# T\n\n' + head + '| a | A | Á |\n| b | B | B2 |\n\nTemplate tail\n')
+            (base / 'c' / 'PROFILE.md').write_text('# Tanuló\n\nown text\n\n' + head + '| a | old | régi |\n\nLocal decisions\n')
+            args = ['--template', str(base / 't'), '--target', str(base / 'c')]
+            self.assertEqual(sync_wording.main(args + ['--check']), 1)
+            self.assertEqual(sync_wording.main(args), 0)
+            self.assertEqual((base / 'c' / 'PROFILE.md').read_text(),
+                             '# Tanuló\n\nown text\n\n' + head + '| a | A | Á |\n| b | B | B2 |\n\nLocal decisions\n')
+            self.assertEqual(sync_wording.main(args + ['--check']), 0)
+
+    def test_the_template_wording_has_no_old_question_mark_date_form(self):
+        profile = (Path(__file__).resolve().parents[1] / 'PROFILE.md').read_text(encoding='utf-8')
+        row = next(line for line in profile.splitlines() if line.startswith('| undated lesson |'))
+        self.assertNotIn('? (', row)
+        self.assertIn('~szept. vége', row)
 
 
 if __name__ == '__main__':

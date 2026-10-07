@@ -220,8 +220,14 @@ def renew_one(repo: Path, fid: str, page: str, given: dict, key: str, at: str) -
     validate("figure-review", {"figures": [verdict], "owner_notes": []})
     if any(is_error(d) for d in verdict["defects"] + verdict["text_mismatch"]):
         raise ValueError(f"{fid}: an accept cannot contain a hiba")
+    # The image description (`observed`) stays the one of the full review; the recheck's own
+    # observation is added to `rechecks` (sn 0.3.9: a date-only recheck no longer erases it).
+    previous = evidence.get("verdict", {}).get("observed")
+    if previous:
+        verdict["observed"] = previous
+    rechecks = list(evidence.get("rechecks", [])) + [{"at": at, "observed": given["observed"]}]
     safefs.write_json(repo, f"docs/evidence/media/{fid}/figure.json",
-                      {**evidence, "verdict": verdict, "verifier": REVIEWER, "at": at})
+                      {**evidence, "verdict": verdict, "verifier": REVIEWER, "at": at, "rechecks": rechecks})
     insert._record_verdict(repo, evidence["commission"], evidence["candidate"], verdict, REVIEWER, at)
     return True
 

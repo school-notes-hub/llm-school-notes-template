@@ -48,13 +48,31 @@ def part(day: str, year: int = 0) -> str:
 
 
 def between(first: str, last: str) -> str:
-    """Two already formatted points as one span: `szept. 10. – 19.`, `szept. eleje – közepe`."""
+    """Two formatted points as one span, in Hungarian style: within one month the month once and
+    an unspaced en dash (`szept. 10–19.`, the inner point dropped; `szept. eleje–közepe`),
+    otherwise a spaced en dash (`szept. 23. – okt. 4.`)."""
     if first == last:
         return first
     a, b = first.rsplit(" ", 1), last.rsplit(" ", 1)
     if len(a) == 2 and len(b) == 2 and a[0] == b[0]:
-        return f"{first} – {b[1]}"
+        left = a[1][:-1] if a[1].endswith(".") and b[1].endswith(".") else a[1]
+        return f"{a[0]} {left}–{b[1]}"
     return f"{first} – {last}"
+
+
+def approximate(lo: str, hi: str, year: int = 0) -> str:
+    """The visible part of an uncertain day: the part of the month when both bounds fall in it,
+    the month alone when they fall in one month, else the part of the month of the lower bound
+    (the day it is ordered by); its range belongs to the tooltip."""
+    if not lo and (not hi or hi == NEVER):
+        return "?"
+    if not lo or not hi or hi == NEVER:
+        return part(lo or hi, year)
+    if part(lo, year) == part(hi, year):
+        return part(lo, year)
+    if lo[:7] == hi[:7]:
+        return part(lo, year).rsplit(" ", 1)[0]
+    return part(lo, year)
 
 
 def range_text(lo: str, hi: str, year: int = 0) -> str:
@@ -78,4 +96,4 @@ def meta(text: str, title: str = "", unsure: bool = False) -> str:
     `~` + text with the class `study-when-unsure`."""
     classes = WHEN + (f" {WHEN}-unsure" if unsure else "")
     tip = f' title="{html.escape(title, quote=True)}"' if title else ""
-    return f'<span class="{classes}"{tip}>{"~" if unsure else ""}{text}</span>'
+    return f'<span class="{classes}"{tip}>{"~" if unsure and text != "?" else ""}{text}</span>'

@@ -40,7 +40,7 @@ def test_a_strict_lower_bound_starts_the_next_day_and_an_undated_start_is_marked
     lesson_log(repo, "2026-09-25-y-jegyzet.md", "proba/y", [
         "{date_note: '2026-09-10 után, legkésőbb 2026-09-25', title: Új, topics: [tb.md]}"])
     tag = ('<span class="study-when study-when-unsure" title="Nem biztos: a kezdete dátum nélküli óra '
-           '(szept. 11. – 25.)">~szept. közepe óta</span>')
+           '(szept. 11–25.)">~szept. közepe óta</span>')
     assert most(repo) == f"* **Most:** B {tag}"
     chapters = markers.read(generate.subject_index(repo, "proba"), "chapters")
     assert tag in chapters
@@ -96,11 +96,11 @@ def test_the_uncertain_mark_comes_only_from_evidence():
     def page(name, folder, first, lesson=note):
         return (name, {"source_file": f"{folder}/", "content_sha256": {first: "x"}, "lessons": [dict(lesson)]})
     # A7: the same range at the same page position of one folder: no evidence, both ↕
-    same = teaching_order.ordered([page("a-jegyzet.md", "f", "p0001.jpg"), page("b-jegyzet.md", "f", "p0001.jpg")])
+    same = teaching_order.ordered([page("a-jegyzet.md", "f", "p0001.jpg"), page("b-jegyzet.md", "f", "p0001.jpg")], {"f"})
     assert [lesson.uncertain for lesson in same] == [True, True]
     # successive pages of one notebook with overlapping ranges: known order, no ↕
     other = {"date_note": "2026-09-05 után, legkésőbb 2026-09-25", "title": "y"}
-    pages_ = teaching_order.ordered([page("a-jegyzet.md", "f", "p0001.jpg"), page("b-jegyzet.md", "f", "p0002.jpg", other)])
+    pages_ = teaching_order.ordered([page("a-jegyzet.md", "f", "p0001.jpg"), page("b-jegyzet.md", "f", "p0002.jpg", other)], {"f"})
     assert [lesson.uncertain for lesson in pages_] == [False, False]
 
 

@@ -160,7 +160,9 @@ def test_recheck_accept_renews_once_and_a_second_edit_stops(setup, repo):
     assert close.close(local, repo, None, lines.append) == 0
     assert "ítélet megújítva (újranézés): physics/forces" in lines
     assert not insert.invalidated(repo)
-    assert safefs.read_json(repo, "docs/evidence/media/forces/figure.json")["verdict"]["observed"] == "Still two arrows."
+    evidence = safefs.read_json(repo, "docs/evidence/media/forces/figure.json")
+    assert evidence["verdict"]["observed"] == "Two opposite arrows."          # the description stays (0.3.9)
+    assert evidence["rechecks"][-1]["observed"] == "Still two arrows."
     page = safefs.read_text(repo, PAGE)
     assert "<!-- figure: forces -->" not in page
     edit(repo, "Three forces act.", "Four forces act.")             # edited again, no new review

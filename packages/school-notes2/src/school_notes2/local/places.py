@@ -42,7 +42,7 @@ def missing_parts(repo: Path) -> tuple[set[str], set[str]]:
             if candidate and candidate.get("state") == "no-figure":
                 missing.remove(fid)
             elif brief and candidate and evidence.get("verdict", {}).get("verdict") == "accept" and (
-                    evidence["verdict"]["key"] == context.verdict_key(repo, brief, candidate)):
+                    context.key_matches(repo, brief, candidate, evidence["verdict"]["key"])):
                 missing.remove(fid)
         except (ValueError, OSError, KeyError):
             pass

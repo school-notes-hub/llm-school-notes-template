@@ -113,11 +113,7 @@ def invalidated(repo: Path) -> list[dict]:
             continue
         if record.get("night_spec"):
             continue  # Historical nightly figure verdicts are kept as records only.
-        try:
-            current = context.verdict_key(repo, record["commission"], record["candidate"])
-        except (OSError, ValueError):
-            current = None
-        if current != record.get("key", ""):
+        if not context.key_matches(repo, record["commission"], record["candidate"], record.get("key", "")):
             stale.append(record)
     return sorted(stale, key=lambda r: (r["file"], r.get("key", "")))
 

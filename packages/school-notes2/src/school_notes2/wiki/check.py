@@ -405,6 +405,7 @@ def check_files(repo: Path, paths: list[str], *, today: date | None = None, fs=s
         out += check_meta(repo, rel, page.meta, fs=fs)
         out += check_learning(repo, rel, page, fs=fs)
         out += check_links(repo, rel, text, fs=fs)
+        out += check_figure_sections(repo, rel, text, fs=fs)
         out += [item(rel, line, TEXTBOOK_MESSAGE, "warning") for line in textbook_lines(rel, text)]
     if fs is safefs:
         out += order_warnings(repo, paths)
@@ -412,6 +413,40 @@ def check_files(repo: Path, paths: list[str], *, today: date | None = None, fs=s
         out += [item(rel, None, message, "warning")
                 for rel, message in drafts.warnings(repo, today or date.today(), paths=paths)]
     return out + check_renders(repo, fs=fs)
+
+
+def check_figure_sections(repo: Path, rel: str, text: str, *, fs=safefs) -> list[dict]:
+    """Every inserted figure on the page must still stand in the section its commission names
+    (`anchor`): a renamed or removed heading leaves its verdict uncheckable. The message names the
+    page, the figure and the missing title, and the fix (sn 0.3.9)."""
+    from ..figures.context import section, with_markers
+    out = []
+    for name in markers.names(text):
+        if not name.startswith("figure-"):
+            continue
+        fid = name[7:]
+        evidence = f"docs/evidence/media/{fid}/figure.json"
+        try:
+            brief = json.loads(fs.read_text(repo, evidence)).get("commission") if fs.is_file(repo, evidence) else None
+        except (ValueError, AttributeError):
+            brief = None
+        if not isinstance(brief, dict) or brief.get("kind") == "banner" or brief.get("page") != rel:
+            continue
+        anchor = str(brief.get("anchor", ""))
+        try:
+            body, _ = section(with_markers(text), anchor)
+        except ValueError:
+            out.append(item(rel, None, (
+                f"figure {fid}: its commission names the section „{anchor}”, which is not on the page "
+                "exactly once (renamed or removed?), so the figure's verdict cannot be checked: restore "
+                f"that heading, or the controller sets the commission's `anchor` in {evidence} to the "
+                "figure's current heading (then the figure is looked at again)")))
+            continue
+        if f"<!-- figure: {fid} -->" not in body:
+            out.append(item(rel, None, (
+                f"figure {fid}: it stands outside the section „{anchor}” its commission names: move it "
+                f"back, or the controller updates the commission's `anchor` in {evidence}")))
+    return out
 
 
 def order_warnings(repo: Path, paths: list[str]) -> list[dict]:

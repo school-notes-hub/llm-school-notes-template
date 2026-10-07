@@ -30,7 +30,9 @@ files; the reviewer has no shell). An `accept` is valid only for the content it 
    `adatok.json` that is not a wiki page is a STOP in step 0);
 6. **STOP** (exit 2, nothing deleted) while an inserted figure's verdict is invalidated – the
    figure must be looked at against the new text;
-7. reader-verdict bookkeeping (figure verdicts untouched), indexes, decisions overview,
+7. the one-time rekey of figure verdicts recorded with the sn 0.3.8 key (`figures.context.rekey`:
+   only where the old key matches the content exactly as it is now), reader-verdict bookkeeping
+   (figure verdicts otherwise untouched), indexes, decisions overview,
    `public.json`, the tool-writes record the writer guard reads;
 8. the content check of `sn done` for the whole learner (the worktree is naturally not clean);
 9. retirement (`retire`): of the hand-overs read in step 0 – never a rescan – each subject
@@ -63,6 +65,7 @@ import tempfile
 from pathlib import Path
 
 from ..figures import insert
+from ..figures.context import rekey as fctx_rekey
 from ..sources import manifest
 from ..state import safefs
 from ..wiki import decisions, generate, public
@@ -142,6 +145,7 @@ def close(local, repo: Path, subjects: list[str] | None, out=print, state: dict 
             return stop(out, "STOP: beillesztett ábra ítélete érvénytelenedett, és nincs rá érvényes újranézési "
                              "accept (az ábrát az új szöveggel össze kell vetni; semmit nem töröltem):",
                         [f"{r['file']}#{r['id']}" for r in stale])
+        changed += fctx_rekey(repo)        # sn 0.3.9: lesson lines left out of the verdict key
         machine_data.reader_bookkeeping(repo)
         generate.write_indexes(repo)
         figs._write_if_changed(repo, decisions.OVERVIEW, decisions.overview(repo, skip=skipped), changed)

@@ -225,6 +225,21 @@ export async function renderMarkdown(source, { resolveUrl, mermaid, pageId = '',
     })
     .use(rehypeSanitize, schema)
     .use(() => tree => {
+      // A lesson date item (`study-when`, sn 0.3.9): one with a tooltip can be focused, so a tap
+      // shows the tooltip as a small bubble (the stylesheet); the leading `~` of an uncertain one
+      // is its own span, which paper leaves out with the range (the month part stays printed).
+      visit(tree, 'element', node => {
+        const cls = node.tagName === 'span' ? node.properties.className || [] : [];
+        if (!cls.includes('study-when')) return;
+        if (node.properties.title) node.properties.tabIndex = 0;
+        const first = node.children[0];
+        if (cls.includes('study-when-unsure') && first?.type === 'text' && first.value.startsWith('~')) {
+          node.children.splice(0, 1, el('span', { className: ['study-tilde'], ariaHidden: 'true' }, [{ type: 'text', value: '~' }]),
+            { type: 'text', value: first.value.slice(1) });
+        }
+      });
+    })
+    .use(() => tree => {
       // An empty `<a id="pdf-13-oldal"></a>` is a jump target that other pages link to
       // (`page#pdf-13-oldal`); it keeps its plain id so those links resolve.
       visit(tree, 'element', node => {

@@ -10,7 +10,9 @@
    small grey text. An uncertain one starts with `~`; its range is only the hover tooltip. */
 .study-content .study-when { font-size: .85rem; color: var(--sl-color-gray-3, #8b949c); white-space: nowrap; }
 .study-content .study-when::before { content: ""; display: inline-block; width: .9em; height: .9em; margin-inline-end: .28em; vertical-align: -.12em; background-color: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='6.25'/%3E%3Cpath d='M8 4.5V8l2.25 1.5'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='6.25'/%3E%3Cpath d='M8 4.5V8l2.25 1.5'/%3E%3C/svg%3E") center / contain no-repeat; }
-.study-content .study-when[title] { cursor: help; }
+.study-content .study-when[title] { position: relative; cursor: help; }
+.study-content .study-when[title]:focus { outline: 1px dotted currentColor; outline-offset: 1px; }
+.study-content .study-when[title]:focus::after { content: attr(title); position: absolute; inset-inline-start: 0; top: 1.5em; z-index: 20; width: max-content; max-width: min(16rem, 70vw); white-space: normal; padding: .2rem .45rem; border-radius: .3rem; font-size: .8rem; line-height: 1.35; color: var(--sl-color-white, #fff); background: var(--sl-color-gray-6, #23262f); box-shadow: 0 1px 4px rgb(0 0 0 / .3); }
 .study-content .study-callout { margin: 1.6rem 0; border-inline-start: 3px solid #638dca; padding: .25rem 1.2rem; background: color-mix(in srgb, #638dca 5%, transparent); }
 .study-content .study-callout > :first-child { margin-top: .3rem; }
 .study-content .study-callout > :last-child { margin-bottom: .3rem; }
@@ -59,9 +61,10 @@
   .print-document main { max-width: none; margin: 0; padding: 0; }
   .study-content { font-size: 11.5pt; line-height: 1.45; color: #111; }
   .study-content .study-label { color: #404040; font-size: 9pt; }
-  /* On paper there is no tooltip: only certain dates are printed, small and grey. */
+  /* On paper there is no tooltip and no uncertainty mark: a date prints small and grey; an
+     uncertain one only as its month part (no `~`, no range), so no lesson line is left empty. */
   .study-content .study-when { color: #606060; font-size: 8.5pt; }
-  .study-content .study-when-unsure { display: none; }
+  .study-content .study-tilde, .study-content .study-when[title]:focus::after { display: none; }
   .study-content :is(h2,h3,h4), .print-chapter > h2 { break-after: avoid; }
   .study-content p { orphans: 3; widows: 3; }
   .study-content img { max-height: 220mm; max-width: 100%; object-fit: contain; break-inside: avoid; }
