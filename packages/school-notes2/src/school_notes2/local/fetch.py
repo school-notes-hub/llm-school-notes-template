@@ -38,6 +38,7 @@ from ..sources.naming import slug, subject_key, unique_dir
 from ..sources.place import Downloaded, Settings, place_package
 from ..state import safefs
 from ..state.errors import NeedsOwner, SnError
+from .common import today
 
 DOWNLOADED, PLACING, STAGED, PLACED = "download.json", "placing.json", "staged.json", "placed.json"
 STAGE = ".school-notes/fetch"
@@ -196,8 +197,10 @@ def _place(local, repo: Path, pkg: Package, folder: Path, out) -> None:
     staged = stage_root / rel
     if staged.is_dir() and any(staged.iterdir()):
         drive_ids = {f["rel"]: f.get("drive_id", "") for f in data["files"]}
+        # `placed`: the day the material arrived – the upper bound of an undated catch-up lesson
+        # from this folder (rules 1.22.4), never the folder's label.
         package = {"drive_id": pkg.id, "drive_folder": pkg.name, "subject_name": pkg.subject_name,
-                   "role": pkg.role, "description": pkg.description}
+                   "role": pkg.role, "description": pkg.description, "placed": today()}
         files = {f"{rel}/{k}": v for k, v in _tree(staged).items()}
         (staged / manifest.NAME).write_text(manifest.dumps(manifest.build(package, placed.pages, drive_ids, files)),
                                             encoding="utf-8")

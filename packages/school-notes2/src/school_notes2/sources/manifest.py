@@ -4,7 +4,7 @@ when it places a package, never changed afterwards).
 It keeps what the download records knew and the repository would otherwise lose when the
 download is deleted: per stored page its file, PDF page, Drive file id, `original_sha256` (the
 uploaded file; `#p<n>` for a PDF page) and `content_sha256` (the stored image), the package's
-Drive folder and role, and the SHA-256 of every file the tool wrote into the folder. The
+Drive folder and role, the day it was placed (`placed`), and the SHA-256 of every file the tool wrote into the folder. The
 duplicate check (`duplicates.known_hashes`), the lesson-log machine frontmatter (`sn close`) and
 the writer guard read it."""
 
@@ -19,7 +19,8 @@ NAME = "sn-fetch.json"
 
 
 def build(package: dict, pages: list[dict], drive_ids: dict[str, str], written: dict[str, str]) -> dict:
-    """`package`: {drive_id, drive_folder, subject_name, role, description}; `pages`: the placed
+    """`package`: {drive_id, drive_folder, subject_name, role, description, placed (the day
+    `sn fetch` placed it)}; `pages`: the placed
     pages (`place.Placed.pages`); `drive_ids`: download file → Drive file id."""
     return {"package": package,
             "pages": [{"path": p["path"], "file": p["file"], "page": p["page"],

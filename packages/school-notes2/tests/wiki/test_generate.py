@@ -5,11 +5,11 @@ def test_subject_blocks(repo):
     text = generate.subject_index(repo, "proba")
     chapters = markers.read(text, "chapters")
     assert chapters == (
-        "# 📘 9. évfolyam: Alapok\n\n"
+        "# 📘 9. évfolyam: Alapok\n\n🗓️ szeptember 3.\n\n"
         "* ⚡ [Összefoglaló: Alapok](osszefoglalo-alapok.md) - Rövid.\n"
         "* [Első](elso.md) - Az első téma.\n"
         "\n<br />\n\n"
-        "# 📘 9. évfolyam: Haladó\n\n* [Második](masodik.md) - A második téma.\n")
+        "# 📘 9. évfolyam: Haladó\n\n🗓️ szeptember eleje óta, még tart\n\n* [Második](masodik.md) - A második téma.\n")
     lessons = markers.read(text, "lessons").splitlines()
     assert lessons[0] == "| Dátum | Óra | Jegyzet | Témakörök |"
     assert lessons[2].startswith("| ? (legkésőbb 2026-09-10) | Folytatás |")
@@ -31,7 +31,7 @@ def test_write_indexes_is_idempotent(repo):
     assert generate.write_indexes(repo) == []
 
 
-def test_undated_lesson_sorts_by_latest_possible_date(repo):
+def test_an_undated_lesson_follows_the_lesson_before_it_in_the_notebook(repo):
     subject = generate.load_subject(repo, "proba")
     titles = [lesson["title"] for _, lesson in generate.lessons(subject)]
     assert titles == ["Folytatás", "Bevezetés"]
@@ -51,13 +51,13 @@ def test_a_full_date_in_the_note_keeps_the_question_mark_form():
 
 
 def test_equal_undated_lessons_follow_the_notebook():
-    from school_notes2.wiki.generate import SubjectPage, lesson_sort_key
-    early = SubjectPage("2026-09-26-vetuletek-jegyzet.md", {"source_file": "sources/f/page-10.jpeg"})
-    late = SubjectPage("2026-09-26-erorendszer-jegyzet.md", {"source_file": "sources/f/page-15.jpeg"})
-    note = {"date_note": "2026-09-15 után, legkésőbb 2026-09-26"}
-    keys = sorted([(lesson_sort_key(early, 0, note), "early"), (lesson_sort_key(late, 0, note), "late")],
-                  reverse=True)
-    assert [k[1] for k in keys] == ["late", "early"]       # newest first: page 15 before page 10
+    from school_notes2.wiki import teaching_order
+    note = {"date_note": "2026-09-15 után, legkésőbb 2026-09-26", "title": "x"}
+    found = teaching_order.ordered([
+        ("2026-09-26-erorendszer-jegyzet.md", {"source_file": "sources/f/page-15.jpeg", "lessons": [note]}),
+        ("2026-09-26-vetuletek-jegyzet.md", {"source_file": "sources/f/page-10.jpeg", "lessons": [note]})])
+    assert [lesson.file for lesson in found] == ["2026-09-26-vetuletek-jegyzet.md", "2026-09-26-erorendszer-jegyzet.md"]
+    assert not any(lesson.uncertain for lesson in found)    # one folder: the notebook order is known
 
 
 def test_catch_up_list_and_lesson_marks_are_neutral_and_stable(repo):

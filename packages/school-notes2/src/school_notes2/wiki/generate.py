@@ -11,8 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..state import safefs
-from . import catch_up, markers
-from ..sources.order import natural_key
+from . import catch_up, markers, teaching_order
 from .pages import md_files, read_page, read_text
 from .pages import subjects as subject_slugs
 
@@ -68,10 +67,14 @@ def list_line(page: SubjectPage) -> str:
 
 
 def chapters_block(subject: Subject) -> str:
+    """The chapters in the `chapters` list order (the writer keeps it in the order the class
+    started them; `sn check` warns otherwise), each with when it was taught (🗓️)."""
+    spans = teaching_order.spans(subject_chapters(subject, ordered_lessons(subject)))
     sections = []
     for chapter in subject.index_meta.get("chapters") or []:
         lines = "\n".join(list_line(p) for p in chapter_pages(subject, chapter["id"]))
-        sections.append(f"# 📘 {chapter['title']}\n\n{lines}\n" if lines else f"# 📘 {chapter['title']}\n")
+        when = f"🗓️ {spans[str(chapter['id'])]}\n\n" if str(chapter["id"]) in spans else ""
+        sections.append(f"# 📘 {chapter['title']}\n\n{when}{lines}\n" if lines else f"# 📘 {chapter['title']}\n")
     return "\n<br />\n\n".join(sections)
 
 
@@ -88,46 +91,23 @@ def lesson_date(lesson: dict) -> str:
     return f"? ({note})" if note else "?"
 
 
-def notebook_position(meta: dict) -> tuple:
-    """Where a lesson page's material starts in the notebook: its first source page, in the
-    fixed page order (4.3). Pages of one notebook thus keep the notebook's order."""
-    first = ""
-    source_file = meta.get("source_file")
-    if isinstance(source_file, list):
-        source_file = source_file[0] if source_file else ""
-    hashes = meta.get("content_sha256")
-    if isinstance(source_file, str) and source_file:
-        first = source_file
-        if source_file.endswith("/") and isinstance(hashes, dict) and hashes:
-            first += sorted(hashes, key=natural_key)[0]
-    if not first:
-        for key in ("sources", "source_files"):
-            for item in meta.get(key) or []:
-                if isinstance(item, dict) and "sources/" in str(item.get("resource", "")):
-                    first = str(item["resource"]).split("sources/", 1)[1]
-                    break
-            if first:
-                break
-    return natural_key(first.removeprefix("sources/"))
+notebook_position = teaching_order.notebook_position
 
 
-def lesson_sort_key(page: SubjectPage, index: int, lesson: dict) -> tuple:
-    # Undated lessons sort by the latest date their range allows (the wiki's own rule); a tie
-    # is settled by where the page's material starts in the notebook, then by the file name –
-    # always the same order, taken from the content.
-    dates = ISO.findall(str(lesson.get("date") or "")) or ISO.findall(lesson.get("date_note") or "")
-    return (max(dates) if dates else "", page.file[:10], notebook_position(page.meta),
-            page.file, index)
+def ordered_lessons(subject: Subject) -> list[teaching_order.Lesson]:
+    """Every lesson of the subject, oldest first (`teaching_order`: an undated lesson by the lower
+    bound of its range), with its `uncertain` mark."""
+    return teaching_order.ordered([(p.file, p.meta) for p in subject.by_type("lesson-notes")])
 
 
 def lessons(subject: Subject) -> list[tuple[SubjectPage, dict]]:
     """Every lesson of the subject, newest first."""
-    rows = []
-    for page in subject.by_type("lesson-notes"):
-        for i, lesson in enumerate(page.meta.get("lessons") or []):
-            rows.append((lesson_sort_key(page, i, lesson), page, lesson))
-    rows.sort(key=lambda r: r[0], reverse=True)
-    return [(page, lesson) for _, page, lesson in rows]
+    return [(subject.page(lesson.file), lesson.data) for lesson in reversed(ordered_lessons(subject))]
+
+
+def subject_chapters(subject: Subject, found: list[teaching_order.Lesson]) -> list[teaching_order.Chapter]:
+    pages = {p.file: str(p.meta.get("chapter")) for p in subject.pages if p.meta.get("chapter")}
+    return teaching_order.chapters(subject.index_meta, pages, found)
 
 
 def topic_link(subject: Subject, topic: str) -> str:
@@ -137,16 +117,71 @@ def topic_link(subject: Subject, topic: str) -> str:
     return f"[{title}]({topic})"
 
 
+UNCERTAIN = " ↕"
+UNCERTAIN_LEGEND = ("A ↕ jel: ennek a dátum nélküli órának a helye a sorban nem biztos, mert az "
+                    "időszaka átfed más órákéval.")
+
+
 def lessons_block(subject: Subject) -> str:
-    rows, states = [], set()
-    for page, lesson in lessons(subject):
+    rows, states, marked = [], set(), False
+    for item in reversed(ordered_lessons(subject)):
+        page, lesson = subject.page(item.file), item.data
         topics = ", ".join(topic_link(subject, t) for t in lesson.get("topics") or [])
         anchor = f"#{lesson['anchor']}" if lesson.get("anchor") else ""
         states.add(page.meta.get("catch_up"))
-        rows.append(f"| {catch_up.mark(page.meta)}{lesson_date(lesson)} | {lesson.get('title', '')} | "
-                    f"[jegyzet]({page.file}{anchor}) | {topics} |")
-    key = catch_up.legend(states)
+        marked |= item.uncertain
+        rows.append(f"| {catch_up.mark(page.meta)}{lesson_date(lesson)}{UNCERTAIN if item.uncertain else ''} | "
+                    f"{lesson.get('title', '')} | [jegyzet]({page.file}{anchor}) | {topics} |")
+    key = " ".join(filter(None, [catch_up.legend(states), UNCERTAIN_LEGEND if marked else ""]))
     return (f"{key}\n\n" if key else "") + TABLE_HEAD + "".join(r + "\n" for r in rows)
+
+
+NOW_HEADING = "# 📍 Itt tartunk"
+RECENT = 5          # lessons listed before the latest one
+
+
+def _dated(lesson: dict) -> str:
+    """`2026-10-06`, or `dátum nélkül, <range>` (a partly legible date as written)."""
+    cell = lesson_date(lesson)
+    return f"dátum nélkül, {lesson['date_note']}" if cell.startswith("?") and lesson.get("date_note") else (
+        "dátum nélkül" if cell == "?" else cell)
+
+
+def now_block(subject: Subject) -> str:
+    """📍 Itt tartunk: the chapter the class started last, the latest lesson with its topics, the
+    chapters before, and the lessons before it, newest first (rules 1.22.4)."""
+    found = ordered_lessons(subject)
+    if not found:
+        return ""
+    chapters_ = subject_chapters(subject, found)
+    started, spans = teaching_order.by_start(chapters_), teaching_order.spans(chapters_)
+    latest = found[-1]
+    page = subject.page(latest.file)
+    anchor = f"#{latest.data['anchor']}" if latest.data.get("anchor") else ""
+    topics = ", ".join(topic_link(subject, t) for t in latest.data.get("topics") or [])
+    mark = UNCERTAIN if latest.uncertain else ""
+    lines = [NOW_HEADING, ""]
+    if started:
+        now = started[-1]
+        lines.append(f"* **Most:** {teaching_order.plain_title(now.title)} "
+                     f"({spans[now.id]})")
+    lines.append(f"* **Legutóbb:** [{latest.data.get('title', '')}]({page.file}{anchor}) – "
+                 f"{_dated(latest.data)}{mark}" + (f" · {topics}" if topics else ""))
+    if len(started) > 1:
+        lines.append("* **Előtte:** " + " → ".join(
+            f"{teaching_order.plain_title(c.title)} ({spans[c.id]})"
+            for c in started[:-1]))
+    before = list(reversed(found[:-1]))[:RECENT]
+    if before:
+        lines += ["", "Eddig ebben a sorrendben vettük, a legújabb elöl:", ""]
+        for item in before:
+            p = subject.page(item.file)
+            a = f"#{item.data['anchor']}" if item.data.get("anchor") else ""
+            lines.append(f"* {lesson_date(item.data)}{UNCERTAIN if item.uncertain else ''} – "
+                         f"[{item.data.get('title', '')}]({p.file}{a})")
+    if latest.uncertain or any(item.uncertain for item in before):
+        lines += ["", UNCERTAIN_LEGEND]
+    return "\n".join(lines) + "\n"
 
 
 def catch_up_description(subject: Subject, page: SubjectPage) -> str:
@@ -182,6 +217,18 @@ def notes_block(subject: Subject) -> str:
 REQUIRED_SUBJECT_BLOCKS = ("chapters", "lessons", "review", "notes")
 
 
+def with_now(text: str) -> str:
+    """The 📍 block's fixed place: right after the back link to the home page (else right
+    before the first generated block, else at the end), so it stands above the chapter lists."""
+    if "now" in markers.names(text):
+        return text
+    back = catch_up.BACK_LINK.search(text)
+    block = markers.BLOCK.search(text)
+    pos = back.end() if back else (block.start() if block else len(text))
+    head, tail = text[:pos].rstrip("\n"), text[pos:].lstrip("\n")
+    return head + "\n\n" + markers.wrap("now", "") + "\n" + tail
+
+
 def with_blocks(text: str, names: tuple[str, ...]) -> str:
     """A required index block the author removed comes back, empty, at the fixed place:
     the end of the page, in canonical order; the refresh then fills it."""
@@ -193,10 +240,10 @@ def with_blocks(text: str, names: tuple[str, ...]) -> str:
 
 def subject_index(repo: Path, slug: str) -> str:
     """The subject index text with every generated block refreshed (and present)."""
-    text = with_blocks(markers.clean_nested_notices(read_text(repo, f"wiki/{slug}/index.md")),
-                       REQUIRED_SUBJECT_BLOCKS)
+    text = with_now(with_blocks(markers.clean_nested_notices(read_text(repo, f"wiki/{slug}/index.md")),
+                                REQUIRED_SUBJECT_BLOCKS))
     subject = load_subject(repo, slug)
-    bodies = {"chapters": chapters_block(subject), "lessons": lessons_block(subject),
+    bodies = {"now": now_block(subject), "chapters": chapters_block(subject), "lessons": lessons_block(subject),
               "review": review_block(subject), "notes": notes_block(subject)}
     for name in markers.names(text):
         if name in bodies:

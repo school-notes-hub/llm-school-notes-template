@@ -2,7 +2,8 @@
 
 Counted: pending and invalidated figures, inserted figures gone from their page (their
 verdict is kept), orphan figure places, textbook placeholder lines,
-figure places without an accepted figure, broken image links, and every page-check error on
+figure places without an accepted figure, broken image links, a finished pass whose hand-over had
+no `log` (`wiki_log.missing`), and every page-check error on
 every wiki page (`check_files(..., fix=False)`: unlike `check_text` it also checks links).
 With a git handle (`sn done`, `sn publish`) the writer guard runs too: a change since HEAD no
 writer may make (`guard.py`). The worktree's cleanliness is not looked at here (`sn publish`
@@ -14,7 +15,7 @@ from ..figures import insert, pending
 from ..state import safefs
 from ..wiki import check
 from ..wiki.pages import wiki_pages
-from . import guard, places as facts
+from . import guard, places as facts, wiki_log
 
 
 def problems(repo: Path, git=None) -> list[tuple[str, list[str]]]:
@@ -32,6 +33,7 @@ def problems(repo: Path, git=None) -> list[tuple[str, list[str]]]:
         ("tankönyvi helyőrző sor", sorted(f"{p['page']}:{p['line']}" for p in facts.textbook_lines(repo))),
         ("ábrahely elfogadott ábra nélkül", sorted(places)),
         ("törött képlink", sorted(links)),
+        ("lezárt menet naplóbejegyzés nélkül", wiki_log.missing(repo)),
         ("lapellenőrzési hiba", sorted(f"{e['file']}:{e.get('line') or ''} {e['message']}" for e in errors)),
     ] + ([("író-őr: tiltott módosítás", guard.violations(repo, git))] if git is not None else [])
 

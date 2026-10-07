@@ -16,6 +16,10 @@ DONE = ".school-notes/done"
 def snapshotted(repo, subject="physics"):
     handoff(repo, subject=subject)
     safefs.write_json(repo, f"{OUT}/{subject}/keys.json", {})
+    # since 0.3.6 every pass hands over its log entry (`sn done` reports one without)
+    if not safefs.is_file(repo, f"{OUT}/{subject}/adatok.json"):
+        safefs.write_json(repo, f"{OUT}/{subject}/adatok.json", {
+            "writer": "claude-opus-5-5/high", "log": [{"kind": "Update", "text": f"{subject}: menet."}]})
 
 
 def done_dirs(repo):
@@ -99,7 +103,7 @@ def test_a_failed_or_interrupted_move_is_recorded_and_a_re_run_goes_on(repo, fak
 def test_a_re_run_does_not_miss_a_retired_hand_overs_new_lesson_log(repo, fake_local):
     paths = place(repo)
     write_log(repo)
-    adatok(repo, notes=[{"file": LOG, "pages": paths}])
+    adatok(repo, notes=[{"file": LOG, "pages": paths}], log=[{"kind": "Creation", "text": "Új óranapló."}])
     safefs.write_json(repo, f"{OUT}/physics/keys.json", {})
     assert close.run(fake_local(repo), None, out=quiet) == 0 and not safefs.listdir(repo, OUT)
     snapshotted(repo, "chemistry")                       # another subject, before the commit

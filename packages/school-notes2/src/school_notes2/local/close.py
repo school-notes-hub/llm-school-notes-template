@@ -26,7 +26,9 @@ files; the reviewer has no shell). An `accept` is valid only for the content it 
 4. each accepted recheck renews the verdict of an inserted figure, once, for the content seen;
 5. the machine data (`machine_data.py`): lesson-log machine frontmatter, `generated` stamps,
    page evidence records, `docs/figure-requests.json` (each request is listed for the owner),
-   draft tracking and the ⏳ notice, the banner and 📎 blocks of every page;
+   draft tracking and the ⏳ notice, the banner and 📎 blocks of every page, and the pass's
+   `wiki/log.md` entries from `adatok.json` `log` (`wiki_log.py`; a log link that is not a wiki
+   page is a STOP in step 0);
 6. **STOP** (exit 2, nothing deleted) while an inserted figure's verdict is invalidated – the
    figure must be looked at against the new text;
 7. reader-verdict bookkeeping (figure verdicts untouched), indexes, decisions overview,
@@ -37,7 +39,8 @@ files; the reviewer has no shell). An `accept` is valid only for the content it 
    evidence records' pass id `helyi-<digest>-<subject>`; a replayed pass gets `-2`, `-3`, …):
    no STOP, no `sn done` problem on that subject's pages (other subjects' open problems do
    not matter; a problem that names no subject holds every hand-over), the hand-over unchanged
-   since step 0, and – in a close without `--subject` – a snapshot (`keys.json`): a subject
+   since step 0, and – in a close without `--subject` – a snapshot (`keys.json`); the moved
+   folder gets `closed.json` (`sn done` reports one whose `adatok.json` had no `log`): a subject
    without one is an unfinished pass and stays, with a line. What moved is in the `sn.close`
    log line, written also when a move fails or is interrupted (outcome `retire-failed`,
    exit 1). A re-run names an already moved subject with a line and goes on; a new lesson log
@@ -61,7 +64,8 @@ from ..figures import insert
 from ..sources import manifest
 from ..state import safefs
 from ..wiki import decisions, generate, public
-from . import done, figure_close as figs, guard, machine_data, tool_writes
+from .. import VERSION
+from . import done, figure_close as figs, guard, machine_data, tool_writes, wiki_log
 from .common import Refused, now_iso
 from .handoff import DONE, OUT, accepted, handoffs, in_scope, retired, retired_notes
 
@@ -103,7 +107,7 @@ def close(local, repo: Path, subjects: list[str] | None, out=print, state: dict 
     stops += figs.figure_blockers(repo, found, subjects)
     data_problems, new_requests = machine_data.check(repo, found, pages, new_pages, subjects,
                                                      noted_before=retired_notes(repo))
-    stops += data_problems
+    stops += data_problems + wiki_log.problems(repo, found)
     if stops:
         return stop(out, "STOP (nem írtam semmit):", stops)
     head_generated = {p: _head_generated(git, p) for p in changed_pages}
@@ -128,6 +132,10 @@ def close(local, repo: Path, subjects: list[str] | None, out=print, state: dict 
                     out(f"ítélet megújítva (újranézés): {h.subject}/{item['id']}")
         machine_data.write(local, repo, found, changed_pages, head_generated, new_requests, at, changed, out)
         machine_data.draft_notices(repo, changed, warnings, subjects)
+        if wiki_log.write(repo, found, at[:10]):
+            changed.append(wiki_log.LOG)
+        warnings += [f"{h.subject}: az adatok.json-ban nincs `log` (naplóbejegyzés); `sn done` jelezni fogja"
+                     for h in found if not h.data.get("log")]
         skipped = machine_data.machine_blocks(repo, changed, warnings, subjects)
         stale = [r for r in insert.invalidated(repo) if in_scope(r["file"], subjects)]
         if stale:
@@ -212,6 +220,7 @@ def retire(repo: Path, state: dict, subjects: list[str] | None, out=print, moved
             out(f"Hiba: az átadást nem tudtam elrakni: {base}: {exc}")
             failed.append(h.subject)
             continue
+        wiki_log.mark_closed(repo, dest, VERSION)
         out(f"átadás elrakva: {base} → {dest}")
         moved.append(dest.rsplit("/", 1)[1])
     return failed

@@ -3,7 +3,7 @@
 
 The writer's `figures.json` [{id, page, route, replaces}], `ujranezes.json` [{id, page, anchor,
 asset}] and `adatok.json` (schema `handoff-data`: `writer`, the lesson pages' source pages
-`notes`, the image checks `checks`, the teacher-image `requests`); the reviewer's
+`notes`, the image checks `checks`, the teacher-image `requests`, the `wiki/log.md` entries `log`); the reviewer's
 `verdicts.json` and `recheck.json` keyed by figure id; the controller's `keys.json`
 (`sn close --snapshot`)."""
 

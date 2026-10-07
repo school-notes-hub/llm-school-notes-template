@@ -7,7 +7,7 @@ This file holds everything that belongs to **this** wiki; the rules shared by ev
 # Template
 
 * **Template repository**: https://github.com/dlaszlo/llm-school-notes-template (or the fork this wiki was made from).
-* **Template version**: `1.22.3`.
+* **Template version**: `1.22.4`.
 * **Template commit**: `<exact template commit recorded at bootstrap and every template update>`.
 
 Updates are optional and happen only when the user asks (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)).
@@ -50,6 +50,14 @@ Every reader-facing string the rules prescribe lives here, in the wiki language 
 | review | `# 🔁 Review` | `# 🔁 Ismétlés` |
 | notes | `# 📝 Notes` | `# 📝 Jegyzetek` |
 | undated lesson | `? (after <earliest>, at the latest <latest>)` | `? (<legkorábbi> után, legkésőbb <legkésőbbi>)` |
+| uncertain place | `The ↕ mark: the place of this undated lesson in the order is not certain, because its range overlaps other lessons.` | `A ↕ jel: ennek a dátum nélküli órának a helye a sorban nem biztos, mert az időszaka átfed más órákéval.` |
+| where we are | `# 📍 Where we are` | `# 📍 Itt tartunk` |
+| current chapter | `**Now:** <chapter> (<chapter span>)` | `**Most:** <fejezet> (<időszak>)` |
+| latest lesson | `**Latest:** <lesson> – <date> · <topics>` | `**Legutóbb:** <óra> – <dátum> · <témakörök>` |
+| earlier chapters | `**Before:** <chapter> (<chapter span>) → …` | `**Előtte:** <fejezet> (<időszak>) → …` |
+| lesson order | `So far, in this order, newest first:` | `Eddig ebben a sorrendben vettük, a legújabb elöl:` |
+| undated in the block | `undated, <range>` | `dátum nélkül, <időszak>` |
+| chapter span | `🗓️ early September – late September`, one or two dated lessons `🗓️ September 3. – September 10.`; the current chapter `🗓️ since late September, still going` (parts: early 1-10, mid 11-20, late 21-) | `🗓️ szeptember eleje – szeptember vége`, egy-két datált óránál `🗓️ szeptember 3. – szeptember 10.`; a mostani fejezet `🗓️ szeptember vége óta, még tart` (eleje 1-10., közepe 11-20., vége 21-) |
 | textbook line | `🔖 Textbook: <lesson>, pages <pages>` | `🔖 Tankönyv: <lecke>, <oldalak>. oldal` |
 | index-based note | `(from the table of contents)` | `(a tartalomjegyzék alapján)` |
 | in short | `⚡ **In short**` | `⚡ **Röviden**` |

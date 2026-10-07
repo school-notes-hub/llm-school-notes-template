@@ -122,6 +122,30 @@
           }
         }
       }
+    },
+    "log": {
+      "type": "array",
+      "description": "the pass's wiki/log.md entries (Hungarian; links relative to wiki/); sn close writes them under the day's heading",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "text"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "Creation",
+              "Update"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "pattern": "^[^\\n]*\\S[^\\n]*$"
+          }
+        }
+      }
     }
   }
 }

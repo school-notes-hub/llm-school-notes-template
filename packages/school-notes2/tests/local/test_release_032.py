@@ -12,12 +12,18 @@ OUT = ".school-notes/out"
 
 
 def files_under(repo, rel):
-    return {p: safefs.read_bytes(repo, p) for p in safefs.walk_files(repo, rel)} if safefs.is_dir(repo, rel) else {}
+    """The hand-over's files (`closed.json`, the tool's mark of a finished pass since 0.3.6, left out)."""
+    return {p: safefs.read_bytes(repo, p) for p in safefs.walk_files(repo, rel)
+            if not p.endswith("/closed.json")} if safefs.is_dir(repo, rel) else {}
 
 
 def snapshotted(repo, subject="physics"):
     handoff(repo, subject=subject)
     safefs.write_json(repo, f"{OUT}/{subject}/keys.json", {})
+    # since 0.3.6 every pass hands over its log entry (`sn done` reports one without)
+    if not safefs.is_file(repo, f"{OUT}/{subject}/adatok.json"):
+        safefs.write_json(repo, f"{OUT}/{subject}/adatok.json", {
+            "writer": "claude-opus-5-5/high", "log": [{"kind": "Update", "text": f"{subject}: menet."}]})
 
 
 def test_a_successful_close_moves_each_consumed_hand_over_to_done(repo, fake_local):
@@ -34,7 +40,7 @@ def test_a_successful_close_moves_each_consumed_hand_over_to_done(repo, fake_loc
         assert {p.replace(f".school-notes/done/{pass_id}/", f"{OUT}/{subject}/"): b for p, b in moved.items()} == old
         assert f"átadás elrakva: {OUT}/{subject} → .school-notes/done/{pass_id}" in lines
     assert local.records[-1] == ("close", "ok", {"subjects": "all", "failed": [],
-                                                 "moved": sorted(name for name, _ in before.values())})
+                                                 "moved": [before[s][0] for s in sorted(before)]})
 
 
 def test_a_subject_close_moves_only_the_named_subjects(repo, fake_local):
