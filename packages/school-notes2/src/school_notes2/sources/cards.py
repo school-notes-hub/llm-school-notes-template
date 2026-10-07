@@ -11,9 +11,8 @@ Preparation snapshots a validated card in each package for stable resume inputs.
 import json
 from pathlib import Path
 
-from ..schemas import SchemaError, validate
+from ..schemas import validate
 from ..state import safefs
-from ..state.errors import Prerequisite
 
 PATH = "subject-cards.json"
 
@@ -36,19 +35,3 @@ def load(repo: Path, subject: str) -> dict | None:
     if card is None:
         return None
     return {key: card[key] for key in ("role", "style")}
-
-
-def missing(repo: Path, subjects) -> list[str]:
-    """The learner's subjects without a shared card, in name order (for `status`)."""
-    cards = _all(repo)
-    return sorted(s for s in set(subjects) if s not in cards)
-
-
-def preflight(content: bytes) -> None:
-    """Validate the pinned shared card file before taking any package from Drive."""
-    try:
-        _parse(content)
-    except (ValueError, TypeError, SchemaError) as exc:
-        raise Prerequisite(f"invalid shared subject cards: {str(exc)[:200]}",
-                           todo=f"javítsd a template {PATH} fájlját, majd szinkronizáld "
-                                "a közös fájlokat a tanulói repóba") from exc

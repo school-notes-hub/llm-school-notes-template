@@ -39,7 +39,7 @@ RECHECK = [{"id": "forces", "page": PAGE, "anchor": "Forces", "asset": "wiki/ass
 @pytest.fixture(autouse=True)
 def learner_tree(repo):
     from school_notes2.wiki import generate, public
-    from tests.e2e.test_run_e2e import learner_files
+    from tests.local.conftest import learner_files
     from tests.wiki.conftest import INDEX
     files = learner_files()
     files["tools/subjects.json"] = json.dumps({"subjects": {

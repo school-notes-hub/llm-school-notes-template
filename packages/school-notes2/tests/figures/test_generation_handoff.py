@@ -6,7 +6,6 @@ from types import SimpleNamespace
 import pytest
 
 from school_notes2.figures import context, insert
-from school_notes2.flows import fetch, run
 from school_notes2.images import generate
 from school_notes2.images.settings import ImageSettings
 from school_notes2.state import safefs
@@ -53,36 +52,3 @@ def test_generated_publication_preview_is_the_inserted_asset(repo, make_figure, 
     insert.insert(repo, brief, receipt(repo, brief, candidate), at="date")
     assert safefs.read_bytes(repo, candidate["asset"]) == preview.read_bytes()
     assert f"sha256: {sha}" in safefs.read_text(repo, brief["page"])
-
-
-def test_legacy_image_marker_does_not_start_a_generation_only_run(monkeypatch):
-    monkeypatch.setattr(fetch, "_scan", lambda *a: [])
-    ctx = SimpleNamespace()
-    assert fetch.start(ctx, "cron", None) is None
-    from school_notes2.flows import repair, fix
-    monkeypatch.setattr(fetch, "drive_client", lambda *a: None)
-    monkeypatch.setattr(repair, "next_task", lambda *a: None)
-    monkeypatch.setattr(fix, "next_task", lambda *a: None)
-    # ctx deliberately has no image settings: there is no image-only scan or spending.
-    assert run._new_task(ctx) is None
-
-
-def test_generation_receipt_does_not_reserve_the_commission_identity(repo, make_figure, tmp_path, monkeypatch):
-    from school_notes2.flows import handlers, generation_receipts
-    from school_notes2.state import phase
-    from school_notes2.figures import commissions
-    from school_notes2.wiki import public
-    brief, candidate = make_figure()
-    digest = public.sha256(repo, candidate["asset"])
-    settings = SimpleNamespace(learner="sample", ledger=lambda: {"jobs": {"sample-forces": {
-        "learner": "sample", "attempts": [{"state": "generated", "sha256": digest, "preview_sha256": digest}]}}})
-    ctx = SimpleNamespace(notes_path=repo, image_settings=lambda: settings, log=None)
-    task = phase.create(tmp_path / "tasks", "sample", "notes", "interactive", "prepared")
-    monkeypatch.setattr(handlers.image_generate, "generate", lambda *a, **kw: {
-        "state": "generated", "number": 1, "sha256": digest, "preview_sha256": digest})
-    handlers.generate(ctx, task, brief["id"], None)
-    generation_receipts.refresh(ctx, task)
-    commissions.check_identity(repo, brief)
-    insert.insert(repo, brief, receipt(repo, brief, candidate), at="date")
-    assert public.media_receipt_rights(repo)(candidate["asset"])[0] == "generated"
-    assert safefs.read_json(repo, "docs/evidence/media/forces/figure.json")["rights"] == "generated"

@@ -6,8 +6,8 @@ from pathlib import Path
 from ..images.plans import check_id
 from ..schemas import validate
 from ..state import safefs
-from ..wiki import frontmatter, markers as blocks
-from ..wiki.pages import CODE_FENCE, INLINE_CODE, links, resolve, wiki_pages
+from ..wiki import markers as blocks
+from ..wiki.pages import CODE_FENCE, INLINE_CODE, wiki_pages
 
 MARKER = re.compile(r"<!-- (?:figure|image|figure-request): ([a-z0-9-]{1,64}) -->")
 MERMAID = re.compile(r"^```mermaid[^\n]*\n(.*?)^```\s*$", re.M | re.S)
@@ -115,74 +115,12 @@ def candidate(repo: Path, brief: dict) -> dict:
     return licenses.candidate(repo, brief, value)
 
 
-def topic(repo: Path, page: str) -> str:
-    meta = frontmatter.split(safefs.read_text(repo, page)).meta
-    for lesson in meta.get("lessons", []):
-        if lesson.get("topics"):
-            target = resolve(page, lesson["topics"][0].split("#", 1)[0])
-            if target and safefs.is_file(repo, target):
-                return target
-    return page
-
-
-def order(repo: Path, brief: dict) -> tuple:
-    page = brief["page"]
-    meta = frontmatter.split(safefs.read_text(repo, page)).meta
-    rank = 0 if page == topic(repo, page) else 1 if meta.get("lessons") else 2
-    matches = markers(repo).get(brief["id"], [])
-    return topic(repo, page), rank, page, matches[0][1] if matches else 0, brief["id"]
-
-
 def assignments(result: dict, pending: list[dict]) -> list[dict]:
     listed = list(result.get("figures", []))
     ids = {a["id"] for a in listed}
     listed += [{k: entry["commission"][k] for k in ("id", "page", "kind")}
                for entry in pending if entry["commission"]["id"] not in ids]
     return sorted(listed, key=lambda a: a["id"])
-
-
-def check(repo: Path, assignments: list[dict], drawings: list[dict] = (), *,
-          generated=None, requests=()) -> list[dict]:
-    from ..wiki.check import item
-    out = []
-    try:
-        validate_assignments(repo, assignments)
-    except (ValueError, OSError) as exc:
-        out.append(item(".school-notes/result.json", None, f"figures: {exc}"))
-    assigned = {a["id"]: a for a in assignments}
-    for drawing in sorted(drawings, key=lambda d: (d["figure"], d["source"], d["crop"])):
-        if assigned.get(drawing["figure"], {}).get("kind") != "notebook-drawing":
-            out.append(item(".school-notes/result.json", None,
-                            f"notebook_drawings: {drawing['figure']} needs an assigned notebook-drawing commission"))
-    for fid in sorted(assigned):
-        path = f".school-notes/figures/{fid}/figure.json"
-        try:
-            brief = read(repo, fid)
-            if not safefs.is_file(repo, path):
-                raise ValueError("missing figure.json; write a candidate or an explicit failed state with reason")
-            request = next((r for r in requests if r["id"] == fid), None)
-            out.extend(item(path, None, message) for message in
-                       preflight(repo, brief, generated=generated, request=request))
-        except (ValueError, OSError) as exc:
-            out.append(item(path, None, str(exc)))
-    return out
-
-
-def preflight(repo: Path, brief: dict, *, generated=None, request=None) -> list[str]:
-    from . import context, machine
-    from .render import png
-    value = candidate(repo, brief)
-    if source := brief.get("source_image"):
-        png(safefs.read_bytes(repo, source["path"]), crop=source["crop"])
-    if value["state"] != "candidate":
-        context.embedding(repo, brief, {"alt": "", "caption": ""})
-        return []
-    errors = machine.generation_errors(repo, brief, value, generated)
-    errors += machine.report(repo, brief, value, generated=generated, request=request)["errors"]
-    context.embedding(repo, brief, value)
-    if not errors:
-        context.verdict_key(repo, brief, value)
-    return errors
 
 
 def _inserted(repo: Path, brief: dict) -> bool:

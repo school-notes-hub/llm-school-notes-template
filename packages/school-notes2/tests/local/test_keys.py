@@ -75,7 +75,7 @@ def test_local_git_network_branch_carries_gh_token(tmp_path, monkeypatch):
     monkeypatch.setattr(common, "gh_token", lambda: "tok")
     (tmp_path / ".git").mkdir()
     cfg = SimpleNamespace(git_name="n", git_email="e", log_path=tmp_path / "log")
-    local = common.Local(SimpleNamespace(cfg=cfg, name="t"), tmp_path)
+    local = common.Local(cfg, SimpleNamespace(name="t"), tmp_path)
     assert local.git(network=True).remote == HttpsToken("tok")
     assert local.git().remote is None
 

@@ -39,13 +39,6 @@ def is_notice(name: str) -> bool:
     return name == "pending" or name.startswith(("pending-section-", "pending-figure-"))
 
 
-def outside(text: str, cut: int) -> int:
-    for start, end, _ in spans(text):
-        if start < cut <= end:
-            cut = end + int(text[end:end + 1] == "\n")
-    return cut
-
-
 def clean_nested_notices(text: str) -> str:
     """Remove legacy notices inside another block before any regex-based replacement."""
     blocks = spans(text)
@@ -105,16 +98,6 @@ def replace(text: str, name: str, body: str) -> str:
         if m.group("name") == name:
             return text[:m.start("body")] + body + text[m.end("body"):]
     raise MarkerError(f"generated block {name!r} missing")
-
-
-def empty_all(text: str) -> str:
-    """Every block emptied: the conflict resolver merges only the hand-written part."""
-    return BLOCK.sub(lambda m: OPEN.format(name=m.group("name")) + "\n" + CLOSE, text)
-
-
-def strip(text: str) -> str:
-    """The text without marker lines (for comparing with pre-marker files)."""
-    return re.sub(r"^<!-- /?school-notes:generated[^>]*-->\n", "", text, flags=re.M)
 
 
 def wrap(name: str, body: str) -> str:

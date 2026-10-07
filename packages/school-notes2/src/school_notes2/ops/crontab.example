@@ -1,7 +1,0 @@
-CRON_TZ=Europe/Budapest
-# The owner's uid (`id -u`); rootless Podman needs the runtime dir.
-XDG_RUNTIME_DIR=/run/user/1000
-# Failures are mailed by the tool itself (plan 8.4), not by cron.
-MAILTO=""
-PATH=/usr/local/bin:/usr/bin:/bin
-0 * * * * /srv/school-notes/current/bin/school-notes round

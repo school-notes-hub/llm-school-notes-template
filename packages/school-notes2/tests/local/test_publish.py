@@ -31,7 +31,7 @@ def world(tmp_path, fake_local, local_origin, monkeypatch):
         builds.append(out)
         return site_build.BuildRecord(commit, out, 0.1, 1)
     monkeypatch.setattr(publish.site_build, "build", fake_build)
-    monkeypatch.setattr(publish.finish, "renderer", lambda ctx: None)
+    monkeypatch.setattr(publish, "renderer", lambda local: None)
     monkeypatch.setattr(publish.done, "report", lambda repo, out=print: 0)
     # local bare origins stand in for GitHub; the real guard has its own tests below
     monkeypatch.setattr(publish, "require_github", lambda url, what: url)
@@ -132,7 +132,7 @@ def test_a_remote_that_is_not_https_github_is_refused_before_any_push(world, mon
         git(repo, "remote", "set-url", "--push", "origin", "http://github.com/o/r.git")
     else:
         git(repo, "remote", "set-url", "origin", "https://github.com/o/r.git")
-        world["local"].ctx.student.site_repo = "http://github.com/o/site.git"
+        world["local"].student.site_repo = "http://github.com/o/site.git"
     with pytest.raises(NeedsOwner):
         publish.run(world["local"], out=lambda *_: None)
     assert ref(world["origin"], "refs/heads/main") != head(repo)

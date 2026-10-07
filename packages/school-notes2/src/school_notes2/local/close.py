@@ -52,12 +52,11 @@ from pathlib import Path
 import yaml
 
 from ..figures import commissions, context as fctx, insert
-from ..flows import generation_receipts
-from ..reader.units import page_key
-from ..review.severity import is_error
+from ..figures.review import is_error
 from ..schemas import validate
 from ..state import safefs
 from ..wiki import banners, decisions, generate, lesson_log, markers, public
+from ..wiki.author import page_key
 from ..wiki.pages import read_page, relative, wiki_pages
 from ..wiki.rights import SVG_RECEIPTS
 from . import done
@@ -133,8 +132,16 @@ def _write_if_changed(repo: Path, rel: str, text: str, changed: list[str]) -> No
         changed.append(rel)
 
 
+def generation_outputs(settings) -> list[str]:
+    """The sha256 of every image (and preview) the host ledger records for this learner."""
+    return sorted({a[key] for entry in settings.ledger()["jobs"].values()
+                   if entry["learner"] == settings.learner
+                   for a in entry["attempts"] if a.get("state") in ("generated", "accepted", "rejected")
+                   for key in ("sha256", "preview_sha256") if a.get(key)})
+
+
 def generation_ledger(local, repo: Path, changed: list[str]) -> None:
-    hashes = generation_receipts.outputs(local.image_settings(repo))
+    hashes = generation_outputs(local.image_settings(repo))
     if hashes:
         _write_if_changed(repo, LEDGER, public.dumps({"rights": "generated", "outputs": hashes}), changed)
 

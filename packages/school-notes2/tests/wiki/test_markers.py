@@ -12,15 +12,6 @@ def test_read_replace_roundtrip():
     assert markers.read(new, "b") == "új\n" and new.startswith("kézi\n") and new.endswith("vége\n")
 
 
-def test_empty_all_keeps_hand_written_text():
-    empty = markers.empty_all(TEXT)
-    assert markers.read(empty, "a") == "" and "köz\n" in empty
-
-
-def test_strip_removes_marker_lines_only():
-    assert markers.strip(TEXT) == "kézi\nrégi\nköz\nvége\n"
-
-
 def test_check_rejects_unpaired_and_duplicate():
     with pytest.raises(markers.MarkerError):
         markers.check(markers.OPEN.format(name="a") + "\n")
@@ -41,9 +32,3 @@ def test_nested_notice_cleanup_preserves_standalone_and_line_boundaries(name):
     markers.check(expected)
     assert markers.is_notice(name)
     assert not markers.is_notice("notes")
-
-
-def test_outside_uses_outermost_extent():
-    text = "intro\n" + markers.wrap("notes", "heading\n" + markers.wrap("pending", "notice")) + "end\n"
-    assert markers.outside(text, text.index("notice")) == text.rindex("end")
-    assert markers.outside(text, 0) == 0

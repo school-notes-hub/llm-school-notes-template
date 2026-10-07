@@ -5,12 +5,11 @@ import itertools
 
 import pytest
 
-from school_notes2.reader import notices
 from school_notes2.state import safefs
 from school_notes2.wiki import author, generate, markers
 
 BODIES = {"lesson-banner": "![Banner](../assets/b.svg)\n", "lesson-sources": "📎 Füzet: 2026. 09. 01.\n",
-          "pending": notices.PAGE}
+          "pending": "⏳ Ezt az oldalt még ellenőrizzük.\n"}
 TITLED = "---\ntype: lesson-notes\n---\n\n# Mit tanultunk ezen az órán\n\n* [Pont](elso.md#pont)\n"
 UNTITLED = "---\ntype: topic\n---\nBevezető mondat.\n\n# Első rész\n"
 
@@ -35,16 +34,6 @@ def test_tool_blocks_go_below_the_title_in_canonical_order(order, start):
         assert text.index("<!-- school-notes:generated lesson-banner") < text.index("Bevezető mondat.")
 
 
-def test_existing_blocks_keep_their_place_byte_for_byte(repo):
-    """A page laid out by 2.5.1 (notice above the title) is not rewritten for nothing."""
-    page = "wiki/proba/masodik.md"
-    text = ("---\ntype: topic\ntitle: Második\ndescription: A második téma.\nchapter: halado\norder: 10\n---\n"
-            + markers.wrap("pending", notices.PAGE) + "\n# Második\n\nSzöveg.\n")
-    safefs.write_text(repo, page, text)
-    safefs.write_json(repo, "docs/review/new-pages.json", {page: "v2-run"})
-    assert notices.refresh(repo, [page]) == [] and safefs.read_text(repo, page) == text
-
-
 @pytest.mark.parametrize("name", generate.REQUIRED_SUBJECT_BLOCKS)
 def test_removed_subject_index_block_comes_back(repo, name):
     """Védelmek-review 2: the author may delete a tool index block; generation restores it."""
@@ -65,14 +54,3 @@ def test_root_subjects_block_comes_back_only_once_there_are_subjects(repo, tmp_p
     empty.mkdir()
     safefs.write_text(empty, "wiki/index.md", "# School notes wiki (not initialized)\n")
     assert generate.write_indexes(empty) == []
-
-
-def test_tool_lines_are_blocks_and_machine_keys():
-    text = ("---\ntype: lesson-notes\ntitle: Óra\ngenerated:\n  by: m\n  at: t\n---\n# Óra\n\n"
-            + markers.wrap("lesson-sources", "📎 Füzet: 2026. 09. 01.\n") + "\nSzerzői sor.\n")
-    lines = text.splitlines()
-    tool = author.tool_lines(text)
-    assert {n for n in range(1, len(lines) + 1) if lines[n - 1].startswith(("type:", "generated:", "  by", "  at"))} <= tool
-    assert lines.index("📎 Füzet: 2026. 09. 01.") + 1 in tool
-    assert lines.index("title: Óra") + 1 not in tool and lines.index("Szerzői sor.") + 1 not in tool
-    assert lines.index("# Óra") + 1 not in tool

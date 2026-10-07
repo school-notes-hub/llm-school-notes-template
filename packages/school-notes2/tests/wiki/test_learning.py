@@ -4,9 +4,8 @@ from datetime import date
 
 import pytest
 
-from school_notes2.wiki import check, decisions, frontmatter, guard, lesson_log, machine, markers
+from school_notes2.wiki import check, decisions, frontmatter, lesson_log, markers
 from tests.wiki.conftest import LESSON_BODY, page, write
-from tests.wiki.test_guard import run, snapshot
 
 REL = "wiki/proba/elso.md"
 NOTE = "wiki/proba/2026-09-10-elso-jegyzet.md"
@@ -69,46 +68,6 @@ def test_question_anchor_check_is_wired_to_check_files(repo):
     # Fable 13: question form is a warning; it never fails a writer call.
     assert any("preceding" in i["message"] and i["severity"] == "warning" for i in found)
     assert not check.errors(found)
-
-
-@pytest.mark.parametrize("kind", ["add", "remove", "answer", "format", "quoted", "flow", "alias"])
-def test_cron_decisions_are_byte_protected_but_owner_can_edit(repo, kind):
-    old = frontmatter.set_keys((repo / REL).read_text(), {"decisions": [DECISION]})
-    new = old
-    if kind == "add":
-        old = frontmatter.strip_keys(old, ("decisions",))
-    elif kind == "remove":
-        new = frontmatter.strip_keys(old, ("decisions",))
-    elif kind == "answer":
-        new = old.replace("Szeptember 29.", "Szeptember 30.")
-    elif kind == "format":
-        new = old.replace("decisions:", "decisions: ")
-    elif kind == "quoted":
-        new = old.replace("decisions:", "'decisions':")
-    elif kind == "flow":
-        old = "---\n{decisions: [], title: X}\n---\nBody\n"
-        new = old.replace("decisions: []", "decisions: [ ]")
-    elif kind == "alias":
-        old = "---\nanswer: &answer old\ndecisions: [{id: q, answer: *answer}]\n---\n"
-        new = old.replace("&answer old", "&answer new")
-    write(repo, REL, old)
-    base = snapshot(repo)
-    write(repo, REL, new)
-    found = run(repo, base, [(REL, "modified")])
-    assert any("decisions" in v.message for v in found)
-    assert not run(repo, base, [(REL, "modified")], interactive=True)
-
-
-def test_new_page_cannot_smuggle_decision_and_tool_writes_preserve_bytes(repo):
-    text = frontmatter.set_keys((repo / REL).read_text(), {"decisions": [DECISION]})
-    before = decisions.snapshot(text.encode())
-    new = frontmatter.set_keys(text, {"generated": {"by": "writer", "at": "now"}})
-    assert decisions.snapshot(new.encode()) == before
-    write(repo, REL, new)
-    assert run(repo, {}, [(REL, "added")])
-    base = snapshot(repo)
-    write(repo, REL, new + "\nÚj magyarázat.\n")
-    assert not run(repo, base, [(REL, "modified")])
 
 
 def test_source_line_uses_only_explicit_lesson_data():
@@ -181,14 +140,6 @@ def test_public_manifest_excludes_private_decisions_and_anchors(repo):
     assert "PRIVATE_CANARY" not in manifest and "private-question-canary" not in manifest
     assert "decisions" not in manifest and "dontesek.md" not in manifest
     assert all(p["path"].startswith("wiki/") for p in json.loads(manifest)["pages"])
-
-
-def test_cron_catches_line_ending_only_decision_change(repo):
-    text = frontmatter.set_keys((repo / REL).read_text(), {"decisions": [DECISION]})
-    write(repo, REL, text)
-    base = snapshot(repo)
-    (repo / REL).write_bytes(text.replace("\n", "\r\n").encode())
-    assert any("decisions" in v.message for v in run(repo, base, [(REL, "modified")]))
 
 
 @pytest.mark.parametrize("extension", ["doc", "docx", "xls", "xlsx", "odp", "ods", "key"])

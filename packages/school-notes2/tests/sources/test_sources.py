@@ -3,13 +3,10 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from PIL import Image
 
-from school_notes2.schemas import validate
-from school_notes2.sources.batch import select_batch, split_ranges
 from school_notes2.sources.duplicates import Known, known_hashes, original_key
 from school_notes2.sources.naming import slug, subject_key, unique_dir
 from school_notes2.sources.order import ordered
@@ -151,43 +148,6 @@ def test_preconverted_package_is_one_item(tmp_path):
                              "sha256": hashlib.sha256(b"# Dia\n").hexdigest(),
                              "original_sha256": files[1]["sha256"], "duplicate_of": None}]
     assert (repo / "sources/matek/tanari-dia/media/k1.png").read_bytes() == b"png"
-
-
-def test_fetch_entries_validate(tmp_path):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    placed = place_package(repo, package([photo(tmp_path / "1.jpg", (100, 80), exif=False)]), 1, Known())
-    validate("fetch", {"student": "benedek", "learner": {"grade": 9}, "run_id": "r1", "mode": "cron",
-                       "packages": [placed.package], "pages": placed.pages,
-                       "range": {"from": 1, "to": 1, "k": 1, "n": 1},
-                       "open_review_items": [], "pending_images": []})
-
-
-def _pkg(name, pages, pre=False):
-    return SimpleNamespace(name=name, pages=pages, preconverted=pre)
-
-
-def test_batching_rules():
-    counted = []
-
-    def count(p):
-        counted.append(p.name)
-        return p.pages
-
-    three = [_pkg("a", 10), _pkg("b", 10), _pkg("c", 5)]
-    selected, dropped = select_batch(three, count)
-    assert [p.name for p, _ in selected] == ["a", "b", "c"] and dropped == []
-    selected, dropped = select_batch([_pkg("a", 20), _pkg("b", 20)], count)
-    assert [p.name for p, _ in selected] == ["a"] and [p.name for p in dropped] == ["b"]
-    selected, _ = select_batch([_pkg("big", 75), _pkg("b", 1)], count)
-    assert [(p.name, n) for p, n in selected] == [("big", 75)]
-    selected, dropped = select_batch([_pkg("a", 3), _pkg("doc", 1, pre=True)], count)
-    assert [p.name for p, _ in selected] == ["a"] and dropped == []
-    assert "doc" not in counted                       # not downloaded when it cannot join
-    selected, _ = select_batch([_pkg("doc", 1, pre=True), _pkg("a", 3)], count)
-    assert [p.name for p, _ in selected] == ["doc"]
-    assert split_ranges(75) == [(1, 30), (31, 60), (61, 75)]
-    assert split_ranges(30) == [(1, 30)]
 
 
 def test_naming(tmp_path):

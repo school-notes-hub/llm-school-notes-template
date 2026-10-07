@@ -1,7 +1,6 @@
 import json
 
 from school_notes2.wiki import check, generate
-from school_notes2.wiki.check_result import check_result
 
 
 def messages(items):
@@ -70,33 +69,6 @@ def test_render_json_must_match(repo):
          "outputs": {"out.svg": {"sha256": "0" * 64}}}))
     found = messages(check.check_files(repo, []))
     assert len(found) == 2
-
-
-FETCH = {"packages": [{"subject": "fizika", "new_subject": True}],
-         "pages": [{"seq": 1, "duplicate_of": None}, {"seq": 2, "duplicate_of": "sources/x.jpg"},
-                   {"seq": 3, "duplicate_of": None}]}
-
-
-def test_result_checks(repo):
-    (repo / "docs/review").mkdir(parents=True)
-    (repo / "docs/review/2026-10-01-review.md").write_text("x")
-    result = {"status": "done",
-              "notes": [{"file": "wiki/proba/2026-09-10-elso-jegyzet.md", "pages": [1, 9]}],
-              "new_subjects": [{"subject": "proba", "emoji": "x", "color": "#000000"}],
-              "review_closure": [{"file": "docs/review/2026-10-01-review.md", "item_id": "R1", "status": "fixed"},
-                                 {"file": "docs/review/nincs.md", "item_id": "R1", "status": "fixed"}],
-              "checks": [{"page": "wiki/proba/elso.md", "image": 7, "locator": "x", "observed": "y",
-                          "decision": "confirmed"},
-                         {"page": "wiki/proba/elso.md", "image": "wiki/assets/abra.svg", "locator": "x",
-                          "observed": "y", "decision": "confirmed"}]}
-    found = messages(check_result(repo, result, FETCH, {("docs/review/2026-10-01-review.md", "R1")}))
-    # An invalid closure is a warning (#17): the item stays open; it is not counted here.
-    assert len(found) == 4
-    assert any("[3]" in m for m in found) and any("[9]" in m for m in found)
-    assert any("not new" in m for m in found)
-    warnings = check_result(repo, result, FETCH, {("docs/review/2026-10-01-review.md", "R1")})
-    assert any("nincs.md" in i["message"] and i["severity"] == "warning" for i in warnings)
-    assert any("page number 7" in m for m in found)
 
 
 def test_missing_cited_source_is_only_a_warning(repo):

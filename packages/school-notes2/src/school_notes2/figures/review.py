@@ -1,17 +1,19 @@
-"""Independently callable, bounded and resumable figure-review role (no phase wiring)."""
+"""The independent figure reviewer's verdicts, checked against the current content (no LLM here:
+the reviewer runs in the owner's session and hands its verdicts over)."""
 
-from dataclasses import replace
 from pathlib import Path
 
-from ..review.severity import is_error
-from ..llm import launch
 from ..schemas import validate
-from ..state import safefs
-from ..state.errors import BadWork, Transient, WaitingQuota
-from . import commissions, context, inputs
+from . import commissions, context
 
 
-def validate_output(value: dict, assigned: dict, repo: Path, briefs: list[dict], *, legacy=False) -> None:
+def is_error(finding):
+    """A finding blocks only as `hiba`; receipts written before severity was required count as one."""
+    return finding.get("severity", "hiba") == "hiba"
+
+
+
+def validate_output(value: dict, assigned: dict, repo: Path, briefs: list[dict]) -> None:
     validate("figure-review", value)
     wanted = {i["id"]: i["key"] for i in assigned["figures"]}
     got = [i["id"] for i in value["figures"]]
@@ -25,7 +27,7 @@ def validate_output(value: dict, assigned: dict, repo: Path, briefs: list[dict],
             raise ValueError(f"{verdict['id']}: stale verdict key")
         if verdict["verdict"] == "accept" and any(is_error(d) for d in verdict["defects"] + verdict["text_mismatch"]):
             raise ValueError("accept cannot contain outstanding defects or text mismatches")
-        if not legacy and verdict["verdict"] != "accept" and not any(is_error(d) for d in verdict["defects"] + verdict["text_mismatch"]):
+        if verdict["verdict"] != "accept" and not any(is_error(d) for d in verdict["defects"] + verdict["text_mismatch"]):
             raise ValueError("repair/reject requires a hiba defect; suggestions do not block acceptance")
         uses = [context.page_context(repo, brief["page"])] + context.other_uses(
             repo, brief, commissions.candidate(repo, brief))
@@ -34,147 +36,9 @@ def validate_output(value: dict, assigned: dict, repo: Path, briefs: list[dict],
             raise ValueError("decision-related finding requires new_evidence")
 
 
-def run_batch(repo: Path, briefs: list[dict], name: str, run: launch.RoleRun, *,
-              render: inputs.Render, log, invoke=launch.run_headless) -> dict:
-    """Returns a trusted receipt or pending. The caller owns scheduling/quota/notifications.
-
-    A saved valid response is reused after interruption. Retry counters are written before
-    launch, so repeated crashes never create an unbounded loop. No writer home or MCP mount.
-    """
-    if run.harness.name != "claude-review":
-        raise ValueError("figure review requires the configured claude-review harness")
-    if not name or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in name):
-        raise ValueError("invalid review batch name")
-    briefs = sorted(briefs, key=lambda b: commissions.order(repo, b))
-    folder = run.task_dir / "figure-review" / name
-    saved = _saved_receipt(folder)
-    if saved is not None:
-        assigned = {"figures": [{"id": v["id"], "key": v["key"]} for v in saved["review"]["figures"]]}
-        saved_ids = {v["id"] for v in assigned["figures"] + saved.get("failed", [])}
-        if {b["id"] for b in briefs} != saved_ids:
-            raise ValueError("saved review belongs to different assignments")
-        validate_output(saved["review"], assigned, repo, briefs, legacy=saved.get("validation_version", 1) < 2)
-        _save(repo, name, saved)
-        return saved
-    assigned = safefs.read_json(folder, "prepared.json")
-    if assigned is None:
-        assigned = inputs.prepare(repo, briefs, folder / "in", render)
-        safefs.write_json(folder, "prepared.json", assigned)
-    prepared_ids = {v["id"] for v in assigned["figures"] + assigned.get("failed", [])}
-    if {b["id"] for b in briefs} != prepared_ids:
-        raise ValueError("saved preparation belongs to different assignments")
-    if not assigned["figures"]:
-        return {"status": "pending", "reason": "no prepared candidates", "failed": assigned["failed"]}
-    ready_ids = {v["id"] for v in assigned["figures"]}
-    briefs = [b for b in briefs if b["id"] in ready_ids]
-    signature = context.digest({p: context.digest(safefs.read_bytes(folder, p).hex())
-                                for p in safefs.walk_files(folder, "in") if p != "in/format-error.json"})
-    state = safefs.read_json(folder, "state.json", {})
-    if state and state["input"] != signature:
-        raise ValueError("review input changed; use a new review batch (repair/recheck)")
-    if not state:
-        state = {"input": signature, "attempts": [], "status": "ready", "failed": assigned["failed"]}
-        safefs.write_json(folder, "state.json", state)
-    configured = replace(run, role_name="figure-review", role=replace(run.role, timeout_s=1800),
-                         mounts=launch.Mounts(work=repo / "wiki", work_readonly=True,
-                                             in_dir=folder / "in", out_dir=folder / "out"),
-                         output_host=folder / "out/review.json", schema="figure-review",
-                         label=name)
-    return _resume(repo, briefs, name, configured, folder, assigned, state, log, invoke)
-
-
-def _resume(repo, briefs, name, run, folder, assigned, state, log, invoke):
-    while True:
-        saved = _saved_receipt(folder)
-        if saved is not None:
-            validate_output(saved["review"], assigned, repo, briefs, legacy=saved.get("validation_version", 1) < 2)
-            _save(repo, name, saved)
-            return saved
-        if state["status"] == "pending":
-            # `timed_out`: the timeout brake (T-125) covers it; other failures are counted
-            # as unjudged runs (fix-49b).
-            return {"status": "pending", "reason": state["reason"], "failed": state.get("failed", []),
-                    "timed_out": state["attempts"][-1:] == ["timeout"]}
-        if state["attempts"] and state["attempts"][-1] == "running":
-            try:
-                output = safefs.read_json(folder, "out/review.json")
-                validate_output(output, assigned, repo, briefs)
-            except (ValueError, OSError):
-                _failure(folder, state, "crash", "interrupted call without valid output")
-            else:
-                return _accept(repo, briefs, name, run, folder, state, output)
-        if state["status"] == "pending":
-            continue
-        safefs.unlink(folder, "out/review.json")
-        state["attempts"].append("running")
-        safefs.write_json(folder, "state.json", state)
-        # Create the output directory before mounting it.
-        safefs.write_json(folder, "out/.ready.json", {})
-        try:
-            outcome = invoke(replace(run, attempt=len(state["attempts"])), log=log, snapshot=lambda: launch.tree_fingerprint(folder / "out"))
-            output = outcome.output
-            validate_output(output, assigned, repo, briefs)
-        except (WaitingQuota, launch.Suspended):
-            # Not an attempt: the call waits for the quota or for the owner (T-125).
-            state["attempts"].pop()
-            safefs.write_json(folder, "state.json", state)
-            raise
-        except launch.TimedOut:
-            _failure(folder, state, "timeout", "figure reviewer timed out")
-        except Transient as exc:
-            _failure(folder, state, "crash", str(exc))
-        except (BadWork, ValueError) as exc:
-            _failure(folder, state, "format", str(exc))
-        else:
-            return _accept(repo, briefs, name, run, folder, state, output)
-
-
-def _failure(folder, state, kind, reason):
-    state["attempts"][-1] = kind
-    state["reason"] = reason
-    state["status"] = ("pending" if kind == "timeout" or state["attempts"].count(kind) >= 2
-                       else "ready")
-    safefs.write_json(folder, "state.json", state)
-    safefs.write_json(folder, "in/format-error.json", {"error": reason})
-
-
-def _accept(repo, briefs, name, run, folder, state, output):
-    by_id = {v["id"]: v for v in output["figures"]}
-    advice = [f"{b['page']} ({b['id']}): {d['observed']} – {d['expected']}"
-              for b in briefs for d in by_id[b["id"]]["defects"] + by_id[b["id"]]["text_mismatch"]
-              if d.get("severity") == "javaslat"]
-    output = {**output, "figures": [by_id[b["id"]] for b in briefs],
-              "owner_notes": sorted(set(output["owner_notes"] + advice))}
-    receipt = {"validation_version": 2, "status": "reviewed", "model": f"{run.role.model}/{run.role.effort}",
-               "review": output, "input": state["input"], "failed": state.get("failed", [])}
-    safefs.write_json(folder, "accepted.json", receipt)  # durable before either repo write
-    _save(repo, name, receipt)
-    return receipt
-
-
-def _save(repo, name, receipt):
-    safefs.write_json(repo, f".school-notes/figure-review/{name}.json", receipt["review"])
-    safefs.write_json(repo, f".school-notes/figure-review/{name}.receipt.json", receipt)
-
-
-def for_figure(receipt: dict, fid: str) -> dict:
-    failure = next((f for f in receipt.get("failed", []) if f["id"] == fid), None)
-    return {"status": "pending", "reason": failure["reason"]} if failure else receipt
-
-
 def verdict_for(receipt: dict, fid: str, *, unique=False) -> dict:
     found = [v for v in receipt.get("review", {}).get("figures", []) if v["id"] == fid]
     if not found or (unique and len(found) != 1):
         return {}
     return {**found[0], **{k: [d for d in found[0][k] if is_error(d)]
                           for k in ("defects", "text_mismatch") if k in found[0]}}
-
-
-def _saved_receipt(folder):
-    """Accepted pre-upgrade receipts are trusted; new model outputs stay strict."""
-    saved = safefs.read_json(folder, "accepted.json")
-    if saved is not None:
-        for verdict in saved["review"]["figures"]:
-            for field in ("defects", "text_mismatch"):
-                verdict[field] = [{"severity": "hiba", **d} for d in verdict[field]]
-    return saved

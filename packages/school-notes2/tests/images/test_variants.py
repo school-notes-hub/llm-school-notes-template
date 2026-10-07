@@ -120,14 +120,6 @@ def test_variant_preview_crash_resumes_without_spending_again(local_images, log,
     assert len(entry["variants"]) == 1 and len(entry["attempts"]) == 2
 
 
-@pytest.mark.parametrize("prompt", ["writer", "fix"])
-def test_prompt_explains_plan_variants(prompt):
-    path = TOOLS.parent / "packages/school-notes2/src/school_notes2/llm/prompts" / f"{prompt}.txt"
-    text = path.read_text()
-    assert "Elutasított kép után a képtervet a hibalista szerint módosíthatod" in text
-    assert "Ítéletre váró képnél ne írd át a képtervet" in text
-
-
 def test_lost_last_attempt_does_not_reuse_an_older_unreviewed_image(local_images, log):
     settings, calls = local_images("barna")
     generate.generate(settings, "termeles-banner", log=log)

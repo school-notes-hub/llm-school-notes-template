@@ -23,11 +23,9 @@ RETRYABLE = ("not-sent", "http-429")
 def generate(settings: ImageSettings, plan_id: str, repair_note: str | None = None, *,
              log: Log, sleep=time.sleep, paid_disabled=False) -> dict:
     plans.check_id(plan_id)
-    from ..figures import commissions, context, migration_gate
+    from ..figures import commissions, context
     try:
         brief = commissions.read(settings.worktree, plan_id)
-        if migration_gate.concerns(settings.worktree, brief):
-            return {"state": "disabled", "message": "a függő ábrák migrációja még nem futott le"}
         commissions.validate_assignments(settings.worktree, [{k: brief[k] for k in ("id", "page", "kind")}])
         context.embedding(settings.worktree, brief, {"alt": "", "caption": ""})
     except (ValueError, OSError) as exc:
@@ -86,8 +84,7 @@ def _blocked(settings: ImageSettings, job_id: str, *, repairing: bool = False) -
         return None
     if entry and attempts_used(entry) >= settings.max_attempts:
         return {"state": "exhausted", "message": "all attempts used; only interactive work"}
-    if not budget_left(ledger, settings.today(), settings.daily_usd, settings.reservation_usd,
-                       settings.monthly_usd):
+    if not budget_left(ledger, settings.today(), settings.reservation_usd, settings.monthly_usd):
         return {"state": "budget-exhausted", "message": "the monthly image budget is used up"}
     return None
 
@@ -126,10 +123,6 @@ def grant(settings: ImageSettings, plan_id: str, request_id: str) -> dict | None
         entry.setdefault("grants", []).append(value)
         write_json(settings.state_dir / "ledger.json", ledger)
         return value, True
-
-
-def exhausted(entry: dict, maximum: int) -> bool:
-    return attempts_used(entry) >= maximum and not awaiting_review(entry)
 
 
 def awaiting_review(entry: dict) -> bool:

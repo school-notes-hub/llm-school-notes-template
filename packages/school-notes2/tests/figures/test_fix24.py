@@ -1,18 +1,18 @@
-"""Legacy generated headers remain accepted; replacements remove v1 evidence."""
+"""Legacy generated headers keep their rights; replacements remove v1 evidence."""
 
 import hashlib
 
 import pytest
 
-from school_notes2.figures import context, machine, migrate_pending, pending
+from school_notes2.figures import context
 from school_notes2.state import safefs
-from school_notes2.wiki import banners, frontmatter, rights
+from school_notes2.wiki import rights
 
 
 @pytest.mark.parametrize("learner", ["one", "two"])
 @pytest.mark.parametrize("compression_format", ["list", "images"])
 @pytest.mark.parametrize("proof", ["public", "compression", "both"])
-def test_v1_webp_is_not_regenerated(repo, monkeypatch, learner, proof, compression_format):
+def test_v1_webp_keeps_generated_rights_until_its_bytes_change(repo, learner, proof, compression_format):
     page, asset = f"wiki/{learner}/topic.md", f"wiki/assets/{learner}.webp"
     data = b"v1 webp"
     digest = hashlib.sha256(data).hexdigest()
@@ -31,13 +31,9 @@ def test_v1_webp_is_not_regenerated(repo, monkeypatch, learner, proof, compressi
             receipt = {"images": receipt}
         safefs.write_json(repo, "docs/evidence/v1-banner-compression.json", receipt)
         assert rights.media(repo)(asset)[0] == "generated"
-    assert banners.generated_header(repo, page, frontmatter.split(safefs.read_text(repo, page)).body)
-    assert not machine.generation_errors(repo, {"kind": "banner"}, {"asset": asset})
-    monkeypatch.setattr(migrate_pending, "historical", lambda *a: {})
-    preview = migrate_pending.migrate(repo, state_dir=repo.parent / "state", repo=object(), dry_run=True)
-    assert preview["commissions"] == []
+    assert rights.generated(repo, asset)[0] == "generated"
     safefs.write_bytes(repo, asset, b"changed bytes")
-    assert not banners.generated_header(repo, page, frontmatter.split(safefs.read_text(repo, page)).body)
+    assert rights.generated(repo, asset) is None
 
 
 def test_compression_requires_generated_original_and_exact_target(repo):
@@ -59,13 +55,3 @@ def test_replacement_removes_only_own_description(comment):
     assert "old" not in result
     assert "<!-- image-description: keep -->" in result
     assert "Text." in result
-
-
-def test_missing_pending_page_is_listed_and_untouched(repo, make_figure, monkeypatch):
-    brief, _ = make_figure(kind="banner")
-    entry = pending.record(repo, brief, "old", [], attempted=True)
-    safefs.unlink(repo, brief["page"])
-    monkeypatch.setattr(migrate_pending, "historical", lambda *a: {})
-    result = migrate_pending.migrate(repo, state_dir=repo.parent / "state", repo=object())
-    assert result["skipped"] == [{"id": brief["id"], "page": brief["page"]}]
-    assert pending.load(repo) == [entry]

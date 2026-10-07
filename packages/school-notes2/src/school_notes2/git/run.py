@@ -40,34 +40,6 @@ RETRY_DELAYS = (15, 60, 180)
 
 
 @dataclass(frozen=True)
-class Remote:
-    """How to reach one remote: its SSH key and the shared known_hosts file."""
-
-    key: Path
-    known_hosts: Path
-    hostname: str = ""
-    port: int = 22
-
-    def ssh_command(self) -> str:
-        parts = ["ssh", "-F", "/dev/null", "-i", str(self.key), "-o", "IdentitiesOnly=yes",
-                 "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
-                 "-o", f"UserKnownHostsFile={self.known_hosts}", "-o", "ConnectTimeout=20",
-                 "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4",
-                 "-o", "ControlMaster=no"]
-        if self.hostname:
-            parts += ["-o", f"HostName={self.hostname}", "-o", "HostKeyAlias=github.com"]
-        if self.port != 22:
-            parts += ["-p", str(self.port)]
-        return " ".join(parts)
-
-    def env(self) -> dict:
-        return {"GIT_SSH_COMMAND": self.ssh_command()}
-
-    def config(self) -> tuple[str, ...]:
-        return ()
-
-
-@dataclass(frozen=True)
 class HttpsToken:
     """GitHub over HTTPS with the token `gh auth token` gave at run time: the token lives only
     in git's environment; the helper on argv names the variable, never the value."""
@@ -94,7 +66,7 @@ class Git:
     name: str
     email: str
     log: Log
-    remote: Remote | HttpsToken | None = None
+    remote: HttpsToken | None = None
     work_tree: Path | None = None
 
     def at(self, work_tree: Path) -> "Git":

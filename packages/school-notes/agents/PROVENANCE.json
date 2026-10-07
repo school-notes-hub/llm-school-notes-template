@@ -1,9 +1,0 @@
-{
-  "source_repository": "/home/dlaszlo/wiki/ai-models-wiki",
-  "source_commit": "d2c5b45c298af89147068c33746cb08f1192fda4",
-  "verbatim_copy": "agents/gl-reviewer.md",
-  "source_path": "agents/gl-reviewer.md",
-  "runtime_restriction": "reviewer.md is an application-specific read-only role with stricter tools, not a verbatim canonical guideline definition",
-  "canonical_sha256": "3d50ac7614f396c0474d153c4006ca7020d04089d44fc7c4a910c4adcd92a35f",
-  "runtime_binding": "agents.py loads canonical gl-reviewer verbatim plus reviewer.md narrower restrictions; role_sha256 hashes the complete system role body"
-}

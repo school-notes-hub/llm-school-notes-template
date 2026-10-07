@@ -4,9 +4,7 @@ import re
 from datetime import date
 from pathlib import Path
 
-import yaml
-
-from . import frontmatter, markers
+from . import markers
 from .pages import CODE_FENCE, PageError, read_page, wiki_pages
 
 ID = re.compile(r"[a-z0-9-]+\Z")
@@ -115,31 +113,6 @@ def question_problems(body: str, meta: dict) -> list[tuple[int, str]]:
     out += [(n, "question anchor must precede an open-question item")
             for n, _ in anchors if n not in used]
     return sorted(out)
-
-
-def snapshot(data: bytes | None) -> tuple:
-    """Raw YAML node slices AND their values: formatting and alias changes both count.
-
-    Node marks support quoted keys and flow mappings, unlike line-based key matching.
-    Keep original newlines; the cron guard runs before any LF auto-fix.
-    """
-    text = (data or b"").decode("utf-8")
-    match = re.match(r"\A---\r?\n(.*?\r?\n)---(?:\r?\n|$)", text, re.S)
-    if not match:
-        return (), None
-    raw = match[1]
-    node = yaml.compose(raw, Loader=frontmatter.Loader)
-    if not isinstance(node, yaml.MappingNode):
-        return (), None
-    spans = []
-    for i, (key, value) in enumerate(node.value):
-        if key.value != "decisions":
-            continue
-        end = value.end_mark.index if node.flow_style else (
-            node.value[i + 1][0].start_mark.index if i + 1 < len(node.value) else len(raw))
-        spans.append(raw[key.start_mark.index:end].encode("utf-8"))
-    meta = yaml.load(raw, Loader=frontmatter.Loader) or {}
-    return tuple(spans), meta.get("decisions")
 
 
 def overview(repo: Path, skip=()) -> str:

@@ -2,7 +2,7 @@ import subprocess
 
 import pytest
 
-from school_notes2.git.run import GitFailed, Remote, classify, with_retries
+from school_notes2.git.run import GitFailed, classify, with_retries
 from school_notes2.state.errors import NeedsOwner, Race, Transient
 
 
@@ -19,11 +19,18 @@ def test_fixed_environment_ignores_user_config(tmp_path, git_factory, monkeypatc
     assert "gc.auto=0" not in git.argv(["gc"], gc=True)
 
 
-def test_ssh_command_is_fixed(tmp_path):
-    remote = Remote(tmp_path / "key", tmp_path / "known", "ssh.github.com", 443)
-    cmd = remote.ssh_command()
-    assert "-F /dev/null" in cmd and "BatchMode=yes" in cmd and "IdentitiesOnly=yes" in cmd
-    assert "HostName=ssh.github.com" in cmd and cmd.endswith("-p 443")
+def test_user_hooks_never_run(tmp_path, git_factory, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    work = tmp_path / "w"
+    subprocess.run(["git", "init", "-q", "-b", "main", str(work)], check=True)
+    hook = work / ".git/hooks/pre-commit"
+    hook.write_text(f"#!/bin/sh\ntouch {tmp_path}/hook-ran\nexit 1\n")
+    hook.chmod(0o755)
+    (work / "a.md").write_text("a\n")
+    git = git_factory(work / ".git", work)
+    git.run("add", "a.md")
+    git.run("commit", "-q", "-m", "a")
+    assert git.out("log", "--format=%s").strip() == "a" and not (tmp_path / "hook-ran").exists()
 
 
 @pytest.mark.parametrize("command,stderr,cls", [

@@ -33,7 +33,6 @@ class ImageSettings:
     key_file: Path            # secrets/openrouter.key
     max_total_usd: Decimal    # school-year safety cap over all learners
     learner_max_usd: Decimal  # school-year safety cap per learner
-    daily_usd: Decimal = Decimal("1")
     monthly_usd: Decimal = Decimal("10")
     reservation_usd: Decimal = Decimal("0.05")
     max_attempts: int = 3

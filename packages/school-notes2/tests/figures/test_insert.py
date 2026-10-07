@@ -2,6 +2,7 @@ import pytest
 
 from school_notes2.figures import context, insert, pending
 from school_notes2.state import safefs
+from tests.figures.conftest import add_pending
 
 
 def receipt(repo, brief, candidate, verdict="accept"):
@@ -15,7 +16,7 @@ def receipt(repo, brief, candidate, verdict="accept"):
 def test_accept_inserts_once_and_records_reviewer(repo, make_figure, kind):
     brief, candidate = make_figure(kind=kind)
     judged = receipt(repo, brief, candidate)
-    pending.record(repo, brief, "run-1", [])
+    add_pending(repo, brief)
     insert.insert(repo, brief, judged, at="2026-10-04")
     text = safefs.read_text(repo, brief["page"])
     assert "<!-- figure: forces -->" not in text
@@ -157,28 +158,17 @@ def test_removed_banner_has_no_valid_verdict(repo, make_figure):
     insert.insert(repo, brief, receipt(repo, brief, candidate), at="date")
     text = markers.BLOCK.sub("", safefs.read_text(repo, brief["page"]))
     safefs.write_text(repo, brief["page"], text)
-    from school_notes2.reader import verdicts
     assert not insert.invalidated(repo)
-    assert not verdicts.invalidate(repo)
-    assert safefs.read_json(repo, insert.VERDICTS) == []
+    [record] = safefs.read_json(repo, insert.VERDICTS)
+    assert insert.removed(repo, record)       # kept as a record; `sn done` counts it
 
 
 def test_reader_key_survives_tool_insertion(repo, make_figure):
-    from school_notes2.reader import units, verdicts
+    from school_notes2.wiki.author import page_key
     brief, candidate = make_figure()
     page = brief["page"]
-    key = units.page_key(repo, page)
-    verdicts.record(repo, [{"file": page, "verdict": "ok"}], {page: key}, "reader", "date")
+    key = page_key(repo, page)
     insert.insert(repo, brief, receipt(repo, brief, candidate), at="date")
-    assert units.page_key(repo, page) == key
-    assert verdicts.valid(repo, page)
-
-
-def test_pending_fetch_is_subject_scoped_and_excludes_owner(repo, make_figure):
-    brief, _ = make_figure()
-    pending.record(repo, brief, "run-1", [])
-    assert pending.for_subjects(repo, {"other"}) == []
-    assert len(pending.for_subjects(repo, {"physics"})) == 1
-    for rid in ("run-2", "run-3"):
-        pending.record(repo, brief, rid, [])
-    assert pending.for_subjects(repo, {"physics"}) == []
+    assert page_key(repo, page) == key
+    safefs.write_text(repo, page, safefs.read_text(repo, page) + "An author edit.\n")
+    assert page_key(repo, page) != key

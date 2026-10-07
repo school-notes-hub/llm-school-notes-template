@@ -9,7 +9,7 @@ from school_notes2.log import Log
 
 @pytest.fixture
 def log(tmp_path):
-    return Log(tmp_path / "logs" / "main.log", run_id="t-run", student="tester", console=False)
+    return Log(tmp_path / "logs" / "main.log", student="tester", console=False)
 
 
 def make_origin(tmp_path: Path, files: dict[str, str | bytes]) -> Path:
@@ -59,16 +59,3 @@ def record_render(repo: Path, asset: str) -> None:
     outputs = safefs.read_json(repo, receipt, {}).get("outputs", {})
     outputs[name] = {"sha256": sha256(repo, asset)}
     safefs.write_json(repo, receipt, {"source": source, "source_sha256": sha256(repo, source), "outputs": outputs})
-
-
-def assert_suppressed(log, target=None):
-    import json
-    events = [json.loads(line) for line in log.main.read_text().splitlines()]
-    assert any(e["action"] == "notify.suppressed" and
-               (target is None or target in e["target"]) for e in events)
-
-
-def recording_mailer(tmp_path, log, monkeypatch, delivered):
-    from school_notes2.notify import Mailer
-    monkeypatch.setattr(Mailer, "_deliver", lambda self, msg: delivered.append(msg) or True)
-    return Mailer(tmp_path / "rc", "owner@example.test", tmp_path / "notify.json", log)

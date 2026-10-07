@@ -11,18 +11,15 @@ from school_notes2.drive.move import move_to_processed
 from school_notes2.sources.toolload import load_tool
 from school_notes2.state.errors import NeedsOwner, Prerequisite, Transient
 
-from fakedrive import NOW
 
 
-def test_ready_needs_ten_minutes_of_server_time(fake, client, tree):
-    old = fake.folder("Szept 30", tree["ready"])
-    fake.file("1.jpg", old, created_ago=30)
+def test_every_package_is_ready_at_once_in_content_order(fake, client, tree):
+    """Feltöltés_Kész is filled by renaming: a just-uploaded package is complete (no settle time)."""
     fresh = fake.folder("Okt 3", tree["ready"])
-    # An old phone timestamp in modifiedTime must not make a fresh upload look ready.
-    fake.file("1.jpg", fresh, created_ago=5, modified_ago=60 * 24 * 30)
-    inv = scan(client, tree["root"], now=NOW, ready_after_s=600)
-    assert [p.name for p in inv.ready] == ["Szept 30"]
-    assert [p.name for p in inv.waiting] == ["Okt 3"]
+    fake.file("1.jpg", fresh, created_ago=0, modified_ago=60 * 24 * 30)
+    old = fake.folder("Szept 30", tree["ready"])
+    fake.file("1.jpg", old, created_ago=60 * 24)
+    assert [p.name for p in scan(client, tree["root"]).ready] == ["Okt 3", "Szept 30"]
 
 
 def test_loose_office_and_unknown_files_are_ignored(fake, client, tree):
@@ -33,10 +30,10 @@ def test_loose_office_and_unknown_files_are_ignored(fake, client, tree):
     fake.file("jegyzet.txt", pkg, mime="text/plain")
     only_office = fake.folder("Tanári", tree["ready"])
     fake.file("anyag.docx", only_office, mime="application/msword")
-    inv = scan(client, tree["root"], now=NOW)
+    inv = scan(client, tree["root"])
     assert [p.name for p in inv.ready] == ["Óra"]
     assert [f.rel for f in inv.ready[0].files] == ["2.jpg"]
-    reasons = {i["path"]: i["reason"] for i in inv.summary()["ignored"]}
+    reasons = {i["path"]: i["reason"] for i in inv.skipped()}
     assert "loose file" in reasons["fuzet/Matek/Feltöltés_Kész/laza.jpg"]
     assert "doc-extract" in reasons["fuzet/Matek/Óra/dia.pptx"]
     assert reasons["fuzet/Matek/Óra/jegyzet.txt"] == "unsupported format"
@@ -49,14 +46,14 @@ def test_subfolders_and_paging(fake, client, tree):
     for name in ("1.jpg", "2.jpg", "3.jpg"):
         fake.file(name, pkg)
     fake.file("1.jpg", sub)
-    inv = scan(client, tree["root"], now=NOW)
+    inv = scan(client, tree["root"])
     assert sorted(f.rel for f in inv.ready[0].files) == ["1.jpg", "2.jpg", "3.jpg", "második nap/1.jpg"]
 
 
 def test_download_verifies_md5(fake, client, tree, tmp_path):
     pkg = fake.folder("Óra", tree["ready"])
     fid = fake.file("1.jpg", pkg, data=b"photo")
-    package = scan(client, tree["root"], now=NOW).ready[0]
+    package = scan(client, tree["root"]).ready[0]
     records = download_package(client, package, tmp_path / "dl")
     assert (tmp_path / "dl" / "1.jpg").read_bytes() == b"photo" and records[0]["sha256"]
     fake.content[fid] = b"other"        # Drive metadata no longer matches the bytes
@@ -68,7 +65,7 @@ def test_download_verifies_md5(fake, client, tree, tmp_path):
 def _ready_package(fake, client, tree):
     pkg = fake.folder("Óra", tree["ready"])
     fake.file("1.jpg", pkg, data=b"one")
-    return pkg, scan(client, tree["root"], now=NOW).ready[0]
+    return pkg, scan(client, tree["root"]).ready[0]
 
 
 def test_move_after_unchanged_relist(fake, client, tree):
@@ -180,24 +177,22 @@ def test_package_deadline_bounds_the_whole_download(client, fake, tree, tmp_path
 
 def test_package_with_two_same_named_files_is_not_taken(fake, client, tree):
     from school_notes2.drive import inventory
-    from tests.drive.fakedrive import NOW
     pkg = fake.folder("Óra", tree["ready"], minutes_ago=60)
     fake.file("1.jpg", pkg, b"a")
     fake.file("1.jpg", pkg, b"b")
-    inv = inventory.scan(client, tree["root"], now=NOW)
+    inv = inventory.scan(client, tree["root"])
     assert not inv.ready
-    assert any("same name" in i["reason"] for i in inv.summary()["ignored"])
+    assert any("same name" in i["reason"] for i in inv.skipped())
 
 
 def test_equal_packages_are_ordered_by_id(fake, client, tree):
     from school_notes2.drive import inventory
-    from tests.drive.fakedrive import NOW
     for _ in range(3):
         pkg = fake.folder("Óra", tree["ready"], minutes_ago=60)
         fake.file("1.jpg", pkg, b"a", created_ago=60)
-    first = [p.id for p in inventory.scan(client, tree["root"], now=NOW).ready]
+    first = [p.id for p in inventory.scan(client, tree["root"]).ready]
     fake.items = dict(reversed(list(fake.items.items())))       # Drive answers in another order
-    assert [p.id for p in inventory.scan(client, tree["root"], now=NOW).ready] == first
+    assert [p.id for p in inventory.scan(client, tree["root"]).ready] == first
     assert first == sorted(first)
 
 
@@ -209,8 +204,8 @@ def test_webp_photos_are_taken_and_a_nested_doc_extract_is_unwrapped(fake, clien
     inner = fake.folder("dia-extract", nested)
     fake.file("document.md", inner, b"# Dia\n", mime="text/markdown")
     fake.file("p.png", fake.folder("figures", inner), b"png", mime="image/png")
-    inv = inventory.scan(client, tree["root"], ready_after_s=0)
-    by_name = {p.name: p for p in inv.ready + inv.waiting}
+    inv = inventory.scan(client, tree["root"])
+    by_name = {p.name: p for p in inv.ready}
     assert [f.rel for f in by_name["telefon"].files] == ["1.webp"]
     doc = by_name["dia"]
     assert doc.preconverted and [f.rel for f in doc.files] == ["document.md", "figures/p.png"]

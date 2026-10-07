@@ -6,7 +6,6 @@ import unicodedata
 from pathlib import Path
 
 from ..state import safefs
-from ..state.errors import Prerequisite
 
 SUBJECTS = "tools/subjects.json"
 
@@ -35,23 +34,6 @@ def unique_name(taken: set[str], name: str) -> str:
         candidate = f"{stem}-{n}{dot}{ext}" if dot else f"{name}-{n}"
     taken.add(candidate)
     return candidate
-
-
-def preflight(content: bytes) -> None:
-    """Validate the pinned learner subject list before taking any package from Drive:
-    preparation maps each Drive subject through it (`subject_key`). Only the shape that
-    mapping reads is checked; a leftover `card` key is ignored (cards are shared)."""
-    try:
-        data = json.loads(content)
-        subjects = data.get("subjects", {}) if isinstance(data, dict) else None
-        if not isinstance(subjects, dict):
-            raise ValueError("the top level and `subjects` must be JSON objects")
-        for key, entry in sorted(subjects.items()):
-            if not isinstance(entry, dict) or not isinstance(entry.get("name", ""), str):
-                raise ValueError(f"subject {key}: an object with a text `name` is required")
-    except ValueError as exc:
-        raise Prerequisite(f"invalid {SUBJECTS}: {str(exc)[:200]}",
-                           todo=f"javítsd a tanulói repó {SUBJECTS} fájlját") from exc
 
 
 def subject_key(drive_name: str, repo: Path) -> tuple[str, bool]:

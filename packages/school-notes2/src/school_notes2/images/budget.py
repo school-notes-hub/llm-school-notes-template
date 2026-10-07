@@ -1,7 +1,7 @@
-"""Daily and monthly budget and the shared image lock (plan 4.6).
+"""The monthly image budget and the shared image lock (plan 4.6).
 
-learning_image.py knows only school-year caps and has a non-waiting lock; the daily
-1 USD budget and the blocking lock shared by all configured learners live here.
+learning_image.py knows only the school-year caps and has a non-waiting lock; the monthly
+budget and the blocking lock shared by all configured learners live here.
 """
 
 import fcntl
@@ -33,16 +33,6 @@ def attempt_cost(attempt: dict) -> Decimal:
     return Decimal(str(value if value is not None else attempt.get("reserved_usd", "0")))
 
 
-def spent_on(ledger: dict, day: date) -> Decimal:
-    """Spending of a Budapest calendar day across all learners."""
-    total = Decimal(0)
-    for _, attempt in attempts(ledger):
-        started = datetime.fromisoformat(attempt["started_at"]).astimezone(TZ).date()
-        if started == day:
-            total += attempt_cost(attempt)
-    return total
-
-
 def spent_in_month(ledger: dict, day: date) -> Decimal:
     """Spending of the Budapest calendar month of `day` across all learners."""
     total = Decimal(0)
@@ -53,10 +43,9 @@ def spent_in_month(ledger: dict, day: date) -> Decimal:
     return total
 
 
-def budget_left(ledger: dict, day: date, daily: Decimal, reservation: Decimal,
-                monthly: Decimal | None = None) -> bool:
-    """The deprecated daily parameter is readable but has no limiting effect."""
-    return monthly is None or spent_in_month(ledger, day) + reservation <= monthly
+def budget_left(ledger: dict, day: date, reservation: Decimal, monthly: Decimal) -> bool:
+    """One more reserved call still fits into this calendar month's budget."""
+    return spent_in_month(ledger, day) + reservation <= monthly
 
 
 def unknown_calls(ledger: dict) -> list[dict]:

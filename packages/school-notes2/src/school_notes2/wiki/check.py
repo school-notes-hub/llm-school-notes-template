@@ -54,10 +54,6 @@ def item(file: str, line: int | None, message: str, severity: str = "error", kin
     return {**found, "kind": kind} if kind else found
 
 
-def blocking(items: list[dict]) -> list[dict]:
-    return [i for i in items if i.get("kind") == BLOCKING]
-
-
 def autofix(repo: Path, rel: str) -> bool:
     """Compatibility entry point: checking never rewrites author bytes."""
     return False

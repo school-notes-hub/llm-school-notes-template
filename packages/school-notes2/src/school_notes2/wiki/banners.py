@@ -61,39 +61,3 @@ def update(repo: Path, page: str, text: str) -> str:
     if not value:
         return text
     return markers.at_fixed_place(text, BLOCK, value)
-
-
-def required(path: str, meta: dict) -> bool:
-    return meta.get("type") in ("topic", "chapter-summary") or (
-        len(Path(path).parts) == 3 and path.startswith("wiki/") and
-        not path.startswith("wiki/assets/") and path.endswith("/index.md"))
-
-
-def asset(page: str, text: str) -> str | None:
-    match = LINK.fullmatch(leading(text))
-    return resolve(page, match["target"].strip("<>")) if match else None
-
-
-def generated_header(repo, path, text, proof=None):
-    from . import rights
-    image = asset(path, text)
-    from ..state import safefs
-    if not image or not safefs.is_file(repo, image):
-        return False
-    return bool(rights.generated(repo, image, proof))
-
-
-def pending_header(repo, path, text, waiting):
-    from ..figures import commissions
-    for marker in commissions.MARKER.finditer(text):
-        brief = waiting.get(marker[1])
-        if brief is None:
-            try:
-                brief = commissions.read(repo, marker[1])
-            except (ValueError, OSError):
-                continue
-        if brief["kind"] == "banner" and brief["page"] == path:
-            prefix = markers.BLOCK.sub("", text[:marker.start()]).strip()
-            if not prefix:
-                return True
-    return False

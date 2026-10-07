@@ -30,7 +30,7 @@ from pathlib import Path
 
 from ..drive import inventory
 from ..drive.download import download_package
-from ..drive.inventory import Package
+from ..drive.inventory import Package, order
 from ..drive.move import move_to_processed
 from ..sources.duplicates import known_hashes
 from ..sources.naming import slug, subject_key, unique_dir
@@ -49,17 +49,10 @@ def new_subject(repo: Path, subject: str, drive_name: str) -> list[str]:
     return [path] if path else []
 
 
-def order(pkg: Package) -> tuple:
-    """A total, content-derived order (not Drive's upload times)."""
-    return (pkg.role, pkg.subject_name, pkg.name, pkg.id)
-
-
 def inbox(local, drive) -> tuple[list[Package], list[dict]]:
-    """Every package in `Feltöltés_Kész` (ready and "waiting" alike: no settle time) and the
-    skipped files, both in content order."""
-    inv = inventory.scan(drive, local.ctx.student.drive_root, ready_after_s=0)
-    packages = sorted(inv.ready + inv.waiting, key=order)
-    return packages, sorted(inv.summary()["ignored"], key=lambda i: (i["path"], i["reason"]))
+    """Every package in `Feltöltés_Kész` (no settle time) and the skipped files, both in content order."""
+    inv = inventory.scan(drive, local.student.drive_root)
+    return inv.ready, inv.skipped()
 
 
 def stage(folder: Path) -> str:
@@ -189,7 +182,7 @@ def _place(local, repo: Path, pkg: Package, folder: Path, out) -> None:
     shutil.rmtree(stage_root, ignore_errors=True)       # our own private preparation folder
     stage_root.mkdir(parents=True)
     settings = Settings(local.cfg.sources.max_side_px, local.cfg.sources.jpeg_quality,
-                        local.cfg.sources.pdf_dpi, local.ctx.tools_dir())
+                        local.cfg.sources.pdf_dpi, local.tools_dir())
     files = [{**f, "path": str(folder / "files" / f["rel"])} for f in data["files"]]
     placed = place_package(stage_root, Downloaded(
         drive_folder=pkg.name, subject=claim["subject"], role=pkg.role, description=pkg.description,
@@ -254,7 +247,7 @@ def _drop_download(folder: Path) -> None:
 
 def _move(local, drive, saved: dict, folder: Path, out) -> str:
     """The move checks Drive against the listing of the download (`saved`), never a newer one."""
-    result = move_to_processed(drive, saved["id"], saved["listed"], local.ctx.student.drive_root)
+    result = move_to_processed(drive, saved["id"], saved["listed"], local.student.drive_root)
     if result == "changed":
         _drop_download(folder)          # next run: download again, replace the placement
         return "changed on Drive after the download; run sn fetch --apply again"

@@ -19,11 +19,9 @@ import pytest
 
 TEMPLATE = Path(__file__).resolve().parents[3]
 PACKAGE = TEMPLATE / "packages/school-notes2"
-PROMPTS = PACKAGE / "src/school_notes2/llm/prompts"
 ALLOW = Path(__file__).with_name("neutrality-allow.txt")
-PRINCIPLE_START = "A cél a termék lehető legjobbra fejlesztése: segítsen egy 14–17 éves gyereknek tanulni"
-# History and v1 review notes are not rewritten (G-21); tests use names only as keys (G-18).
-EXCLUDED = ("CHANGELOG.md", "packages/school-notes/review/")
+# History is not rewritten (G-21); tests use names only as keys (G-18).
+EXCLUDED = ("CHANGELOG.md",)
 SKIPPED_PARTS = ("tests", "__pycache__", "node_modules")
 
 
@@ -230,23 +228,16 @@ def test_no_learner_branching_in_code_or_tests():
     assert hits == []
 
 
-def test_no_fixed_reader_age_in_prompts_and_rules():
-    """The yardstick is the learner's grade (prompts) or PROFILE *Audience* (rules); only the
-    owner's verbatim principle keeps its age range."""
+def test_no_fixed_reader_age_in_the_rules():
+    """The yardstick is PROFILE *Audience*, never a fixed age."""
     age = re.compile(r"\b1\d(?:\s*[–-]\s*1\d)?[\s-]*(?:éves|years?[\s-]old)", re.I)
     hits = []
-    texts = [(p.relative_to(TEMPLATE).as_posix(), p.read_text(encoding="utf-8"))
-             for p in sorted(PROMPTS.glob("*.txt"))]
-    texts += [(rel, _text(rel)) for rel in scope()
+    texts = [(rel, _text(rel)) for rel in scope()
               if rel.endswith(".md") and (rel.startswith(("instructions/", ".agents/"))
                                           or rel in ("AGENTS.md", "PROFILE.md"))]
     for rel, text in texts:
         if text is None:
             continue
-        lines = text.splitlines()
-        if rel.startswith("packages/") and lines and lines[0].startswith(PRINCIPLE_START):
-            lines = lines[1:]
-            text = "\n".join([""] + lines)          # keep line numbers
         hits += [f"{rel}:{_line(text, m.start())}: {m.group(0)}" for m in age.finditer(text)]
     assert hits == []
 

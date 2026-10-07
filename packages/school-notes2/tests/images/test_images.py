@@ -10,8 +10,7 @@ from decimal import Decimal
 import pytest
 
 from school_notes2.images import generate as gen
-from school_notes2.images import pending
-from school_notes2.images.budget import images_lock
+from school_notes2.images.budget import budget_left, images_lock
 from school_notes2.images.plans import PlanError
 from school_notes2.images.settings import budapest_today
 
@@ -103,7 +102,6 @@ def test_unknown_outcome_stops_both_learners_until_settled(make_settings, fake_a
     fake_api.actions = ["drop"]
     assert run(benedek, log)["state"] == "unknown"
     assert run(barna, log)["state"] == "waiting-unknown"
-    assert pending.scan(barna)["pending"] == [] and pending.scan(barna)["waiting_unknown"]
     assert fake_api.calls == 1
     assert gen.settle_unknown(benedek, log=log) == []  # younger than a day
     settled = gen.settle_unknown(benedek, log=log, max_age_hours=0)
@@ -112,15 +110,14 @@ def test_unknown_outcome_stops_both_learners_until_settled(make_settings, fake_a
     assert run(benedek, log)["number"] == 2  # the lost attempt counts
 
 
-def test_monthly_budget_ignores_daily_limit(make_settings, fake_api, log):
-    s = make_settings(daily_usd=Decimal("0"), monthly_usd=Decimal("0.08"))
-    other = make_settings("barna", daily_usd=Decimal("0"), monthly_usd=Decimal("0.08"))
-    assert run(s, log)["state"] == "generated"            # 0.04 spent today
+def test_monthly_budget_is_shared_by_the_learners_and_renews_next_month(make_settings, fake_api, log):
+    s = make_settings(monthly_usd=Decimal("0.08"))
+    other = make_settings("barna", monthly_usd=Decimal("0.08"))
+    assert run(s, log)["state"] == "generated"            # 0.04 spent this month
     assert run(other, log)["state"] == "budget-exhausted"  # 0.04 + 0.05 reservation > 0.08
-    tomorrow = (budapest_today().replace(day=1) + timedelta(days=32)).replace(day=1)
-    s_next_day = make_settings(daily_usd=Decimal("0"), monthly_usd=Decimal("0.08"), today=lambda: tomorrow)
-    assert pending.scan(s_next_day)["budget_left"]
-    assert pending.scan(other)["pending"] == [] and not pending.scan(other)["budget_left"]
+    next_month = (budapest_today().replace(day=1) + timedelta(days=32)).replace(day=1)
+    assert budget_left(s.ledger(), next_month, s.reservation_usd, s.monthly_usd)
+    assert not budget_left(other.ledger(), other.today(), other.reservation_usd, other.monthly_usd)
     assert fake_api.calls == 1
 
 
@@ -144,35 +141,9 @@ def test_exhausted_image_is_not_pending_and_never_called(make_settings, fake_api
     for n in range(3):
         run(s, log, repair_note="javítás" if n else None)
     assert fake_api.calls == 3
-    assert pending.scan(s)["exhausted"] == []
-    assert pending.scan(s)["pending"] == [{"plan_id": "termeles-banner", "page": PAGE}]
     assert run(s, log)["number"] == 3  # Free retrieval while the last image awaits judgement.
-    from school_notes2.figures import context
-    from school_notes2.images import judgement
-    brief, candidate = prepare_candidate(s)
-    judgement.record(s, [brief], {"review": {"figures": [{"id": brief["id"], "verdict": "reject",
-        "key": context.verdict_key(s.worktree, brief, candidate)}]}})
-    scan = pending.scan(s)
-    assert scan["exhausted"] == [{"plan_id": "termeles-banner", "page": PAGE}]
     assert run(s, log, repair_note="még egyszer")["state"] == "exhausted"
     assert fake_api.calls == 3
-
-
-def test_pending_needs_marker_and_plan(make_settings, fake_api, log):
-    s = make_settings()
-    assert pending.scan(s)["pending"] == [{"plan_id": "termeles-banner", "page": PAGE}]
-    (s.worktree / ".school-notes/images/termeles-banner.json").unlink()
-    assert pending.scan(s)["missing_plan"] and not pending.scan(s)["pending"]
-
-
-def test_kept_plan_is_restored_in_a_later_run(make_settings, fake_api, log):
-    s = make_settings()
-    run(s, log)
-    (s.worktree / ".school-notes/images/termeles-banner.json").unlink()  # fetch wipes .school-notes
-    from school_notes2.images import plans
-    assert plans.restore(s, ["termeles-banner"]) == ["termeles-banner"]
-    prepare_candidate(s)
-    assert PAGE in independent_accept(s)
 
 
 def test_invalid_input_is_refused(make_settings, fake_api, log):
@@ -197,13 +168,10 @@ def test_refusal_before_any_request_is_not_retried(make_settings, fake_api, log)
     assert result["state"] == "error" and slept == [] and fake_api.requests == []
 
 
-def test_monthly_cap_stops_generation_before_the_daily_budget():
-    from datetime import date
-    from decimal import Decimal
-    from school_notes2.images.budget import budget_left
+def test_monthly_cap_counts_the_calendar_month():
     ledger = {"jobs": {"j": {"id": "j", "learner": "b", "attempts": [
         {"number": n, "state": "done", "cost_usd": "0.9", "started_at": f"2026-10-{n:02d}T10:00:00+02:00"}
         for n in range(1, 13)]}}}
-    assert budget_left(ledger, date(2026, 10, 20), Decimal("1"), Decimal("0.05"))          # no cap
-    assert not budget_left(ledger, date(2026, 10, 20), Decimal("1"), Decimal("0.05"), Decimal("10"))
-    assert budget_left(ledger, date(2026, 11, 1), Decimal("1"), Decimal("0.05"), Decimal("10"))
+    assert not budget_left(ledger, date(2026, 10, 20), Decimal("0.05"), Decimal("10"))   # 10.8 spent
+    assert budget_left(ledger, date(2026, 10, 20), Decimal("0.05"), Decimal("11"))
+    assert budget_left(ledger, date(2026, 11, 1), Decimal("0.05"), Decimal("10"))

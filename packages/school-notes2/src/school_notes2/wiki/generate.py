@@ -18,7 +18,6 @@ from .pages import subjects as subject_slugs
 
 ISO = re.compile(r"\d{4}-\d{2}-\d{2}")
 TABLE_HEAD = "| Dátum | Óra | Jegyzet | Témakörök |\n|---|---|---|---|\n"
-SUBJECT_BLOCKS = ("catch-up", "chapters", "lessons", "review", "notes")
 
 
 @dataclass

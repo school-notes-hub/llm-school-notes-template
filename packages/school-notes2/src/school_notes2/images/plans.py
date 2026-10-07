@@ -19,7 +19,6 @@ from ..state.files import write_bytes, write_json
 from .settings import ImageSettings
 
 PLAN_ID = re.compile(r"^[a-z0-9-]{1,64}$")
-MARKER = re.compile(r"<!-- image: ([a-z0-9-]{1,64}) -->")
 IMMUTABLE_PREFIXES = ("sources/", "references/")
 
 
@@ -42,10 +41,6 @@ def target(plan_id: str) -> str:
     return f".school-notes/images/{check_id(plan_id)}.json"
 
 
-def marker(plan_id: str) -> str:
-    return f"<!-- image: {check_id(plan_id)} -->"
-
-
 def read_plan(worktree: Path, rel: str) -> dict:
     """The plan file of the worktree, read without following any symlink (7.6)."""
     try:
@@ -58,15 +53,6 @@ def read_plan(worktree: Path, rel: str) -> dict:
     return plan
 
 
-def find_markers(worktree: Path) -> dict[str, list[str]]:
-    """Plan id -> wiki pages (repo-relative) that hold its marker."""
-    found: dict[str, list[str]] = {}
-    for rel in safefs.glob(worktree, "wiki", "wiki/**/*.md"):
-        for plan_id in MARKER.findall(safefs.read_text(worktree, rel)):
-            found.setdefault(plan_id, []).append(rel)
-    return found
-
-
 def keep(settings: ImageSettings, plan_id: str) -> Path:
     """Copy the worktree plan to state/image-plans/<learner>/ (validated first)."""
     data = safefs.read_bytes(settings.worktree, target(plan_id))
@@ -74,17 +60,6 @@ def keep(settings: ImageSettings, plan_id: str) -> Path:
     kept = settings.plans_dir / f"{plan_id}.json"
     write_bytes(kept, data)
     return kept
-
-
-def restore(settings: ImageSettings, plan_ids: list[str]) -> list[str]:
-    """Put kept plans back into a fresh `.school-notes/images/`; returns restored ids."""
-    restored = []
-    for plan_id in plan_ids:
-        kept = settings.plans_dir / f"{check_id(plan_id)}.json"
-        if kept.is_file() and not safefs.exists(settings.worktree, target(plan_id)):
-            safefs.copy_in(kept, settings.worktree, target(plan_id))
-            restored.append(plan_id)
-    return restored
 
 
 def _sha(worktree: Path, rel: str) -> str:
@@ -114,8 +89,3 @@ def write_job(settings: ImageSettings, plan_id: str, job: dict) -> Path:
     path = job_path(settings, plan_id)
     write_json(path, job)
     return path
-
-
-def kept_job(settings: ImageSettings, plan_id: str) -> dict | None:
-    path = job_path(settings, plan_id)
-    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None

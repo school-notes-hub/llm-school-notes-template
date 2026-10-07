@@ -1,13 +1,12 @@
 """Find ready packages under a learner's Drive root (plan 4.1, 5.2/1).
 
 Layout: <root>/{Füzet,Tanári-tanulni}/<Tantárgy>/Feltöltés_Kész/<package folder>/...
-A package is ready when the latest server upload time and modification time of everything in
-it is at least `ready_after_s` old: `modifiedTime` alone may be an old client-side photo time.
+Every package folder there is ready: the owner fills `Feltöltés_Kész` by renaming (an atomic
+move), so there is no settle time.
 """
 
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 
 from .client import FOLDER, DriveClient
 
@@ -45,7 +44,6 @@ class Package:
     ready_folder_id: str    # its parent, Feltöltés_Kész
     subject_folder_id: str
     preconverted: bool
-    latest: datetime
     files: list[DriveFile] = field(default_factory=list)      # to download
     ignored: list[dict] = field(default_factory=list)         # {"path", "reason"}
     listed: list[list] = field(default_factory=list)           # snapshot of everything listed
@@ -58,15 +56,12 @@ class Package:
 @dataclass
 class Inventory:
     ready: list[Package] = field(default_factory=list)
-    waiting: list[Package] = field(default_factory=list)
     ignored: list[dict] = field(default_factory=list)
 
-    def summary(self) -> dict:
-        """The part of state/<learner>/last-run.json that `status` shows (plan 4.11)."""
-        skipped = self.ignored + [dict(i, path=f"{p.label}/{i['path']}")
-                                  for p in self.ready + self.waiting for i in p.ignored]
-        return {"ready": [p.label for p in self.ready], "waiting": [p.label for p in self.waiting],
-                "ignored": skipped}
+    def skipped(self) -> list[dict]:
+        """Every file not taken, the ones inside a package with the package's label, in path order."""
+        return sorted(self.ignored + [dict(i, path=f"{p.label}/{i['path']}") for p in self.ready for i in p.ignored],
+                      key=lambda i: (i["path"], i["reason"]))
 
 
 def nfc(name: str) -> str:
@@ -77,10 +72,6 @@ def segment(name: str) -> str:
     """A Drive name as one safe path segment: Drive allows "/" in names, the disk does not."""
     clean = nfc(name).replace("/", "_").replace("\0", "_")
     return "_" if clean in ("", ".", "..") else clean
-
-
-def parse_time(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 def child_folder(client: DriveClient, parent_id: str, name: str) -> dict | None:
@@ -101,9 +92,12 @@ def walk(client: DriveClient, folder_id: str, prefix: str = "") -> list[tuple[st
     return out
 
 
-def scan(client: DriveClient, root_id: str, now: datetime | None = None,
-         ready_after_s: int = 600) -> Inventory:
-    now = now or datetime.now(timezone.utc)
+def order(pkg: Package) -> tuple:
+    """A total, content-derived order (not Drive's upload times)."""
+    return (pkg.role, pkg.subject_name, pkg.name, pkg.id)
+
+
+def scan(client: DriveClient, root_id: str) -> Inventory:
     inv = Inventory()
     for top_name, role in ROLES.items():
         top = child_folder(client, root_id, top_name)
@@ -114,15 +108,13 @@ def scan(client: DriveClient, root_id: str, now: datetime | None = None,
                 continue
             ready = child_folder(client, subject["id"], READY)
             if ready is not None:
-                _scan_ready(client, inv, ready["id"], subject, role, now, ready_after_s)
-    # A total order: equal times and equal names fall back to the Drive id.
-    inv.ready.sort(key=lambda p: (p.latest, p.label, p.id))
-    inv.waiting.sort(key=lambda p: (p.latest, p.label, p.id))
+                _scan_ready(client, inv, ready["id"], subject, role)
+    inv.ready.sort(key=order)
     inv.ignored.sort(key=lambda i: (i["path"], i["reason"]))
     return inv
 
 
-def _scan_ready(client, inv, ready_id, subject, role, now, ready_after_s) -> None:
+def _scan_ready(client, inv, ready_id, subject, role) -> None:
     where = f"{role}/{nfc(subject['name'])}/{READY}"
     for item in client.list_children(ready_id):
         if item["mimeType"] != FOLDER:
@@ -133,23 +125,19 @@ def _scan_ready(client, inv, ready_id, subject, role, now, ready_after_s) -> Non
         if not pkg.files:
             inv.ignored.append({"path": f"{where}/{pkg.name}", "reason": "no usable file"})
             inv.ignored += [dict(i, path=f"{where}/{pkg.name}/{i['path']}") for i in pkg.ignored]
-        elif (now - pkg.latest).total_seconds() >= ready_after_s:
-            inv.ready.append(pkg)
         else:
-            inv.waiting.append(pkg)
+            inv.ready.append(pkg)
 
 
 def build_package(client: DriveClient, folder: dict, subject: dict, role: str,
                   ready_id: str) -> Package:
     items = walk(client, folder["id"])
-    times = [parse_time(t) for _, i in items for t in (i.get("createdTime"), i.get("modifiedTime")) if t]
     names = {rel for rel, i in items if i["mimeType"] != FOLDER}
     prefix = wrapper(names)
     pkg = Package(id=folder["id"], name=nfc(folder["name"]), subject_name=nfc(subject["name"]),
                   role=role, description=folder.get("description", "") or "",
                   ready_folder_id=ready_id, subject_folder_id=subject["id"],
-                  preconverted=DOCUMENT in names or bool(prefix),
-                  latest=max(times, default=parse_time(folder.get("createdTime", "1970-01-01T00:00:00Z"))))
+                  preconverted=DOCUMENT in names or bool(prefix))
     for rel, item in items:
         if item["mimeType"] == FOLDER:
             continue

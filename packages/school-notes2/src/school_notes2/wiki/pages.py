@@ -16,7 +16,6 @@ INLINE_CODE = re.compile(r"`[^`\n]*`")
 COMMENT = re.compile(r"<!--.*?-->", re.S)
 LINK = re.compile(r"(?P<img>!?)\[(?P<text>(?:[^\[\]]|\[[^\]]*\])*)\]\((?P<target><[^>]*>|[^)\s]*)(?:\s+\"[^\"]*\")?\)")
 HTML_IMG = re.compile(r"<img\b[^>]*\bsrc=(?P<q>[\"'])(?P<target>.+?)(?P=q)", re.I)
-RESERVED = ("index.md", "log.md")
 
 
 class PageError(ValueError):

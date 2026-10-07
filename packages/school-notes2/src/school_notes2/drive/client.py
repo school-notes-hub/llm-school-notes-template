@@ -19,7 +19,7 @@ from ..state.errors import NeedsOwner, Prerequisite, Transient
 FULL_SCOPE = "https://www.googleapis.com/auth/drive"
 API = "https://www.googleapis.com/drive/v3"
 FOLDER = "application/vnd.google-apps.folder"
-FIELDS = "id,name,mimeType,parents,size,md5Checksum,createdTime,modifiedTime,description,trashed"
+FIELDS = "id,name,mimeType,parents,size,md5Checksum,description,trashed"
 CHUNK = 1024 * 1024
 
 

@@ -1,5 +1,4 @@
 import io
-from pathlib import Path
 
 import pytest
 from PIL import Image
@@ -40,3 +39,24 @@ def make_figure(repo):
         record_render(repo, asset)
         return brief, candidate
     return make
+
+
+def add_pending(repo, brief, run_ids=("run-1",), defects=()):
+    """A queued figure in docs/figure-pending.json, as the VM fix runs left them."""
+    from school_notes2.figures import pending
+    entries = [e for e in safefs.read_json(repo, pending.PATH, []) if e["commission"]["id"] != brief["id"]]
+    entries.append({"commission": brief, "status": "pending", "runs": len(run_ids), "run_ids": sorted(run_ids),
+                    "defects": list(defects), "owner_required": len(run_ids) >= 3})
+    safefs.write_json(repo, pending.PATH, sorted(entries, key=lambda e: e["commission"]["id"]))
+    return entries[-1]
+
+
+def add_request(repo, request, original_sha256=None):
+    """A figure request in docs/figure-requests.json, bound to its source bytes."""
+    from school_notes2.figures import requests
+    from school_notes2.wiki.pages import sha256
+    records = [r for r in safefs.read_json(repo, requests.PATH, []) if r["id"] != request["id"]]
+    records.append({**request, "content_sha256": sha256(repo, request["source"]), "original_sha256": original_sha256})
+    records.sort(key=lambda r: (r["source"], r["page"], r["id"]))
+    safefs.write_json(repo, requests.PATH, records)
+    return records

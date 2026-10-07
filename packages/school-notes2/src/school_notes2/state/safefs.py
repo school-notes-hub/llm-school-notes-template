@@ -220,10 +220,6 @@ def _parent(root, rel, create: bool):
         os.close(fd)
 
 
-def makedirs(root, rel) -> None:
-    os.close(_open_dir(root, rel, create=True))
-
-
 def write_bytes(root, rel, data: bytes, mode: int = 0o644) -> None:
     """Atomic write; a symlink at the target is replaced, never followed."""
     with _parent(root, rel, create=True) as (pfd, name):
@@ -363,5 +359,3 @@ def read_json(root, rel, default=None):
 
 def write_json(root, rel, value, mode: int = 0o644) -> None:
     write_text(root, rel, json.dumps(value, ensure_ascii=False, indent=2) + "\n", mode)
-
-

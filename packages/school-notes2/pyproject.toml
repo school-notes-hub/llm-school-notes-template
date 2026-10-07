@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "school-notes2"
-version = "2.6.4"
-description = "School Notes v2: hourly notebook ingest, nightly review and public site for the learner wikis"
+version = "0.2.0"
+description = "School Notes: the local `sn` command line for the learner wikis (fetch, figures, close, done, publish)"
 requires-python = ">=3.12"
 dependencies = [
     "jsonschema>=4.23,<5",   # every JSON contract is validated (plan 4)
@@ -24,7 +24,7 @@ dev = ["pytest>=8,<10"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-school_notes2 = ["schemas/*.json", "container/*", "ops/*", "llm/prompts/*.txt", "llm/*.toml"]
+school_notes2 = ["schemas/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

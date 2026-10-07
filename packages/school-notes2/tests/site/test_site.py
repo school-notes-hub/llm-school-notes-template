@@ -52,21 +52,17 @@ class Env:
         self.tmp = tmp_path
         self.log = log
         self.origin = make_origin(tmp_path, FILES)
-        self.bare = Git(tmp_path / "bare.git", "Tool", "tool@example.com", log)
-        repos.ensure_bare(self.bare, str(self.origin), repos.NOTES_REFSPECS)
-        repos.fetch(self.bare, 60)
+        clone = tmp_path / "private"
+        subprocess.run(["git", "clone", "-q", str(self.origin), str(clone)], check=True, env=ENV)
+        self.bare = Git(clone / ".git", "Tool", "tool@example.com", log, None, clone)
         self.site_origin = tmp_path / "site-origin.git"
         subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(self.site_origin)],
                        check=True, env=ENV)
-        self.site_bare = Git(tmp_path / "site.git", "Tool", "tool@example.com", log)
-        repos.ensure_bare(self.site_bare, str(self.site_origin), repos.SITE_REFSPECS)
-        # A brand-new site repo has no commit yet; the worktree starts from an empty commit.
-        empty_tree = self.site_bare.out("hash-object", "-t", "tree", "-w", "--stdin",
-                                        input=b"").strip()
-        start = self.site_bare.out("commit-tree", empty_tree, input=b"start\n").strip()
+        # As `sn publish` keeps it: one plain clone per learner, origin = the site repo.
         self.site_path = tmp_path / "work" / "site"
-        repos.ensure_worktree(self.site_bare, self.site_path, start)
-        self.site = repos.worktree_git(self.site_bare, self.site_path)
+        subprocess.run(["git", "init", "-q", str(self.site_path)], check=True, env=ENV)
+        self.site = Git(self.site_path / ".git", "Tool", "tool@example.com", log, None, self.site_path)
+        self.site.run("remote", "add", "origin", str(self.site_origin))
         self.study = tmp_path / "study-site"
         self.study.mkdir()
         shutil.copy(HERE / "fake_cli.py", self.study / "cli.mjs")

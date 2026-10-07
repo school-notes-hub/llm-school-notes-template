@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..state import safefs
 from ..wiki import frontmatter, markers
-from ..wiki.pages import CODE_FENCE, LINK, links, relative, resolve, wiki_pages
+from ..wiki.pages import CODE_FENCE, LINK, links, resolve, wiki_pages
 from .commissions import MARKER, MERMAID, markers as figure_markers
 
 HEAD = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$", re.M)

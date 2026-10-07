@@ -3,12 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from school_notes2.flows.fetch import fetch_json
 from school_notes2.schemas import SchemaError, validate
 from school_notes2.sources import cards
 from school_notes2.sources.duplicates import Known
 from school_notes2.sources.place import Downloaded, place_package
-from school_notes2.state import phase
 from school_notes2.state.files import write_json
 from tests.sources.test_sources import record
 
@@ -58,7 +56,7 @@ def test_invalid_card_file_is_rejected(tmp_path, data):
 
 @pytest.mark.parametrize("student", LEARNERS)
 def test_learner_subjects_card_has_no_effect(tmp_path, student):
-    """A `card` left in a learner's tools/subjects.json never reaches fetch.json."""
+    """A `card` left in a learner's tools/subjects.json never reaches the placed package."""
     repo = tmp_path / "repo"
     (repo / "tools").mkdir(parents=True)
     write_json(repo / "tools/subjects.json",
@@ -68,16 +66,12 @@ def test_learner_subjects_card_has_no_effect(tmp_path, student):
     placed = place_package(repo, Downloaded("Óra", "statika", "tanari", "", False, True,
                                             [record(doc, "document.md")]), 1, Known())
     assert "card" not in placed.package
-    task = phase.create(tmp_path / "tasks", student, "notes", "cron", "moved")
-    task.set_phase("prepared", packages=[placed.package], pages=placed.pages, ranges=[[1, 1]])
-    assert "card" not in fetch_json(task, 1, grade=9)["packages"][0]
     shared(repo)
     assert cards.load(repo, "statika") == CARD
 
 
 @pytest.mark.parametrize("student", LEARNERS)
-def test_prepared_card_survives_reload_and_card_file_change(tmp_path, student):
-    """T-095: no new phase; card input survives the existing preparation/resume boundary."""
+def test_the_shared_card_is_snapshot_into_the_placed_package(tmp_path, student):
     repo = tmp_path / "repo"
     repo.mkdir()
     shared(repo)
@@ -85,31 +79,8 @@ def test_prepared_card_survives_reload_and_card_file_change(tmp_path, student):
     doc.write_text("# Tananyag\n")
     placed = place_package(repo, Downloaded("Óra", "statika", "tanari", "", False, True,
                                             [record(doc, "document.md")]), 1, Known())
-    task = phase.create(tmp_path / "tasks", student, "notes", "cron", "moved")
-    task.set_phase("prepared", packages=[placed.package], pages=placed.pages, ranges=[[1, 1]])
-    before = fetch_json(task, 1, grade=11)
-    assert before["packages"][0]["card"] == CARD
-    assert before["learner"] == {"grade": 11}
-    shared(repo, {"statika": {**CARD, "role": "Új szerep"}})
-    restored = fetch_json(phase.load(task.dir), 1, grade=11)
-    assert json.dumps(restored, ensure_ascii=False) == json.dumps(before, ensure_ascii=False)
-    restored["packages"][0]["card"]["style"] = ""
-    with pytest.raises(SchemaError):
-        validate("fetch", restored)
-
-
-@pytest.mark.parametrize("grade", [0, -1, "9", None])
-def test_fetch_requires_a_positive_grade(tmp_path, grade):
-    task = phase.create(tmp_path / "tasks", "proba", "notes", "cron", "moved")
-    task.set_phase("prepared", packages=[], pages=[], ranges=[[0, 0]])
-    with pytest.raises(SchemaError):
-        fetch_json(task, 1, grade=grade)
-
-
-def test_missing_cards_are_listed_in_name_order(tmp_path):
-    assert cards.missing(tmp_path, {"b", "a"}) == ["a", "b"]
-    shared(tmp_path, {"a": CARD})
-    assert cards.missing(tmp_path, ["b", "a", "c"]) == ["b", "c"]
+    assert placed.package["card"] == CARD
+    validate("subject-card", placed.package["card"])
 
 
 def test_symlinked_card_file_is_not_read(tmp_path):

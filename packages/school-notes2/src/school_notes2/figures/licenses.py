@@ -83,23 +83,3 @@ def rights(repo, asset, *, recorded=None):
         if current == request and permission(repo, current) == record.get("license"):
             return "licensed", path
     return None
-
-
-def preflight(repo):
-    """Owner data and withdrawn grants must never consume writer failure strikes."""
-    from ..state.errors import NeedsOwner
-    from ..wiki.pages import wiki_pages
-    from ..wiki.public import linked_targets
-    try:
-        load(repo)
-        recorded = records(repo)
-        assets, _ = linked_targets(repo, sorted(wiki_pages(repo)))
-        invalid = [asset for asset in sorted(assets) if safefs.is_file(repo, asset)
-                   and any(record.get("output_sha256") == sha256(repo, asset)
-                           for _, record in recorded.get(asset, []))
-                   and rights(repo, asset, recorded=recorded) is None]
-        if invalid:
-            raise ValueError("permission changed or withdrawn: " + ", ".join(invalid))
-    except (ValueError, OSError) as exc:
-        raise NeedsOwner(f"invalid image permission: {exc}",
-                         todo="correct docs/licenses.json or remove the affected image in `school-notes chat`") from exc

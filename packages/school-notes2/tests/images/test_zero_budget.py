@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from school_notes2.images import generate, pending
+from school_notes2.images import generate
 from school_notes2.images.settings import ImageSettings
 from school_notes2.state.files import write_json
 
@@ -20,7 +20,7 @@ def test_zero_budget_queues_nothing_and_preserves_attempts(tmp_path, student, at
     page.write_text("<!-- image: tema-banner -->\n")
     settings = ImageSettings(student, repo, tmp_path / "unused.py", tmp_path / "state",
                              tmp_path / "plans", tmp_path / "lock", tmp_path / "key",
-                             Decimal("10"), Decimal("5"), daily_usd=Decimal("0"), monthly_usd=Decimal("0"),
+                             Decimal("10"), Decimal("5"), monthly_usd=Decimal("0"),
                              today=lambda: date(2026, 10, 4))
     write_json(settings.plans_dir / "tema-banner.json", {"id": "tema-banner"})
     ledger = {"request_id": settings.request_id, "jobs": {f"{student}-tema-banner": {
@@ -29,9 +29,5 @@ def test_zero_budget_queues_nothing_and_preserves_attempts(tmp_path, student, at
     write_json(path, ledger)
     before = path.read_bytes()
     for _ in range(2):
-        found = pending.scan(settings)
-        assert found["pending"] == [] and found["budget_left"] is False
-        assert found["missing_plan"] == []
-    assert path.read_bytes() == before
-    if not attempts:
         assert generate._blocked(settings, f"{student}-tema-banner")["state"] == "budget-exhausted"
+    assert path.read_bytes() == before

@@ -5,12 +5,12 @@ The library functions log into a quiet log; each command writes one line of its 
 JSONL log (`logs/school-notes.log`), so the log reads one line per command."""
 
 import subprocess
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 
 from .. import config
-from ..flows import context
 from ..git.run import Git, HttpsToken
 from ..log import TZ, Log
 from ..state.errors import NeedsOwner, Prerequisite, SnError
@@ -51,16 +51,17 @@ def today() -> str:
 
 @dataclass
 class Local:
-    ctx: context.Ctx
+    cfg: config.Config
+    student: config.Student
     repo: Path
 
     @property
     def name(self) -> str:
-        return self.ctx.name
+        return self.student.name
 
-    @property
-    def cfg(self) -> config.Config:
-        return self.ctx.cfg
+    def tools_dir(self) -> Path:
+        """tools/ of the release this process runs from."""
+        return RELEASE / "tools"
 
     @property
     def quiet(self) -> Log:
@@ -79,11 +80,22 @@ class Local:
 
     def image_settings(self, worktree: Path | None = None):
         """The shared host ledger and lock; the key is read from the ops `.env` at call time."""
-        return replace(self.ctx.image_settings(), worktree=worktree or self.repo, key_file=keys.ENV_FILE)
+        from ..images.settings import ImageSettings
+        state, limits = self.cfg.state_dir, self.cfg.limits
+        return ImageSettings(
+            learner=self.name, worktree=worktree or self.repo,
+            script=self.tools_dir() / "learning_image.py",
+            state_root=state / "images", plans_root=state / "image-plans",
+            lock_path=state / "images.lock", key_file=keys.ENV_FILE,
+            max_total_usd=Decimal(str(limits.image_year_total_usd)),
+            learner_max_usd=Decimal(str(limits.image_year_learner_usd)),
+            monthly_usd=Decimal(str(limits.image_monthly_usd)),
+            reservation_usd=Decimal(str(limits.image_reservation_usd)),
+            timeout_s=self.cfg.timeouts.image_generate_s)
 
     def drive(self):
         from ..drive.client import DriveClient, DriveMediaTransport
-        transport = DriveMediaTransport(None, self.cfg.timeouts.drive_call_s, tools_dir=self.ctx.tools_dir(),
+        transport = DriveMediaTransport(None, self.cfg.timeouts.drive_call_s, tools_dir=self.tools_dir(),
                                         saved=keys.drive_token(keys.load()))
         return DriveClient(transport, self.cfg.timeouts.download_package_s)
 
@@ -95,12 +107,12 @@ class Local:
 
 
 def load(learner: str, config_path: Path | None = None) -> Local:
-    cfg = replace(config.load(config_path), release_dir=RELEASE)
-    ctx = context.make(cfg, learner, console=False)
-    repo = ctx.student.local_repo or Path.home() / "jegyzet" / f"school-notes-{learner}-active"
+    cfg = config.load(config_path)
+    student = cfg.student(learner)
+    repo = student.local_repo or Path.home() / "jegyzet" / f"school-notes-{learner}-active"
     if not (repo / ".git").exists():
         raise Prerequisite(f"{repo} is not a git working copy", todo="clone the learner repo over HTTPS")
-    return Local(ctx, repo)
+    return Local(cfg, student, repo)
 
 
 def learners(config_path: Path | None = None) -> list[str]:

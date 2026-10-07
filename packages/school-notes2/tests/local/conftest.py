@@ -1,14 +1,16 @@
+import json
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from school_notes2.config import Role, Sources, Timeouts
+from school_notes2.config import Sources, Timeouts
 from school_notes2.git.run import Git, HttpsToken
 from school_notes2.local.common import git_dir
 from school_notes2.log import Log
 from tests.figures.conftest import make_figure, repo  # noqa: F401 - shared fixtures
+from tests.wiki.conftest import INDEX, ROOT, page
 
 TEMPLATE = Path(__file__).resolve().parents[4]
 ENV = {"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1", "PATH": "/usr/bin:/bin",
@@ -30,11 +32,12 @@ class FakeLocal:
         self.git_calls = []
         self._ledger = ledger or {"jobs": {}}
         self.cfg = SimpleNamespace(timeouts=Timeouts(), sources=Sources(), root=root,
-                                   git_name="T", git_email="t@example.com",
-                                   role=lambda n: (Role("claude", "model-x", "high"), None))
-        self.ctx = SimpleNamespace(name=name, tools_dir=lambda: TEMPLATE / "tools",
-                                   student=SimpleNamespace(drive_root=drive_root, site_repo=site_repo))
+                                   git_name="T", git_email="t@example.com")
+        self.student = SimpleNamespace(name=name, drive_root=drive_root, site_repo=site_repo)
         self.quiet = Log(None, console=False)
+
+    def tools_dir(self):
+        return TEMPLATE / "tools"
 
     def record(self, command, outcome="ok", **fields):
         self.records.append((command, outcome, fields))
@@ -71,3 +74,18 @@ def init_repo(path: Path) -> Path:
     subprocess.run(["git", "init", "-q", "-b", "main", str(path)], check=True, env=ENV)
     (path / ".gitignore").write_text(".school-notes/\n")
     return path
+
+
+def learner_files() -> dict[str, str]:
+    """A minimal learner repo: root and subject index, one topic page, subjects.json, public.json."""
+    return {
+        "wiki/index.md": ROOT, "wiki/a-projektrol.md": "# A projektről\n", "wiki/log.md": "# Napló\n",
+        "wiki/proba/index.md": INDEX,
+        "wiki/proba/elso.md": page("type: topic\ntitle: Első\ndescription: Az első téma.\n"
+                                   "chapter: alapok\norder: 10"),
+        "tools/subjects.json": json.dumps({"subjects": {"proba": {"name": "Próba", "emoji": "🧪"}}},
+                                          ensure_ascii=False),
+        "publication/public.json": json.dumps({"version": 1, "mode": "public", "title": "T",
+                                               "base": "/t/", "assets": []}),
+        "docs/review/index.md": "# Review\n",
+    }

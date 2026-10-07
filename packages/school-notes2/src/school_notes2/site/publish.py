@@ -42,7 +42,7 @@ def publish(site: Git, build_site: Path, *, student: str, source_commit: str, ru
             ls_remote_s: int = 60, rsync: str = "rsync") -> Published:
     """Copy `build_site` (the checked `<task>/build/site`) to gh-pages and push it.
 
-    `site` is the site worktree's Git (`repos.worktree_git(bare, path)`).
+    `site` is the learner's gh-pages clone (`local/publish.site_git`).
     A rejected push (someone else published) rebuilds the commit, up to three rounds.
     """
     for round_no in range(1, MAX_ROUNDS + 1):

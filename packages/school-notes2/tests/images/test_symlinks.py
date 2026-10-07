@@ -13,20 +13,6 @@ from image_fakes import prepare_candidate, independent_accept
 PLAN = ".school-notes/images/termeles-banner.json"
 
 
-def test_review3_b1_dangling_plan_link_does_not_create_a_host_file(make_settings, fake_api, log,
-                                                                    tmp_path):
-    """generate keeps the plan, the LLM swaps it for a dangling link to ~/.bash_aliases,
-    restoring it must not create the canary."""
-    s = make_settings()
-    assert gen.generate(s, "termeles-banner", log=log, sleep=lambda x: None)["state"] == "generated"
-    canary = tmp_path / "bash_aliases"
-    (s.worktree / PLAN).unlink()
-    os.symlink(canary, s.worktree / PLAN)
-    with pytest.raises(UnsafePath):
-        plans.restore(s, ["termeles-banner"])
-    assert not canary.exists()
-
-
 def test_plan_read_through_a_link_is_refused(make_settings, log, tmp_path):
     s = make_settings()
     secret = tmp_path / "secret.json"
@@ -68,15 +54,6 @@ def test_linked_assets_folder_stops_learning_image(make_settings, fake_api, log,
     with pytest.raises(UnsafePath):
         prepare_candidate(s)
     assert list(outside.iterdir()) == []
-
-
-def test_markers_behind_a_linked_folder_are_not_seen(make_settings, tmp_path):
-    s = make_settings()
-    outside = tmp_path / "pages"
-    outside.mkdir()
-    (outside / "x.md").write_text("<!-- image: stolen -->\n")
-    os.symlink(outside, s.worktree / "wiki/evil")
-    assert "stolen" not in plans.find_markers(s.worktree)
 
 
 JOB = "benedek-termeles-banner"

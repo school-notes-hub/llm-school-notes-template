@@ -22,12 +22,11 @@ import tempfile
 from pathlib import Path
 
 from .. import VERSION
-from ..flows import finish
 from ..git import repos
 from ..site import build as site_build
 from ..site import publish as site_publish
 from . import done
-from .common import https_url, require_github, today
+from .common import RELEASE, https_url, require_github, today
 
 
 def preconditions(local, git, out) -> str | None:
@@ -43,6 +42,15 @@ def preconditions(local, git, out) -> str | None:
     return None
 
 
+def renderer(local) -> site_build.Renderer:
+    """The release's study-site renderer; the PDF cache is kept per learner."""
+    t = local.cfg.timeouts
+    return site_build.Renderer(
+        study_site=RELEASE / "packages" / "study-site", browser=local.cfg.browser,
+        pdf_cache=local.cfg.state_dir / "pdf-cache" / local.name, build_s=t.build_s,
+        browser_check_s=t.browser_check_s, check_public_s=t.check_public_s)
+
+
 def effective_remote(git, what: str) -> None:
     """Both the fetch and the push address of `origin` (after any `insteadOf`/`pushurl`) must
     be https://github.com/…; only then may git get the token."""
@@ -53,7 +61,7 @@ def effective_remote(git, what: str) -> None:
 def site_git(local):
     """The learner's single gh-pages clone (created on first use, HTTPS remote)."""
     path = local.site_clone()
-    url = require_github(https_url(local.ctx.student.site_repo), "the site repo")
+    url = require_github(https_url(local.student.site_repo), "the site repo")
     if not (path / ".git").exists():
         path.mkdir(parents=True, exist_ok=True)
         local.git(path).run("init", "--quiet", str(path), cwd=path)
@@ -74,14 +82,13 @@ def run(local, reviewed: bool = False, build_only: Path | None = None, out=print
         out(f"nem adom ki: {reason}")
         local.record("publish", "refused", target=head, reason=reason)
         return 1
-    renderer = finish.renderer(local.ctx)
     if build_only is not None:
-        record = site_build.build(git, head, Path(build_only), renderer, changed=None, log=local.quiet)
+        record = site_build.build(git, head, Path(build_only), renderer(local), changed=None, log=local.quiet)
         out(f"build: {record.output / 'site'} ({record.pages} lap, {record.duration_s} s)")
         local.record("publish", "built", target=head, pages=record.pages)
         return 0
     effective_remote(git, "the working copy's origin")
-    require_github(https_url(local.ctx.student.site_repo), "the site repo")
+    require_github(https_url(local.student.site_repo), "the site repo")
     net = local.git(network=True)
     net.run("push", "--porcelain", "origin", "HEAD:refs/heads/main", timeout=local.cfg.timeouts.push_s)
     if repos.ls_remote(net, "refs/heads/main", local.cfg.timeouts.ls_remote_s) != head:
@@ -97,7 +104,7 @@ def run(local, reviewed: bool = False, build_only: Path | None = None, out=print
         changed = site_publish.changed_since_publish(git, site, head)
         with tempfile.TemporaryDirectory(prefix=f"sn-publish-{local.name}-") as tmp:
             try:
-                record = site_build.build(git, head, Path(tmp), renderer, changed=changed, log=local.quiet)
+                record = site_build.build(git, head, Path(tmp), renderer(local), changed=changed, log=local.quiet)
             except site_build.BuildContentError as exc:
                 for problem in exc.problems[:30]:
                     out(f"  {problem['file']}: {problem['message']}")

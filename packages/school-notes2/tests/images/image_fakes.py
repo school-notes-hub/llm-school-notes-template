@@ -5,14 +5,11 @@ import base64
 import io
 import json
 import threading
-from datetime import date
-from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from PIL import Image
 
-from school_notes2.images.settings import ImageSettings
 
 TOOLS = Path(__file__).resolve().parents[4] / "tools"
 KEY = "test-key-not-real"
