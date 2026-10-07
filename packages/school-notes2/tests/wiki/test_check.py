@@ -146,3 +146,32 @@ def test_private_names_in_the_public_view_are_errors_but_not_in_dropped_parts():
               "Lásd https://example.org/sources/p0001 is.\n")
     assert check.check_public_view("wiki/x/a.md", hidden) == []
     assert check.check_public_view("wiki/log.md", "Lásd sources/x.\n") == []          # not published
+
+
+MATH = "unbalanced \\[ \\] or \\( \\) math delimiter"
+
+
+def test_interval_notation_in_image_alt_text_is_not_math():
+    # The alt texts `sn close` inserts escape interval brackets; balanced or not, they never render
+    # as math (sn-helyi 0.3.4).
+    balanced = "![A \\[0; 3\\] és \\]−1; 5\\[ szakasz.](<../assets/proba/a.svg>)\n"
+    unbalanced = "![B = \\[1; 6\\[ és A = \\]−2; 5\\], \\[0; 5\\[.](<../assets/proba/b.svg>)\n"
+    nested = "![C [belső \\[2; 7\\[] \\(x](kep.png) és ![D \\[1; 2\\[][ref]\n"
+    for text in (balanced, unbalanced, nested):
+        assert check.check_formulas("wiki/proba/a.md", "Szöveg.\n\n" + text) == []
+
+
+def test_a_stray_math_delimiter_in_body_text_is_still_an_error():
+    assert messages(check.check_formulas("wiki/proba/a.md", "Ez \\[ x^2 nyitva marad.\n")) == [MATH]
+    assert messages(check.check_formulas("wiki/proba/a.md", "Ez \\( x nyitva marad.\n")) == [MATH]
+    # A link (not an image) is rendered text: its brackets still count.
+    assert messages(check.check_formulas("wiki/proba/a.md", "[\\[ x](a.md)\n")) == [MATH]
+
+
+def test_with_alt_text_and_body_only_the_body_delimiter_counts():
+    alt = "![A = \\]−2; 5\\] és B = \\]1; 6\\[.](<../assets/proba/a.svg>)\n\n"
+    assert messages(check.check_formulas("wiki/proba/a.md", alt + "Képlet: \\[ a+b \\]\n")) == []
+    assert messages(check.check_formulas("wiki/proba/a.md", alt + "Képlet: \\[ a+b\n")) == [MATH]
+    # The balanced pairs inside the alt text cannot hide a body delimiter either.
+    alt2 = "![\\[0; 3\\[ \\]1; 2\\]](a.svg)\n\n"
+    assert messages(check.check_formulas("wiki/proba/a.md", alt2 + "\\] a\n")) == [MATH]

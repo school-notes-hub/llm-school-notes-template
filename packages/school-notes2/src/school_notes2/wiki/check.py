@@ -150,10 +150,17 @@ def check_ids(rel: str, text: str) -> list[dict]:
             for line, value, what in heading_ids.duplicates(text)]
 
 
+# An image's alt text with CommonMark backslash escapes and one level of balanced brackets.
+# Interval notation there is escaped (`\]-1; 3\]`) so the `]` does not close the alt; alt text is
+# never rendered as math, so its `\[`, `\(` and `$$` are not formula delimiters.
+IMAGE_ALT = re.compile(r"!\[(?:\\.|[^\\\[\]]|\[(?:\\.|[^\\\[\]])*\])*\](?=[(\[])", re.S)
+
+
 def check_formulas(rel: str, text: str) -> list[dict]:
     """Display-math delimiters must pair up; the build compiles the formulas themselves."""
     body = CODE_FENCE.sub("", text)
     body = re.sub(r"`[^`\n]*`", "", body)
+    body = IMAGE_ALT.sub("", body)
     if body.count("$$") % 2:
         return [item(rel, None, "unbalanced $$ display-math delimiter")]
     if body.count("\\[") != body.count("\\]") or body.count("\\(") != body.count("\\)"):

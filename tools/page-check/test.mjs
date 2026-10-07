@@ -60,3 +60,8 @@ test('browser: disclosure states, cold/warm cache, changed asset and broken Merm
  report=JSON.parse(fs.readFileSync(path.join(root,'.visual-runs/page-check/report.json')));
  assert.ok(report.errors.some(e=>['mermaid','browser'].includes(e.kind)));
 });
+test('escaped interval brackets stay in the alt text and are never math',()=>{
+ const r=renderMarkdown('![A = \\]-2; 5\\] és \\[0; 5\\[](a.svg)\n');
+ assert.ok(r.html.includes('alt="A = ]-2; 5] és [0; 5["'),r.html);
+ assert.equal(r.mathCount,0);assert.ok(!r.html.includes('math-display'));
+});

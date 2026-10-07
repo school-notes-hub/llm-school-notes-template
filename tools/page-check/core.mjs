@@ -59,6 +59,9 @@ export function renderMarkdown(source) {
   const math = mathjax.document('', {InputJax: new TeX({packages: AllPackages.filter(p=>!['noerrors','noundefined','html','require','autoload'].includes(p))}), OutputJax: new SVG({fontCache:'none'})});
   const errors=[], assets=[], links=[], slugger=new GithubSlugger(); let mathCount=0, mermaidCount=0;
   const md=new MarkdownIt({html:true,linkify:false,typographer:false}).use(footnote).use(taskLists).use(mathPlugin);
+  // markdown-it joins escaped characters (`text_special`) only at the top level, and an image's alt
+  // text drops the nested ones: `![\]-1; 3\]](a.svg)` would lose its interval brackets.
+  md.core.ruler.after('text_join','nested_text_join',state=>walk(state.tokens,t=>{if(t.type==='text_special')t.type='text';}));
   // Sanitize the complete output before injecting our trusted MathJax markup.
   const formulas=[];
   const formula=(content,display)=>{
