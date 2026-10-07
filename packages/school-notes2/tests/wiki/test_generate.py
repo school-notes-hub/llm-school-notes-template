@@ -5,11 +5,13 @@ def test_subject_blocks(repo):
     text = generate.subject_index(repo, "proba")
     chapters = markers.read(text, "chapters")
     assert chapters == (
-        "# 📘 9. évfolyam: Alapok\n\n🗓️ szeptember 3.\n\n"
+        "# 📘 9. évfolyam: Alapok\n\n🗓️ szeptember eleje ↕\n\n"
         "* ⚡ [Összefoglaló: Alapok](osszefoglalo-alapok.md) - Rövid.\n"
         "* [Első](elso.md) - Az első téma.\n"
         "\n<br />\n\n"
-        "# 📘 9. évfolyam: Haladó\n\n🗓️ szeptember eleje óta, még tart\n\n* [Második](masodik.md) - A második téma.\n")
+        "# 📘 9. évfolyam: Haladó\n\n🗓️ szeptember eleje óta, még tart ↕\n\n* [Második](masodik.md) - A második téma.\n"
+        "\nA ↕ jel: dátum nélküli óra, ezért a helye a sorban (vagy egy fejezet kezdete) nem biztos, mert az "
+        "időszaka átfed más órákéval.\n")
     lessons = markers.read(text, "lessons").splitlines()
     assert lessons[0] == "| Dátum | Óra | Jegyzet | Témakörök |"
     assert lessons[2].startswith("| ? (legkésőbb 2026-09-10) | Folytatás |")

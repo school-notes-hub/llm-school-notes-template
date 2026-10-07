@@ -71,11 +71,13 @@ def chapters_block(subject: Subject) -> str:
     started them; `sn check` warns otherwise), each with when it was taught (🗓️)."""
     spans = teaching_order.spans(subject_chapters(subject, ordered_lessons(subject)))
     sections = []
-    for chapter in subject.index_meta.get("chapters") or []:
+    listed = subject.index_meta.get("chapters") if isinstance(subject.index_meta.get("chapters"), list) else []
+    for chapter in listed:
         lines = "\n".join(list_line(p) for p in chapter_pages(subject, chapter["id"]))
         when = f"🗓️ {spans[str(chapter['id'])]}\n\n" if str(chapter["id"]) in spans else ""
         sections.append(f"# 📘 {chapter['title']}\n\n{when}{lines}\n" if lines else f"# 📘 {chapter['title']}\n")
-    return "\n<br />\n\n".join(sections)
+    legend = f"\n{UNCERTAIN_LEGEND}\n" if any(v.endswith(teaching_order.UNCERTAIN) for v in spans.values()) else ""
+    return "\n<br />\n\n".join(sections) + legend
 
 
 PARTIAL_DATE = re.compile(r"^\d{4}-\d{2}-(?:\d\?|\?\d|\?\?)")
@@ -117,9 +119,14 @@ def topic_link(subject: Subject, topic: str) -> str:
     return f"[{title}]({topic})"
 
 
-UNCERTAIN = " ↕"
-UNCERTAIN_LEGEND = ("A ↕ jel: ennek a dátum nélküli órának a helye a sorban nem biztos, mert az "
-                    "időszaka átfed más órákéval.")
+UNCERTAIN = teaching_order.UNCERTAIN
+UNCERTAIN_LEGEND = ("A ↕ jel: dátum nélküli óra, ezért a helye a sorban (vagy egy fejezet kezdete) nem "
+                    "biztos, mert az időszaka átfed más órákéval.")
+
+
+def lesson_link(page: SubjectPage, lesson: dict) -> str:
+    """The lesson log of a lesson, at its section when it names an `anchor`."""
+    return f"{page.file}#{lesson['anchor']}" if lesson.get("anchor") else page.file
 
 
 def lessons_block(subject: Subject) -> str:
@@ -127,11 +134,10 @@ def lessons_block(subject: Subject) -> str:
     for item in reversed(ordered_lessons(subject)):
         page, lesson = subject.page(item.file), item.data
         topics = ", ".join(topic_link(subject, t) for t in lesson.get("topics") or [])
-        anchor = f"#{lesson['anchor']}" if lesson.get("anchor") else ""
         states.add(page.meta.get("catch_up"))
         marked |= item.uncertain
         rows.append(f"| {catch_up.mark(page.meta)}{lesson_date(lesson)}{UNCERTAIN if item.uncertain else ''} | "
-                    f"{lesson.get('title', '')} | [jegyzet]({page.file}{anchor}) | {topics} |")
+                    f"{lesson.get('title', '')} | [jegyzet]({lesson_link(page, lesson)}) | {topics} |")
     key = " ".join(filter(None, [catch_up.legend(states), UNCERTAIN_LEGEND if marked else ""]))
     return (f"{key}\n\n" if key else "") + TABLE_HEAD + "".join(r + "\n" for r in rows)
 
@@ -140,46 +146,41 @@ NOW_HEADING = "# 📍 Itt tartunk"
 RECENT = 5          # lessons listed before the latest one
 
 
-def _dated(lesson: dict) -> str:
-    """`2026-10-06`, or `dátum nélkül, <range>` (a partly legible date as written)."""
+def block_date(lesson: dict) -> str:
+    """PROFILE *undated in the block*: `2026-10-06`, or `dátum nélkül, <range>` (a partly
+    legible date as written)."""
     cell = lesson_date(lesson)
-    return f"dátum nélkül, {lesson['date_note']}" if cell.startswith("?") and lesson.get("date_note") else (
-        "dátum nélkül" if cell == "?" else cell)
+    if cell == "?":
+        return "dátum nélkül"
+    return f"dátum nélkül, {lesson['date_note']}" if cell.startswith("? (") else cell
 
 
 def now_block(subject: Subject) -> str:
     """📍 Itt tartunk: the chapter the class started last, the latest lesson with its topics, the
-    chapters before, and the lessons before it, newest first (rules 1.22.4)."""
+    chapters before, and the lessons before it, newest first (rules 1.22.5)."""
     found = ordered_lessons(subject)
     if not found:
         return ""
     chapters_ = subject_chapters(subject, found)
     started, spans = teaching_order.by_start(chapters_), teaching_order.spans(chapters_)
     latest = found[-1]
-    page = subject.page(latest.file)
-    anchor = f"#{latest.data['anchor']}" if latest.data.get("anchor") else ""
     topics = ", ".join(topic_link(subject, t) for t in latest.data.get("topics") or [])
-    mark = UNCERTAIN if latest.uncertain else ""
     lines = [NOW_HEADING, ""]
     if started:
         now = started[-1]
-        lines.append(f"* **Most:** {teaching_order.plain_title(now.title)} "
-                     f"({spans[now.id]})")
-    lines.append(f"* **Legutóbb:** [{latest.data.get('title', '')}]({page.file}{anchor}) – "
-                 f"{_dated(latest.data)}{mark}" + (f" · {topics}" if topics else ""))
+        lines.append(f"* **Most:** {teaching_order.plain_title(now.title)} ({spans[now.id]})")
+    lines.append(f"* **Legutóbb:** [{latest.data.get('title', '')}]({lesson_link(subject.page(latest.file), latest.data)}) – "
+                 f"{block_date(latest.data)}{UNCERTAIN if latest.uncertain else ''}" + (f" · {topics}" if topics else ""))
     if len(started) > 1:
         lines.append("* **Előtte:** " + " → ".join(
-            f"{teaching_order.plain_title(c.title)} ({spans[c.id]})"
-            for c in started[:-1]))
+            f"{teaching_order.plain_title(c.title)} ({spans[c.id]})" for c in started[:-1]))
     before = list(reversed(found[:-1]))[:RECENT]
     if before:
         lines += ["", "Eddig ebben a sorrendben vettük, a legújabb elöl:", ""]
-        for item in before:
-            p = subject.page(item.file)
-            a = f"#{item.data['anchor']}" if item.data.get("anchor") else ""
-            lines.append(f"* {lesson_date(item.data)}{UNCERTAIN if item.uncertain else ''} – "
-                         f"[{item.data.get('title', '')}]({p.file}{a})")
-    if latest.uncertain or any(item.uncertain for item in before):
+        lines += [f"* {block_date(item.data)}{UNCERTAIN if item.uncertain else ''} – "
+                  f"[{item.data.get('title', '')}]({lesson_link(subject.page(item.file), item.data)})"
+                  for item in before]
+    if any(UNCERTAIN in line for line in lines):
         lines += ["", UNCERTAIN_LEGEND]
     return "\n".join(lines) + "\n"
 
@@ -217,16 +218,16 @@ def notes_block(subject: Subject) -> str:
 REQUIRED_SUBJECT_BLOCKS = ("chapters", "lessons", "review", "notes")
 
 
-def with_now(text: str) -> str:
-    """The 📍 block's fixed place: right after the back link to the home page (else right
-    before the first generated block, else at the end), so it stands above the chapter lists."""
-    if "now" in markers.names(text):
-        return text
+def place_now(text: str, body: str) -> str:
+    """The 📍 block's one fixed place on every subject index: right after the back link to the
+    home page, before the catch-up list (else right before the first generated block, else at
+    the end). A block standing elsewhere moves there, so existing pages converge."""
+    text = markers.remove(text, {"now"})
     back = catch_up.BACK_LINK.search(text)
     block = markers.BLOCK.search(text)
     pos = back.end() if back else (block.start() if block else len(text))
     head, tail = text[:pos].rstrip("\n"), text[pos:].lstrip("\n")
-    return head + "\n\n" + markers.wrap("now", "") + "\n" + tail
+    return head + "\n\n" + markers.wrap("now", body) + "\n" + tail
 
 
 def with_blocks(text: str, names: tuple[str, ...]) -> str:
@@ -240,16 +241,17 @@ def with_blocks(text: str, names: tuple[str, ...]) -> str:
 
 def subject_index(repo: Path, slug: str) -> str:
     """The subject index text with every generated block refreshed (and present)."""
-    text = with_now(with_blocks(markers.clean_nested_notices(read_text(repo, f"wiki/{slug}/index.md")),
-                                REQUIRED_SUBJECT_BLOCKS))
+    text = with_blocks(markers.clean_nested_notices(read_text(repo, f"wiki/{slug}/index.md")),
+                       REQUIRED_SUBJECT_BLOCKS)
     subject = load_subject(repo, slug)
-    bodies = {"now": now_block(subject), "chapters": chapters_block(subject), "lessons": lessons_block(subject),
+    bodies = {"chapters": chapters_block(subject), "lessons": lessons_block(subject),
               "review": review_block(subject), "notes": notes_block(subject)}
     for name in markers.names(text):
         if name in bodies:
             text = markers.replace(text, name, bodies[name])
-    return catch_up.update(text, by_date_desc(subject.by_type("lesson-notes")),
+    text = catch_up.update(text, by_date_desc(subject.by_type("lesson-notes")),
                            lambda page: catch_up_description(subject, page))
+    return place_now(text, now_block(subject))
 
 
 def subject_order(repo: Path) -> list[str]:

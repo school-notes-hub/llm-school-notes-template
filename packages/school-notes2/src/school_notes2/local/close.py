@@ -26,9 +26,8 @@ files; the reviewer has no shell). An `accept` is valid only for the content it 
 4. each accepted recheck renews the verdict of an inserted figure, once, for the content seen;
 5. the machine data (`machine_data.py`): lesson-log machine frontmatter, `generated` stamps,
    page evidence records, `docs/figure-requests.json` (each request is listed for the owner),
-   draft tracking and the ⏳ notice, the banner and 📎 blocks of every page, and the pass's
-   `wiki/log.md` entries from `adatok.json` `log` (`wiki_log.py`; a log link that is not a wiki
-   page is a STOP in step 0);
+   draft tracking and the ⏳ notice, the banner and 📎 blocks of every page (a `log` link in
+   `adatok.json` that is not a wiki page is a STOP in step 0);
 6. **STOP** (exit 2, nothing deleted) while an inserted figure's verdict is invalidated – the
    figure must be looked at against the new text;
 7. reader-verdict bookkeeping (figure verdicts untouched), indexes, decisions overview,
@@ -39,8 +38,11 @@ files; the reviewer has no shell). An `accept` is valid only for the content it 
    evidence records' pass id `helyi-<digest>-<subject>`; a replayed pass gets `-2`, `-3`, …):
    no STOP, no `sn done` problem on that subject's pages (other subjects' open problems do
    not matter; a problem that names no subject holds every hand-over), the hand-over unchanged
-   since step 0, and – in a close without `--subject` – a snapshot (`keys.json`); the moved
-   folder gets `closed.json` (`sn done` reports one whose `adatok.json` had no `log`): a subject
+   since step 0, and – in a close without `--subject` – a snapshot (`keys.json`). The folder
+   carries `closed.json` (pass id, subject) into the move; after the move the pass's `log`
+   entries go into `wiki/log.md` once (`wiki_log.py`: keyed by the pass id, `logged: true`), and a
+   retired pass whose entries an interrupted close did not write is repaired first; `sn done`
+   reports a retired pass without `log` under its subject: a subject
    without one is an unfinished pass and stays, with a line. What moved is in the `sn.close`
    log line, written also when a move fails or is interrupted (outcome `retire-failed`,
    exit 1). A re-run names an already moved subject with a line and goes on; a new lesson log
@@ -66,7 +68,7 @@ from ..state import safefs
 from ..wiki import decisions, generate, public
 from .. import VERSION
 from . import done, figure_close as figs, guard, machine_data, tool_writes, wiki_log
-from .common import Refused, now_iso
+from .common import Refused, now_iso, today
 from .handoff import DONE, OUT, accepted, handoffs, in_scope, retired, retired_notes
 
 STOP = 2
@@ -132,8 +134,6 @@ def close(local, repo: Path, subjects: list[str] | None, out=print, state: dict 
                     out(f"ítélet megújítva (újranézés): {h.subject}/{item['id']}")
         machine_data.write(local, repo, found, changed_pages, head_generated, new_requests, at, changed, out)
         machine_data.draft_notices(repo, changed, warnings, subjects)
-        if wiki_log.write(repo, found, at[:10]):
-            changed.append(wiki_log.LOG)
         warnings += [f"{h.subject}: az adatok.json-ban nincs `log` (naplóbejegyzés); `sn done` jelezni fogja"
                      for h in found if not h.data.get("log")]
         skipped = machine_data.machine_blocks(repo, changed, warnings, subjects)
@@ -184,6 +184,8 @@ def retire(repo: Path, state: dict, subjects: list[str] | None, out=print, moved
     folders moved, as they move."""
     moved = [] if moved is None else moved
     failed = []
+    for dest in wiki_log.repair(repo, today()):     # a retired pass whose entries a close did not write
+        out(f"naplóbejegyzés pótolva: {dest}")
     if "open" not in state:
         return failed                               # a STOP or an error: nothing is retired
     open_ = state["open"]
@@ -209,6 +211,10 @@ def retire(repo: Path, state: dict, subjects: list[str] | None, out=print, moved
         try:
             for n in range(1, 1000):
                 dest = f"{DONE}/{name}" + (f"-{n}" if n > 1 else "")
+                if safefs.exists(repo, dest):
+                    continue
+                # the mark travels with the move: a pass retired by an interrupted close is known
+                wiki_log.mark_closed(repo, base, dest.rsplit("/", 1)[1], h.subject, VERSION)
                 try:
                     safefs.move(repo, base, dest)
                     break
@@ -220,9 +226,10 @@ def retire(repo: Path, state: dict, subjects: list[str] | None, out=print, moved
             out(f"Hiba: az átadást nem tudtam elrakni: {base}: {exc}")
             failed.append(h.subject)
             continue
-        wiki_log.mark_closed(repo, dest, VERSION)
         out(f"átadás elrakva: {base} → {dest}")
         moved.append(dest.rsplit("/", 1)[1])
+        if wiki_log.write_pass(repo, dest, today()):
+            out(f"naplóbejegyzés beírva: {h.subject} ({wiki_log.LOG})")
     return failed
 
 

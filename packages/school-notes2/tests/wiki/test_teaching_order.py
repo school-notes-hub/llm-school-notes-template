@@ -60,15 +60,16 @@ def titles(repo):
 
 
 def test_bounds_of_every_date_note_form():
-    assert teaching_order.bounds({"date": "2026-09-22"}) == ("2026-09-22", False, "2026-09-22", True)
+    assert teaching_order.bounds({"date": "2026-09-22"}) == ("2026-09-22", "2026-09-22", True)
+    # strictly after X: the earliest day is X+1 (0.3.7, Astra A1)
     assert teaching_order.bounds({"date_note": "2026-09-22 után, legkésőbb 2026-10-04"}) == \
-        ("2026-09-22", True, "2026-10-04", False)
+        ("2026-09-23", "2026-10-04", False)
     assert teaching_order.bounds({"date_note": "2026-09-14-től, legkésőbb 2026-10-03"}) == \
-        ("2026-09-14", False, "2026-10-03", False)
+        ("2026-09-14", "2026-10-03", False)
     assert teaching_order.bounds({"date_note": "2026-09-1? (levágva: 2026-09-10 és 2026-09-19 között)"}) == \
-        ("2026-09-10", False, "2026-09-19", False)
-    assert teaching_order.bounds({"date_note": "legkésőbb 2026-09-25"}) == ("", False, "2026-09-25", False)
-    assert teaching_order.bounds({"date_note": "2026-09-28 vagy 2026-09-29"})[::2] == ("2026-09-28", "2026-09-29")
+        ("2026-09-10", "2026-09-19", False)
+    assert teaching_order.bounds({"date_note": "legkésőbb 2026-09-25"}) == ("", "2026-09-25", False)
+    assert teaching_order.bounds({"date_note": "2026-09-28 vagy 2026-09-29"})[:2] == ("2026-09-28", "2026-09-29")
 
 
 def test_an_undated_lesson_sorts_by_its_lower_bound(tmp_path):
@@ -76,7 +77,7 @@ def test_an_undated_lesson_sorts_by_its_lower_bound(tmp_path):
     assert titles(repo) == ["Új fejezet", "Pótolt óra", "Folytatás", "Kezdés"]
     table = markers.read(generate.subject_index(repo, "proba"), "lessons")
     assert "| ? (2026-09-10 után, legkésőbb 2026-10-04) ↕ | Pótolt óra |" in table
-    assert "A ↕ jel: ennek a dátum nélküli órának a helye a sorban nem biztos" in table
+    assert "A ↕ jel: dátum nélküli óra, ezért a helye a sorban (vagy egy fejezet kezdete) nem biztos" in table
 
 
 def test_inside_one_lesson_log_the_notebook_order_tightens_the_range(tmp_path):
@@ -94,11 +95,14 @@ def test_one_folder_keeps_its_notebook_order_and_a_lesson_without_lower_bound_ma
                                             "lessons": [{"date_note": "2026-09-14 után, legkésőbb 2026-10-03",
                                                          "title": n}]})
              for i, n in ((5, "szechenyi"), (3, "rendi"), (7, "vita"))]
-    pages.append(("2026-10-03-forras-jegyzet.md", {"source_file": "t/2026-10-03/", "content_sha256": {"p0001.jpg": "x"},
+    pages.append(("2026-10-03-forras-jegyzet.md", {"source_file": "t/2026-10-02/", "content_sha256": {"p0001.jpg": "x"},
                                                    "lessons": [{"date_note": "legkésőbb 2026-10-03", "title": "forras"}]}))
     found = teaching_order.ordered(pages)
     assert [lesson.data["title"] for lesson in found] == ["forras", "rendi", "szechenyi", "vita"]
     assert [lesson.uncertain for lesson in found] == [True, False, False, False]
+    # the first page of the same folder is certainly the first lesson (0.3.7): no ↕ at all
+    pages[-1][1]["source_file"] = "t/2026-10-03/"
+    assert not any(lesson.uncertain for lesson in teaching_order.ordered(pages))
 
 
 def test_the_now_block_names_the_chapter_the_latest_lesson_and_the_ones_before(tmp_path):
@@ -108,12 +112,13 @@ def test_the_now_block_names_the_chapter_the_latest_lesson_and_the_ones_before(t
         "# 📍 Itt tartunk\n\n"
         "* **Most:** Második fejezet (szeptember 22. óta, még tart)\n"
         "* **Legutóbb:** [Új fejezet](2026-09-22-c-jegyzet.md) – 2026-09-22 · [Uj](uj.md)\n"
-        "* **Előtte:** Első fejezet (szeptember eleje – szeptember vége)\n\n"
+        "* **Előtte:** Első fejezet (szeptember eleje – október eleje ↕)\n\n"
         "Eddig ebben a sorrendben vettük, a legújabb elöl:\n\n"
-        "* ? (2026-09-10 után, legkésőbb 2026-10-04) ↕ – [Pótolt óra](2026-10-04-b-jegyzet.md)\n"
+        "* dátum nélkül, 2026-09-10 után, legkésőbb 2026-10-04 ↕ – [Pótolt óra](2026-10-04-b-jegyzet.md)\n"
         "* 2026-09-10 – [Folytatás](2026-09-10-a-jegyzet.md)\n"
         "* 2026-09-03 – [Kezdés](2026-09-10-a-jegyzet.md)\n\n"
-        "A ↕ jel: ennek a dátum nélküli órának a helye a sorban nem biztos, mert az időszaka átfed más órákéval.\n")
+        "A ↕ jel: dátum nélküli óra, ezért a helye a sorban (vagy egy fejezet kezdete) nem biztos, mert az "
+        "időszaka átfed más órákéval.\n")
     # its fixed place: after the back link, above the chapter lists; a refresh changes nothing
     assert text.index("../index.md)") < text.index("# 📍 Itt tartunk") < text.index("# 📘")
     write(repo, "wiki/proba/index.md", text)
@@ -123,12 +128,13 @@ def test_the_now_block_names_the_chapter_the_latest_lesson_and_the_ones_before(t
 def test_each_chapter_shows_when_it_was_taught(tmp_path):
     repo = subject_repo(tmp_path)
     chapters = markers.read(generate.subject_index(repo, "proba"), "chapters")
-    assert "# 📘 9. évfolyam: Első fejezet\n\n🗓️ szeptember eleje – szeptember vége\n\n" in chapters
+    # the undated catch-up lesson may come after the 09-22 start: the end is not cut as if certain
+    assert "# 📘 9. évfolyam: Első fejezet\n\n🗓️ szeptember eleje – október eleje ↕\n\n" in chapters
     assert "# 📘 9. évfolyam: Második fejezet\n\n🗓️ szeptember 22. óta, még tart\n\n" in chapters
     two = teaching_order.Chapter("x", "X", 0, [
-        teaching_order.Lesson("a.md", 0, {}, "2026-09-03", False, "2026-09-03", True, "f", ()),
-        teaching_order.Lesson("a.md", 1, {}, "2026-09-10", False, "2026-09-10", True, "f", ())])
-    later = teaching_order.Lesson("b.md", 0, {}, "2026-10-01", False, "2026-10-01", True, "f", ())
+        teaching_order.Lesson("a.md", 0, {}, "2026-09-03", "2026-09-03", True, "f", ()),
+        teaching_order.Lesson("a.md", 1, {}, "2026-09-10", "2026-09-10", True, "f", ())])
+    later = teaching_order.Lesson("b.md", 0, {}, "2026-10-01", "2026-10-01", True, "f", ())
     assert teaching_order.span(two, later) == "szeptember 3. – szeptember 10."
 
 

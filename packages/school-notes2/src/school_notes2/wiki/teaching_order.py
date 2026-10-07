@@ -1,27 +1,37 @@
-"""When the class taught what (shared rules 1.22.4: *Lesson-notes pages*, *Subject index*,
+"""When the class taught what (shared rules 1.22.5: *Lesson-notes pages*, *Subject index*,
 *Stable order*), computed from the lesson logs' `lessons` only.
 
-A lesson is placed by its notebook `date`; an undated one by the LOWER bound of its `date_note`
-range (`<X> után, legkésőbb <Y>`, `<X>-től`, `<X> és <Y> között`, `<X> vagy <Y>`), then by the
-upper bound, then by where its page starts in the notebook, the file name and its place in the
-page. Inside one lesson log the lessons stand in notebook order, so a later lesson's lower bound
-is never earlier than the one before it, and an earlier lesson's upper bound never later than
-the one after it. A lesson with no lower bound sorts first (oldest): its place is unknown.
+**Bounds.** A lesson's range is its notebook `date`, or the range of its `date_note`
+(`<X> után, legkésőbb <Y>` – strictly after X, so the earliest day is X+1 –, `<X>-től`,
+`<X> és <Y> között`, `<X> vagy <Y>`); no lower bound is "", no upper bound NEVER.
 
-Two lessons are in a *known* order when their ranges do not overlap, when they stand in one
-lesson log, or when they have the same range and come from the same source folder (the pages
-of one folder keep the notebook's order). An undated lesson that is in no known order with some
-other lesson is *uncertain*: the index marks it, so the learner does not read a false order (a
-lesson with no lower bound is uncertain itself but does not make the others uncertain).
+**Evidence of order.** A lesson certainly comes before another when they stand in one lesson
+log in that order (the notebook order), when their pages are successive pages of one source
+folder (the page positions of one notebook), or when its range ends before the other's begins.
+The ranges are narrowed along that evidence: an undated lesson is never earlier than a lesson
+that certainly comes before it, nor later than one that certainly comes after it. A file name,
+an alphabetical folder order or two pages at the same position are no evidence: they only keep
+the output deterministic.
 
-A chapter starts with the first lesson whose `topics` names one of its pages; chapters are
-ordered by that start, then by the average day of their lessons, then by the `chapters` list.
-Later lessons (a revisit) never move a chapter."""
+**Order.** Lessons sort by lower bound, upper bound, then the deterministic fallback (folder,
+page position, file, index); inside one lesson log only the index decides. An undated lesson
+that is in no certain order with some other lesson is *uncertain* (↕); a lesson with no lower
+bound is uncertain itself but does not make the others so.
 
+**Chapters.** A chapter starts with the first lesson whose `topics` names one of its pages: of
+its lessons, one that no other of them certainly precedes, preferring one with a known lower
+bound (a lesson with only an upper bound starts the chapter when the evidence puts it before the
+others); a later lesson (a revisit) therefore never becomes the start while an earlier one is
+evidenced. Chapters are ordered by their start lesson's chronology (its range; no file name);
+two chapters started in the same lesson by the order of their first topic in that lesson's
+`topics`, then by the `chapters` list. Nothing that comes later moves a chapter."""
+
+import functools
 import posixpath
 import re
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
+from pathlib import Path
 
 from ..sources.order import natural_key
 
@@ -31,6 +41,7 @@ GRADE = re.compile(r"^\d{1,2}\. évfolyam: ")
 NEVER = "9999-12-31"
 MONTHS = ("január", "február", "március", "április", "május", "június", "július", "augusztus",
           "szeptember", "október", "november", "december")
+UNCERTAIN = " ↕"
 
 
 @dataclass
@@ -38,18 +49,18 @@ class Lesson:
     file: str               # the lesson log's file name in the subject folder
     index: int              # its place in the page's `lessons`
     data: dict              # the `lessons` entry
-    lo: str                 # earliest possible day ("" unknown)
-    lo_open: bool           # strictly after `lo` (`<X> után`)
-    hi: str                 # latest possible day (NEVER unknown)
+    lo: str                 # earliest possible day, inclusive ("" unknown)
+    hi: str                 # latest possible day, inclusive (NEVER unknown)
     dated: bool
     folder: str             # the page's first source folder
-    position: tuple         # where the page starts in the notebook
+    position: tuple         # where the page starts in that folder
     uncertain: bool = False
     topics: list[str] = field(default_factory=list)
 
     @property
     def key(self) -> tuple:
-        return (self.lo, 0 if self.dated else 1, self.hi, self.position, self.file, self.index)
+        """Presentation order: chronology, then a deterministic fallback (no evidence)."""
+        return (self.lo, self.hi, self.folder, self.position, self.file, self.index)
 
     @property
     def day(self) -> str:
@@ -57,11 +68,15 @@ class Lesson:
         return self.lo or (self.hi if self.hi != NEVER else "")
 
 
-def bounds(lesson: dict) -> tuple[str, bool, str, bool]:
-    """(lo, lo_open, hi, dated) of one `lessons` entry."""
+def _next_day(day: str) -> str:
+    return (date.fromisoformat(day) + timedelta(days=1)).isoformat()
+
+
+def bounds(lesson: dict) -> tuple[str, str, bool]:
+    """(lo, hi, dated) of one `lessons` entry, both bounds inclusive."""
     day = str(lesson.get("date") or "")
     if ISO.fullmatch(day):
-        return day, False, day, True
+        return day, day, True
     note = str(lesson.get("date_note") or "")
     found = ISO.findall(note)
     latest = LATEST.search(note)
@@ -72,15 +87,23 @@ def bounds(lesson: dict) -> tuple[str, bool, str, bool]:
     else:
         lo = min(found) if found else ""
         hi = max(found) if len(found) > 1 else NEVER
-    return lo, bool(lo and re.search(re.escape(lo) + r"\s+után", note)), hi, False
+    if lo and re.search(re.escape(lo) + r"\s+után", note):
+        lo = _next_day(lo)                       # strictly after X: X+1 at the earliest
+    return lo, hi, False
+
+
+def source_folders(meta: dict) -> list[str]:
+    value = meta.get("source_file")
+    values = value if isinstance(value, list) else [value] if value else []
+    out = []
+    for v in values:
+        v = str(v).removeprefix("sources/")
+        out.append(v.rstrip("/") if v.endswith("/") else posixpath.dirname(v))
+    return out
 
 
 def first_folder(meta: dict) -> str:
-    source = meta.get("source_file")
-    if isinstance(source, list):
-        source = source[0] if source else ""
-    source = str(source or "").removeprefix("sources/")
-    return source.rstrip("/") if source.endswith("/") else posixpath.dirname(source)
+    return (source_folders(meta) or [""])[0]
 
 
 def notebook_position(meta: dict) -> tuple:
@@ -107,37 +130,70 @@ def notebook_position(meta: dict) -> tuple:
 
 
 def page_lessons(file: str, meta: dict) -> list[Lesson]:
-    entries = [e for e in meta.get("lessons") or [] if isinstance(e, dict)]
-    raw = [list(bounds(e)) for e in entries]
-    floor = ""
-    for row in raw:                       # notebook order: never earlier than the one before
-        if not row[3] and floor > row[0]:
-            row[0], row[1] = floor, False
-        floor = max(floor, row[0])
-    ceiling = NEVER
-    for row in reversed(raw):             # … and never later than the one after
-        if not row[3] and ceiling < row[2]:
-            row[2] = ceiling
-        ceiling = min(ceiling, row[2])
+    entries = [e for e in meta.get("lessons") or [] if isinstance(e, dict)] \
+        if isinstance(meta.get("lessons"), list) else []
     folder, position = first_folder(meta), notebook_position(meta)
-    return [Lesson(file, i, e, lo, op, hi, dated, folder, position,
-                   topics=[str(t).split("#", 1)[0] for t in e.get("topics") or []])
-            for i, (e, (lo, op, hi, dated)) in enumerate(zip(entries, raw))]
+    out = []
+    for i, entry in enumerate(entries):
+        lo, hi, dated = bounds(entry)
+        topics = entry.get("topics") if isinstance(entry.get("topics"), list) else []
+        out.append(Lesson(file, i, entry, lo, hi, dated, folder, position,
+                          topics=[str(t).split("#", 1)[0] for t in topics]))
+    return out
+
+
+def _sequences(found: list[Lesson]) -> list[list[list[list[Lesson]]]]:
+    """The evidence chains: per source folder, its pages by position (pages at one position
+    side by side), each page's lessons in notebook order; a page without a folder alone."""
+    by_folder: dict[str, dict[tuple, dict[str, list[Lesson]]]] = {}
+    for lesson in found:
+        folder = lesson.folder or f"\0{lesson.file}"
+        by_folder.setdefault(folder, {}).setdefault(lesson.position, {}).setdefault(lesson.file, []).append(lesson)
+    return [[list(pages.values()) for _, pages in sorted(positions.items())]
+            for _, positions in sorted(by_folder.items())]
+
+
+def _narrow(found: list[Lesson]) -> None:
+    for chain in _sequences(found):
+        floor = ""
+        for group in chain:                     # forward: never earlier than what came before
+            reached = floor
+            for page in group:
+                running = floor
+                for lesson in sorted(page, key=lambda item: item.index):
+                    if not lesson.dated and running > lesson.lo:
+                        lesson.lo = running
+                    running = max(running, lesson.lo)
+                reached = max(reached, running)
+            floor = reached
+        ceiling = NEVER
+        for group in reversed(chain):           # backward: never later than what comes after
+            reached = ceiling
+            for page in group:
+                running = ceiling
+                for lesson in sorted(page, key=lambda item: -item.index):
+                    if not lesson.dated and running < lesson.hi:
+                        lesson.hi = running
+                    running = min(running, lesson.hi)
+                reached = min(reached, running)
+            ceiling = reached
 
 
 def known_before(a: Lesson, b: Lesson) -> bool:
+    """Evidence only: the notebook order of one lesson log, successive pages of one source
+    folder, or ranges that do not overlap."""
     if a.file == b.file:
         return a.index < b.index
-    if a.hi < b.lo or (a.hi == b.lo and b.lo_open):
-        return True
-    return (a.folder == b.folder and a.folder != "" and (a.lo, a.dated, a.hi) == (b.lo, b.dated, b.hi)
-            and (a.position, a.file) < (b.position, b.file))
+    if a.folder and a.folder == b.folder and a.position != b.position:
+        return a.position < b.position
+    return a.hi < b.lo
 
 
 def ordered(pages: list[tuple[str, dict]]) -> list[Lesson]:
     """Every lesson of a subject, oldest first, with its `uncertain` mark."""
-    found = sorted((lesson for file, meta in pages for lesson in page_lessons(file, meta)),
-                   key=lambda lesson: lesson.key)
+    found = [lesson for file, meta in pages for lesson in page_lessons(file, meta)]
+    _narrow(found)
+    found.sort(key=lambda lesson: lesson.key)
     for lesson in found:
         # A lesson with no lower bound is itself uncertain; it does not make the others so.
         lesson.uncertain = not lesson.dated and any(
@@ -153,46 +209,66 @@ class Chapter:
     title: str
     place: int                       # in the `chapters` list
     lessons: list[Lesson]            # the lessons whose `topics` name one of its pages, oldest first
+    pages: set[str] = field(default_factory=set)
 
     @property
     def start(self) -> Lesson | None:
-        """The first lesson with a known lower bound (one without could be any time)."""
-        known = [lesson for lesson in self.lessons if lesson.lo]
-        return (known or self.lessons or [None])[0]
+        if not self.lessons:
+            return None
+        first = [lesson for lesson in self.lessons
+                 if not any(known_before(other, lesson) for other in self.lessons if other is not lesson)]
+        known = [lesson for lesson in first if lesson.lo]
+        return min(known or first or self.lessons, key=lambda lesson: lesson.key)
 
-    @property
-    def average(self) -> float:
-        # lessons with a known lower bound only (one without could be any time)
-        days = [date.fromisoformat(lesson.lo).toordinal() for lesson in self.lessons if lesson.lo]
-        return sum(days) / len(days) if days else 0.0
-
-    @property
-    def key(self) -> tuple:
-        return (self.start.key if self.start else ("",), self.average, self.place)
+    def topic_place(self) -> int:
+        """Where the chapter's first topic stands in its start lesson's `topics`."""
+        return next((i for i, t in enumerate(self.start.topics) if t in self.pages), 10**6)
 
 
 def chapters(index_meta: dict, page_chapter: dict[str, str], lessons: list[Lesson]) -> list[Chapter]:
     """The `chapters` list with each chapter's lessons (`page_chapter`: topic file → chapter id)."""
     out = []
-    for place, entry in enumerate(index_meta.get("chapters") or []):
+    listed = index_meta.get("chapters") if isinstance(index_meta.get("chapters"), list) else []
+    for place, entry in enumerate(listed):
         if not isinstance(entry, dict):
             continue
-        cid = entry.get("id")
-        mine = [lesson for lesson in lessons if any(page_chapter.get(t) == cid for t in lesson.topics)]
-        out.append(Chapter(str(cid), str(entry.get("title", cid)), place, mine))
+        cid = str(entry.get("id"))
+        pages = {f for f, c in page_chapter.items() if c == cid}
+        mine = [lesson for lesson in lessons if any(t in pages for t in lesson.topics)]
+        out.append(Chapter(cid, str(entry.get("title", cid)), place, mine, pages))
     return out
+
+
+def _compare(a: Chapter, b: Chapter) -> int:
+    x, y = a.start, b.start
+    if (x.lo, x.hi) != (y.lo, y.hi):
+        return -1 if (x.lo, x.hi) < (y.lo, y.hi) else 1
+    if x is y and a.topic_place() != b.topic_place():
+        return -1 if a.topic_place() < b.topic_place() else 1
+    if x is not y and known_before(x, y):
+        return -1
+    if x is not y and known_before(y, x):
+        return 1
+    return -1 if a.place < b.place else (1 if a.place > b.place else 0)
 
 
 def by_start(found: list[Chapter]) -> list[Chapter]:
     """The chapters that have lessons, in the order the class started them."""
-    return sorted((c for c in found if c.lessons), key=lambda c: c.key)
+    return sorted((c for c in found if c.lessons), key=functools.cmp_to_key(_compare))
 
 
-def order_problems(found: list[Chapter]) -> list[tuple[str, str]]:
-    """(later, earlier): a chapter listed after another although the class started it first –
-    only when the two starts are in a known order."""
+def order_problems(found: list[Chapter]) -> list[tuple[str, list[str], str | None]]:
+    """(chapter, the chapters listed before it although it certainly started earlier, the
+    chapter it belongs right after – None: first) for every provable inversion of the list."""
     listed = [c for c in found if c.lessons]
-    return [(b.id, a.id) for a, b in zip(listed, listed[1:]) if known_before(b.start, a.start)]
+    out = []
+    for j, chapter in enumerate(listed):
+        later = [c.id for c in listed[:j] if known_before(chapter.start, c.start)]
+        if not later:
+            continue
+        after = next((c.id for c in reversed(listed[:j]) if not known_before(chapter.start, c.start)), None)
+        out.append((chapter.id, later, after))
+    return out
 
 
 def plain_title(title: str) -> str:
@@ -213,24 +289,30 @@ def exact(day: str) -> str:
 
 
 def span(chapter: Chapter, until: Lesson | None = None) -> str:
-    """When the chapter was taught, in learner words: from its start to its last lesson before
-    the current chapter started (`until`; a revisit after that does not stretch it); exact days for one
-    or two dated lessons, else parts of months. The current chapter (no `until`): `… óta, még tart`."""
+    """When the chapter was taught, in learner words: from its start to the latest possible day
+    of its lessons that do not certainly come after the current chapter's start (`until`); exact days for one or
+    two dated lessons, else parts of months; the current chapter (no `until`) `… óta, még
+    tart`. An undated start, or an undated last lesson of a finished chapter, makes the span
+    uncertain (↕): its edge is a range, never cut as if certain."""
     first = chapter.start
     taught = [lesson for lesson in chapter.lessons
-              if lesson.key >= first.key and (until is None or lesson.key < until.key)] or [first]
-    last = taught[-1]
+              if not known_before(lesson, first) and (until is None or not known_before(until, lesson))]
+    taught = taught or [first]
+
+    def latest(lesson: Lesson) -> str:
+        return lesson.lo if lesson.dated else (lesson.hi if lesson.hi != NEVER else lesson.lo)
+
+    last = max(taught, key=lambda lesson: (latest(lesson), lesson.dated))
+    mark = "" if first.dated and (until is None or last.dated) else UNCERTAIN
     if all(lesson.dated for lesson in taught) and len({lesson.lo for lesson in taught}) <= 2:
         start, end = exact(first.lo), exact(last.lo)
     else:
-        start = month_part(first.day) if first.day else "?"
-        end_day = last.lo if last.dated else (last.hi if last.hi != NEVER else last.lo)
-        if until is not None and until.hi != NEVER and end_day > until.hi:
-            end_day = until.hi       # it is placed before the current chapter's start
-        end = month_part(end_day) if end_day else "?"
+        start = month_part(first.lo) if first.lo else (
+            f"legkésőbb {month_part(first.hi)}" if first.hi != NEVER else "?")
+        end = month_part(latest(last)) if latest(last) else "?"
     if until is None:
-        return f"{start} óta, még tart"
-    return start if start == end else f"{start} – {end}"
+        return f"{start} óta, még tart{mark}"
+    return (start if start == end else f"{start} – {end}") + mark
 
 
 def spans(found: list[Chapter]) -> dict[str, str]:
@@ -240,3 +322,63 @@ def spans(found: list[Chapter]) -> dict[str, str]:
         return {}
     current = started[-1]
     return {c.id: span(c, None if c is current else current.start) for c in started}
+
+
+def order_warnings(repo: Path, paths: list[str]) -> list[dict]:
+    """Teaching-order warnings for the pages in `paths` (`sn check`, `sn done`): on the subject
+    index every chapter the `chapters` list puts after one it certainly started before (with the
+    place it belongs); on a topic page that no lesson's `topics` names; on a lesson log an
+    undated lesson without a lower bound, or with a `legkésőbb` bound earlier than a dated lesson
+    from the same source folder (a folder label is no upper bound)."""
+    import yaml
+    from . import generate
+    from ..state import safefs
+    out = []
+    wanted = set(paths)
+    for slug in sorted({p.split("/")[1] for p in paths if p.count("/") == 2 and p.startswith("wiki/")}):
+        if slug == "assets" or not safefs.is_file(repo, f"wiki/{slug}/index.md"):
+            continue
+        try:
+            subject = generate.load_subject(repo, slug)
+        except (ValueError, yaml.YAMLError):
+            continue                 # unreadable frontmatter: reported on its own
+        found = generate.ordered_lessons(subject)
+        listed = generate.subject_chapters(subject, found)
+        titles = {c.id: c.title for c in listed}
+        for cid, later, after in order_problems(listed):
+            start = next(c.start for c in listed if c.id == cid)
+            where = f"right after {after!r} ({titles[after]})" if after else "first in the list"
+            out.append(_warn(f"wiki/{slug}/index.md", (
+                f"`chapters`: {cid!r} ({titles[cid]}) is listed after "
+                f"{', '.join(repr(c) for c in later)}, but the class started it first "
+                f"({generate.lesson_date(start.data)}: {start.data.get('title', '')}); it belongs {where} "
+                "(the chapters stand in the order the class started them)")))
+        named = {t for lesson in found for t in lesson.topics}
+        for page in subject.by_type("topic"):
+            if page.file not in named:
+                out.append(_warn(f"wiki/{slug}/{page.file}", (
+                    "no lesson's `topics` names this topic page, so it has no place in the teaching "
+                    "order: list it in `topics` of the lesson that taught it")))
+        for lesson in found:
+            if lesson.dated:
+                continue
+            rel, raw = f"wiki/{slug}/{lesson.file}", bounds(lesson.data)
+            what = f"lessons[{lesson.index}] ({lesson.data.get('title', '')})"
+            if not raw[0]:
+                out.append(_warn(rel, f"{what}: `date_note` has no lower bound; write `<X> után, legkésőbb "
+                                      "<Y>` with X the date of the last lesson before it"))
+            if not LATEST.search(str(lesson.data.get("date_note") or "")) or not lesson.folder:
+                continue             # no `legkésőbb` bound (e.g. a partly legible date)
+            later = sorted(other.lo for other in found
+                           if other.dated and other.folder == lesson.folder and other.lo > raw[1])
+            if later:
+                out.append(_warn(rel, (
+                    f"{what}: the `date_note` upper bound {raw[1]} is earlier than the dated lesson of "
+                    f"{later[-1]} from the same source folder {lesson.folder}; the upper bound of a "
+                    "catch-up lesson is the day the material was fetched (`placed` in its sn-fetch.json), "
+                    "never a folder label")))
+    return [w for w in out if w["file"] in wanted]
+
+
+def _warn(rel: str, message: str) -> dict:
+    return {"file": rel, "line": None, "message": message, "severity": "warning"}

@@ -415,66 +415,8 @@ def check_files(repo: Path, paths: list[str], *, today: date | None = None, fs=s
 
 
 def order_warnings(repo: Path, paths: list[str]) -> list[dict]:
-    """Teaching-order warnings (rules 1.22.4) for the subjects of `paths`: on the subject index a
-    `chapters` list that contradicts the order the class started the chapters (only when the two
-    starts are in a known order); on a topic page that no lesson's `topics` names; on a lesson
-    log an undated lesson without a lower bound, or with a `legkésőbb` bound earlier than a dated
-    lesson from the same source folder (a folder label is no upper bound)."""
-    from . import generate, teaching_order
-    out = []
-    for slug in sorted({p.split("/")[1] for p in paths if p.count("/") == 2 and p.startswith("wiki/")}):
-        if not safefs.is_file(repo, f"wiki/{slug}/index.md") or slug == "assets":
-            continue
-        try:
-            subject = generate.load_subject(repo, slug)
-            found = generate.ordered_lessons(subject)
-            chapters = generate.subject_chapters(subject, found)
-        except (ValueError, TypeError, AttributeError, yaml.YAMLError):
-            continue                 # unreadable frontmatter: reported on its own
-        named = {t for lesson in found for t in lesson.topics}
-        titles = {c.id: c.title for c in chapters}
-        for later, earlier in teaching_order.order_problems(chapters):
-            start = next(c.start for c in chapters if c.id == later)
-            out.append(item(f"wiki/{slug}/index.md", None, (
-                f"`chapters`: {later!r} ({titles[later]}) is listed after {earlier!r} ({titles[earlier]}), "
-                f"but the class started it first ({generate.lesson_date(start.data)}: "
-                f"{start.data.get('title', '')}); the chapters stand in the order the class started them"),
-                "warning"))
-        for page in subject.by_type("topic"):
-            if page.file not in named:
-                out.append(item(f"wiki/{slug}/{page.file}", None, (
-                    "no lesson's `topics` names this topic page, so it has no place in the teaching "
-                    "order: list it in `topics` of the lesson that taught it"), "warning"))
-        folders = {p.file: set(_source_folders(p.meta)) for p in subject.by_type("lesson-notes")}
-        for lesson in found:
-            if lesson.dated:
-                continue
-            rel = f"wiki/{slug}/{lesson.file}"
-            low, _, high, _ = teaching_order.bounds(lesson.data)
-            if not low:
-                out.append(item(rel, None, (
-                    f"lessons[{lesson.index}] ({lesson.data.get('title', '')}): `date_note` has no lower "
-                    "bound; write `<X> után, legkésőbb <Y>` with X the date of the last lesson before it"),
-                    "warning"))
-            if not teaching_order.LATEST.search(str(lesson.data.get("date_note") or "")):
-                continue             # no `legkésőbb` bound (e.g. a partly legible date)
-            later = sorted((other.lo, folder) for other in found if other.dated and other.lo > high
-                           for folder in folders.get(other.file, set()) & folders.get(lesson.file, set()))
-            if later:
-                day, folder = later[-1]
-                out.append(item(rel, None, (
-                    f"lessons[{lesson.index}] ({lesson.data.get('title', '')}): the `date_note` upper bound "
-                    f"{high} is earlier than the dated lesson of {day} from the same source folder {folder}; "
-                    "the upper bound of a catch-up lesson is the day the material was fetched "
-                    "(`placed` in its sn-fetch.json), never a folder label"), "warning"))
-    return [i for i in out if i["file"] in set(paths)]
-
-
-def _source_folders(meta: dict) -> list[str]:
-    value = meta.get("source_file")
-    values = value if isinstance(value, list) else [value] if value else []
-    return [str(v).removeprefix("sources/").rstrip("/") if str(v).endswith("/") else
-            str(v).removeprefix("sources/").rsplit("/", 1)[0] for v in values]
+    from . import teaching_order
+    return teaching_order.order_warnings(repo, paths)
 
 
 def textbook_lines(rel: str, text: str) -> list[int]:
