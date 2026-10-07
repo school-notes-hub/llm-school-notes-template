@@ -27,6 +27,7 @@ def problems(repo: Path, git=None) -> list[tuple[str, list[str]]]:
         ("beillesztett ábra eltűnt a lapról", sorted(
             f"{r['file']}#{r['id']}" for r in safefs.read_json(repo, insert.VERDICTS, [])
             if r.get("role") == "figure-review" and not r.get("night_spec") and insert.removed(repo, r))),
+        ("képkérés rögzítés nélkül", facts.unrecorded_requests(repo)),
         ("árva ábrahely", sorted(f"{p['page']}:{p['line']} {p['id']}" for p in facts.orphan_places(repo))),
         ("tankönyvi helyőrző sor", sorted(f"{p['page']}:{p['line']}" for p in facts.textbook_lines(repo))),
         ("ábrahely elfogadott ábra nélkül", sorted(places)),

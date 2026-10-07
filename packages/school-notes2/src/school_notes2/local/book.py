@@ -58,11 +58,12 @@ def run(local, subject: str, code: str, source: Path | None, offset: int | None)
         print(f"elhelyezve: {rel} ({len(written)} fájl)")
     elif not safefs.is_file(repo, f"{rel}/README.md"):
         raise Refused(f"{rel}/README.md nincs meg")
+    else:
+        written = []
     argv = [sys.executable, "tools/book_index.py", rel] + (["--offset", str(offset)] if offset is not None and source is None else [])
     proc = subprocess.run(argv, cwd=repo, capture_output=True, text=True, timeout=300)
     print(proc.stdout.strip() or proc.stderr.strip())
-    # The writer guard accepts the book's files as they are now (a README checked by hand is
-    # taken over by this run; editing it again needs another `sn book`).
-    tool_writes.record(repo, files=safefs.walk_files(repo, rel))
+    if proc.returncode == 0:      # the writer guard accepts exactly what this run wrote
+        tool_writes.record(repo, files=written + [f"{rel}/index.md"])
     local.record("book", "ok" if proc.returncode == 0 else "error", target=rel)
     return proc.returncode

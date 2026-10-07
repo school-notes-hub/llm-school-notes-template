@@ -11,8 +11,8 @@ from ..figures import commissions, context as fctx, insert, preflight
 from ..figures.review import is_error
 from ..schemas import validate
 from ..state import safefs
-from ..wiki import markers, public
-from ..wiki.pages import relative, sha256
+from ..wiki import markers, public, rights
+from ..wiki.pages import links, relative, resolve, sha256
 from ..wiki.rights import SVG_RECEIPTS
 from .common import today
 from .handoff import Handoff, _json, accepted, in_scope
@@ -69,14 +69,61 @@ def preflight_problems(local, repo: Path, fids: list[str]) -> list[str]:
     return [f"{fid}: {problem}" for fid in fids for problem in preflight.problems(repo, fid, generated=generated)]
 
 
-def svg_receipts(repo: Path, items: list[tuple[str, dict]], changed: list[str]) -> None:
+def verdict_problems(found: list[Handoff]) -> list[str]:
+    """Every accept (figures and rechecks) in the figure-review schema, without a `hiba`:
+    checked before any write, so a bad later verdict never stops a close halfway."""
+    out = []
+    for h in found:
+        for kind, items, verdicts in (("verdicts", h.figures, h.verdicts), ("recheck", h.rechecks, h.recheck_verdicts)):
+            for item in items:
+                given = accepted(verdicts, item["id"])
+                if not given:
+                    continue
+                try:
+                    verdict = figure_verdict(item["id"], "0" * 64, given)
+                    validate("figure-review", {"figures": [verdict], "owner_notes": []})
+                except (ValueError, KeyError, TypeError) as exc:
+                    out.append(f"{h.subject}/{item['id']}: {kind}.json: {exc}")
+                    continue
+                if any(is_error(d) for d in verdict["defects"] + verdict["text_mismatch"]):
+                    out.append(f"{h.subject}/{item['id']}: {kind}.json: an accept cannot contain a hiba")
+    return out
+
+
+def direct_svgs(repo: Path, pages: list[str], new_or_changed: set[str]) -> list[str]:
+    """Writer SVGs linked directly (outside a generated block) from the pages the pass changed,
+    whose bytes are new or changed since HEAD: they need a provenance receipt (D7)."""
+    out = set()
+    for page in pages:
+        if not safefs.is_file(repo, page):
+            continue
+        text = safefs.read_text(repo, page)
+        spans = [(text.count("\n", 0, s) + 1, text.count("\n", 0, e) + 1) for s, e, _ in markers.spans(text)]
+        for link in links(text):
+            target = resolve(page, link.target)
+            if (link.image and target and target.startswith("wiki/assets/") and target.endswith(".svg")
+                    and target in new_or_changed and not any(a < link.line < b for a, b in spans)):
+                out.add(target)
+    return sorted(out)
+
+
+def direct_svg_problems(repo: Path, svgs: list[str]) -> list[str]:
+    return [f"{rel}: a directly linked SVG may not embed another image or data (it needs a commission)"
+            for rel in svgs if not rights.writer_svg(repo, rel)]
+
+
+def svg_receipts(repo: Path, items: list[tuple[str, dict]], changed: list[str], direct=(), pass_ids=None) -> None:
+    """Authorship receipts: the accepted SVGs of the drawn route and the directly linked writer
+    SVGs (`direct`: (subject, path)); run id the pass id of the subject's hand-over."""
     data = _json(repo, SVG_RECEIPTS, {"rights": "authored", "svgs": []})
     entries = {(e["path"], e["sha256"]): e for e in data.get("svgs", [])}
-    for subject, fig in items:
-        asset = commissions.candidate(repo, commissions.read(repo, fig["id"])).get("asset", "")
+    pass_ids = pass_ids or {}
+    assets = [(s, commissions.candidate(repo, commissions.read(repo, f["id"])).get("asset", "")) for s, f in items]
+    for subject, asset in assets + list(direct):
         if asset.endswith(".svg"):
             sha = hashlib.sha256(safefs.read_bytes(repo, asset)).hexdigest()
-            entries.setdefault((asset, sha), {"path": asset, "sha256": sha, "run_id": f"helyi-{today()}-{subject}"})
+            entries.setdefault((asset, sha), {"path": asset, "sha256": sha,
+                                              "run_id": pass_ids.get(subject, f"helyi-{today()}-{subject}")})
     if entries:
         _write_if_changed(repo, SVG_RECEIPTS,
                           public.dumps({"rights": "authored", "svgs": [entries[k] for k in sorted(entries)]}), changed)
@@ -85,6 +132,14 @@ def new_key(repo: Path, fid: str) -> str:
     """The current key of a figure not inserted yet (commission, candidate, marker)."""
     brief = commissions.read(repo, fid)
     return fctx.verdict_key(repo, brief, commissions.candidate(repo, brief))
+
+def candidate_state(repo: Path, fid: str) -> str | None:
+    """The candidate's `state` (candidate / failed / no-figure), None when unreadable."""
+    try:
+        return commissions.candidate(repo, commissions.read(repo, fid))["state"]
+    except (ValueError, OSError, KeyError):
+        return None
+
 
 def inserted_key(repo: Path, fid: str) -> tuple[dict, str]:
     """(evidence, current key) of an inserted figure, from its evidence record."""

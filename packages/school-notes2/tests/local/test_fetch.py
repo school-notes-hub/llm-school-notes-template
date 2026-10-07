@@ -292,3 +292,24 @@ def test_a_reuploaded_page_is_reported_and_not_placed_twice(world):
     assert fetch.run(world["local"], apply=True, out=lines.append) == 0
     assert names(world["repo"], "2026-10-08") == ["uj.jpg"]
     assert any(line.startswith("  már ismert, nem tároltam újra: ujra.jpg = sources/matek/2026-10-07/") for line in lines)
+
+
+def test_a_page_is_never_a_duplicate_of_a_placement_that_can_still_be_replaced(world, monkeypatch):
+    """A4: package A is placed but changes on Drive before its move; package B holds the same
+    photo. B must keep its own copy: A's retry may replace its placement without that photo."""
+    real = fetch.download_package
+
+    def download_then_change(drive, pkg, dest, timeout):
+        files = real(drive, pkg, dest, timeout)
+        world["drive"].file("c.jpg", world["pkg"], jpeg("green"))
+        return files
+    monkeypatch.setattr(fetch, "download_package", download_then_change)
+    assert fetch.run(world["local"], apply=True, out=quiet) == 1               # A placed, not moved
+    monkeypatch.undo()
+    red = next(fid for fid, m in world["drive"].items.items() if m["name"] == "b.jpg")
+    del world["drive"].items[red]                                             # A's retry drops the photo
+    b = world["drive"].folder("2026-10-06", world["ready"])                   # B is processed first
+    world["drive"].file("ugyanaz.jpg", b, jpeg("red"))
+    assert fetch.run(world["local"], apply=True, out=quiet) == 0
+    assert names(world["repo"], "2026-10-06") == ["ugyanaz.jpg"]
+    assert names(world["repo"], "2026-10-07") == ["a.jpg", "c.jpg"]

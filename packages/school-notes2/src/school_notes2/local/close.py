@@ -70,51 +70,61 @@ def close(local, repo: Path, subjects: list[str] | None, out=print) -> int:
     found = handoffs(repo, subjects)
     pages = manifest.pages(repo)
     tracked, untracked = guard.changes(git)
-    changed_pages = sorted(p for p in {*(r for r, s in tracked.items() if s != "D"), *untracked}
-                           if p.startswith("wiki/") and p.endswith(".md"))
-    stops = [f"író-őr: {v}" for v in guard.violations(repo, git)]
+    current = {*(r for r, s in tracked.items() if s != "D"), *untracked}
+    changed_pages = sorted(p for p in current if p.startswith("wiki/") and p.endswith(".md"))
+    new_pages = [p for p in changed_pages if p in untracked or tracked.get(p) == "A"]
+    stops = [f"író-őr: {v}" for v in guard.violations(repo, git, subjects)]
     inserting = [(h, f) for h in found for f in h.figures if accepted(h.verdicts, f["id"])]
+    stops += figs.verdict_problems(found)
     stops += [f"előellenőrzés: {p}" for p in figs.preflight_problems(
         local, repo, [f["id"] for _, f in inserting if not figs.is_inserted(repo, f["page"], f["id"])])]
+    by_subject = {h.subject: h for h in found}
+    direct = [(rel.split("/")[1], svg) for rel in changed_pages if in_scope(rel, subjects)
+              for svg in figs.direct_svgs(repo, [rel], {p for p in current if p.endswith(".svg")})]
+    stops += [f"előellenőrzés: {p}" for p in figs.direct_svg_problems(repo, sorted({svg for _, svg in direct}))]
     stops += figs.figure_blockers(repo, found, subjects)
-    data_problems, new_requests = machine_data.check(repo, found, pages)
+    data_problems, new_requests = machine_data.check(repo, found, pages, new_pages, subjects)
     stops += data_problems
     if stops:
         return stop(out, "STOP (nem írtam semmit):", stops)
     head_generated = {p: _head_generated(git, p) for p in changed_pages}
     changed: list[str] = []
     warnings: list[str] = []
-    for h in found:
-        for f in h.figures:
-            if not accepted(h.verdicts, f["id"]):
-                out(f"nincs accept, nem illesztem be: {h.subject}/{f['id']}")
-    figs.generation_ledger(local, repo, changed)
-    figs.svg_receipts(repo, [(h.subject, f) for h, f in inserting], changed)
-    for h, fig in inserting:
-        if figs.insert_one(repo, fig, h.verdicts[fig["id"]], h.keys.get(fig["id"], ""), at):
-            changed.append(fig["page"])
-            out(f"beillesztve: {h.subject}/{fig['id']}")
-    for h in found:
-        for item in h.rechecks:
-            given = accepted(h.recheck_verdicts, item["id"])
-            if given and figs.renew_one(repo, item["id"], item["page"], given, h.keys.get(item["id"], ""), at):
-                out(f"ítélet megújítva (újranézés): {h.subject}/{item['id']}")
-    machine_data.write(local, repo, found, changed_pages, head_generated, new_requests, at, changed, out)
-    machine_data.draft_notices(repo, changed, warnings)
-    skipped = machine_data.machine_blocks(repo, changed, warnings)
-    tool_writes.record(repo, parts=sorted({p for p in changed if p.startswith("wiki/") and p.endswith(".md")}))
-    stale = [r for r in insert.invalidated(repo) if in_scope(r["file"], subjects)]
-    if stale:
-        return stop(out, "STOP: beillesztett ábra ítélete érvénytelenedett, és nincs rá érvényes újranézési "
-                         "accept (az ábrát az új szöveggel össze kell vetni; semmit nem töröltem):",
-                    [f"{r['file']}#{r['id']}" for r in stale])
-    machine_data.reader_bookkeeping(repo)
-    generate.write_indexes(repo)
-    figs._write_if_changed(repo, decisions.OVERVIEW, decisions.overview(repo, skip=skipped), changed)
-    public.write(repo, public.either(public.render_rights(repo), public.media_receipt_rights(repo),
-                                     public.writer_svg_rights(repo)))
-    tool_writes.record(repo, parts=[p for p in safefs.walk_files(repo, "wiki") if p.endswith("/index.md")
-                                    or p == "wiki/index.md"])
+    try:
+        for h in found:
+            for f in h.figures:
+                if not accepted(h.verdicts, f["id"]):
+                    out(f"nincs accept, nem illesztem be: {h.subject}/{f['id']}")
+        figs.generation_ledger(local, repo, changed)
+        figs.svg_receipts(repo, [(h.subject, f) for h, f in inserting], changed, direct=sorted(set(direct)),
+                          pass_ids={s: machine_data.pass_id(h) for s, h in by_subject.items()})
+        for h, fig in inserting:
+            if figs.insert_one(repo, fig, h.verdicts[fig["id"]], h.keys.get(fig["id"], ""), at):
+                changed.append(fig["page"])
+                out(f"beillesztve: {h.subject}/{fig['id']}")
+        for h in found:
+            for item in h.rechecks:
+                given = accepted(h.recheck_verdicts, item["id"])
+                if given and figs.renew_one(repo, item["id"], item["page"], given, h.keys.get(item["id"], ""), at):
+                    out(f"ítélet megújítva (újranézés): {h.subject}/{item['id']}")
+        machine_data.write(local, repo, found, changed_pages, head_generated, new_requests, at, changed, out)
+        machine_data.draft_notices(repo, changed, warnings, subjects)
+        skipped = machine_data.machine_blocks(repo, changed, warnings, subjects)
+        stale = [r for r in insert.invalidated(repo) if in_scope(r["file"], subjects)]
+        if stale:
+            return stop(out, "STOP: beillesztett ábra ítélete érvénytelenedett, és nincs rá érvényes újranézési "
+                             "accept (az ábrát az új szöveggel össze kell vetni; semmit nem töröltem):",
+                        [f"{r['file']}#{r['id']}" for r in stale])
+        machine_data.reader_bookkeeping(repo)
+        generate.write_indexes(repo)
+        figs._write_if_changed(repo, decisions.OVERVIEW, decisions.overview(repo, skip=skipped), changed)
+        public.write(repo, public.either(public.render_rights(repo), public.media_receipt_rights(repo),
+                                         public.writer_svg_rights(repo)))
+    finally:
+        # Every page as the tool left it, also after an interruption: the guard then knows the
+        # tool's own writes (step 0 has made sure no hand edit was among them).
+        tool_writes.record(repo, parts=[p for p in safefs.walk_files(repo, "wiki")
+                                        if p.endswith(".md") and (not subjects or guard.in_subjects(p, subjects))])
     for line in warnings:
         out(f"figyelmeztetés: {line}")
     return done.report(repo, out)
@@ -147,6 +157,10 @@ def snapshot(local, subjects: list[str] | None, only: list[str] | None, out=prin
         wanted = [(f["id"], False) for f in h.figures] + [(r["id"], True) for r in h.rechecks]
         for fid, inserted in wanted:
             if only and fid not in only:
+                continue
+            state = None if inserted else figs.candidate_state(repo, fid)
+            if state in ("failed", "no-figure"):
+                out(f"nem megy a lektorhoz ({state}): {h.subject}/{fid}")
                 continue
             try:
                 keys[fid] = figs.inserted_key(repo, fid)[1] if inserted else figs.new_key(repo, fid)

@@ -1,30 +1,43 @@
 """The writer guard: what changed in the working copy since HEAD that no writer may change.
 Read-only; run by `sn done` and by `sn close` before it writes (a finding there is a STOP).
 
-From `git diff HEAD` and the untracked files (ignored files are not looked at):
+From `git diff HEAD` (staged and unstaged) and the untracked files (ignored files are not
+looked at):
 
-* a tracked file under `sources/` or `references/` changed or deleted; a new file there that no
-  source manifest (`sn fetch`) and no tool record (`sn book`) names with its current bytes;
+* a committed file under `sources/` changed or deleted; a new file there (untracked or staged)
+  that no source manifest (`sn fetch`) names with its current bytes; a manifest's file missing
+  or changed; under `references/` a file `sn book` did not write (a book's `README.md` stays the
+  writer's in the *textbook table* scope);
 * a symlink, a non-regular file or a dotfile under `wiki/`;
-* an existing `decisions` entry of a wiki page removed or changed (compared byte for byte; a
-  new entry is the writer's, under the rules for answered questions);
+* an existing `decisions` entry removed or changed (compared as parsed YAML, flow style too; a
+  renamed page is compared with its old version, a deleted page's entries must stand on some
+  page; a new entry is the writer's, under the rules for answered questions);
 * a machine frontmatter key or a generated block that is neither the HEAD version nor the
-  tool's own last write (`tool_writes`); removing a whole generated block is the writer's choice;
+  tool's own last write (`tool_writes`); of `sources` only the tool's package entries (pointing
+  into `sources/`) count – a web or textbook entry is the writer's; removing a whole generated
+  block is the writer's choice;
 * a new raster image link outside a generated block, or changed bytes of a committed raster
   image: a raster image goes in only through a commission and the reviewer's accept.
 
+With `subjects` the `wiki/` part looks only at those subjects; the `sources/` part stays global.
 Each finding is one line: `<path>: <what>`, in path order."""
 
+import difflib
 import posixpath
 import stat
 from pathlib import Path
+
+import yaml
 
 from ..sources import manifest
 from ..state import safefs
 from ..wiki import frontmatter, markers
 from ..wiki.machine import machine_keys
-from ..wiki.pages import links, resolve
+from ..wiki.pages import links, resolve, wiki_pages
 from . import tool_writes
+
+RASTER = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".heic", ".heif", ".avif")
+INTERRUPTED = " (if an earlier `sn close` was interrupted, run it again: it records its own writes)"
 
 
 def changes(git) -> tuple[dict[str, str], list[str]]:
@@ -38,7 +51,15 @@ def changes(git) -> tuple[dict[str, str], list[str]]:
     return tracked, sorted(untracked)
 
 
-def violations(repo: Path, git) -> list[str]:
+def in_subjects(rel: str, subjects) -> bool:
+    if not subjects:
+        return True
+    parts = rel.split("/")
+    return len(parts) > 2 and parts[0] == "wiki" and (parts[1] in subjects or
+                                                     (parts[1] == "assets" and parts[2] in subjects))
+
+
+def violations(repo: Path, git, subjects=None) -> list[str]:
     tracked, untracked = changes(git)
 
     def base(rel: str) -> str | None:
@@ -48,19 +69,28 @@ def violations(repo: Path, git) -> list[str]:
     record = tool_writes.load(repo)
     known = manifest.written(repo)
     out = []
+    added = {r for r, s in tracked.items() if s == "A"} | set(untracked)
     for rel, status in sorted(tracked.items()):
-        if rel.startswith("sources/") or (rel.startswith("references/") and (
-                status == "D" or record["files"].get(rel) != _sha(repo, rel))):
+        if rel in added:
+            continue
+        if rel.startswith("sources/"):
             out.append(f"{rel}: a committed source changed or was deleted ({status})")
-    for rel in untracked:
+        elif rel.startswith("references/") and not _readme(rel) and (
+                status == "D" or record["files"].get(rel) != _sha(repo, rel)):
+            out.append(f"{rel}: a committed reference changed or was deleted ({status})")
+    for rel in sorted(added):
         if rel.startswith("sources/") and rel not in known:
             out.append(f"{rel}: new file under sources/ that no source manifest names")
-        elif rel.startswith("sources/") and known[rel] is not None and known[rel] != _sha(repo, rel):
-            out.append(f"{rel}: differs from its source manifest")
-        elif rel.startswith("references/") and record["files"].get(rel) != _sha(repo, rel):
+        elif rel.startswith("references/") and not _readme(rel) and record["files"].get(rel) != _sha(repo, rel):
             out.append(f"{rel}: new file under references/ that sn book did not write")
-    for rel in sorted({*(r for r, s in tracked.items() if s != "D"), *untracked}):
-        if not rel.startswith("wiki/"):
+    for rel, sha in sorted(known.items()):
+        if sha is not None and _sha(repo, rel) != sha:
+            out.append(f"{rel}: a file of its source manifest is missing or changed")
+    deleted = sorted(r for r, s in tracked.items() if s == "D" and r.startswith("wiki/") and r.endswith(".md"))
+    present = sorted(r for r in {*(r for r, s in tracked.items() if s != "D"), *untracked} if r.startswith("wiki/"))
+    renamed = _pairs(repo, deleted, [r for r in present if r in added and r.endswith(".md")], base)
+    for rel in present:
+        if not in_subjects(rel, subjects):
             continue
         if any(part.startswith(".") for part in rel.split("/")):
             out.append(f"{rel}: dotfile under wiki/")
@@ -74,11 +104,58 @@ def violations(repo: Path, git) -> list[str]:
             out.append(f"{rel}: not a regular file under wiki/")
             continue
         if rel.endswith(".md"):
-            out += _page(repo, rel, base(rel), record)
-        elif rel.startswith("wiki/assets/") and not rel.endswith(".svg") and tracked.get(rel) == "M":
+            out += _page(repo, rel, base(renamed.get(rel, rel)), record)
+        elif _raster(rel) and tracked.get(rel) == "M":
             out.append(f"{rel}: the bytes of a committed image changed (a replacement is a new file "
                        "with `replaces`)")
+    moved = set(renamed.values())
+    standing = None
+    for rel in deleted:
+        if rel in moved or not in_subjects(rel, subjects):
+            continue
+        lost = _decisions(base(rel))
+        if lost:
+            if standing is None:
+                standing = [e for page in wiki_pages(repo) for e in _decisions(safefs.read_text(repo, page))]
+            if any(e not in standing for e in lost):
+                out.append(f"{rel}: the page was deleted with `decisions` entries that stand on no other page")
     return out
+
+
+def _pairs(repo: Path, deleted: list[str], new: list[str], base) -> dict[str, str]:
+    """{new path: old path} for pages renamed in the working copy (content pairing: the most
+    similar deleted page, at least half the same), in path order."""
+    out, free = {}, list(deleted)
+    for rel in new:
+        try:
+            text = safefs.read_text(repo, rel)
+        except (safefs.UnsafePath, OSError):
+            continue                    # a link or a non-file: reported on its own
+        scored = sorted(((difflib.SequenceMatcher(None, base(old) or "", text).ratio(), old) for old in free),
+                        reverse=True)
+        if scored and scored[0][0] >= 0.5:
+            out[rel] = scored[0][1]
+            free.remove(scored[0][1])
+    return out
+
+
+def _decisions(text: str | None) -> list:
+    if text is None:
+        return []
+    try:
+        value = frontmatter.split(text).meta.get("decisions") or []
+    except (ValueError, yaml.YAMLError):
+        return []
+    return value if isinstance(value, list) else [value]
+
+
+def tool_part(key: str, value):
+    """The part of a machine key the tool owns: of `sources` the package entries only (their
+    `resource` points into `sources/`); web and textbook entries are the writer's."""
+    if key == "sources" and isinstance(value, list):
+        return [e for e in value if isinstance(e, dict)
+                and str(e.get("resource", "")).lstrip("./").startswith("sources/")]
+    return value
 
 
 def _page(repo: Path, rel: str, old: str | None, record: dict) -> list[str]:
@@ -89,39 +166,32 @@ def _page(repo: Path, rel: str, old: str | None, record: dict) -> list[str]:
     except Exception:               # noqa: BLE001 - unreadable frontmatter: the page check reports it
         return []
     if before is not None:
-        now_entries = _decision_entries(page)
-        for entry in _decision_entries(before):
-            if entry not in now_entries:
-                out.append(f"{rel}: an existing `decisions` entry was removed or changed")
-                break
+        now_entries = _decisions(text)
+        if any(entry not in now_entries for entry in _decisions(old)):
+            out.append(f"{rel}: an existing `decisions` entry was removed or changed")
     parts = tool_writes.machine_parts(text)
     if record["parts"].get(rel) != tool_writes.sha(parts):
         keys = sorted(set(machine_keys(page.meta) + (machine_keys(before.meta) if before else ())))
-        now = {k: page.meta.get(k) for k in keys}
-        was = {k: before.meta.get(k) for k in keys} if before else {k: None for k in keys}
+        now = {k: tool_part(k, page.meta.get(k)) for k in keys}
+        was = {k: tool_part(k, before.meta.get(k)) for k in keys} if before else {k: None for k in keys}
         if now != was:
             out.append(f"{rel}: a machine frontmatter key was written by hand "
-                       f"({', '.join(k for k in keys if now[k] != was[k])})")
+                       f"({', '.join(k for k in keys if now[k] != was[k])}){INTERRUPTED}")
         old_blocks = {n: markers.read(old, n) for n in markers.names(old)} if old is not None else {}
         for name in markers.names(text):
             if old_blocks.get(name, object()) != markers.read(text, name):
-                out.append(f"{rel}: the generated block `{name}` was written by hand")
+                out.append(f"{rel}: the generated block `{name}` was written by hand{INTERRUPTED}")
     out += _raster_links(rel, text, old)
     return out
 
 
-def _decision_entries(page) -> list[str]:
-    """The raw text of each `decisions` list item (byte comparison, no YAML round trip)."""
-    chunk = next((c for key, c in frontmatter.blocks(page.raw_meta) if key == "decisions"), "") \
-        if page.has_fm else ""
-    items, current = [], None
-    for line in chunk.splitlines()[1:]:
-        if line.lstrip().startswith("- ") and (current is None or len(line) - len(line.lstrip()) <= current[0]):
-            current = [len(line) - len(line.lstrip()), line]
-            items.append(current)
-        elif current is not None:
-            current[1] += "\n" + line
-    return [text.rstrip() for _, text in items]
+def _raster(rel: str) -> bool:
+    return posixpath.splitext(rel)[1].lower() in RASTER
+
+
+def _readme(rel: str) -> bool:
+    """`references/<subject>/<book>/README.md`: the writer checks its table by hand."""
+    return rel.count("/") == 3 and rel.endswith("/README.md")
 
 
 def _raster_links(rel: str, text: str, old: str | None) -> list[str]:
@@ -130,8 +200,7 @@ def _raster_links(rel: str, text: str, old: str | None) -> list[str]:
     out = []
     for link in links(text):
         target = resolve(rel, link.target)
-        if (not link.image or not target or not target.startswith("wiki/")
-                or posixpath.splitext(target)[1].lower() == ".svg" or target in before):
+        if not link.image or not target or not target.startswith("wiki/") or not _raster(target) or target in before:
             continue
         if any(start < link.line < end for start, end in spans):
             continue                    # inside a generated block: the tool's insertion

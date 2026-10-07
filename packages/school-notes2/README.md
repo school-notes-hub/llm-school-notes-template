@@ -14,7 +14,7 @@ is in git, tag `archiv/main-elotte` and the `archiv/<branch>` tags).
 
 | Command | What it does | Code |
 |---|---|---|
-| `sn fetch <t> [--apply]` | Drive inbox list; `--apply`: download → place in the working copy with its source manifest `sn-fetch.json` (a page known by its hash is listed, not stored again; a full-page PDF scan is taken out, any other PDF page rendered to 1.25 × the target size) → move on Drive → delete the download; resumable | `local/fetch.py` |
+| `sn fetch <t> [--apply]` | Drive inbox list; `--apply`: download → place in the working copy with its source manifest `sn-fetch.json` (a page known by its hash is listed, not stored again; a PDF page is rendered to 1.25 × the target size, no DPI) → move on Drive → delete the download; resumable | `local/fetch.py` |
 | `sn book <t> <subject> <code> [<source>] [--offset N]` | a converted textbook into `references/`, README table, map | `local/book.py` |
 | `sn check <t> <page…>` | page check, read-only (`check_files(fix=False)`) | `local/check.py` |
 | `sn gen <t> <id> [--note f]`, `--settle`, `--grant` | one paid image generation through the host ledger | `local/gen.py` |

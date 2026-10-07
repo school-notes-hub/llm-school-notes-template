@@ -189,6 +189,12 @@ def test_check_public_blocks_private_source_names_in_the_output(env, leak):
     assert caught.value.problems[0]["file"] == "wiki/gazd/tema.md"
 
 
+def test_a_web_address_with_a_sources_segment_is_not_a_private_name(env):
+    """Both sides leave web URLs out before the visible-text patterns (O11)."""
+    env.push({"wiki/gazd/tema.md": "# Téma\n\nLásd https://example.org/sources/p0001 oldalt.\n"})
+    env.build(env.main())
+
+
 def test_check_public_blocks_secrets_and_machine_paths(env):
     env.push({"wiki/gazd/tema.md": "# Téma\n\nForrás: a füzet 2026-09-25-i oldala.\n"})
     env.build(env.main())

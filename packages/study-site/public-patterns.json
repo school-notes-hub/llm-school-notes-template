@@ -1,5 +1,5 @@
 {
-  "comment": "Patterns that must never appear in the public site (plan 4.10, 5.4/5). Python `re` syntax, matched case-insensitively. `secrets` also apply to every wiki Markdown file (the tool's check reads this file); `machine_paths` and `output_only` apply only to rendered output, because the Markdown legitimately holds these in HTML comments that the renderer drops (and a URL may contain such a path segment). No link or image may point into sources/ or references/ (those files are strictly private); and no rendered text may name sources/ or references/, a page or photo id (p0001) or a private-link marker (local pipeline plan 5).",
+  "comment": "Patterns that must never appear in the public site (plan 4.10, 5.4/5). Python `re` syntax, matched case-insensitively. `secrets` also apply to every wiki Markdown file (the tool's check reads this file); `machine_paths` and `output_only` apply only to rendered output, because the Markdown legitimately holds these in HTML comments that the renderer drops (and a URL may contain such a path segment). No link or image may point into sources/ or references/ (those files are strictly private); no private-link marker may remain. `visible_text` (local pipeline plan 5): no sources/ or references/ path and no page or photo id (p0001) in what the site shows; web URLs (also href/src values) are left out first, on both sides, because a public address may contain any path. The tool's page check applies the same patterns to the page's public view, so a page that passes `sn done` does not fail only here.",
   "secrets": [
     "OPENROUTER_API_KEY",
     "\\bsk-or-v1-[0-9a-f]{20,}",
@@ -28,9 +28,11 @@
     "<!--\\s*(?:q|figure|figure-request|image):",
     "\"decisions\"\\s*:",
     "(?:href|src|srcset)\\s*=\\s*[\\\"\\x27]?[^\\\"\\x27>\\s]*(?:^|/)docs/review/",
+    "data-private-link"
+  ],
+  "visible_text": [
     "\\bsources/",
     "\\breferences/",
-    "\\bp\\d{4}\\b",
-    "data-private-link"
+    "\\bp\\d{4}\\b"
   ]
 }

@@ -73,19 +73,42 @@ def _one_or_list(values: list):
     return values[0] if len(values) == 1 else values
 
 
+def _source_path(value: str) -> str:
+    """A `source_file` value as a repo path: v2 `<subject>/<folder>/`, v1 `sources/<folder>/<file>`."""
+    value = value.strip()
+    return value if value.startswith("sources/") else "sources/" + value
+
+
+def _is_file(path: str) -> bool:
+    return bool(posixpath.splitext(path.rstrip("/"))[1]) and not path.endswith("/")
+
+
 def _old_folders(old: dict) -> list[str]:
-    """The earlier source folders, repo-relative (`sources/...`), from `source_file`."""
-    return [("sources/" + f).rstrip("/") for f in _as_list(old.get("source_file"))]
+    """The earlier source folders, repo-relative (`sources/...`): from `source_file` (a v2
+    folder, or a v1 file path whose folder counts) and from v1 `source_files[].file`."""
+    paths = [_source_path(f) for f in _as_list(old.get("source_file"))]
+    paths += [_source_path(str(e["file"])) for e in old.get("source_files") or [] if isinstance(e, dict) and e.get("file")]
+    return list(dict.fromkeys((posixpath.dirname(p) if _is_file(p) else p.rstrip("/")) for p in paths))
 
 
 def _full_paths(old: dict, key: str) -> dict[str, str]:
-    """An earlier hash map with repo-relative keys (its keys are relative to source_file)."""
+    """An earlier hash map with repo-relative keys. v2: a map relative to `source_file`. v1: a
+    single hash string (the first source file's) and `source_files: [{file, sha256}]` (content)."""
     value = old.get(key)
     folders = _old_folders(old)
-    if not isinstance(value, dict) or not folders:
-        return {}
-    base = folders[0] if len(folders) == 1 else posixpath.commonpath(folders)
-    return {posixpath.normpath(posixpath.join(base, str(k))): str(v) for k, v in value.items()}
+    out = {}
+    if isinstance(value, dict) and folders:
+        base = folders[0] if len(folders) == 1 else posixpath.commonpath(folders)
+        out = {posixpath.normpath(posixpath.join(base, str(k))): str(v) for k, v in value.items()}
+    elif isinstance(value, str) and value.strip():
+        files = [_source_path(f) for f in _as_list(old.get("source_file")) if _is_file(_source_path(f))]
+        if files:
+            out[files[0]] = value.strip()
+    if key == "content_sha256":
+        for entry in old.get("source_files") or []:
+            if isinstance(entry, dict) and entry.get("file") and entry.get("sha256"):
+                out.setdefault(_source_path(str(entry["file"])), str(entry["sha256"]))
+    return out
 
 
 def source_paths(meta: dict) -> list[str]:

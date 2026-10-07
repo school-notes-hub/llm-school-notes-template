@@ -102,8 +102,9 @@ def test_materials_schema_rejects_bad_values(repo, materials):
     write(repo, NOTE, frontmatter.set_keys(text, {"lessons": lessons}))
     found = check.check_files(repo, [NOTE])
     assert any("material" in i["message"] for i in found)
-    # #16: a badly formed material name is a warning; only a non-list breaks the source line.
-    assert bool(check.errors(found)) == (not isinstance(materials, list))
+    # #16: a badly formed material name is a warning; a non-list breaks the source line, and a
+    # file name with an extension would be published on the 📎 line (A2): both are errors.
+    assert bool(check.errors(found)) == (not isinstance(materials, list) or materials == ["a.pdf (lap)"])
 
 
 def test_source_block_position_and_idempotence():

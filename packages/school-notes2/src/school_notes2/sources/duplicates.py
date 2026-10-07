@@ -37,9 +37,10 @@ class Known:
         self.content.setdefault(content, where)
 
 
-def known_hashes(repo: Path) -> Known:
+def known_hashes(repo: Path, exclude=()) -> Known:
     """Hashes in the lesson-notes frontmatter, then in the source manifests (`sn fetch` records
-    a page there before any lesson page names it)."""
+    a page there before any lesson page names it). `exclude`: folders whose placement can still
+    be replaced (not committed, its package not yet moved on Drive) – never a duplicate target."""
     from . import manifest
     known = Known()
     for where in safefs.glob(repo, "wiki", "wiki/**/*.md"):
@@ -51,8 +52,10 @@ def known_hashes(repo: Path) -> Known:
             known.content.setdefault(value, where)
         for value in _hashes(meta.get("original_sha256")):
             known.original.setdefault(value, where)
+    skip = tuple(f.rstrip("/") + "/" for f in exclude)
     for path, page in manifest.pages(repo).items():
-        known.add(page["original_sha256"], page["sha256"], path)
+        if not (skip and path.startswith(skip)):
+            known.add(page["original_sha256"], page["sha256"], path)
     return known
 
 

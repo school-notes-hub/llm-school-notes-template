@@ -1,3 +1,4 @@
+import io
 import hashlib
 import shutil
 import subprocess
@@ -5,7 +6,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from school_notes2.sources.duplicates import Known, known_hashes, original_key
 from school_notes2.sources.naming import slug, subject_key, unique_dir
@@ -180,29 +181,57 @@ def test_prepare_photo_cli_keeps_working(tmp_path):
         assert im.size == (1000, 333)
 
 
-def test_a_full_page_scan_is_taken_out_not_rendered(tmp_path):
-    """Plan 3.3/2: a scanner PDF page (one full-page image) costs no rendering at all."""
+def raw_pdf(path: Path, cm: str, width: int, height: int, extra: str = "") -> Path:
+    """A one-page PDF drawing a 600×400 image (red block top left) with matrix `cm`, plus
+    optional content (text over the image)."""
+    img = Image.new("RGB", (600, 400), "white")
+    ImageDraw.Draw(img).rectangle([0, 0, 150, 100], fill="red")
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=90)
+    jpg = buf.getvalue()
+    content = f"q {cm} cm /Im0 Do Q {extra}".encode()
+    objs = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width} {height}] /Resources << /XObject << /Im0 4 0 R >> "
+            f"/Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> /Contents 5 0 R >>".encode(),
+            b"<< /Type /XObject /Subtype /Image /Width 600 /Height 400 /ColorSpace /DeviceRGB /BitsPerComponent 8 "
+            b"/Filter /DCTDecode /Length " + str(len(jpg)).encode() + b" >>\nstream\n" + jpg + b"\nendstream",
+            b"<< /Length " + str(len(content)).encode() + b" >>\nstream\n" + content + b"\nendstream"]
+    data, offsets = b"%PDF-1.4\n", []
+    for n, obj in enumerate(objs, 1):
+        offsets.append(len(data))
+        data += f"{n} 0 obj\n".encode() + obj + b"\nendobj\n"
+    xref = len(data)
+    data += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode() + b"".join(f"{o:010d} 00000 n \n".encode() for o in offsets)
+    data += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    path.write_bytes(data)
+    return path
+
+
+def red_corner(png: Path) -> str:
+    """Which corner of the rendered page holds the red block."""
+    with Image.open(png) as im:
+        im = im.convert("RGB")
+        w, h = im.size
+        corners = {"top-left": (w // 10, h // 10), "top-right": (w - w // 10, h // 10),
+                   "bottom-left": (w // 10, h - h // 10), "bottom-right": (w - w // 10, h - h // 10)}
+        return next(name for name, xy in corners.items() if im.getpixel(xy)[0] > 200 and im.getpixel(xy)[1] < 80)
+
+
+def test_text_over_a_full_page_image_is_kept(tmp_path):
+    """O1/A3: a page that is one full-page image plus text is rendered, the text included, and
+    two pages with the same image but different text stay different pages."""
     from school_notes2.sources.prepare import pdf_pages
-    pdf(tmp_path / "scan.pdf", 3)
-    images, stats = pdf_pages(tmp_path / "scan.pdf", tmp_path / "out", 2000)
-    assert stats["extracted"] == 3 and stats["rendered"] == 0 and stats["seconds"] >= 0
-    assert [Image.open(p).size for p in images] == [(595, 842)] * 3
+    plain = raw_pdf(tmp_path / "plain.pdf", "432 0 0 288 0 0", 432, 288)
+    text = raw_pdf(tmp_path / "text.pdf", "432 0 0 288 0 0", 432, 288, "BT /F1 36 Tf 20 200 Td (FOTOSZINTEZIS) Tj ET")
+    [a], stats = pdf_pages(plain, tmp_path / "a", 400)
+    [b], _ = pdf_pages(text, tmp_path / "b", 400)
+    assert stats["pages"] == 1 and stats["seconds"] >= 0
+    assert max(Image.open(a).size) == 500                       # 1.25 × max_side_px, no DPI
+    assert Image.open(a).tobytes() != Image.open(b).tobytes()   # the text is on the page
 
 
-def test_any_other_page_is_rendered_to_the_target_size(tmp_path, monkeypatch):
-    from school_notes2.sources import prepare
-    pdf(tmp_path / "doc.pdf", 2)
-    monkeypatch.setattr(prepare, "full_page_image", lambda page: False)
-    images, stats = prepare.pdf_pages(tmp_path / "doc.pdf", tmp_path / "out", 400)
-    assert stats["rendered"] == 2
-    assert [max(Image.open(p).size) for p in images] == [500, 500]          # 1.25 × max_side_px, no DPI
-
-
-def test_only_one_unrotated_image_covering_the_page_is_taken_out():
-    from school_notes2.sources.prepare import full_page_image
-    page = {"size": (1680.0, 2543.0), "rot": 0, "images": [(1680, 2543, 72.0, 72.0)]}
-    assert full_page_image(page)
-    assert not full_page_image({**page, "rot": 90})
-    assert not full_page_image({**page, "images": page["images"] * 2})
-    assert not full_page_image({**page, "images": [(1680, 2543, 144.0, 144.0)]})     # covers a quarter
-    assert full_page_image({**page, "images": [(3360, 5086, 144.0, 144.0)]})         # a finer scan
+def test_an_image_turned_by_its_matrix_is_rendered_turned(tmp_path):
+    from school_notes2.sources.prepare import pdf_pages
+    [upright], _ = pdf_pages(raw_pdf(tmp_path / "plain.pdf", "432 0 0 288 0 0", 432, 288), tmp_path / "u", 400)
+    [turned], _ = pdf_pages(raw_pdf(tmp_path / "r180.pdf", "-432 0 0 -288 432 288", 432, 288), tmp_path / "t", 400)
+    assert red_corner(upright) == "top-left" and red_corner(turned) == "bottom-right"

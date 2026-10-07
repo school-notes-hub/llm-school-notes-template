@@ -31,7 +31,7 @@ def problems(repo: Path, fid: str, *, generated=None) -> list[str]:
             crop_within(safefs.read_bytes(repo, source["path"]), source["crop"])
         if candidate["state"] != "candidate":
             context.embedding(repo, brief, {"alt": "", "caption": ""})
-            return [f"nincs jelölt: {candidate['state']} ({candidate.get('reason', '')})"]
+            return []               # failed / no-figure: not reviewed, never inserted
         errors = files_and_rights(repo, brief, candidate, generated=generated)
         errors += generation_errors(repo, brief, candidate, generated)
         context.embedding(repo, brief, candidate)

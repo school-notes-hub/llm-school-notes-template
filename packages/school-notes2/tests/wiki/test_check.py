@@ -105,3 +105,32 @@ def test_the_done_check_counts_a_bad_web_footnote(repo):
     (repo / "wiki/proba/elso.md").write_text((repo / "wiki/proba/elso.md").read_text()
                                              + "\nSzöveg.[^w]\n\n[^w]: Cikk. https://example.org/a\n")
     assert any("[^w]" in i["message"] for i in check.errors(check.check_files(repo, ["wiki/proba/elso.md"], fix=False)))
+
+
+def test_a_web_footnote_is_read_with_its_continuation_and_its_reference_links():
+    """A1: the renderer keeps a footnote's indented continuation paragraphs and resolves
+    reference-style links; the check reads the same structure."""
+    cont = ("# A\n\nSzöveg.[^w]\n\n[^w]: Cikk. https://example.org/a (ellenőrizve: 2026-09-30).\n\n"
+            "    A füzet scan-42.jpg képe.\n")
+    [found] = check.check_web_footnotes("wiki/x/a.md", cont)
+    assert "a file name" in found["message"] and found["line"] == 5
+    ref = ("# A\n\nSzöveg.[^w]\n\n[^w]: [Web][web] és scan-42.jpg (ellenőrizve: 2026-09-30).\n\n"
+           "[web]: https://example.org/a\n")
+    [found] = check.check_web_footnotes("wiki/x/a.md", ref)
+    assert "a file name" in found["message"]
+    two = "# A\n\n[^w]: [Web][web], [más](https://example.org/b) (2026-09-30).\n\n[web]: https://example.org/a\n"
+    assert "more than one link" in check.check_web_footnotes("wiki/x/a.md", two)[0]["message"]
+
+
+def test_private_names_in_the_public_view_are_errors_but_not_in_dropped_parts():
+    """A2/O11: the output gate's visible-text patterns on the page's public view; a private
+    footnote (no web link), an HTML comment, a link target and a web URL are not shown."""
+    page = ("---\ntitle: A\n---\n# A\n\nLásd sources/fizika/x.jpg.\n")
+    [found] = check.check_public_view("wiki/x/a.md", page)
+    assert found["severity"] == "error" and found["line"] == 6 and "sources/" in found["message"]
+    assert check.check_public_view("wiki/x/a.md", "# A\n\nA füzet p0002 oldala.\n")[0]["line"] == 3
+    hidden = ("---\ntitle: A\nsource_file: fizika/p0001.jpg\n---\n# A\n\nSzöveg.[^f] [kép](../../sources/x/p0001.jpg)\n\n"
+              "<!-- sources/x p0003 -->\n\n[^f]: Füzet, sources/x/p0001.jpg.\n\n"
+              "Lásd https://example.org/sources/p0001 is.\n")
+    assert check.check_public_view("wiki/x/a.md", hidden) == []
+    assert check.check_public_view("wiki/log.md", "Lásd sources/x.\n") == []          # not published

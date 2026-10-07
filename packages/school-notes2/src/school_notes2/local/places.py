@@ -11,6 +11,15 @@ from ..wiki.pages import links, resolve, wiki_pages
 REQUEST = "<!-- figure-request: "
 
 
+def unrecorded_requests(repo: Path) -> list[str]:
+    """`figure-request` markers without their record in `docs/figure-requests.json` (page and id
+    must agree): `sn close` records a request from the hand-over; until then it is open."""
+    from ..figures import requests
+    records = {(r["id"], r["page"]) for r in requests.load(repo)}
+    return sorted(f"{page} {fid}" for page in wiki_pages(repo)
+                  for fid in requests.marker_ids(safefs.read_text(repo, page)) if (fid, page) not in records)
+
+
 def requested(repo: Path) -> set[str]:
     """IDs whose every marker is a `figure-request`: the image waits for the owner's licence
     decision (`docs/figure-requests.json`); the text teaches without it."""

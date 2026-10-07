@@ -11,6 +11,8 @@ import re
 from datetime import date
 from pathlib import Path
 
+import yaml
+
 from ..state import safefs
 from . import decisions, drafts, frontmatter, lesson_log, markers
 from .pages import CODE_FENCE, COMMENT, INLINE_CODE, blank, links, resolve
@@ -84,16 +86,22 @@ def check_text(rel: str, text: str) -> list[dict]:
     out += check_formulas(rel, text)
     out += check_ids(rel, text)
     out += check_web_footnotes(rel, text)
+    out += check_public_view(rel, text)
     return out
 
 
 # A footnote that holds a web URL is kept whole on the public site (study-site
 # `publicMarkdown`), so its form is fixed: a title, exactly one web URL, a retrieval date.
 # Structure, not a word list ("óra", "dia" would be false alarms). A private source pointer
-# goes into a footnote of its own, which the public view drops.
-FOOTNOTE = re.compile(r"^\[\^([^\]]+)\]:[ \t]*(.*(?:\n(?:[ \t]{2,}|\t)\S.*)*)", re.M)
-WEB = re.compile(r"https?://[^\s)>\]]+", re.I)
-MD_LINK = re.compile(r"\[([^\]]*)\]\(\s*<?([^)\s>]+)>?[^)]*\)")
+# goes into a footnote of its own, which the public view drops. The footnote is read as the
+# renderer reads it: with its indented continuation paragraphs, and with reference-style links
+# resolved through the page's link definitions.
+FOOTNOTE_START = re.compile(r"^\[\^([^\]]+)\]:[ \t]?(.*)$")
+DEFINITION = re.compile(r"^ {0,3}\[(?!\^)([^\]]+)\]:[ \t]*<?([^\s>]+)>?.*$", re.M)
+WEB = re.compile(r"https?://[^\s)>\]\"']+", re.I)
+MD_LINK = re.compile(r"\[((?:[^\[\]]|\[[^\]]*\])*)\]\(\s*<?([^)\s>]+)>?[^)]*\)")
+REF_LINK = re.compile(r"\[((?:[^\[\]]|\[[^\]]*\])*)\]\[([^\]]*)\]|\[([^\[\]^]+)\](?![(\[:])")
+HTML_HREF = re.compile(r"(?:href|src)\s*=\s*[\"']?([^\"'\s>]+)", re.I)
 ISO_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 FILE_EXT = re.compile(r"\b[\w.-]+\.(?:jpe?g|png|webp|gif|heic|tiff?|pdf|pptx?|docx?|xlsx?|odp|ods|md|svg)\b", re.I)
 PAGE_ID = re.compile(r"\bp\d{4}\b", re.I)
@@ -104,17 +112,76 @@ WEB_FOOTNOTE_MESSAGE = ("a footnote with a web URL must be exactly: title, one w
                         "footnote of its own")
 
 
-def web_footnote_problems(body: str) -> list[str]:
-    """What is wrong with one footnote body that holds a web URL (empty: fine or no URL)."""
-    if not WEB.search(body):
+def _visible(text: str) -> str:
+    """The page without fenced code and HTML comments (same length: line numbers stay)."""
+    blank_out = lambda m: re.sub(r"[^\n]", " ", m[0])     # noqa: E731
+    return COMMENT.sub(blank_out, CODE_FENCE.sub(blank_out, text))
+
+
+def definitions(text: str) -> dict[str, str]:
+    """Reference link definitions `[id]: url` of a page, by lower-case id."""
+    return {m[1].strip().lower(): m[2] for m in DEFINITION.finditer(_visible(text))}
+
+
+def footnotes(text: str) -> list[tuple[str, int, str]]:
+    """(id, line, body) of every footnote definition: its first line and every following
+    indented line, blank lines between them included (a continuation paragraph)."""
+    lines = _visible(text).split("\n")
+    out, i = [], 0
+    while i < len(lines):
+        m = FOOTNOTE_START.match(lines[i])
+        if not m:
+            i += 1
+            continue
+        body, j = [m[2]], i + 1
+        while j < len(lines):
+            if lines[j].startswith(("  ", "\t")) and lines[j].strip():
+                body.append(lines[j])
+                j += 1
+            elif not lines[j].strip() and j + 1 < len(lines) and lines[j + 1].startswith(("  ", "\t")) \
+                    and lines[j + 1].strip():
+                body.append("")
+                j += 1
+            else:
+                break
+        out.append((m[1], i + 1, "\n".join(body)))
+        i = j
+    return out
+
+
+def link_targets(body: str, defs: dict[str, str]) -> tuple[list[str], str]:
+    """(every link target of a text – inline, reference-style, raw HTML, bare web URL – and the
+    text with link targets removed, link texts kept)."""
+    targets = []
+
+    def inline(m):
+        targets.append(m[2])
+        return " " + m[1] + " "
+
+    def reference(m):
+        # [text][label], [text][] (collapsed) or [label] (shortcut); unknown labels stay text
+        text = m[1] if m[1] is not None else m[3]
+        label = (m[2] if m[2] else text if m[1] is not None else m[3]).strip().lower()
+        if label in defs:
+            targets.append(defs[label])
+            return " " + text + " "
+        return m[0]
+    rest = MD_LINK.sub(inline, body)
+    rest = REF_LINK.sub(reference, rest)
+    targets += HTML_HREF.findall(rest)
+    rest = HTML_HREF.sub(" ", rest)
+    targets += WEB.findall(rest)
+    return targets, WEB.sub(" ", rest)
+
+
+def web_footnote_problems(body: str, defs: dict[str, str] | None = None) -> list[str]:
+    """What is wrong with one footnote body that holds a web link (empty: fine or no web link)."""
+    targets, rest = link_targets(body, defs or {})
+    if not any(WEB.match(t) for t in targets):
         return []
-    links = MD_LINK.findall(body)
-    targets = [t for _, t in links]
-    bare = WEB.findall(MD_LINK.sub(" ", body))
     out = []
-    if len(targets) + len(bare) != 1 or any(not WEB.match(t) for t in targets):
+    if len(targets) != 1:
         out.append("more than one link, or a link that is not a web URL")
-    rest = WEB.sub(" ", MD_LINK.sub(lambda m: " " + m[1] + " ", body))
     if PRIVATE.search(body):
         out.append("a sources/ or references/ path")
     if FILE_EXT.search(rest):
@@ -129,14 +196,54 @@ def web_footnote_problems(body: str) -> list[str]:
 
 
 def check_web_footnotes(rel: str, text: str) -> list[dict]:
-    body = CODE_FENCE.sub(lambda m: re.sub(r"[^\n]", " ", m[0]), text)
+    defs = definitions(text)
     out = []
-    for m in FOOTNOTE.finditer(body):
-        problems = web_footnote_problems(m.group(2))
+    for fid, line, body in footnotes(text):
+        problems = web_footnote_problems(body, defs)
         if problems:
-            out.append(item(rel, line_of(body, m.start()), f"[^{m.group(1)}]: {WEB_FOOTNOTE_MESSAGE} "
-                            f"({'; '.join(problems)})"))
+            out.append(item(rel, line, f"[^{fid}]: {'; '.join(problems)} – {WEB_FOOTNOTE_MESSAGE}"))
     return out
+
+
+VISIBLE_PATTERNS = tuple(re.compile(p, re.I) for p in
+                         json.loads(PATTERNS_FILE.read_text(encoding="utf-8")).get("visible_text", []))
+
+
+def public_text(text: str) -> str:
+    """What the public view shows of a page, as text (same line count): no frontmatter but its
+    `title` and `description`, no HTML comment or code, no footnote without a web link (the
+    renderer drops those), no link definition; links keep their words, never their targets;
+    web URLs left out (a public address may contain any path)."""
+    page = frontmatter.split(text) if text.startswith("---") else None
+    head_lines = (len(page.raw_meta.split("\n")) + 2) if page and page.has_fm else 0
+    lines = _visible(text).split("\n")
+    defs = definitions(text)
+    for fid, line, body in footnotes(text):
+        targets, _ = link_targets(body, defs)
+        if not any(WEB.match(t) for t in targets):
+            for n in range(line - 1, line - 1 + len(body.split("\n"))):
+                lines[n] = ""
+    for n in range(head_lines):
+        lines[n] = ""
+    if page and page.has_fm:
+        lines[0] = f"{page.meta.get('title', '')} {page.meta.get('description', '')}"
+    body = DEFINITION.sub("", "\n".join(lines))
+    return link_targets(body, defs)[1]
+
+
+def check_public_view(rel: str, text: str) -> list[dict]:
+    """The output gate's `visible_text` patterns on the public view of the page, so a page that
+    passes `sn done` never fails only at publish. Only published pages (not the log, not asset
+    READMEs: `pages.wiki_pages`)."""
+    if rel == "wiki/log.md" or rel.startswith("wiki/assets/") or not rel.startswith("wiki/"):
+        return []
+    try:
+        shown = public_text(text)
+    except (ValueError, yaml.YAMLError):
+        return []                   # unreadable frontmatter: reported on its own
+    return [item(rel, line_of(shown, m.start()), f"a private name would be published: {m[0]!r} "
+                 "(a sources/ or references/ path or a page or photo id in visible text)")
+            for p in VISIBLE_PATTERNS for m in [p.search(shown)] if m]
 
 
 def check_ids(rel: str, text: str) -> list[dict]:
@@ -293,7 +400,8 @@ def check_lessons(repo: Path, rel: str, meta: dict, *, fs=safefs) -> list[dict]:
             continue
         if lesson.get("date") is not None and not decisions.valid_date(lesson["date"]):
             out.append(item(rel, None, f"lesson {n}: `date` must be YYYY-MM-DD"))
-        out += [item(rel, None, f"lesson {n}: {message}", "warning")
+        out += [item(rel, None, f"lesson {n}: {message}",
+                     "error" if "technical file names" in message else "warning")
                 for message in lesson_log.material_problems(lesson)]
         if not isinstance(lesson.get("topics", []), list):
             out.append(item(rel, None, f"lesson {n}: `topics` must be a list"))

@@ -192,7 +192,7 @@ def _place(local, repo: Path, pkg: Package, folder: Path, out) -> None:
     placed = place_package(stage_root, Downloaded(
         drive_folder=pkg.name, subject=claim["subject"], role=pkg.role, description=pkg.description,
         new_subject=claim["new_subject"], preconverted=pkg.preconverted, files=files), 1,
-        known_hashes(repo), settings, folder=stage_root / rel)
+        known_hashes(repo, exclude=_replaceable(local, pkg.id)), settings, folder=stage_root / rel)
     staged = stage_root / rel
     if staged.is_dir() and any(staged.iterdir()):
         drive_ids = {f["rel"]: f.get("drive_id", "") for f in data["files"]}
@@ -216,9 +216,8 @@ def _place(local, repo: Path, pkg: Package, folder: Path, out) -> None:
     _write(folder / PLACED, record)
     out(f"elhelyezve: {rel} ({len(written)} fájl, {len(record['duplicates'])} már ismert oldal)")
     for pdf in placed.pdfs:
-        out(f"  PDF {pdf['file']}: {pdf['pages']} oldal ({pdf['extracted']} kivéve, {pdf['rendered']} renderelve), "
-            f"{pdf['seconds']} s")
-        local.record("fetch.pdf", target=f"{rel}/{pdf['file']}", **{k: pdf[k] for k in ("pages", "extracted", "rendered", "seconds")})
+        out(f"  PDF {pdf['file']}: {pdf['pages']} oldal, {pdf['seconds']} s")
+        local.record("fetch.pdf", target=f"{rel}/{pdf['file']}", pages=pdf["pages"], seconds=pdf["seconds"])
     for page in placed.pages:
         if page["duplicate_of"]:
             where = page["file"] + (f", {page['page']}. oldal" if page.get("page") else "")
@@ -246,6 +245,19 @@ def _ours(local, repo: Path, rel: str, folder: Path, version: str) -> bool:
         sub.rmdir()
     (folder / STAGED).unlink()
     return False
+
+
+def _replaceable(local, package_id: str) -> list[str]:
+    """Folders placed by other packages that are not moved on Drive yet and not committed: such
+    a placement may still be replaced (its package changed on Drive), so no page of another
+    package may count as its duplicate."""
+    root = local.downloads()
+    out = []
+    for other in sorted(root.glob(f"*/{PLACING}")) if root.is_dir() else []:
+        claim = _read(other)
+        if claim["package"] != package_id and not local.git().out("ls-files", "--", claim["folder"]).split():
+            out.append(claim["folder"])
+    return out
 
 
 def _unclaimed(local, rel: str, package_id: str) -> None:

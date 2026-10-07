@@ -11,9 +11,19 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 
 
+WEB_URL = re.compile(r"https?://[^\s\"'<>)]+", re.I)
+
+
 def patterns():
     spec = json.loads((HERE / 'public-patterns.json').read_text(encoding='utf-8'))
     return [re.compile(p, re.I) for key in ('secrets', 'machine_paths', 'output_only') for p in spec[key]]
+
+
+def visible_patterns():
+    """Matched after the web URLs (href/src values too) are left out: a public address may
+    contain any path. The tool's page check strips the same way."""
+    spec = json.loads((HERE / 'public-patterns.json').read_text(encoding='utf-8'))
+    return [re.compile(p, re.I) for p in spec.get('visible_text', [])]
 
 
 def text_of(path, counts):
@@ -37,7 +47,7 @@ def text_of(path, counts):
 def main(root):
     payload = json.loads((root / 'payload.json').read_text())
     assert payload['mode'] == 'public'
-    compiled, errors = patterns(), []
+    compiled, visible, errors = patterns(), visible_patterns(), []
     counts = {'files': 0, 'pdfs': 0, 'search_chunks': 0}
     site = root / 'site'
     for path in sorted(site.rglob('*')):
@@ -48,6 +58,8 @@ def main(root):
         text = text_of(path, counts)
         if text is not None:
             errors += [{'file': name, 'pattern': p.pattern} for p in compiled if p.search(text)]
+            shown = WEB_URL.sub(' ', text)
+            errors += [{'file': name, 'pattern': p.pattern} for p in visible if p.search(shown)]
         if (path.suffix in ('.md', '.pptx', '.docx') or 'receipt' in path.name
                 or name.startswith(('sources/', 'references/', 'docs/'))):
             errors.append({'file': name, 'pattern': 'private file type'})

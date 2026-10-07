@@ -6,6 +6,8 @@ every other content page the pass changed; the page evidence records
 `requests`; the draft tracking and the ⏳ notice; the banner and 📎 blocks; the reader-verdict
 bookkeeping. `check` finds everything that would stop these writes, before any write."""
 
+import hashlib
+import json
 from datetime import date
 from pathlib import Path
 
@@ -22,22 +24,40 @@ from .common import today
 from .handoff import Handoff, in_scope
 
 
-def check(repo: Path, found: list[Handoff], pages: dict[str, dict]) -> tuple[list[str], list | None]:
-    """(problems, the new figure-requests value or None when nothing changes)."""
+def pass_id(h: Handoff) -> str:
+    """The pass's identity: the hand-over's content and subject. Replaying the same hand-over is
+    the same pass (any day, byte-identical); another hand-over is another pass."""
+    digest = hashlib.sha256(json.dumps(h.data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:12]
+    return f"helyi-{digest}-{h.subject}"
+
+
+def check(repo: Path, found: list[Handoff], pages: dict[str, dict], new_pages=(), subjects=None
+          ) -> tuple[list[str], list | None]:
+    """(problems, the new figure-requests value or None when nothing changes). `new_pages`: the
+    wiki pages that are not in HEAD; a new lesson log must be in its subject's `notes`."""
     out = []
+    noted = {note["file"] for h in found for note in h.data.get("notes", [])}
+    for rel in sorted(new_pages):
+        if rel.endswith("-jegyzet.md") and in_scope(rel, subjects) and rel not in noted and safefs.is_file(repo, rel):
+            out.append(f"{rel}: a new lesson log that is in no adatok.json `notes` (its source pages are needed)")
     for h in found:
         for note in h.data.get("notes", []):
             if not in_scope(note["file"], [h.subject]) or not note["file"].endswith("-jegyzet.md"):
                 out.append(f"{h.subject}: notes: {note['file']} is not a lesson log of the subject")
             elif not safefs.is_file(repo, note["file"]):
                 out.append(f"{h.subject}: notes: {note['file']} does not exist")
+            else:
+                try:
+                    frontmatter.split(safefs.read_text(repo, note["file"]))
+                except (ValueError, yaml.YAMLError) as exc:
+                    out.append(f"{h.subject}: notes: {note['file']}: unreadable frontmatter: {str(exc)[:120]}")
             out += [f"{h.subject}: notes: {note['file']}: {p} is in no source manifest (sn fetch)"
                     for p in note["pages"] if p not in pages]
         out += [f"{h.subject}: checks: {problem}" for problem in
                 records.check_entries(repo, records.from_writer(h.data.get("checks", [])), pages)]
     incoming = [r for h in found for r in h.data.get("requests", [])]
     try:
-        value = requests.collect(repo, incoming, list(pages.values()))
+        value = requests.collect(repo, incoming, list(pages.values()), subjects=subjects)
     except (ValueError, OSError) as exc:
         return out + [f"requests: {exc}"], None
     current = safefs.read_json(repo, requests.PATH, None) if safefs.is_file(repo, requests.PATH) else None
@@ -56,7 +76,7 @@ def write(local, repo: Path, found: list[Handoff], changed_pages: list[str], hea
                 and (frontmatter_generated(repo, p) == head_generated.get(p))]
         changed += machine.stamp_generated(repo, mine, by, at)
         written = records.append(repo, records.from_writer(h.data.get("checks", [])),
-                                 run_id=f"helyi-{today()}-{h.subject}", checker=by, at=at, pages=pages)
+                                 run_id=pass_id(h), checker=by, at=at, pages=pages)
         changed += written
     if new_requests is not None:
         safefs.write_json(repo, requests.PATH, new_requests)
@@ -72,7 +92,7 @@ def frontmatter_generated(repo: Path, rel: str):
         return None
 
 
-def draft_notices(repo: Path, changed: list[str], warnings: list[str]) -> None:
+def draft_notices(repo: Path, changed: list[str], warnings: list[str], subjects=None) -> None:
     """The draft tracking and ⏳ notice of every page (`drafts.update`)."""
     try:
         linked = drafts.lesson_keys(repo)
@@ -81,6 +101,8 @@ def draft_notices(repo: Path, changed: list[str], warnings: list[str]) -> None:
         return
     day = date.fromisoformat(today())
     for rel in sorted(wiki_pages(repo)):
+        if not in_scope(rel, subjects):
+            continue
         old = safefs.read_text(repo, rel)
         try:
             new = drafts.update(old, linked.get(rel, []), day)
@@ -107,12 +129,14 @@ def reader_bookkeeping(repo: Path) -> None:
         safefs.write_json(repo, insert.VERDICTS, kept)
 
 
-def machine_blocks(repo: Path, changed: list[str], warnings: list[str]) -> set[str]:
+def machine_blocks(repo: Path, changed: list[str], warnings: list[str], subjects=None) -> set[str]:
     """Banner and lesson-log source blocks of every page; an unreadable page is skipped
     (its problem stays for the content check)."""
     skipped = set()
     pages = manifest.pages(repo)
     for rel in sorted(wiki_pages(repo)):
+        if not in_scope(rel, subjects):
+            continue
         old = safefs.read_text(repo, rel)
         try:
             meta = read_page(repo, rel).meta

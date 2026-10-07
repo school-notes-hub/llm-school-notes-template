@@ -50,20 +50,23 @@ def test_committed_sources_are_immutable_and_new_ones_need_a_manifest(repo, fake
     safefs.write_bytes(repo, f"{FOLDER}/p0001.jpg", b"edited")
     safefs.write_bytes(repo, "sources/physics/stray.jpg", b"x")
     assert found(repo, fake_local) == [f"{FOLDER}/p0001.jpg: a committed source changed or was deleted (M)",
-                                       "sources/physics/stray.jpg: new file under sources/ that no source manifest names"]
+                                       "sources/physics/stray.jpg: new file under sources/ that no source manifest names",
+                                       f"{FOLDER}/p0001.jpg: a file of its source manifest is missing or changed"]
 
 
 def test_a_new_source_file_must_match_its_manifest(repo, fake_local):
     place(repo)
     safefs.write_bytes(repo, f"{FOLDER}/p0002.jpg", b"swapped")
-    assert found(repo, fake_local) == [f"{FOLDER}/p0002.jpg: differs from its source manifest"]
+    assert found(repo, fake_local) == [f"{FOLDER}/p0002.jpg: a file of its source manifest is missing or changed"]
 
 
 def test_a_new_reference_file_must_come_from_sn_book(repo, fake_local):
-    safefs.write_text(repo, "references/physics/book/README.md", "# Könyv\n")
-    assert found(repo, fake_local) == ["references/physics/book/README.md: new file under references/ that sn book did not write"]
-    tool_writes.record(repo, files=["references/physics/book/README.md"])
+    safefs.write_text(repo, "references/physics/book/document.md", "# Könyv\n")
+    assert found(repo, fake_local) == ["references/physics/book/document.md: new file under references/ that sn book did not write"]
+    tool_writes.record(repo, files=["references/physics/book/document.md"])
     assert found(repo, fake_local) == []
+    safefs.write_text(repo, "references/physics/book/README.md", "# Könyv\n\n| Lecke | 3 |\n")
+    assert found(repo, fake_local) == []                       # the README table is the writer's (textbook table)
 
 
 def test_dotfiles_and_symlinks_under_wiki(repo, fake_local, tmp_path):
@@ -77,14 +80,14 @@ def test_dotfiles_and_symlinks_under_wiki(repo, fake_local, tmp_path):
 def test_machine_keys_and_generated_blocks_are_the_tools(repo, fake_local):
     text = safefs.read_text(repo, PAGE)
     safefs.write_text(repo, PAGE, frontmatter.set_keys(text, {"generated": {"by": "me", "at": "now"}}))
-    assert found(repo, fake_local) == [f"{PAGE}: a machine frontmatter key was written by hand (generated)"]
+    assert found(repo, fake_local) == [f"{PAGE}: a machine frontmatter key was written by hand (generated)" + guard.INTERRUPTED]
     tool_writes.record(repo, parts=[PAGE])
     assert found(repo, fake_local) == []                       # the tool's own write
     index = "wiki/physics/index.md"
     old = safefs.read_text(repo, index)
     start = old.index("<!-- school-notes:generated chapters -->")
     safefs.write_text(repo, index, old[:start] + old[start:].replace("\n", "\nKézi sor.\n", 1))
-    assert found(repo, fake_local) == [f"{index}: the generated block `chapters` was written by hand"]
+    assert found(repo, fake_local) == [f"{index}: the generated block `chapters` was written by hand" + guard.INTERRUPTED]
 
 
 def test_a_raster_image_goes_in_only_through_a_figure_block(repo, fake_local):

@@ -41,7 +41,7 @@ class Placed:
     package: dict                                       # fetch.json `packages[]` entry
     pages: list[dict] = field(default_factory=list)     # fetch.json `pages[]` entries
     written: list[str] = field(default_factory=list)    # repo-relative paths the tool wrote
-    pdfs: list[dict] = field(default_factory=list)       # per PDF: {file, pages, extracted, rendered, seconds}
+    pdfs: list[dict] = field(default_factory=list)       # per PDF: {file, pages, seconds}
 
 
 def place_package(repo: Path, pkg: Downloaded, start_seq: int, known: Known,

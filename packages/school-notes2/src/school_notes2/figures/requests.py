@@ -46,9 +46,10 @@ def original_hash(repo, source, pages=()):
     return found.pop()
 
 
-def collect(repo, incoming, pages=()):
+def collect(repo, incoming, pages=(), subjects=None):
     """The new `docs/figure-requests.json` value with `incoming` added (no write). Raises on a
-    reused id, a source outside `sources/`, or a marker without exactly one request and page."""
+    reused id, a source outside `sources/`, or a marker without exactly one request and page;
+    with `subjects` only those subjects' markers are looked at (other records stay as they are)."""
     existing = {r["id"]: r for r in load(repo)}
     seen = set()
     for request in sorted(incoming, key=lambda r: (r["page"], r["id"])):
@@ -66,6 +67,8 @@ def collect(repo, incoming, pages=()):
                                "original_sha256": original_hash(repo, request["source"], pages)}
     found = {}
     for page in sorted(wiki_pages(repo)):
+        if subjects and page.split("/")[1] not in subjects:
+            continue
         for fid in marker_ids(safefs.read_text(repo, page)):
             found.setdefault(fid, []).append(page)
     for fid, locations in sorted(found.items()):
