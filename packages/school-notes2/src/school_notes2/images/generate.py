@@ -142,7 +142,8 @@ def _attempts(settings, job, job_path, repair_note, log, sleep) -> dict:
         try:
             answer = call(settings, "generate", args, job["target"], with_key=True, files=files)
             result = _success(settings, job["id"], answer)
-            attempt_line(result["state"], started)
+            if result["state"] != "accepted":       # an accepted image answers without a paid call
+                attempt_line(result["state"], started)
             return result
         except ExecutorTimeout:
             attempt_line("unknown", started)

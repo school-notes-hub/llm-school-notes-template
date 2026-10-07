@@ -32,10 +32,16 @@ files; the reviewer has no shell). An `accept` is valid only for the content it 
 7. reader-verdict bookkeeping (figure verdicts untouched), indexes, decisions overview,
    `public.json`, the tool-writes record the writer guard reads;
 8. the content check of `sn done` for the whole learner (the worktree is naturally not clean);
-9. only after exit 0: each consumed hand-over folder `.school-notes/out/<subject>/` is moved
-   (never deleted) to `.school-notes/done/<pass id>/` – the pass id of the evidence records,
-   `helyi-<digest>-<subject>`; a replayed pass gets `-2`, `-3`, … A STOP, exit 1 or an error
-   leaves the hand-over where it is.
+9. retirement (`retire`): of the hand-overs read in step 0 – never a rescan – each subject
+   whose part succeeded is moved (never deleted) to `.school-notes/done/<pass id>/` (the
+   evidence records' pass id `helyi-<digest>-<subject>`; a replayed pass gets `-2`, `-3`, …):
+   no STOP, no `sn done` problem on that subject's pages (other subjects' open problems do
+   not matter; a problem that names no subject holds every hand-over), the hand-over unchanged
+   since step 0, and – in a close without `--subject` – a snapshot (`keys.json`): a subject
+   without one is an unfinished pass and stays, with a line. What moved is in the `sn.close`
+   log line, written also when a move fails or is interrupted (outcome `retire-failed`,
+   exit 1). A re-run names an already moved subject with a line and goes on; a new lesson log
+   noted by a finished hand-over is not missing.
 
 With `--subject` the STOP checks look only at the named subjects (a stalled subject does not
 block the others); `sn done` and `sn publish` stay strict for the whole learner. `--check`
@@ -45,6 +51,7 @@ neither `--check` nor `--snapshot` moves a hand-over."""
 import filecmp
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -56,9 +63,7 @@ from ..state import safefs
 from ..wiki import decisions, generate, public
 from . import done, figure_close as figs, guard, machine_data, tool_writes
 from .common import Refused, now_iso
-from .handoff import OUT, accepted, handoffs, in_scope
-
-DONE = ".school-notes/done"
+from .handoff import DONE, OUT, accepted, handoffs, in_scope, retired, retired_notes
 
 STOP = 2
 REVIEWER = figs.REVIEWER
@@ -71,10 +76,16 @@ def stop(out, title: str, lines: list[str]) -> int:
     return STOP
 
 
-def close(local, repo: Path, subjects: list[str] | None, out=print) -> int:
+def close(local, repo: Path, subjects: list[str] | None, out=print, state: dict | None = None) -> int:
+    """Steps 0-8; `state` receives `found` (the hand-overs read here, for step 9) and, when the
+    content check ran, `open` (the subjects with an `sn done` problem; None: not attributable)."""
+    state = {} if state is None else state
     at = now_iso()
     git = local.git()
-    found = handoffs(repo, subjects)
+    found = handoffs(repo, subjects, allow_retired=True)
+    state["found"] = found
+    for subject in sorted(set(subjects or ()) - {h.subject for h in found}):
+        out(f"már elrakva, kihagyom: {subject} ({', '.join(retired(repo, subject))})")
     pages = manifest.pages(repo)
     tracked, untracked = guard.changes(git)
     current = {*(r for r, s in tracked.items() if s != "D"), *untracked}
@@ -90,7 +101,8 @@ def close(local, repo: Path, subjects: list[str] | None, out=print) -> int:
               for svg in figs.direct_svgs(repo, [rel], {p for p in current if p.endswith(".svg")})]
     stops += [f"előellenőrzés: {p}" for p in figs.direct_svg_problems(repo, sorted({svg for _, svg in direct}))]
     stops += figs.figure_blockers(repo, found, subjects)
-    data_problems, new_requests = machine_data.check(repo, found, pages, new_pages, subjects)
+    data_problems, new_requests = machine_data.check(repo, found, pages, new_pages, subjects,
+                                                     noted_before=retired_notes(repo))
     stops += data_problems
     if stops:
         return stop(out, "STOP (nem írtam semmit):", stops)
@@ -134,27 +146,75 @@ def close(local, repo: Path, subjects: list[str] | None, out=print) -> int:
                                         if p.endswith(".md") and (not subjects or guard.in_subjects(p, subjects))])
     for line in warnings:
         out(f"figyelmeztetés: {line}")
-    return done.report(repo, out)
+    code = done.report(repo, out)
+    state["open"] = open_subjects(repo) if code else set()
+    return code
 
 
-def retire(repo: Path, subjects: list[str] | None, out=print) -> list[str]:
-    """Step 9: move each consumed hand-over to `.school-notes/done/<pass id>/` (the next
-    free `-2`, `-3`, … when that pass was closed before); nothing is deleted."""
-    moved = []
-    for h in handoffs(repo, subjects):
+SUBJECT_PATH = re.compile(r"wiki/(?:assets/)?([^/\s#:]+)/")
+
+
+def open_subjects(repo: Path) -> set[str] | None:
+    """The subjects that have an `sn done` problem: by the page an item names, a figure id by
+    its marker or commission page; None when an item names no subject (e.g. the home page)."""
+    from ..figures import commissions, pending
+    pages_of = {fid: [p for p, _ in places] for fid, places in commissions.markers(repo).items()}
+    for entry in pending.load(repo):
+        pages_of.setdefault(entry["commission"]["id"], []).append(entry["commission"]["page"])
+    out = set()
+    for _, items in done.problems(repo):
+        for text in items:
+            named = set(SUBJECT_PATH.findall(text)) or set(SUBJECT_PATH.findall(" ".join(pages_of.get(text, []))))
+            if not named:
+                return None
+            out |= named
+    return out
+
+
+def retire(repo: Path, state: dict, subjects: list[str] | None, out=print, moved: list | None = None) -> list[str]:
+    """Step 9 (module text): returns the subjects whose move failed; `moved` collects the
+    folders moved, as they move."""
+    moved = [] if moved is None else moved
+    failed = []
+    if "open" not in state:
+        return failed                               # a STOP or an error: nothing is retired
+    open_ = state["open"]
+    if open_ is None:
+        out("az átadások maradnak: van tantárgyhoz nem köthető tartalmi hiba")
+        return failed
+    for h in state["found"]:
+        base = f"{OUT}/{h.subject}"
+        if h.subject in open_:
+            out(f"az átadás marad (tartalmi hiba a tantárgyban): {base}")
+            continue
+        if not subjects and not safefs.is_file(repo, f"{base}/keys.json"):
+            out(f"az átadás marad (nincs pillanatkép, befejezetlen menet): {base}")
+            continue
+        try:
+            now = handoffs(repo, [h.subject])
+        except Refused:
+            now = []
+        if now != [h]:
+            out(f"az átadás marad (a lezárás közben változott vagy eltűnt): {base}")
+            continue
         name = machine_data.pass_id(h)
-        for n in range(1, 1000):
-            dest = f"{DONE}/{name}" + (f"-{n}" if n > 1 else "")
-            try:
-                safefs.move(repo, f"{OUT}/{h.subject}", dest)
-                break
-            except FileExistsError:
-                continue
-        else:
-            raise Refused(f"{DONE}/{name}: no free name for the hand-over")
-        out(f"átadás elrakva: {OUT}/{h.subject} → {dest}")
-        moved.append(dest)
-    return moved
+        try:
+            for n in range(1, 1000):
+                dest = f"{DONE}/{name}" + (f"-{n}" if n > 1 else "")
+                try:
+                    safefs.move(repo, base, dest)
+                    break
+                except FileExistsError:
+                    continue
+            else:
+                raise FileExistsError(f"{DONE}/{name}: no free name")
+        except OSError as exc:
+            out(f"Hiba: az átadást nem tudtam elrakni: {base}: {exc}")
+            failed.append(h.subject)
+            continue
+        out(f"átadás elrakva: {base} → {dest}")
+        moved.append(dest.rsplit("/", 1)[1])
+    return failed
 
 
 def _head_generated(git, rel: str):
@@ -250,11 +310,15 @@ def run(local, subjects: list[str] | None, check: bool = False, out=print, *,
     if take_snapshot:
         return snapshot(local, subjects, snapshot_only, out)
     if not check:
-        code = close(local, local.repo, subjects, out)
-        moved = retire(local.repo, subjects, out) if code == 0 else []
-        local.record("close", {0: "ok", 1: "open", STOP: "stop"}.get(code, "error"),
-                     subjects=subjects or "all", moved=len(moved))
-        return code
+        state, moved, failed, outcome = {}, [], [], "error"
+        try:
+            code = close(local, local.repo, subjects, out, state)
+            failed = retire(local.repo, state, subjects, out, moved)
+            outcome = "retire-failed" if failed else {0: "ok", 1: "open", STOP: "stop"}.get(code, "error")
+            return 1 if failed else code
+        finally:
+            # also after a failed or interrupted move: what is already under done/ is named here
+            local.record("close", outcome, subjects=subjects or "all", moved=moved, failed=failed)
     with tempfile.TemporaryDirectory(prefix=f"sn-close-{local.name}-") as tmp:
         copy = Path(tmp) / "repo"
         private_copy(local.repo, copy)

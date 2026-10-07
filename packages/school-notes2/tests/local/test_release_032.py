@@ -15,9 +15,14 @@ def files_under(repo, rel):
     return {p: safefs.read_bytes(repo, p) for p in safefs.walk_files(repo, rel)} if safefs.is_dir(repo, rel) else {}
 
 
+def snapshotted(repo, subject="physics"):
+    handoff(repo, subject=subject)
+    safefs.write_json(repo, f"{OUT}/{subject}/keys.json", {})
+
+
 def test_a_successful_close_moves_each_consumed_hand_over_to_done(repo, fake_local):
-    handoff(repo)
-    handoff(repo, subject="chemistry")
+    snapshotted(repo)
+    snapshotted(repo, "chemistry")
     safefs.write_text(repo, f"{OUT}/physics/iro-jelentes.md", "# Jelentés\n")
     before = {h.subject: (machine_data.pass_id(h), files_under(repo, f"{OUT}/{h.subject}")) for h in handoffs(repo, None)}
     local, lines = fake_local(repo), []
@@ -28,7 +33,8 @@ def test_a_successful_close_moves_each_consumed_hand_over_to_done(repo, fake_loc
         moved = files_under(repo, f".school-notes/done/{pass_id}")
         assert {p.replace(f".school-notes/done/{pass_id}/", f"{OUT}/{subject}/"): b for p, b in moved.items()} == old
         assert f"átadás elrakva: {OUT}/{subject} → .school-notes/done/{pass_id}" in lines
-    assert local.records[-1] == ("close", "ok", {"subjects": "all", "moved": 2})
+    assert local.records[-1] == ("close", "ok", {"subjects": "all", "failed": [],
+                                                 "moved": sorted(name for name, _ in before.values())})
 
 
 def test_a_subject_close_moves_only_the_named_subjects(repo, fake_local):
@@ -40,10 +46,10 @@ def test_a_subject_close_moves_only_the_named_subjects(repo, fake_local):
 
 
 def test_a_replayed_pass_gets_its_own_folder_and_nothing_is_overwritten(repo, fake_local):
-    handoff(repo)
+    snapshotted(repo)
     [h] = handoffs(repo, None)
     assert close.run(fake_local(repo), None, out=quiet) == 0
-    handoff(repo)                                       # the same hand-over again: the same pass id
+    snapshotted(repo)                                   # the same hand-over again: the same pass id
     assert close.run(fake_local(repo), None, out=quiet) == 0
     name = machine_data.pass_id(h)
     assert safefs.listdir(repo, ".school-notes/done") == [name, f"{name}-2"]
@@ -58,14 +64,10 @@ def test_a_stop_an_open_result_and_the_dry_runs_leave_the_hand_over(repo, fake_l
     assert close.run(local, None, snapshot_only=None, take_snapshot=True, out=quiet) == 0
     assert close.run(local, None, check=True, out=quiet) == 0
     assert safefs.listdir(repo, OUT) == ["physics"] and not safefs.exists(repo, ".school-notes/done")
-    acid = "wiki/chemistry/acid.md"
-    edit(repo, "Two forces act.", "Two forces act.\n\n[broken](nincs.md)", page=acid)   # a page-check error: exit 1
-    before = files_under(repo, OUT)
+    edit(repo, "Two forces act.", "Two forces act.\n\n[broken](nincs.md)")   # its own page-check error: exit 1
+    close.run(local, None, snapshot_only=None, take_snapshot=True, out=quiet)
     assert close.run(local, None, out=quiet) == 1
-    assert files_under(repo, OUT).keys() == before.keys() and not safefs.exists(repo, ".school-notes/done")
-    edit(repo, "\n\n[broken](nincs.md)", "", page=acid)
-    assert close.run(local, None, out=quiet) == 0                           # only now: moved
-    assert not safefs.listdir(repo, OUT) and len(safefs.listdir(repo, ".school-notes/done")) == 1
+    assert safefs.listdir(repo, OUT) == ["physics"] and not safefs.exists(repo, ".school-notes/done")
 
 
 def test_move_never_replaces_and_never_follows_a_link(tmp_path):

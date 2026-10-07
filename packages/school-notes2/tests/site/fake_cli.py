@@ -35,3 +35,6 @@ for entry in config["pages"]:
                                               "site": config["site"], "pages": pages}))
 if "PDF_STEP" in "".join((repo / e["path"]).read_text() for e in config["pages"]):
     print("PDFs: 1 generated, 2 reused\nPDF time: 3.5 s")   # lib/pdf.mjs and cli.mjs report the step
+if "PDF_FAIL" in "".join((repo / e["path"]).read_text() for e in config["pages"]):
+    print("PDF time: 1.5 s failed")                      # cli.mjs: the PDF step threw
+    sys.exit(1)

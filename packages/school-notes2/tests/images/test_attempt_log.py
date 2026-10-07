@@ -16,3 +16,12 @@ def test_each_generation_attempt_writes_one_timed_line(local_images, tmp_path): 
     found = [json.loads(line) for line in steps.main.read_text().splitlines()]
     assert [(x["action"], x["outcome"], x["target"]) for x in found] == [("image.attempt", "generated", "barna-termeles-banner")] * 2
     assert all(isinstance(x["seconds"], float) for x in found) and len(calls) == 2
+
+
+def test_an_already_accepted_answer_is_not_a_paid_attempt(local_images, tmp_path, monkeypatch):  # noqa: F811
+    """0.3.3 (m2): only a real paid call writes `image.attempt`."""
+    settings, _ = local_images("barna")
+    monkeypatch.setattr(generate, "call", lambda *a, **k: {"state": "accepted", "path": "x.webp"})
+    steps = Log(tmp_path / "logs" / "school-notes.log", student="barna", console=False, steps=STEPS)
+    assert generate.generate(settings, "termeles-banner", log=steps)["state"] == "accepted"
+    assert not steps.main.exists()

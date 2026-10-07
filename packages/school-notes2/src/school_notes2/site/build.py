@@ -101,8 +101,9 @@ def build(git: Git, commit: str, task_dir: Path, renderer: Renderer, *, changed:
                 if problems:
                     raise BuildContentError(problems) from None
             _check_public(renderer, out, payload)
-    except Exception:
-        log.event("site.build", "error", target=commit[:12], duration_s=t.s)
+    except Exception as exc:
+        log.event("site.build", "error", target=commit[:12], duration_s=t.s,
+                  error_class=getattr(exc, "kind", type(exc).__name__))
         raise
     shutil.rmtree(src, ignore_errors=True)
     record = {"commit": commit, "duration_s": round(t.s, 1), "pages": len(payload["pages"])}
@@ -192,7 +193,7 @@ def _env() -> dict:
 
 # The renderer's report of its PDF step (counts from `lib/pdf.mjs`, time from `cli.mjs`): one
 # timed line in the JSONL log.
-PDF_TIME = re.compile(r"^PDF time: ([\d.]+) s$", re.M)
+PDF_TIME = re.compile(r"^PDF time: ([\d.]+) s( failed)?$", re.M)
 PDF_COUNTS = re.compile(r"^PDFs: (\d+) generated, (\d+) reused$", re.M)
 
 
@@ -205,7 +206,9 @@ def _render(r: Renderer, src: Path, out: Path, dates: Path, log: Log | None = No
     timed, counts = PDF_TIME.search(proc.stdout or ""), PDF_COUNTS.search(proc.stdout or "")
     if timed and log is not None:
         made, reused = (int(counts[1]), int(counts[2])) if counts else (0, 0)
-        log.event("site.pdf", target=f"{made + reused} pdf", duration_s=float(timed[1]), generated=made, reused=reused)
+        failed = {"error_class": "bad_work" if proc.returncode == RENDER_EXIT_PAGE else "transient"} if timed[2] else {}
+        log.event("site.pdf", "error" if timed[2] else "ok", target=f"{made + reused} pdf", duration_s=float(timed[1]),
+                  generated=made, reused=reused, **failed)
     if proc.returncode == RENDER_EXIT_PAGE:
         problems = [_page_problem(line) for line in proc.stderr.splitlines()
                     if line.startswith(PAGE_ERROR)]

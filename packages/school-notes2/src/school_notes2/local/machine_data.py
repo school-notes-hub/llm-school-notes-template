@@ -31,12 +31,13 @@ def pass_id(h: Handoff) -> str:
     return f"helyi-{digest}-{h.subject}"
 
 
-def check(repo: Path, found: list[Handoff], pages: dict[str, dict], new_pages=(), subjects=None
+def check(repo: Path, found: list[Handoff], pages: dict[str, dict], new_pages=(), subjects=None, noted_before=()
           ) -> tuple[list[str], list | None]:
     """(problems, the new figure-requests value or None when nothing changes). `new_pages`: the
-    wiki pages that are not in HEAD; a new lesson log must be in its subject's `notes`."""
+    wiki pages that are not in HEAD; a new lesson log must be in its subject's `notes` – or in a
+    finished hand-over's (`noted_before`, a re-run before the commit)."""
     out = []
-    noted = {note["file"] for h in found for note in h.data.get("notes", [])}
+    noted = {note["file"] for h in found for note in h.data.get("notes", [])} | set(noted_before)
     for rel in sorted(new_pages):
         if rel.endswith("-jegyzet.md") and in_scope(rel, subjects) and rel not in noted and safefs.is_file(repo, rel):
             out.append(f"{rel}: a new lesson log that is in no adatok.json `notes` (its source pages are needed)")

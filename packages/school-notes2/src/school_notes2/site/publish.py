@@ -46,6 +46,18 @@ def publish(site: Git, build_site: Path, *, student: str, source_commit: str, ru
     A rejected push (someone else published) rebuilds the commit, up to three rounds.
     """
     start = time.monotonic()
+    try:
+        return _publish(site, build_site, student=student, source_commit=source_commit, run_id=run_id,
+                        tool_version=tool_version, log=log, fetch_s=fetch_s, push_s=push_s,
+                        ls_remote_s=ls_remote_s, rsync=rsync, start=start)
+    except Exception as exc:
+        log.event("site.publish", "error", target=source_commit[:12], duration_s=time.monotonic() - start,
+                  error_class=getattr(exc, "kind", type(exc).__name__))
+        raise
+
+
+def _publish(site, build_site, *, student, source_commit, run_id, tool_version, log, fetch_s, push_s,
+             ls_remote_s, rsync, start) -> Published:
     for round_no in range(1, MAX_ROUNDS + 1):
         parent = fetch_gh_pages(site, log, fetch_s=fetch_s, ls_remote_s=ls_remote_s)
         commit = _stage(site, build_site, parent, source_commit, tool_version, rsync)
@@ -64,7 +76,6 @@ def publish(site: Git, build_site: Path, *, student: str, source_commit: str, ru
         log.event("site.publish", "ok", target=commit[:12], duration_s=time.monotonic() - start,
                   source=source_commit[:12])
         return Published(commit, True)
-    log.event("site.publish", "error", target="push rejected", duration_s=time.monotonic() - start)
     raise Transient("gh-pages push kept being rejected (someone else keeps publishing)")
 
 

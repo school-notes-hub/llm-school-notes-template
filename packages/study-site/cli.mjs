@@ -68,8 +68,10 @@ if (command === 'build') {
   // The PDF step's time, one line the tool reads into its JSONL log (school_notes2 site/build.py).
   // Measured here, not in lib/pdf.mjs: that file is part of the PDF cache fingerprint.
   const pdfStarted = Date.now();
-  await generatePdfs({output,payload,browserPath,cacheDirectory:options['pdf-cache']});
-  if (wantsPdf) console.log(`PDF time: ${((Date.now()-pdfStarted)/1000).toFixed(1)} s`);
+  const pdfTime = failed => { if (wantsPdf) console.log(`PDF time: ${((Date.now()-pdfStarted)/1000).toFixed(1)} s${failed ? ' failed' : ''}`); };
+  try { await generatePdfs({output,payload,browserPath,cacheDirectory:options['pdf-cache']}); }
+  catch (error) { pdfTime(true); throw error; }
+  pdfTime(false);
   console.log(`Built ${payload.pages.length} pages: ${path.join(output, 'site')}`);
 } else if (command === 'serve') {
   const base = options.base || '/';
