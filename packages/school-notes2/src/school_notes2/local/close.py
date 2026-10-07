@@ -4,8 +4,9 @@ never decides in anyone's name, writes no `decisions` record (plan 3.3/16) and d
 figure verdict. The hand-over it reads is described in `handoff.py`.
 
 **`--snapshot`** (before the reviewer starts, and with `--only <ids>` before the confirmation
-pass, for the figures to confirm): the candidate preflight of every handed-over figure first (a
-problem is a STOP, exit 2, nothing written); then `keys.json` – for each figure of
+pass, for the figures to confirm): the candidate preflight of every handed-over figure first, and
+`ujranezes.json` naming inserted figures only (sn 0.3.11: a new figure listed there is a STOP line
+naming it, not a crash); a problem is a STOP, exit 2, nothing written; then `keys.json` – for each figure of
 `figures.json` and `ujranezes.json` the verdict key of the content as it is now (image, alt,
 caption, section text) – and `diff.patch` (the subject's `git diff` against HEAD with its new
 files; the reviewer has no shell). An `accept` is valid only for the content it was given:
@@ -24,7 +25,8 @@ of lesson lines and the lessons legends of the subject indexes as generated (`wi
    commission's; an inserted figure that disappeared from its page (its verdict stays; the
    controller brings it to the owner); an `adatok.json` entry that cannot be written (a lesson
    page that is not there, a source page in no manifest, a check image that does not exist, a
-   figure request without its marker or with a reused id);
+   figure request without its marker or with a reused id); an `ujranezes.json` entry for a
+   figure that is not inserted;
 1. generation receipts (this learner's outputs in the host image ledger);
 2. authorship receipts for the accepted SVGs of the drawn route (run id `helyi-<date>-<subject>`);
 3. each accepted figure inserted by `figures.insert.insert`; verifier: the owner's fixed reviewer;
@@ -36,7 +38,9 @@ of lesson lines and the lessons legends of the subject indexes as generated (`wi
 6. **STOP** (exit 2, nothing deleted) while an inserted figure's verdict is invalidated – the
    figure must be looked at against the new text;
 7. reader-verdict bookkeeping (figure verdicts untouched), indexes, decisions overview,
-   `public.json`, the tool-writes record the writer guard reads;
+   `public.json`, the tool-writes record the writer guard reads (with `--subject`: the named
+   subjects' pages and every other wiki page this close wrote – the root index, other subject
+   indexes – unless a hand-edited machine part it did not overwrite is on it; sn 0.3.11);
 8. the content check of `sn done` for the whole learner (the worktree is naturally not clean);
 9. retirement (`retire`): of the hand-overs read in step 0 – never a rescan – each subject
    whose part succeeded is moved (never deleted) to `.school-notes/done/<pass id>/` (the
@@ -114,7 +118,7 @@ def close(local, repo: Path, subjects: list[str] | None, out=print, state: dict 
     direct = [(rel.split("/")[1], svg) for rel in changed_pages if in_scope(rel, subjects)
               for svg in figs.direct_svgs(repo, [rel], {p for p in current if p.endswith(".svg")})]
     stops += [f"előellenőrzés: {p}" for p in figs.direct_svg_problems(repo, sorted({svg for _, svg in direct}))]
-    stops += figs.figure_blockers(repo, found, subjects)
+    stops += figs.recheck_problems(repo, found) + figs.figure_blockers(repo, found, subjects)
     data_problems, new_requests = machine_data.check(repo, found, pages, new_pages, subjects,
                                                      noted_before=retired_notes(repo))
     stops += data_problems + wiki_log.problems(repo, found)
@@ -123,6 +127,7 @@ def close(local, repo: Path, subjects: list[str] | None, out=print, state: dict 
     head_generated = {p: _head_generated(git, p) for p in changed_pages}
     changed: list[str] = []
     warnings: list[str] = []
+    outside = _outside_pages(repo, subjects)
     try:
         for h in found:
             for f in h.figures:
@@ -157,14 +162,51 @@ def close(local, repo: Path, subjects: list[str] | None, out=print, state: dict 
                                          public.writer_svg_rights(repo)))
     finally:
         # Every page as the tool left it, also after an interruption: the guard then knows the
-        # tool's own writes (step 0 has made sure no hand edit was among them).
+        # tool's own writes (step 0 has made sure no hand edit was among them). With --subject also
+        # the pages outside the named subjects this close wrote (the root index and the other
+        # subject indexes by `write_indexes`), unless a hand-edited machine part it did not
+        # overwrite is on one (sn 0.3.11).
         tool_writes.record(repo, parts=[p for p in safefs.walk_files(repo, "wiki")
                                         if p.endswith(".md") and (not subjects or guard.in_subjects(p, subjects))])
+        tool_writes.record(repo, parts=_written_outside(repo, git, subjects, outside, warnings))
     for line in warnings:
         out(f"figyelmeztetés: {line}")
     code = done.report(repo, out)
     state["open"] = open_subjects(repo) if code else set()
     return code
+
+
+def _outside_pages(repo: Path, subjects: list[str] | None) -> dict[str, str]:
+    """With --subject: the text of every wiki page outside the named subjects before the close
+    writes, to know afterwards which of them the close wrote."""
+    if not subjects:
+        return {}
+    return {p: safefs.read_text(repo, p) for p in safefs.walk_files(repo, "wiki")
+            if p.endswith(".md") and not guard.in_subjects(p, subjects)}
+
+
+def _written_outside(repo: Path, git, subjects: list[str] | None, outside: dict[str, str],
+                     warnings: list[str]) -> list[str]:
+    """The pages outside the named subjects whose machine parts this close changed (or which it
+    created), for the tool-writes record (`guard.tool_written`). A page with a hand-edited
+    machine part the close did not overwrite is not recorded, with a warning."""
+    if not subjects:
+        return []
+    record = tool_writes.load(repo)
+    out = []
+    for rel in safefs.walk_files(repo, "wiki"):
+        if not rel.endswith(".md") or guard.in_subjects(rel, subjects):
+            continue
+        before = outside.get(rel)
+        parts = tool_writes.machine_parts(safefs.read_text(repo, rel))
+        if before is not None and tool_writes.machine_parts(before) == parts:
+            continue                                # not written by this close
+        if before is None or guard.tool_written(repo, git, rel, before, record):
+            out.append(rel)
+        else:
+            warnings.append(f"{rel}: a lezárás írta, de egy gépi részét kézzel módosították, és azt a lezárás "
+                            "nem írta felül – nem rögzítem; az `sn done` jelezni fogja")
+    return out
 
 
 SUBJECT_PATH = re.compile(r"wiki/(?:assets/)?([^/\s#:]+)/")
@@ -259,7 +301,7 @@ def snapshot(local, subjects: list[str] | None, only: list[str] | None, out=prin
     if not found:
         raise Refused(f"nincs átadás ({OUT}/<tantárgy>/)")
     wanted_new = [f["id"] for h in found for f in h.figures if not only or f["id"] in only]
-    problems = figs.preflight_problems(local, repo, [f for f in wanted_new])
+    problems = figs.recheck_problems(repo, found) + figs.preflight_problems(local, repo, wanted_new)
     if problems:
         return stop(out, "STOP: az ábra nem mehet a lektorhoz (előellenőrzés; nem írtam semmit):", problems)
     unreadable = []

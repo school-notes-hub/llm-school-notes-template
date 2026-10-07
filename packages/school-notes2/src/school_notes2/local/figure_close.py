@@ -141,10 +141,36 @@ def candidate_state(repo: Path, fid: str) -> str | None:
         return None
 
 
+def evidence_path(fid: str) -> str:
+    return f"docs/evidence/media/{fid}/figure.json"
+
 def inserted_key(repo: Path, fid: str) -> tuple[dict, str]:
     """(evidence, current key) of an inserted figure, from its evidence record."""
-    evidence = safefs.read_json(repo, f"docs/evidence/media/{fid}/figure.json")
+    evidence = safefs.read_json(repo, evidence_path(fid))
+    if not isinstance(evidence, dict):
+        raise ValueError(f"{fid}: nincs beillesztve ({evidence_path(fid)} nincs meg)")
     return evidence, fctx.verdict_key(repo, evidence["commission"], evidence["candidate"])
+
+def recheck_problems(repo: Path, found: list[Handoff]) -> list[str]:
+    """`ujranezes.json` lists inserted figures only (an inserted figure has its evidence record).
+    A new figure listed there too – e.g. added by the writer after the fix round – is a STOP line
+    naming it; it stays in `figures.json`, where `--snapshot --only` refreshes its key."""
+    out = []
+    for h in found:
+        new_ids = {f.get("id") for f in h.figures}
+        for item in h.rechecks:
+            fid = item.get("id")
+            if safefs.is_file(repo, evidence_path(fid)):
+                continue
+            if fid in new_ids:
+                out.append(f"{h.subject}/{fid}: az ujranezes.json csak beillesztett ábrát sorolhat, ez az ábra még "
+                           f"nincs beillesztve – vedd ki az ujranezes.json-ból; az új ábra a figures.json-ban marad, "
+                           f"a kulcsát az `sn close <tanuló> --subject {h.subject} --snapshot --only {fid}` frissíti")
+            else:
+                out.append(f"{h.subject}/{fid}: az ujranezes.json csak beillesztett ábrát sorolhat, ez az ábra nincs "
+                           f"beillesztve ({evidence_path(fid)} nincs meg) – vedd ki az ujranezes.json-ból; "
+                           f"új ábra a figures.json-ba való")
+    return out
 
 def is_inserted(repo: Path, page: str, fid: str) -> bool:
     return markers.read(safefs.read_text(repo, page), f"figure-{fid}") is not None
@@ -175,8 +201,8 @@ def figure_blockers(repo: Path, found: list[Handoff], subjects: list[str] | None
                            "pillanatképe óta, vagy nincs pillanatkép) – megerősítés kell")
         for item in h.rechecks:
             fid = item["id"]
-            if not accepted(h.recheck_verdicts, fid):
-                continue
+            if not accepted(h.recheck_verdicts, fid) or not safefs.is_file(repo, evidence_path(fid)):
+                continue                                    # not inserted: `recheck_problems` names it
             _, current = inserted_key(repo, fid)
             if recorded_key(repo, fid, item["page"]) == current:
                 continue                                    # renewed already, nothing changed since
@@ -226,7 +252,7 @@ def renew_one(repo: Path, fid: str, page: str, given: dict, key: str, at: str) -
     if previous:
         verdict["observed"] = previous
     rechecks = list(evidence.get("rechecks", [])) + [{"at": at, "observed": given["observed"]}]
-    safefs.write_json(repo, f"docs/evidence/media/{fid}/figure.json",
+    safefs.write_json(repo, evidence_path(fid),
                       {**evidence, "verdict": verdict, "verifier": REVIEWER, "at": at, "rechecks": rechecks})
     insert._record_verdict(repo, evidence["commission"], evidence["candidate"], verdict, REVIEWER, at)
     return True

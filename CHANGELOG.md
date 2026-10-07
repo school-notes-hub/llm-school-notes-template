@@ -2,6 +2,12 @@
 
 Newest first. Each entry says what changed in the shared files and what an existing wiki must do when it applies the update (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)). A wiki records the version it is on in `PROFILE.md`.
 
+## 1.22.9 - 2026-10-08
+
+- `tools/book_index.py` reads a negative printed-page offset, also in a band (`printed-page offset: -4`, `printed-page offset: -4 from PDF 1`; a typographic minus too) and takes `--offset N` or `--offset=N`: an excerpt whose PDF page 1 is printed page 5 has offset -4. The map writes a negative offset in brackets (`printed = PDF - (-4)`). A positive offset gives the same map as before. `tools/test_shared_tools.py` covers negative, banded negative and the old forms. Sources and evidence *Layout* names the negative case.
+- Helyi menet: `ujranezes.json` lists inserted figures only; a new figure (also one added in the fix round) stays in `figures.json`. `sn close --snapshot` and `sn close` stop (exit 2, nothing written) on a listed figure that is not inserted, naming it (sn 0.3.11; before, the snapshot crashed).
+- Migration (controller-owned): synchronize the shared set (`tools/book_index.py`, `tools/test_shared_tools.py`, `instructions/helyi-menet.md`, `instructions/sources-and-evidence.md`, `CHANGELOG.md`, `shared-files.json`). A book README that tells the reader to pass `--offset -N` by hand because the README line was not read (Barna: the Statika and Építőanyagok excerpts) is out of date - the line is read now; rewording it is the writer's (*textbook table*). Regenerating such a map (`sn book <t> <subject> <code>`) changes only its offset sentence (`PDF - (-6)` instead of `PDF - -6`).
+
 ## 1.22.8 - 2026-10-07
 
 - Fix round of the 1.22.7 review. A figure's verdict key leaves out only a complete, closed lesson or textbook line (`<sub>🗓️ Óra: …</sub>`, `<sub>🗓️ Órák: …</sub>`, `<sub>🔖 Tankönyv: …</sub>`, footnote references after it allowed); anything else on such a line, and a 🗓️ line without `<sub>`, stays in the key (PROFILE *lesson line*). The renewal of verdicts recorded with the sn 0.3.8 key runs first in `sn close` and alone as `sn close <t> --rekey`; it renews only an exact match, never over a content change.

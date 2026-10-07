@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the navigation map (index.md) of a converted reference book.
 
-Usage: uv run tools/book_index.py references/<subject>/<book-id> [--offset N] [--readme]
+Usage: uv run tools/book_index.py references/<subject>/<book-id> [--offset N | --offset=N] [--readme]
 
 Use --readme or <!-- book-index: readme --> for a checked README table.
 Reader-facing labels come from the local tools/book-index.json.
@@ -15,6 +15,7 @@ the whole book. It is built from two things that are always there:
 
 Printed page = PDF page - offset. The offset is read from the README
 ("printed-page offset: N" in the README, or "one less" / "eggyel kisebb" = 1) or given with --offset.
+N may be negative: an excerpt whose PDF page 1 is printed page 5 has "printed-page offset: -4".
 A book whose numbering jumps (inserted plates, a second part) has one line per band:
 "printed-page offset: N from PDF p" - the offset holds from PDF page p up to the next band.
 The output is regenerated from scratch every time; never edit index.md by hand.
@@ -82,10 +83,20 @@ def toc_rows(doc_lines):
     return rows
 
 
+MINUS = str.maketrans({"\u2212": "-", "\u2013": "-"})     # a typographic minus or en dash in a README
+
+
+def number(text):
+    """An offset written with an optional sign ("4", "+4", "-4", "\u22124")."""
+    return int(text.translate(MINUS))
+
+
 def readme_bands(readme):
-    """[(first PDF page, offset)] in PDF page order; None when the README gives no offset."""
-    found = [(int(m.group(2) or 1), int(m.group(1))) for m in re.finditer(
-        r"printed-page offset:\s*(\d+)(?:\s+from\s+PDF\s+(?:p\.?\s*)?(\d+))?", readme, re.IGNORECASE)]
+    """[(first PDF page, offset)] in PDF page order; None when the README gives no offset.
+    An offset may be negative (an excerpt that starts later in the printed book)."""
+    found = [(int(m.group(2) or 1), number(m.group(1))) for m in re.finditer(
+        r"printed-page offset:\s*([+\-\u2212\u2013]?\d+)(?:\s+from\s+PDF\s+(?:p\.?\s*)?(\d+))?",
+        readme, re.IGNORECASE)]
     if found:
         return sorted(dict(found).items())
     if re.search(r"eggyel\s+kisebb|one\s+(less|lower)|printed\s*=\s*PDF\s*-\s*1", readme, re.IGNORECASE):
@@ -116,10 +127,15 @@ def pdf_of(bands, printed):
     return printed + bands[0][1]
 
 
+def signed(off):
+    """An offset as it reads after "printed = PDF - ": a negative one in brackets."""
+    return f"({off})" if off < 0 else str(off)
+
+
 def bands_text(bands):
     if len(bands) == 1:
-        return str(bands[0][1])
-    return ", ".join(f"{off} (PDF {first}-)" for first, off in bands)
+        return signed(bands[0][1])
+    return ", ".join(f"{signed(off)} (PDF {first}-)" for first, off in bands)
 
 
 def readme_rows(readme):
@@ -156,8 +172,14 @@ def main():
         sys.exit(__doc__)
     book = Path(args[0])
     bands = None
+    given = next((a.split("=", 1)[1] for a in args if a.startswith("--offset=")), None)
     if "--offset" in args:
-        bands = [(1, int(args[args.index("--offset") + 1]))]
+        given = args[args.index("--offset") + 1] if args.index("--offset") + 1 < len(args) else ""
+    if given is not None:
+        try:
+            bands = [(1, number(given))]
+        except ValueError:
+            sys.exit(f"--offset needs a whole number (printed = PDF - N, N may be negative), not {given!r}")
     doc_lines = (book / "document.md").read_text(encoding="utf-8").split("\n")
     readme = (book / "README.md").read_text(encoding="utf-8")
     if bands is None:

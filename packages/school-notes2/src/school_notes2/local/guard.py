@@ -169,20 +169,59 @@ def _page(repo: Path, rel: str, old: str | None, record: dict) -> list[str]:
         now_entries = _decisions(text)
         if any(entry not in now_entries for entry in _decisions(old)):
             out.append(f"{rel}: an existing `decisions` entry was removed or changed")
-    parts = tool_writes.machine_parts(text)
-    if record["parts"].get(rel) != tool_writes.sha(parts):
-        keys = sorted(set(machine_keys(page.meta) + (machine_keys(before.meta) if before else ())))
-        now = {k: tool_part(k, page.meta.get(k)) for k in keys}
-        was = {k: tool_part(k, before.meta.get(k)) for k in keys} if before else {k: None for k in keys}
-        if now != was:
-            out.append(f"{rel}: a machine frontmatter key was written by hand "
-                       f"({', '.join(k for k in keys if now[k] != was[k])}){INTERRUPTED}")
-        old_blocks = {n: markers.read(old, n) for n in markers.names(old)} if old is not None else {}
-        for name in markers.names(text):
-            if old_blocks.get(name, object()) != markers.read(text, name):
-                out.append(f"{rel}: the generated block `{name}` was written by hand{INTERRUPTED}")
+    out += _machine(rel, text, page, old, before, record)
     out += _raster_links(rel, text, old)
     return out
+
+
+def _machine(rel: str, text: str, page, old: str | None, before, record: dict) -> list[str]:
+    """Machine frontmatter keys and generated blocks that are neither the HEAD's nor the tool's
+    last write."""
+    if record["parts"].get(rel) == tool_writes.sha(tool_writes.machine_parts(text)):
+        return []
+    keys, blocks = _differences(text, page, old, before)
+    out = []
+    if keys:
+        out.append(f"{rel}: a machine frontmatter key was written by hand ({', '.join(keys)}){INTERRUPTED}")
+    out += [f"{rel}: the generated block `{name}` was written by hand{INTERRUPTED}" for name in blocks]
+    return out
+
+
+def _differences(text: str, page, old: str | None, before) -> tuple[list[str], list[str]]:
+    """(machine keys, generated blocks) of `text` that differ from `old` (the tool's part of a
+    key; a block removed from `text` does not count)."""
+    keys = sorted(set(machine_keys(page.meta) + (machine_keys(before.meta) if before else ())))
+    now = {k: tool_part(k, page.meta.get(k)) for k in keys}
+    was = {k: tool_part(k, before.meta.get(k)) for k in keys} if before else {k: None for k in keys}
+    old_blocks = {n: markers.read(old, n) for n in markers.names(old)} if old is not None else {}
+    return ([k for k in keys if now[k] != was[k]],
+            [n for n in markers.names(text) if old_blocks.get(n, object()) != markers.read(text, n)])
+
+
+def machine_differences(text: str, old: str | None) -> set[str] | None:
+    """The machine parts of `text` that differ from `old` (`key <k>`, `block <name>`); None when
+    a frontmatter is unreadable."""
+    try:
+        page, before = frontmatter.split(text), frontmatter.split(old) if old is not None else None
+    except Exception:               # noqa: BLE001
+        return None
+    keys, blocks = _differences(text, page, old, before)
+    return {f"key {k}" for k in keys} | {f"block {n}" for n in blocks}
+
+
+def tool_written(repo: Path, git, rel: str, before: str, record: dict) -> bool:
+    """`sn close --subject` asks this of a page outside the named subjects that the close changed
+    (`before`: its text before the close): may the page be recorded as the tool's? Yes when the
+    page was the tool's last write before (`record`), or when every machine part that differs
+    from the HEAD now is one this close changed. A machine-part edit the close did not touch is
+    not the tool's: no."""
+    if record["parts"].get(rel) == tool_writes.sha(tool_writes.machine_parts(before)):
+        return True
+    proc = git.run("show", f"HEAD:{rel}", check=False)
+    head = proc.stdout.decode("utf-8", "replace") if proc.returncode == 0 else None
+    after = safefs.read_text(repo, rel)
+    now, changed = machine_differences(after, head), machine_differences(after, before)
+    return now is not None and changed is not None and now <= changed
 
 
 def _raster(rel: str) -> bool:

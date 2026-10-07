@@ -63,6 +63,54 @@ class SharedToolsTest(unittest.TestCase):
             self.assertIn('20: 49', index)
             self.assertIn('1 (PDF 1-), 5 (PDF 25-)', index)
 
+    def test_negative_offsets_are_read(self):
+        """An excerpt whose PDF page 1 is printed page 5: printed = PDF - (-4) (sn 0.3.11)."""
+        for text, expected in [('printed-page offset: -4', [(1, -4)]), ('(`printed-page offset: -24`)', [(1, -24)]),
+                               ('printed-page offset: \u22126', [(1, -6)]), ('printed-page offset: +3', [(1, 3)]),
+                               ('printed-page offset: 0', [(1, 0)]), ('* `printed-page offset: 1`; more', [(1, 1)])]:
+            self.assertEqual(book_index.readme_bands(text), expected, text)
+        bands = book_index.readme_bands('printed-page offset: -4')
+        self.assertEqual([book_index.printed_of(bands, p) for p in (1, 4, 12)], [5, 8, 16])
+        self.assertEqual([book_index.pdf_of(bands, n) for n in (5, 16)], [1, 12])
+        self.assertEqual(book_index.bands_text(bands), '(-4)')
+
+    def test_negative_offset_bands(self):
+        """An excerpt (printed 5- from PDF 1) with two unnumbered plates after PDF 8: from PDF 11
+        the numbering goes on with printed 13 (offset -2)."""
+        readme = 'printed-page offset: -4 from PDF 1\nprinted-page offset: -2 from PDF p. 11\n'
+        bands = book_index.readme_bands(readme)
+        self.assertEqual(bands, [(1, -4), (11, -2)])
+        self.assertEqual([book_index.printed_of(bands, p) for p in (1, 8, 9, 10, 11, 12)], [5, 12, None, None, 13, 14])
+        self.assertEqual([book_index.pdf_of(bands, n) for n in (5, 12, 13, 14)], [1, 8, 11, 12])
+        self.assertEqual(book_index.bands_text(bands), '(-4) (PDF 1-), (-2) (PDF 11-)')
+
+    def test_negative_offset_from_the_readme_and_the_option(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            script = root / 'book_index.py'
+            script.write_bytes(Path(book_index.__file__).read_bytes())
+            (root / 'book-index.json').write_bytes(Path(book_index.__file__).with_name('book-index.json').read_bytes())
+            book = root / 'eptan'; book.mkdir()
+            (book / 'document.md').write_text(''.join(f'<!-- element:p{i:03}-e001 kind=text page={i} -->\nText {i}\n'
+                                                      for i in range(1, 13)))
+            table = '<!-- book-index: readme -->\n\n| Lecke | Oldal |\n|---|---|\n| Első | 5 |\n| Második | 10 |\n'
+            (book / 'README.md').write_text('# Részlet\n\nprinted-page offset: -4\n\n' + table)
+            done = subprocess.run([sys.executable, str(script), str(book)], capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            index = (book / 'index.md').read_text()
+            self.assertIn('| Első | 5-9 | 1-10 |', index)            # PDF 1-5
+            self.assertIn('| Második | 10-16 | 11-25 |', index)       # PDF 6-12
+            self.assertIn('* 5: 1 · 6: 3', index)
+            self.assertIn('printed = PDF - (-4)', index)
+            (book / 'README.md').write_text('# Részlet\n\n' + table)  # no offset line: the option gives it
+            for option in (['--offset', '-4'], ['--offset=-4']):
+                (book / 'index.md').unlink()
+                subprocess.run([sys.executable, str(script), str(book), *option], check=True, capture_output=True)
+                self.assertEqual((book / 'index.md').read_text(), index)
+            failed = subprocess.run([sys.executable, str(script), str(book), '--offset=x'], capture_output=True, text=True)
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertIn('whole number', failed.stderr)
+
     def test_checked_readme_overrides_plausible_but_incomplete_toc(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

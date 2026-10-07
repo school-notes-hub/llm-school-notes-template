@@ -52,7 +52,7 @@ def _parser() -> argparse.ArgumentParser:
     book.add_argument("subject")
     book.add_argument("code", help="the book's stock number, e.g. OH-MIR11TB")
     book.add_argument("source", nargs="?", type=Path, help="the doc-extract folder; without it the map is regenerated")
-    book.add_argument("--offset", type=int, help="printed page = PDF page - N")
+    book.add_argument("--offset", type=int, help="printed page = PDF page - N (negative for an excerpt: --offset=-4)")
     check = sub.add_parser("check", help="page check, read-only")
     check.add_argument("learner")
     check.add_argument("pages", nargs="+")
