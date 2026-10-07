@@ -13,7 +13,7 @@ import re
 import unicodedata
 
 from . import frontmatter
-from .pages import CODE_FENCE, COMMENT
+from .pages import CODE_FENCE, COMMENT, LABEL
 
 ATX = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$")
 CODE_SPAN = re.compile(r"(`+)(.+?)(?<!`)\1(?!`)", re.S)
@@ -22,8 +22,8 @@ AUTOLINK = re.compile(r"<([A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*|[^\s<>@]+@[^\s<>
 TAG = re.compile(r"<!--.*?-->|</?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?/?>", re.S)
 FOOTNOTE = re.compile(r"\[\^([^\]\s]+)\]")
 DEFINITION = re.compile(r"^ {0,3}\[\^([^\]\s]+)\]:(.*(?:\n(?: {4}|\t).*)*)", re.M)
-IMAGE = re.compile(r"!\[(?:[^\[\]]|\[[^\]]*\])*\]\((?:<[^>]*>|[^)\s]*)(?:\s+\"[^\"]*\")?\)")
-LINK = re.compile(r"\[((?:[^\[\]]|\[[^\]]*\])*)\]\((?:<[^>]*>|[^)\s]*)(?:\s+\"[^\"]*\")?\)")
+IMAGE = re.compile(r"!\[" + LABEL + r"\]\((?:<[^<>\n]*>|[^)\s]*)(?:\s+\"[^\"]*\")?\)")
+LINK = re.compile(r"\[(" + LABEL + r")\]\((?:<[^<>\n]*>|[^)\s]*)(?:\s+\"[^\"]*\")?\)")
 ESCAPE = re.compile(r"\\([!-/:-@\[-`{-~])")
 ENTITY = re.compile(r"&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});")
 JUMP = re.compile(r"<a\b([^<>]*)></a>", re.I)

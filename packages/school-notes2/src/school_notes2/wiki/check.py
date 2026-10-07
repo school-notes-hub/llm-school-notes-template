@@ -15,7 +15,7 @@ import yaml
 
 from ..state import safefs
 from . import decisions, drafts, frontmatter, lesson_log, markers, web_footnote
-from .pages import CODE_FENCE, COMMENT, INLINE_CODE, blank, links, resolve
+from .pages import CODE_FENCE, COMMENT, INLINE_CODE, LABEL, blank, find_links, links, resolve
 
 TYPES_WITH_CHAPTER = ("topic", "chapter-summary")
 LESSON_SUFFIX = "-jegyzet.md"
@@ -150,22 +150,49 @@ def check_ids(rel: str, text: str) -> list[dict]:
             for line, value, what in heading_ids.duplicates(text)]
 
 
-# An image's alt text with CommonMark backslash escapes and one level of balanced brackets.
-# Interval notation there is escaped (`\]-1; 3\]`) so the `]` does not close the alt; alt text is
-# never rendered as math, so its `\[`, `\(` and `$$` are not formula delimiters.
-IMAGE_ALT = re.compile(r"!\[(?:\\.|[^\\\[\]]|\[(?:\\.|[^\\\[\]])*\])*\](?=[(\[])", re.S)
+# A reference image `![alt][ref]` / `![alt][]` whose label is defined; an undefined one is text.
+REF_IMAGE = re.compile(r"!\[(?P<text>" + LABEL + r")\]\[(?P<ref>[^\[\]\n]*)\]")
+LATEX = re.compile(r"\\[A-Za-z]+|[\^_](?:\{|[A-Za-z0-9])")
+OPENER = {"[": ("]", "\\[…\\]", "$$…$$"), "(": (")", "\\(…\\)", "$…$")}
+
+
+def alt_spans(text: str) -> list[tuple[int, int]]:
+    """Offsets of every confirmed image alt text: an inline image with a complete destination, or
+    a reference image whose label is defined on the page (the shared `pages.LABEL`)."""
+    defs = definitions(text)
+    spans = [m.span("text") for m in find_links(text) if m["img"]]
+    for m in find_links(text, REF_IMAGE):
+        label = (m["ref"] or m["text"]).strip().lower()
+        if label in defs:
+            spans.append(m.span("text"))
+    return spans
 
 
 def check_formulas(rel: str, text: str) -> list[dict]:
-    """Display-math delimiters must pair up; the build compiles the formulas themselves."""
-    body = CODE_FENCE.sub("", text)
-    body = re.sub(r"`[^`\n]*`", "", body)
-    body = IMAGE_ALT.sub("", body)
+    """`$$` display math must pair up (the build compiles the formulas themselves). Image alt text
+    is never rendered as math, so it is masked (spaces, newlines kept), never deleted. Neither
+    renderer reads `\\[…\\]` or `\\(…\\)` as math (Markdown makes them plain brackets): LaTeX
+    between them is a warning that names the form that renders."""
+    body = CODE_FENCE.sub(blank, text)
+    body = INLINE_CODE.sub(blank, body)
+    for start, end in alt_spans(body):
+        body = body[:start] + re.sub(r"[^\n]", " ", body[start:end]) + body[end:]
     if body.count("$$") % 2:
         return [item(rel, None, "unbalanced $$ display-math delimiter")]
-    if body.count("\\[") != body.count("\\]") or body.count("\\(") != body.count("\\)"):
-        return [item(rel, None, "unbalanced \\[ \\] or \\( \\) math delimiter")]
-    return []
+    out = []
+    escapes = list(re.finditer(r"\\(.)", body, re.S))
+    for i, m in enumerate(escapes):
+        if m[1] not in OPENER:
+            continue
+        closer, shown, use = OPENER[m[1]]
+        stop = re.search(r"\n[ \t]*\n", body[m.end():])
+        limit = m.end() + stop.start() if stop else len(body)
+        close = next((e for e in escapes[i + 1:] if e.start() < limit and e[1] == closer), None)
+        content = body[m.end():close.start() if close else limit]
+        if LATEX.search(content):
+            out.append(item(rel, line_of(body, m.start()), f"{shown} does not render as math, use {use}",
+                            severity="warning"))
+    return out
 
 
 def check_links(repo: Path, rel: str, text: str, *, fs=safefs) -> list[dict]:

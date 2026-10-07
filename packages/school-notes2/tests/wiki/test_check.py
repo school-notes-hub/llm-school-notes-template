@@ -148,30 +148,55 @@ def test_private_names_in_the_public_view_are_errors_but_not_in_dropped_parts():
     assert check.check_public_view("wiki/log.md", "Lásd sources/x.\n") == []          # not published
 
 
-MATH = "unbalanced \\[ \\] or \\( \\) math delimiter"
+
+DOLLARS = "unbalanced $$ display-math delimiter"
+A = "wiki/proba/a.md"
+
+
+def warnings(items):
+    return [i["message"] for i in items if i["severity"] == "warning"]
 
 
 def test_interval_notation_in_image_alt_text_is_not_math():
-    # The alt texts `sn close` inserts escape interval brackets; balanced or not, they never render
-    # as math (sn-helyi 0.3.4).
-    balanced = "![A \\[0; 3\\] és \\]−1; 5\\[ szakasz.](<../assets/proba/a.svg>)\n"
-    unbalanced = "![B = \\[1; 6\\[ és A = \\]−2; 5\\], \\[0; 5\\[.](<../assets/proba/b.svg>)\n"
-    nested = "![C [belső \\[2; 7\\[] \\(x](kep.png) és ![D \\[1; 2\\[][ref]\n"
-    for text in (balanced, unbalanced, nested):
-        assert check.check_formulas("wiki/proba/a.md", "Szöveg.\n\n" + text) == []
+    # The alt texts `sn close` inserts escape interval brackets (sn-helyi 0.3.4/0.3.5).
+    for alt in ("![A \\[0; 3\\] és \\]−1; 5\\[ $$ szakasz.](<../assets/proba/a.svg>)\n",
+                "![B = \\[1; 6\\[ és A = \\]−2; 5\\], \\[0; 5\\[ $$.](<../assets/proba/b.svg>)\n",
+                "![outer ![inner [x]](b.svg) $$](a.svg)\n",                 # deeper nesting
+                "![C $$ [belső [mélyebb [x]]]](kep.png)\n",
+                "![D $$][ref]\n\n[ref]: a.svg\n",):
+        assert check.check_formulas(A, "Szöveg.\n\n" + alt) == [], alt
 
 
-def test_a_stray_math_delimiter_in_body_text_is_still_an_error():
-    assert messages(check.check_formulas("wiki/proba/a.md", "Ez \\[ x^2 nyitva marad.\n")) == [MATH]
-    assert messages(check.check_formulas("wiki/proba/a.md", "Ez \\( x nyitva marad.\n")) == [MATH]
-    # A link (not an image) is rendered text: its brackets still count.
-    assert messages(check.check_formulas("wiki/proba/a.md", "[\\[ x](a.md)\n")) == [MATH]
+def test_what_is_not_an_alt_text_still_counts():
+    # Astra 0.3.4 review 2: no blank-line crossing, no incomplete destination, no undefined reference.
+    for text in ("![unfinished\n\n$$\nx+1\n](a.svg)\n", "![unfinished $$](missing\n",
+                 "![unfinished $$][missing]\n", "[link $$](a.md)\n"):
+        assert messages(check.check_formulas(A, text)) == [DOLLARS], text
 
 
-def test_with_alt_text_and_body_only_the_body_delimiter_counts():
-    alt = "![A = \\]−2; 5\\] és B = \\]1; 6\\[.](<../assets/proba/a.svg>)\n\n"
-    assert messages(check.check_formulas("wiki/proba/a.md", alt + "Képlet: \\[ a+b \\]\n")) == []
-    assert messages(check.check_formulas("wiki/proba/a.md", alt + "Képlet: \\[ a+b\n")) == [MATH]
-    # The balanced pairs inside the alt text cannot hide a body delimiter either.
-    alt2 = "![\\[0; 3\\[ \\]1; 2\\]](a.svg)\n\n"
-    assert messages(check.check_formulas("wiki/proba/a.md", alt2 + "\\] a\n")) == [MATH]
+def test_masking_never_manufactures_a_delimiter():
+    # Astra 0.3.4 review 3: `\![x](y)` is a `!` and a link; `\\![x](a.svg)` a backslash and an image.
+    assert check.check_formulas(A, "\\![ordinary](page.md)\n") == []
+    assert check.check_formulas(A, "\\\\![ordinary $$](a.svg)\n") == []
+    assert check.check_formulas(A, "x \\![ordinary](a.svg) y\n") == []
+
+
+def test_latex_in_backslash_brackets_is_a_warning_naming_the_form_that_renders():
+    # Neither renderer reads `\[…\]` or `\(…\)` as math (Opus 0.3.4 m2).
+    found = check.check_formulas(A, "Képlet:\n\n\\[ x^2 + \\frac{1}{2} \\]\n\nés \\( a_1 \\) itt.\n")
+    assert messages(found) == []
+    assert warnings(found) == ["\\[…\\] does not render as math, use $$…$$",
+                               "\\(…\\) does not render as math, use $…$"]
+    assert [i["line"] for i in found] == [3, 5]
+    assert warnings(check.check_formulas(A, "Ez \\[ x^2 nyitva marad.\n")) == [
+        "\\[…\\] does not render as math, use $$…$$"]
+    # Plain bracketed text, an escaped backslash and interval notation are no warning.
+    for text in ("A \\[0; 3\\] zárt, a \\]1; 2\\[ nyílt.\n", "\\\\[ x^2 \\\\]\n", "\\[ megjegyzés \\]\n"):
+        assert check.check_formulas(A, text) == [], text
+    assert check.check_formulas(A, "![\\[ x^2 \\]](a.svg)\n") == []
+
+
+def test_dollar_display_math_must_still_pair_up():
+    alt = "![A = \\]−2; 5\\] $$](<../assets/proba/a.svg>)\n\n"
+    assert messages(check.check_formulas(A, alt + "$$\na+b\n$$\n")) == []
+    assert messages(check.check_formulas(A, alt + "$$\na+b\n")) == [DOLLARS]

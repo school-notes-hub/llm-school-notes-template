@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..state import safefs
 from ..wiki import frontmatter, markers
-from ..wiki.pages import CODE_FENCE, LINK, links, resolve, wiki_pages
+from ..wiki.pages import CODE_FENCE, LINK, links, resolve, sub_links, wiki_pages
 from .commissions import MARKER, MERMAID, markers as figure_markers
 
 HEAD = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$", re.M)
@@ -31,7 +31,7 @@ def without_replaced(text: str, page: str, asset: str | None) -> str:
             return ""
         return match[0]
     text = markers.BLOCK.sub(old_block, text)
-    return pattern.sub(remove, text)
+    return sub_links(text, remove, pattern)
 
 
 def canonical(text: str, page: str, brief: dict) -> str:
@@ -39,7 +39,7 @@ def canonical(text: str, page: str, brief: dict) -> str:
     # Its own image, alt and caption are bound separately in verdict_key.
     text = markers.BLOCK.sub("", text)
     text = DESCRIPTION.sub("", text)
-    text = LINK.sub(lambda m: "" if m["img"] else m[0], text)
+    text = sub_links(text, lambda m: "" if m["img"] else m[0])
     text = MARKER.sub("", text)
     return re.sub(r"\n(?:[ \t]*\n)+", "\n\n", text).strip()
 

@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from . import frontmatter, markers
-from .pages import CODE_FENCE, LINK, relative, resolve, read_page
+from .pages import CODE_FENCE, match_link, relative, resolve, read_page, sub_links
 
 BLOCK = "lesson-banner"
 
@@ -31,7 +31,7 @@ def leading(text: str) -> str:
     for line in CODE_FENCE.sub("", text).splitlines():
         if not line.strip() or line.startswith(("<!--", "# ")):
             continue
-        match = LINK.fullmatch(line.strip())
+        match = match_link(line.strip())
         if match and match["img"]:
             return line.strip()
         return ""
@@ -48,7 +48,7 @@ def body(repo: Path, page: str, meta: dict, *, read=read_page) -> str:
         if not dest or not dest.startswith("wiki/assets/"):
             raise ValueError("topic banner must be a local wiki asset")
         return f'![{match["text"]}](<{relative(page, dest)}>)'
-    return LINK.sub(relocate, image)
+    return sub_links(image, relocate)
 
 
 def update(repo: Path, page: str, text: str) -> str:

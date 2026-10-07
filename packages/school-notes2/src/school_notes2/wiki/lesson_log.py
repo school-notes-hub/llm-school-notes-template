@@ -5,7 +5,7 @@ from pathlib import Path
 
 from . import markers
 from .decisions import valid_date
-from .pages import CODE_FENCE, COMMENT, LINK, read_page, resolve
+from .pages import CODE_FENCE, COMMENT, find_links, read_page, resolve
 
 BLOCK = "lesson-sources"
 TITLE = "Mit tanultunk ezen az órán"
@@ -111,7 +111,7 @@ def form_problems(repo: Path, rel: str, body: str, meta: dict, *, read=read_page
               if isinstance(lesson, dict) and isinstance(lesson.get("topics", []), list)
               for t in lesson.get("topics", [])}
     for point in points:
-        targets = [m["target"].strip("<>") for m in LINK.finditer(point) if not m["img"]]
+        targets = [m["target"].strip("<>") for m in find_links(point) if not m["img"]]
         if not any(_topic_section(repo, rel, target, topics, read=read) for target in targets):
             out.append("each learning point must link a listed topic page's teaching section")
     return out

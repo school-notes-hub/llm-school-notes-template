@@ -19,14 +19,14 @@ import html
 import re
 from datetime import date
 
-from .pages import CODE_FENCE, COMMENT
+from .pages import CODE_FENCE, COMMENT, LABEL
 
 FOOTNOTE_START = re.compile(r"^\[\^([^\]]+)\]:[ \t]?(.*)$")
 DEFINITION = re.compile(r"^ {0,3}\[(?!\^)([^\]]+)\]:[ \t]*<?([^\s>]+)>?.*$", re.M)
 WEB = re.compile(r"https?://[^\s)>\]\"']+", re.I)
 # A link's URL may hold balanced parentheses (`…/Kandela_(mértékegység)`), as in CommonMark.
-MD_LINK = re.compile(r"\[((?:[^\[\]]|\[[^\]]*\])*)\]\(\s*<?((?:[^()\s<>]|\([^()\s]*\))+)>?((?:\s+[^)]*)?)\)")
-REF_LINK = re.compile(r"\[((?:[^\[\]]|\[[^\]]*\])*)\]\[([^\]]*)\]|\[([^\[\]^]+)\](?![(\[:])")
+MD_LINK = re.compile(r"\[(" + LABEL + r")\]\(\s*<?((?:[^()\s<>]|\([^()\s]*\))+)>?((?:\s+[^)]*)?)\)")
+REF_LINK = re.compile(r"\[(" + LABEL + r")\]\[([^\]]*)\]|\[([^\[\]^]+)\](?![(\[:])")
 HTML_HREF = re.compile(r"(?:href|src)\s*=\s*[\"']?([^\"'\s>]+)", re.I)
 ISO_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 FILE_EXT = re.compile(r"\b[\w.-]+\.(?:jpe?g|png|webp|gif|heic|tiff?|pdf|pptx?|docx?|xlsx?|odp|ods|md|svg)\b", re.I)

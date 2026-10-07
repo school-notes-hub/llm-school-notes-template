@@ -14,8 +14,71 @@ from . import frontmatter
 CODE_FENCE = re.compile(r"^(```|~~~).*?^\1[^\n]*$", re.S | re.M)
 INLINE_CODE = re.compile(r"`[^`\n]*`")
 COMMENT = re.compile(r"<!--.*?-->", re.S)
-LINK = re.compile(r"(?P<img>!?)\[(?P<text>(?:[^\[\]]|\[[^\]]*\])*)\]\((?P<target><[^>]*>|[^)\s]*)(?:\s+\"[^\"]*\")?\)")
+# A link text or image alt (one shared pattern, sn-helyi 0.3.5): a backslash escape (`\]` never
+# closes it), balanced brackets nested up to four deep, a line break but never a blank line (a
+# label does not cross a paragraph). `sn close` escapes interval brackets in alt text this way.
+_ATOM = r"\\[^\n]|\\?\n(?![ \t]*\n)|[^\\\[\]\n]"
+
+
+def _label(depth: int) -> str:
+    pattern = f"(?:{_ATOM})*"
+    for _ in range(depth):
+        pattern = rf"(?:{_ATOM}|\[{pattern}\])*"
+    return pattern
+
+
+LABEL = _label(4)
+# Inline link or image with a complete destination. Match it through `find_links`/`sub_links`/
+# `match_link` (never `LINK` directly): they read an escaped `\!` or `\[` as text, `\\!` as a
+# backslash before a real image.
+LINK = re.compile(r"(?P<img>!?)\[(?P<text>" + LABEL + r")\]\((?P<target><[^<>\n]*>|[^)\s]*)(?:\s+\"[^\"]*\")?\)")
+ESCAPED = re.compile(r"\\[!-/:-@\[-`{-~]")
 HTML_IMG = re.compile(r"<img\b[^>]*\bsrc=(?P<q>[\"'])(?P<target>.+?)(?P=q)", re.I)
+
+
+class Found:
+    """A match on the escape-masked text, read back from the original (same offsets)."""
+
+    def __init__(self, match: re.Match, text: str):
+        self.match, self.text = match, text
+
+    def __getitem__(self, key):
+        start, end = self.match.span(key)
+        return None if start < 0 else self.text[start:end]
+
+    group = __getitem__
+
+    def start(self, key=0) -> int:
+        return self.match.start(key)
+
+    def end(self, key=0) -> int:
+        return self.match.end(key)
+
+    def span(self, key=0) -> tuple[int, int]:
+        return self.match.span(key)
+
+
+def mask_escapes(text: str) -> str:
+    """Each backslash escape of an ASCII punctuation character as two NULs (same length), left
+    to right as CommonMark reads them: `\\` is one escape, so the `!` after it is real."""
+    return ESCAPED.sub("\0\0", text)
+
+
+def find_links(text: str, pattern: re.Pattern = LINK) -> list[Found]:
+    return [Found(m, text) for m in pattern.finditer(mask_escapes(text))]
+
+
+def match_link(text: str, pattern: re.Pattern = LINK) -> Found | None:
+    m = pattern.fullmatch(mask_escapes(text))
+    return Found(m, text) if m else None
+
+
+def sub_links(text: str, repl, pattern: re.Pattern = LINK) -> str:
+    out, last = [], 0
+    for found in find_links(text, pattern):
+        out += [text[last:found.start()], repl(found)]
+        last = found.end()
+    return "".join(out) + text[last:]
 
 
 class PageError(ValueError):
@@ -85,7 +148,7 @@ def links(text: str) -> list[Link]:
     body = COMMENT.sub(blank, body)
     body = INLINE_CODE.sub(blank, body)
     found = []
-    for m in LINK.finditer(body):
+    for m in find_links(body):
         target, _, fragment = m.group("target").strip("<>").partition("#")
         found.append(Link(bool(m.group("img")), m.group("text"), target,
                           body.count("\n", 0, m.start()) + 1, fragment))
