@@ -59,8 +59,10 @@ NOTEBOOK_PAGE = re.compile(r"^(?:p\d{4}|page-\d+)\.(?:jpe?g|png|webp)$", re.I)
 def notebook_folders(repo: Path, folders: set[str]) -> set[str]:
     """The source folders whose page order is the order of one notebook (teaching-order
     evidence): every stored page split from one PDF (its manifest), or, for a folder without a
-    manifest, only PDF-page files (`p0001.jpg`, `page-07.jpeg`). A catch-up folder of separate
-    photos may mix notebooks: its order is no evidence."""
+    manifest, exactly one PDF with or without its page images, or only PDF-page images
+    (`p0001.jpg`, `page-07.jpeg`). Two PDFs, or a catch-up folder of separate photos, may mix
+    notebooks: their order is no evidence. The same folder gets the same answer with or without
+    a manifest (older learner folders have none)."""
     out = set()
     for folder in sorted(folders):
         base = f"sources/{folder}"
@@ -74,8 +76,11 @@ def notebook_folders(repo: Path, folders: set[str]) -> set[str]:
                 out.add(folder)
         elif safefs.is_dir(repo, base):
             files = [n for n in safefs.listdir(repo, base) if not n.startswith(".")]
-            if any(NOTEBOOK_PAGE.match(n) for n in files) and all(
-                    NOTEBOOK_PAGE.match(n) or n.lower().endswith(".pdf") for n in files):
+            pdfs = [n for n in files if n.lower().endswith(".pdf")]
+            pages = [n for n in files if NOTEBOOK_PAGE.match(n)]
+            # one PDF (with or without its page images), or only PDF-page images; two PDFs may
+            # be two notebooks, so their order is no evidence
+            if len(pdfs) <= 1 and (pdfs or pages) and len(pdfs) + len(pages) == len(files):
                 out.add(folder)
     return out
 

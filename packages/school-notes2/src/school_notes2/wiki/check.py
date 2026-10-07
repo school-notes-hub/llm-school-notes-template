@@ -408,7 +408,8 @@ def check_files(repo: Path, paths: list[str], *, today: date | None = None, fs=s
         out += check_figure_sections(repo, rel, text, fs=fs)
         out += [item(rel, line, TEXTBOOK_MESSAGE, "warning") for line in textbook_lines(rel, text)]
     if fs is safefs:
-        out += order_warnings(repo, paths)
+        from . import date_spans
+        out += order_warnings(repo, paths) + date_spans.warnings(repo, paths)
     if fs is safefs and not errors(out):
         out += [item(rel, None, message, "warning")
                 for rel, message in drafts.warnings(repo, today or date.today(), paths=paths)]

@@ -39,7 +39,8 @@ def test_after_orders_lessons_the_dates_cannot(tmp_path):
     assert "`after: nincs-jegyzet.md` names no lesson" in error["message"]
     lesson_log(repo, "a-jegyzet.md", "proba/a", [f"{{{note}, title: 4. óra, topics: [alap.md], after: b-jegyzet.md}}"])
     lesson_log(repo, "b-jegyzet.md", "proba/b", [f"{{{note}, title: Gyakorlás, topics: [alap.md], after: a-jegyzet.md}}"])
-    assert any("closes a circle" in w["message"] for w in teaching_order.order_warnings(repo, ["wiki/proba/a-jegyzet.md"]))
+    assert any("closes a circle" in w["message"]
+               for w in teaching_order.order_warnings(repo, ["wiki/proba/a-jegyzet.md", "wiki/proba/b-jegyzet.md"]))
 
 
 def test_a_folder_of_separate_photos_is_no_order_evidence(tmp_path):

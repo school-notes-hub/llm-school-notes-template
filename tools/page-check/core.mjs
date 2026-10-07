@@ -93,9 +93,10 @@ export function renderMarkdown(source) {
     if(t.type==='link_open')links.push(t.attrGet('href'));
   });
   let html=safeHtml(md.renderer.render(tokens,md.options,env));
-  // A lesson date item (as on the study site): focusable when it has a tooltip, its `~` a span of its own.
-  html=html.replace(/<span class="study-when( study-when-unsure)?" title="([^"]*)">(~?)/g,(_,u,t,tilde)=>
-    `<span class="study-when${u||''}" title="${t}" tabindex="0">${tilde?'<span class="study-tilde" aria-hidden="true">~</span>':''}`);
+  // A lesson date item (as on the study site): focusable when it has a tooltip and is not inside a link,
+  // its `~` a span of its own and "körülbelül" for a screen reader.
+  html=html.replace(/(<a\b[^>]*>)?<span class="study-when( study-when-unsure)?" title="([^"]*)">(~?)/g,(_,a,u,t,tilde)=>
+    `${a||''}<span class="study-when${u||''}" title="${t}"${a?'':' tabindex="0"'}>${tilde?'<span class="study-tilde" aria-hidden="true">~</span><span class="study-sr">körülbelül </span>':''}`);
   for(const [token,svg] of formulas)html=html.replace(token,()=>svg);
   html=html.replace(/<blockquote>\s*<p>\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\n|<br\s*\/?>\n?)/g,(_,kind)=>
     `<blockquote class="markdown-alert markdown-alert-${kind.toLowerCase()}"><p class="markdown-alert-title">${kind[0]+kind.slice(1).toLowerCase()}</p><p>`);

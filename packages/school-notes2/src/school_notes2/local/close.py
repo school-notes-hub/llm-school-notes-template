@@ -13,7 +13,12 @@ files; the reviewer has no shell). An `accept` is valid only for the content it 
 
 **Close**, subjects in name order, figures in listed order:
 
-0. **STOP** (exit 2) before writing anything, listing every case: a writer-guard finding
+First, before any check: the one-time rekey of figure verdicts recorded with the sn 0.3.8 key
+(`figures.context.rekey`: only where that key matches the content exactly as it is now; also
+alone as `sn close <t> --rekey`). `sn close <t> --dates` rewrites only the hand-written date spans
+of lesson lines and the lessons legends of the subject indexes as generated (`wiki/date_spans.py`).
+
+0. **STOP** (exit 2) before writing anything else, listing every case: a writer-guard finding
    (`guard.py`); a preflight problem of an accepted figure; an accept whose content changed
    since the snapshot (or has no snapshot); a `replaces` in `figures.json` that differs from the
    commission's; an inserted figure that disappeared from its page (its verdict stays; the
@@ -30,9 +35,7 @@ files; the reviewer has no shell). An `accept` is valid only for the content it 
    `adatok.json` that is not a wiki page is a STOP in step 0);
 6. **STOP** (exit 2, nothing deleted) while an inserted figure's verdict is invalidated – the
    figure must be looked at against the new text;
-7. the one-time rekey of figure verdicts recorded with the sn 0.3.8 key (`figures.context.rekey`:
-   only where the old key matches the content exactly as it is now), reader-verdict bookkeeping
-   (figure verdicts otherwise untouched), indexes, decisions overview,
+7. reader-verdict bookkeeping (figure verdicts untouched), indexes, decisions overview,
    `public.json`, the tool-writes record the writer guard reads;
 8. the content check of `sn done` for the whole learner (the worktree is naturally not clean);
 9. retirement (`retire`): of the hand-overs read in step 0 – never a rescan – each subject
@@ -91,6 +94,8 @@ def close(local, repo: Path, subjects: list[str] | None, out=print, state: dict 
     state = {} if state is None else state
     at = now_iso()
     git = local.git()
+    for rel in fctx_rekey(repo):            # first: verdicts recorded with the sn 0.3.8 key (exact)
+        out(f"ítéletkulcs megújítva (0.3.8 → 0.3.9): {rel}")
     found = handoffs(repo, subjects, allow_retired=True)
     state["found"] = found
     for subject in sorted(set(subjects or ()) - {h.subject for h in found}):
@@ -145,7 +150,6 @@ def close(local, repo: Path, subjects: list[str] | None, out=print, state: dict 
             return stop(out, "STOP: beillesztett ábra ítélete érvénytelenedett, és nincs rá érvényes újranézési "
                              "accept (az ábrát az új szöveggel össze kell vetni; semmit nem töröltem):",
                         [f"{r['file']}#{r['id']}" for r in stale])
-        changed += fctx_rekey(repo)        # sn 0.3.9: lesson lines left out of the verdict key
         machine_data.reader_bookkeeping(repo)
         generate.write_indexes(repo)
         figs._write_if_changed(repo, decisions.OVERVIEW, decisions.overview(repo, skip=skipped), changed)
@@ -324,6 +328,27 @@ def differences(a: Path, b: Path) -> list[str]:
 
     left, right = files(a), files(b)
     return sorted((left ^ right) | {p for p in left & right if not same(p)})
+
+def rekey_only(local, out=print) -> int:
+    """`sn close <t> --rekey`: the verdict-key renewal alone; idempotent, writes nothing else."""
+    written = fctx_rekey(local.repo)
+    for rel in written:
+        out(f"ítéletkulcs megújítva (0.3.8 → 0.3.9): {rel}")
+    out(f"--rekey: {len(written)} fájl")
+    local.record("close", "rekey", changed=len(written))
+    return 0
+
+
+def dates_only(local, out=print) -> int:
+    """`sn close <t> --dates`: hand-written date spans and lessons legends as generated."""
+    from ..wiki import date_spans
+    changes = date_spans.apply(local.repo)
+    for rel, count in changes:
+        out(f"dátum egységesítve: {rel} ({count})")
+    out(f"--dates: {len(changes)} lap, {sum(c for _, c in changes)} csere")
+    local.record("close", "dates", changed=len(changes))
+    return 0
+
 
 def run(local, subjects: list[str] | None, check: bool = False, out=print, *,
         snapshot_only: list[str] | None = None, take_snapshot: bool = False) -> int:

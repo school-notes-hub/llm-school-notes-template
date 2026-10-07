@@ -228,13 +228,21 @@ export async function renderMarkdown(source, { resolveUrl, mermaid, pageId = '',
       // A lesson date item (`study-when`, sn 0.3.9): one with a tooltip can be focused, so a tap
       // shows the tooltip as a small bubble (the stylesheet); the leading `~` of an uncertain one
       // is its own span, which paper leaves out with the range (the month part stays printed).
+      // A date inside a link stays hover-only: a focusable element inside a link would be a nested
+      // interactive element, and a tap follows the link anyway (sn 0.3.10).
+      const linked = new Set();
+      visit(tree, 'element', node => {
+        if (node.tagName === 'a') visit(node, 'element', inner => { linked.add(inner); });
+      });
       visit(tree, 'element', node => {
         const cls = node.tagName === 'span' ? node.properties.className || [] : [];
         if (!cls.includes('study-when')) return;
-        if (node.properties.title) node.properties.tabIndex = 0;
+        if (node.properties.title && !linked.has(node)) node.properties.tabIndex = 0;
         const first = node.children[0];
         if (cls.includes('study-when-unsure') && first?.type === 'text' && first.value.startsWith('~')) {
+          // the `~` is seen, "körülbelül" is heard (visually hidden); paper prints neither
           node.children.splice(0, 1, el('span', { className: ['study-tilde'], ariaHidden: 'true' }, [{ type: 'text', value: '~' }]),
+            el('span', { className: ['study-sr'] }, [{ type: 'text', value: 'körülbelül ' }]),
             { type: 'text', value: first.value.slice(1) });
         }
       });

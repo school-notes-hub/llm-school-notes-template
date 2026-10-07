@@ -86,19 +86,26 @@ class SharedToolsTest(unittest.TestCase):
                 self.assertEqual((book / 'document.md').read_text(), doc)
 
 
-    def test_wording_sync_replaces_only_the_wording_rows(self):
+    def test_wording_sync_keeps_the_learners_columns_and_bound_rows(self):
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)
-            head = '| Key | English | Magyar |\n|---|---|---|\n'
             (base / 't').mkdir()
             (base / 'c').mkdir()
-            (base / 't' / 'PROFILE.md').write_text('# T\n\n' + head + '| a | A | Á |\n| b | B | B2 |\n\nTemplate tail\n')
-            (base / 'c' / 'PROFILE.md').write_text('# Tanuló\n\nown text\n\n' + head + '| a | old | régi |\n\nLocal decisions\n')
+            (base / 't' / 'PROFILE.md').write_text(
+                '# T\n\n# Wording\n\n| Key | English | Magyar |\n|---|---|---|\n'
+                '| wiki title | `<Name>\'s notes` | `<Név> jegyzetei` |\n| lessons | `# Lessons` | `# 🗓️ Órák` |\n'
+                '| homework | `x \\| y` | `a \\| b` |\n| catch-up notice | `T` | `Írd be, Tanuló.` |\n\n# Local decisions\n')
+            (base / 'c' / 'PROFILE.md').write_text(
+                '# Profil\n\n# Wording\n\nBevezető.\n\n| Key | Magyar |\n|---|---|\n'
+                '| wiki title | `Kata jegyzetei` |\n| lessons | `# Órák` |\n| catch-up notice | `Kata, írd be.` |\n'
+                '| in words | `szövegesen:` |\n\nUtána.\n\n# Local decisions\n\nsaját\n')
             args = ['--template', str(base / 't'), '--target', str(base / 'c')]
             self.assertEqual(sync_wording.main(args + ['--check']), 1)
             self.assertEqual(sync_wording.main(args), 0)
             self.assertEqual((base / 'c' / 'PROFILE.md').read_text(),
-                             '# Tanuló\n\nown text\n\n' + head + '| a | A | Á |\n| b | B | B2 |\n\nLocal decisions\n')
+                             '# Profil\n\n# Wording\n\nBevezető.\n\n| Key | Magyar |\n|---|---|\n'
+                             '| wiki title | `Kata jegyzetei` |\n| lessons | `# 🗓️ Órák` |\n| homework | `a \\| b` |\n'
+                             '| catch-up notice | `Kata, írd be.` |\n| in words | `szövegesen:` |\n\nUtána.\n\n# Local decisions\n\nsaját\n')
             self.assertEqual(sync_wording.main(args + ['--check']), 0)
 
     def test_the_template_wording_has_no_old_question_mark_date_form(self):

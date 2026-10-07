@@ -59,8 +59,9 @@ class Lesson:
     uncertain: bool = False
     topics: list[str] = field(default_factory=list)
     notebook: bool = False  # the folder holds one notebook: its page order is evidence
-    before: set = field(default_factory=set)       # ids of the lessons `after` puts before it
-    after_problem: str = ""                         # an `after` that names no lesson or closes a circle
+    before: set = field(default_factory=set)       # ids of the lessons certainly before it (`ordered`)
+    after_problem: str = ""                         # an `after` that names no lesson, contradicts dates or closes a circle
+    graph: bool = False                             # `before` comes from the order graph
 
     @property
     def key(self) -> tuple:
@@ -142,61 +143,120 @@ def page_lessons(file: str, meta: dict) -> list[Lesson]:
     return out
 
 
-def _sequences(found: list[Lesson]) -> list[list[list[list[Lesson]]]]:
-    """The evidence chains: per notebook folder, its pages by position (pages at one position
-    side by side), each page's lessons in notebook order; any other page alone."""
-    by_folder: dict[str, dict[tuple, dict[str, list[Lesson]]]] = {}
+def _structural(found: list[Lesson]) -> tuple[dict, list[tuple[Lesson, str]]]:
+    """The order graph's evidence edges (id(a) → ids it certainly precedes): one lesson log's
+    notebook order, the page order of one notebook folder, and `after`. An `after` that names no
+    lesson, contradicts certain dates or closes a circle is a problem and left out."""
+    edges: dict[int, set[int]] = {id(x): set() for x in found}
+    by_file: dict[str, list[Lesson]] = {}
     for lesson in found:
-        folder = lesson.folder if lesson.folder and lesson.notebook else f"\0{lesson.file}"
-        by_folder.setdefault(folder, {}).setdefault(lesson.position, {}).setdefault(lesson.file, []).append(lesson)
-    return [[list(pages.values()) for _, pages in sorted(positions.items())]
-            for _, positions in sorted(by_folder.items())]
+        by_file.setdefault(lesson.file, []).append(lesson)
+    for lessons in by_file.values():
+        lessons.sort(key=lambda x: x.index)
+        for a, b in zip(lessons, lessons[1:]):
+            edges[id(a)].add(id(b))
+    folders: dict[str, dict[tuple, list[Lesson]]] = {}
+    for lesson in found:
+        if lesson.notebook and lesson.folder:
+            folders.setdefault(lesson.folder, {}).setdefault(lesson.position, []).append(lesson)
+    for positions in folders.values():
+        groups = [positions[k] for k in sorted(positions)]
+        for earlier, later in zip(groups, groups[1:]):
+            for a in earlier:
+                edges[id(a)] |= {id(b) for b in later}
+    problems = []
+    afters = []
+    for lesson in found:
+        ref = lesson.data.get("after")
+        if ref in (None, ""):
+            continue
+        m = AFTER.match(str(ref))
+        target = None
+        if m and m[1] in by_file:
+            logs = by_file[m[1]]
+            n = int(m[2]) if m[2] else len(logs)
+            target = logs[n - 1] if 1 <= n <= len(logs) else None
+        if target is None or target is lesson:
+            problems.append((lesson, f"`after: {ref}` names no lesson of this subject (`<lesson log>.md` or "
+                                     "`<lesson log>.md#<n>`, n from 1)"))
+            continue
+        t_lo, _, _ = bounds(target.data)
+        _, l_hi, _ = bounds(lesson.data)
+        if t_lo and l_hi != NEVER and t_lo > l_hi:
+            problems.append((lesson, f"`after: {ref}` contradicts the dates: that lesson is not before "
+                                     f"{l_hi}"))
+            continue
+        afters.append((target, lesson))
+    for target, lesson in afters:
+        if id(target) in _reach(edges, id(lesson)) or target is lesson:
+            problems.append((lesson, f"`after: {lesson.data.get('after')}` closes a circle with the "
+                                     "notebook order or another `after`"))
+            continue
+        edges[id(target)].add(id(lesson))
+    return edges, problems
 
 
-def _narrow(found: list[Lesson]) -> None:
-    for _ in range(len(found) + 1):            # `after` links chain lessons across logs
-        changed = False
-        for lesson in found:
-            for other in found:
-                if id(other) in lesson.before:
-                    if not lesson.dated and other.lo > lesson.lo:
-                        lesson.lo, changed = other.lo, True
-                    if not other.dated and lesson.hi < other.hi:
-                        other.hi, changed = lesson.hi, True
-        if not changed:
-            break
-    for chain in _sequences(found):
-        floor = ""
-        for group in chain:                     # forward: never earlier than what came before
-            reached = floor
-            for page in group:
-                running = floor
-                for lesson in sorted(page, key=lambda item: item.index):
-                    if not lesson.dated and running > lesson.lo:
-                        lesson.lo = running
-                    running = max(running, lesson.lo)
-                reached = max(reached, running)
-            floor = reached
-        ceiling = NEVER
-        for group in reversed(chain):           # backward: never later than what comes after
-            reached = ceiling
-            for page in group:
-                running = ceiling
-                for lesson in sorted(page, key=lambda item: -item.index):
-                    if not lesson.dated and running < lesson.hi:
-                        lesson.hi = running
-                    running = min(running, lesson.hi)
-                reached = min(reached, running)
-            ceiling = reached
+def _reach(edges: dict, start: int) -> set[int]:
+    """Every node reachable from `start` (not itself unless on a circle)."""
+    seen, stack = set(), list(edges.get(start, ()))
+    while stack:
+        node = stack.pop()
+        if node not in seen:
+            seen.add(node)
+            stack.extend(edges.get(node, ()))
+    return seen
+
+
+def _topological(found: list[Lesson], edges: dict) -> list[Lesson]:
+    """The lessons in an order every edge respects, ties by `Lesson.key`; a circle left by
+    contradictory data is broken at the smallest key (deterministic)."""
+    import heapq
+    by_id = {id(x): x for x in found}
+    indegree = {id(x): 0 for x in found}
+    for a, targets in edges.items():
+        for b in targets:
+            indegree[b] += 1
+    heap = [(x.key, id(x)) for x in found if indegree[id(x)] == 0]
+    heapq.heapify(heap)
+    out, done = [], set()
+    while len(out) < len(found):
+        if not heap:
+            rest = min((x for x in found if id(x) not in done), key=lambda x: x.key)
+            indegree[id(rest)] = 0
+            heap = [(rest.key, id(rest))]
+        _, node = heapq.heappop(heap)
+        if node in done:
+            continue
+        done.add(node)
+        out.append(by_id[node])
+        for b in edges.get(node, ()):
+            indegree[b] -= 1
+            if indegree[b] == 0 and b not in done:
+                heapq.heappush(heap, (by_id[b].key, b))
+    return out
+
+
+def _narrow(found: list[Lesson], edges: dict) -> None:
+    """Never earlier than a lesson that certainly precedes, never later than one that follows."""
+    order = _topological(found, edges)
+    by_id = {id(x): x for x in found}
+    for a in order:
+        for b in (by_id[i] for i in edges[id(a)]):
+            if not b.dated and a.lo > b.lo:
+                b.lo = a.lo
+    for b in reversed(order):
+        for a in (x for x in found if id(b) in edges[id(x)]):
+            if not a.dated and b.hi < a.hi:
+                a.hi = b.hi
 
 
 def known_before(a: Lesson, b: Lesson) -> bool:
-    """Evidence only: the notebook order of one lesson log, successive pages of one source
-    folder, or ranges that do not overlap."""
+    """Evidence only: the combined order graph of `ordered` (notebook order, notebook folders,
+    `after`, non-overlapping ranges); for lessons outside it the same rules directly."""
+    if b.graph:
+        return id(a) in b.before
     if a.file == b.file:
         return a.index < b.index
-    if id(a) in b.before:
-        return True
     if a.notebook and b.notebook and a.folder and a.folder == b.folder and a.position != b.position:
         return a.position < b.position
     return a.hi < b.lo
@@ -205,65 +265,31 @@ def known_before(a: Lesson, b: Lesson) -> bool:
 AFTER = re.compile(r"^([^#\s]+\.md)(?:#(\d+))?$")
 
 
-def resolve_after(found: list[Lesson]) -> list[tuple[Lesson, str]]:
-    """Link every `after` to the lesson it names (the closure: a lesson after B after C is after
-    C); (lesson, problem) for a reference that names no lesson or closes a circle."""
-    by_file: dict[str, list[Lesson]] = {}
-    for lesson in found:
-        by_file.setdefault(lesson.file, []).append(lesson)
-    problems = []
-    for lesson in found:
-        ref = lesson.data.get("after")
-        if ref in (None, ""):
-            continue
-        m = AFTER.match(str(ref))
-        target = None
-        if m and m[1] in by_file:
-            logs = sorted(by_file[m[1]], key=lambda x: x.index)
-            n = int(m[2]) if m[2] else len(logs)
-            target = logs[n - 1] if 1 <= n <= len(logs) else None
-        if target is None or target is lesson:
-            problems.append((lesson, f"`after: {ref}` names no lesson of this subject (`<lesson log>.md` or "
-                                     "`<lesson log>.md#<n>`, n from 1)"))
-            continue
-        # after the named lesson, and so after every lesson before it in that log
-        lesson.before |= {id(x) for x in by_file[target.file] if x.index <= target.index}
-    for _ in range(len(found)):                 # transitive closure
-        grown = False
-        for lesson in found:
-            more = set().union(*(o.before for o in found if id(o) in lesson.before)) - lesson.before
-            if more:
-                lesson.before |= more
-                grown = True
-        if not grown:
-            break
-    for lesson in found:
-        if id(lesson) in lesson.before:
-            problems.append((lesson, f"`after: {lesson.data.get('after')}` closes a circle"))
-            lesson.before.discard(id(lesson))
-    return problems
-
-
 def ordered(pages: list[tuple[str, dict]], notebooks: set[str] | None = None) -> list[Lesson]:
     """Every lesson of a subject, oldest first, with its `uncertain` mark (`notebooks`: the
-    source folders that hold one notebook)."""
+    source folders that hold one notebook). One graph serves ordering, transitivity and circle
+    detection: the evidence edges, then the ranges narrowed along them, then an edge wherever a
+    range ends before another begins."""
     found = [lesson for file, meta in pages for lesson in page_lessons(file, meta)]
     for lesson in found:
         lesson.notebook = lesson.folder in (notebooks or set())
-    for lesson, problem in resolve_after(found):
+    edges, problems = _structural(found)
+    for lesson, problem in problems:
         lesson.after_problem = problem
-    _narrow(found)
-    found.sort(key=lambda lesson: lesson.key)
-    for _ in range(len(found)):                 # an `after` is kept even where the keys tie
-        moved = False
-        for i, lesson in enumerate(found):
-            j = max((k for k, other in enumerate(found) if id(other) in lesson.before), default=-1)
-            if j > i:
-                found.insert(j, found.pop(i))
-                moved = True
-                break
-        if not moved:
-            break
+    _narrow(found, edges)
+    for a in found:
+        for b in found:
+            if a is not b and a.hi < b.lo:
+                edges[id(a)].add(id(b))
+    for lesson in found:
+        lesson.graph = True
+    for lesson in found:                      # `before` holds the ids that certainly precede it
+        lesson.before = set()
+    for a in found:
+        for node in _reach(edges, id(a)):
+            if node != id(a):
+                next(x for x in found if id(x) == node).before.add(id(a))
+    found = _topological(found, edges)
     for lesson in found:
         # A lesson with no lower bound is itself uncertain; it does not make the others so.
         lesson.uncertain = not lesson.dated and any(

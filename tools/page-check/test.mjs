@@ -65,11 +65,15 @@ test('escaped interval brackets stay in the alt text and are never math',()=>{
  assert.ok(r.html.includes('alt="A = ]-2; 5] és [0; 5["'),r.html);
  assert.equal(r.mathCount,0);assert.ok(!r.html.includes('math-display'));
 });
-test('a lesson date is a quiet meta item with its tooltip, reachable by tap (sn 0.3.8, 0.3.9)',()=>{
- const r=renderMarkdown('* [x](a.md) <span class="study-when study-when-unsure" title="Dátum nélküli óra: szept. 23. – okt. 4.">~szept. vége</span>\n');
- assert.ok(r.html.includes('<span class="study-when study-when-unsure" title="Dátum nélküli óra: szept. 23. – okt. 4." tabindex="0"><span class="study-tilde" aria-hidden="true">~</span>szept. vége</span>'),r.html);
+test('a lesson date is a quiet meta item with its tooltip, reachable by tap unless linked (sn 0.3.8-0.3.10)',()=>{
+ const r=renderMarkdown('* [x](a.md) <span class="study-when study-when-unsure" title="Dátum nélküli óra: szept. 23. – okt. 4.">~szept. vége</span>\n\n'
+   +'<sub>🗓️ Óra: [<span class="study-when study-when-unsure" title="T">~szept. eleje</span>](a.md)</sub>\n');
+ assert.ok(r.html.includes('<span class="study-when study-when-unsure" title="Dátum nélküli óra: szept. 23. – okt. 4." tabindex="0"><span class="study-tilde" aria-hidden="true">~</span><span class="study-sr">körülbelül </span>szept. vége</span>'),r.html);
+ assert.ok(r.html.includes('<a href="a.md"><span class="study-when study-when-unsure" title="T"><span class="study-tilde"'),r.html);
  const css=fs.readFileSync(new URL('./style.css',import.meta.url),'utf8');
  assert.match(css,/\.study-when::before \{[^}]*mask:/);
  assert.match(css,/\.study-when\[title\]:focus::after \{ content:attr\(title\)/);
- assert.match(css,/@media print[^\n]*\.study-tilde, \.markdown-body \.study-when\[title\]:focus::after \{ display:none; \}/);
+ assert.match(css,/td \.study-when\[title\]:focus::after \{ position:static/);
+ assert.match(css,/@media \(hover:hover\)/);
+ assert.match(css,/@media print[^\n]*\.study-tilde, \.markdown-body \.study-sr, \.markdown-body \.study-when\[title\]:focus::after \{ display:none; \}/);
 });

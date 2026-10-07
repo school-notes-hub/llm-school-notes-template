@@ -7,7 +7,7 @@ This file holds everything that belongs to **this** wiki; the rules shared by ev
 # Template
 
 * **Template repository**: https://github.com/dlaszlo/llm-school-notes-template (or the fork this wiki was made from).
-* **Template version**: `1.22.7`.
+* **Template version**: `1.22.8`.
 * **Template commit**: `<exact template commit recorded at bootstrap and every template update>`.
 
 Updates are optional and happen only when the user asks (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)).
@@ -76,7 +76,7 @@ Every reader-facing string the rules prescribe lives here, in the wiki language 
 | lesson-log source line | `📎 Notebook: <lesson dates> · Teacher material: <name>; <name>` | `📎 Füzet: <óradátumok> · Tanári anyag: <név>; <név>` |
 | undated source lesson | `undated lesson` | `dátum nélküli óra` |
 | notebook correction request | `Correct this in your notebook too: <correct statements>.` | `Javítsd a füzetedben is: <helyes állítások>.` |
-| lesson line | `🗓️ Lesson: <date>` | `🗓️ Óra: <dátum>` |
+| lesson line | `<sub>🗓️ Lesson: <date></sub>` on a line of its own (footnote references may follow), several lessons `🗓️ Lessons:`; the date in the *lesson date* form, a link to the lesson log may hold it | `<sub>🗓️ Óra: <dátum></sub>` külön sorban (utána csak lábjegyzet-hivatkozás állhat), több óra `🗓️ Órák:`; a dátum a *lesson date* alakjában, a dátum lehet az óranaplóra mutató link szövege |
 | correction label | `⚠️ 🤖 machine correction` | `⚠️ 🤖 gépi javítás` |
 | unknown-author label | `<role icon> 🤖 machine <role>` | `<szerepikon> 🤖 gépi <szerep>` |
 | machine-authorship legend | `🤖 marks a machine-authored explanation, addition or correction. It is not a verification mark.` | `A 🤖 gépi magyarázatot, kiegészítést vagy javítást jelöl. Nem hitelesítési jel.` |

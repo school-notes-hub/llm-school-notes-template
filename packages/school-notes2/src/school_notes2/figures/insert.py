@@ -103,10 +103,32 @@ def _record_verdict(repo, brief, candidate, verdict, model, at):
     safefs.write_json(repo, VERDICTS, sorted(records, key=lambda r: (r["file"], r["key"], r["role"])))
 
 
+def without_record(repo: Path) -> list[dict]:
+    """Inserted figure blocks whose accepted verdict lives only in the evidence record – no
+    `docs/review/verdicts.json` figure-review record (sn 0.3.10): as records for `invalidated`."""
+    from ..wiki.pages import wiki_pages
+    recorded = {(r.get("file"), r.get("id")) for r in safefs.read_json(repo, VERDICTS, [])
+                if r.get("role") == "figure-review" and not r.get("night_spec")}
+    out = []
+    for page in sorted(wiki_pages(repo)):
+        for name in markers.names(safefs.read_text(repo, page)):
+            fid = name[7:] if name.startswith("figure-") else None
+            rel = f"docs/evidence/media/{fid}/figure.json"
+            if not fid or (page, fid) in recorded or not safefs.is_file(repo, rel):
+                continue
+            evidence = safefs.read_json(repo, rel, {})
+            verdict = evidence.get("verdict", {})
+            if verdict.get("verdict") == "accept" and evidence.get("commission") and evidence.get("candidate"):
+                out.append({"role": "figure-review", "file": page, "id": fid, "key": verdict.get("key", ""),
+                            "commission": evidence["commission"], "candidate": evidence["candidate"]})
+    return out
+
+
 def invalidated(repo: Path) -> list[dict]:
-    """T-154: report stale accepts after rebase; no LLM, retry or publication hold."""
+    """T-154: report stale accepts after rebase; no LLM, retry or publication hold. Over the
+    `verdicts.json` records and the inserted figures whose verdict only the evidence holds."""
     stale = []
-    for record in safefs.read_json(repo, VERDICTS, []):
+    for record in safefs.read_json(repo, VERDICTS, []) + without_record(repo):
         if record.get("role") != "figure-review":
             continue
         if removed(repo, record):

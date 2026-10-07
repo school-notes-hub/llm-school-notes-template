@@ -15,8 +15,8 @@ from . import frontmatter, generate, markers
 
 LESSON_KEYS = ("type", "grade", "sources", "source_file", "content_sha256", "original_sha256",
                "drive_folder", "generated")
-LESSONS_LEGEND = ("A legújabb óra van legfelül. Ha egy órának nincs pontos dátuma, `~` jelzi; "
-                  "az időszakot az egér rávitelekor (telefonon koppintásra) látod.")
+LESSONS_LEGEND = ("A legújabb óra van legfelül. A `~` bizonytalan dátumot jelöl; az időszakot az "
+                  "egér rávitelekor vagy koppintásra látod.")
 
 
 def machine_keys(meta: dict) -> tuple[str, ...]:

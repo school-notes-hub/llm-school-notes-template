@@ -9,6 +9,8 @@ commands; each lives in `school_notes2/local/<command>.py`:
   sn gen <t> <figure-id> --grant             a new frame of attempts – only on the owner's word
   sn close <t> [--subject a,b] [--check]     insert accepted figures, machine blocks, indexes
   sn close <t> --subject a --snapshot [--only id,…]   keys.json + diff.patch for the reviewer
+  sn close <t> --rekey                       renew figure verdict keys recorded by sn 0.3.8 (only that)
+  sn close <t> --dates                       hand-written date spans and lessons legends as generated
   sn done <t>                                content finished? exit 0/1
   sn publish <t> [--reviewed] [--build-only DIR]   push main, build, gate, gh-pages, live
 
@@ -40,7 +42,7 @@ def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="sn", description=f"School Notes, local ({VERSION})",
                                 formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     p.add_argument("--config", type=Path, default=None)
-    p.set_defaults(only=None, snapshot=False)
+    p.set_defaults(only=None, snapshot=False, rekey=False, dates=False)
     sub = p.add_subparsers(dest="command", required=True)
     fetch = sub.add_parser("fetch", help="Drive inbox")
     fetch.add_argument("learner")
@@ -68,6 +70,10 @@ def _parser() -> argparse.ArgumentParser:
     mode.add_argument("--snapshot", action="store_true",
                       help="before the reviewer (and before the confirmation pass with --only): "
                            "keys.json and diff.patch into the hand-over folder")
+    mode.add_argument("--rekey", action="store_true",
+                      help="only renew figure verdict keys recorded with the sn 0.3.8 key (exact matches)")
+    mode.add_argument("--dates", action="store_true",
+                      help="only rewrite hand-written date spans and the lessons legends as generated")
     close.add_argument("--only", help="with --snapshot: comma-separated figure ids to snapshot again")
     done = sub.add_parser("done", help="is the content finished?")
     done.add_argument("learner")
@@ -124,6 +130,10 @@ def _dispatch(local, args) -> int:
         from .local import close
         subjects = sorted(s.strip() for s in args.subject.split(",") if s.strip()) if args.subject else None
         only = sorted(s.strip() for s in args.only.split(",") if s.strip()) if args.only else None
+        if args.rekey:
+            return close.rekey_only(local)
+        if args.dates:
+            return close.dates_only(local)
         return close.run(local, subjects, args.check, take_snapshot=args.snapshot, snapshot_only=only)
     if args.command == "done":
         from .local import done

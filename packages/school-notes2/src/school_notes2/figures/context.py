@@ -12,10 +12,12 @@ from .commissions import MARKER, MERMAID, markers as figure_markers
 
 HEAD = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$", re.M)
 DESCRIPTION = re.compile(r"\s*<!-- image-description(?:\n|:).*?-->", re.S)
-# A section's lesson line and textbook line (`🗓️ Óra: …`, `🔖 Tankönyv: …`, also inside `<sub>`):
-# when and where the material was taught, never what the figure must show. Left out of the key
-# since sn 0.3.9, so a date-form edit does not invalidate a figure's verdict.
-META_LINE = re.compile(r"^[ \t]*(?:<(?:sub|small)>[ \t]*)?(?:🗓️|🔖)[^\n]*$", re.M)
+# A section's lesson line and textbook line - a complete, closed `<sub>🗓️ Óra: …</sub>` or
+# `<sub>🔖 Tankönyv: …</sub>` line, its footnote references allowed after it and nothing else: when
+# and where the material was taught, never what the figure must show. Left out of the key since
+# sn 0.3.9 (exactly this form since 0.3.10), so a date-form edit does not invalidate a verdict;
+# anything else on such a line keeps the line in the key.
+from ..wiki.date_spans import META_LINE  # noqa: E402 - shared with the date normaliser
 
 
 def digest(value) -> str:
