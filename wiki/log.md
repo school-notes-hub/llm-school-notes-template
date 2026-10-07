@@ -6,11 +6,11 @@
 
 * **Update**: [1.13.0](../CHANGELOG.md) makes optional image and Drive execution repository-local, removes global skill installation, and adds portable-state and clean-setup checks. The template remains uninitialized.
 
-* **Update**: [1.12.2](../CHANGELOG.md) requires Git-based deployment and adds a versioned [Hermes image-skill installer](../instructions/install-learning-images.md); local configuration stays outside Git.
+* **Update**: [1.12.2](../CHANGELOG.md) requires Git-based deployment and adds a versioned Hermes image-skill installer; local configuration stays outside Git.
 
-* **Update**: Added private active-policy discovery and single-writer budget transfer instructions for the [image executor](../instructions/learning-image-execution.md).
+* **Update**: Added private active-policy discovery and single-writer budget transfer instructions for the image executor.
 
-* **Update**: [1.12.0](../CHANGELOG.md) implements the visual decision/prompt/QA plan and a shared [bounded image executor](../instructions/learning-image-execution.md) with a Hermes entrypoint. The template remains uninitialized.
+* **Update**: [1.12.0](../CHANGELOG.md) implements the visual decision/prompt/QA plan and a shared bounded image executor with a Hermes entrypoint. The template remains uninitialized.
 
 * **Update**: Shared release [1.11.9](../CHANGELOG.md) requires numbered, self-contained open questions and adds a [formatting example](../instructions/note-formatting.md). The template remains uninitialized.
 
@@ -28,6 +28,6 @@
 
 ## 2026-09-27
 
-* **Update**: Added the [system handbook](../instructions/system-guide.md), [Drive setup guide](../instructions/install-drive.md), bounded uploader and Hermes skill in shared release 1.11.0. Kept credentials and deployment-specific receipts outside the template.
+* **Update**: Added the system handbook, Drive setup guide, bounded uploader and Hermes skill in shared release 1.11.0. Kept credentials and deployment-specific receipts outside the template.
 * **Update**: Established the byte-identical [shared file set](../shared-files.json) for release 1.10.0, with shared media instructions and configurable tools. Learner-specific settings remain local; the template stays uninitialized.
 * **Update**: Added the shared school-note improvements documented in [template version 1.9.0](../CHANGELOG.md): visual evidence, teacher-image selection, curriculum-aware scope, bounded visual generation and printable notes. Kept the template uninitialized; no learner content, private references or credentials were added.

@@ -40,7 +40,7 @@ python3 examples/technical-visuals/measure.py --output /tmp/visual-run-3 --povra
 
 For the official extracted Linux AppImage, use `--freecad-app-run /path/to/squashfs-root/AppRun` instead of `--freecad`. Executable flags can be combined in one run. The runner uses Python's standard library, records three process timings per static case, checks outputs and preserves logs. The headless FreeCAD script has no GUI imports; it uses a bundled module that internally imports QtCore, not a running graphical view. User/system FreeCAD configuration for the measurement is placed in the output directory. An installed binary may have other environment-specific runtime requirements.
 
-The supplied scripts execute only the requested programs and write their outputs/configuration/logs to the selected output directory; they do not download packages, copy secrets, modify Hermes or publish files. Run only trusted scene/model code. Distributable source belongs in Git; large runtimes and scratch results do not.
+The supplied scripts execute only the requested programs and write their outputs/configuration/logs to the selected output directory; they do not download packages, copy secrets or publish files. Run only trusted scene/model code. Distributable source belongs in Git; large runtimes and scratch results do not.
 
 ## Measured result, 2026-09-28
 
@@ -88,4 +88,4 @@ The [repository runner examples](runner.md) add Matplotlib and PlantUML and demo
 * [Graphviz output formats](https://graphviz.org/docs/outputs/).
 * [POV-Ray animation clock and subset handling](https://wiki.povray.org/content/Reference:Animation_Options).
 
-POV-Ray 3.7 uses CPU rendering; the pilot fixes two worker threads and disables its display window. No GPU is needed for this scene. A GPU-less VM run is planned but not yet measured; compare the same revision and settings before estimating its throughput. See the [official CPU benchmark guidance](https://www.povray.org/download/benchmark.php).
+POV-Ray 3.7 uses CPU rendering; the pilot fixes two worker threads and disables its display window. No GPU is needed for this scene. On another machine, compare the same revision and settings before estimating its throughput. See the [official CPU benchmark guidance](https://www.povray.org/download/benchmark.php).

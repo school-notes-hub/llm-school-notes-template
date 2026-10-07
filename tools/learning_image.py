@@ -702,9 +702,9 @@ def main():
         config_path = Path(args.config).resolve() if args.config else Path(__file__).resolve().parent.parent / 'learning-images.json'
         if not config_path.exists():
             if args.command in ('status', 'check'):
-                print(json.dumps({'state': 'not-configured', 'setup': 'instructions/install-learning-images.md'}))
+                print(json.dumps({'state': 'not-configured', 'setup': 'pass --config (the sn command line builds one)'}))
                 return 0
-            raise ValueError('No image configuration. Follow instructions/install-learning-images.md')
+            raise ValueError('No image configuration: pass --config (the sn command line builds one)')
         config = load_config(config_path)
         if args.command == 'init-state':
             print(json.dumps(initialize_state(config)))

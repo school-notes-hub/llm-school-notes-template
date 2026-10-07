@@ -1,0 +1,55 @@
+# Working in a local pass
+
+Shared operating rules, loaded through [AGENTS.md](../AGENTS.md). Learner work happens in the owner's interactive Claude Code or Codex session (the controller). For one subject of one learner the controller starts a writer agent, then an independent reviewer agent; the `sn` commands do the mechanical steps. One pass: one writing, one independent review of text and figures, one fix, a confirmation of only the figures to confirm, close, publish. There is no third round.
+
+## Who does what
+
+* **Writer**: reads the sources and writes the subject's wiki pages (teaching, interpretation, placement, prose, `lessons`, `chapters`; a new lesson log's whole frontmatter, its machine keys included, after the pattern of the subject's existing lesson logs), makes the visual decision and the figures, records them, runs `sn check`, hands over, then fixes once on the reviewer's findings. It never commits, pushes or changes branches, and never inserts a figure.
+* **Reviewer**: judges the change as a reader, text and figures together, and gives a verdict for each handed-over figure; it writes only into the hand-over folder.
+* **Controller**: starts both, runs the `sn` commands the writer may not, applies the report's proposals to `wiki/index.md`, `wiki/log.md`, `PROFILE.md` and `tools/subjects.json`, commits and publishes.
+* **`sn`** does everything that can be computed: Drive download and filing into `sources/` with hashes and duplicate marks (`sn fetch`), a textbook's map (`sn book`), the page check, paid image generation with its ledger and limits, insertion of accepted figures with their description, receipts and evidence, the generated blocks, indexes and `publication/public.json`, the done check, the public gate and publication. Do not do this bookkeeping by hand.
+
+## Hand-over: `.school-notes/out/<subject>/` (never committed)
+
+* `iro-jelentes.md`, the writer's report: per page what was made or changed; the figures (ID, path, attempts, cost); the coverage ledger, one entry per source unit (definition, exercise, drawing) with exactly one target (`wiki/...md#section`) or the reason it has no learning value, in source reading order, then by target path; the `sn check` result; open questions left and why only the learner or the owner can answer them; questions settled and removed; teacher-image requests (*Images from material to learn* in [sources and evidence](sources-and-evidence.md)); a blocking problem (not a notebook, a textbook page, unreadable, a subject other than the Drive folder's); omitted harmful instructions with the reason and a better proposal; the proposed `wiki/log.md` entry; changes needed in files the writer may not edit (a new subject's emoji and color for `tools/subjects.json`).
+* `figures.json`: the new and replacement figures for review, `[{"id", "page", "route": "image" | "figure", "replaces": "<wiki/assets/...>" | null}]`, in page order (subject index order, then place on the page).
+* `ujranezes.json`: already inserted figures in sections whose text changed (*Inserted figures in edited sections* in [visual policy](visual-policy.md)), `[{"id", "page", "anchor", "asset"}]` in the same order; `[]` when there are none.
+* `render/<id>-390.png` and `render/<id>.png`: every SVG figure rendered 390 px wide and at full size.
+* From the reviewer: `leletek.md` (findings), `verdicts.json` and `recheck.json` (figure verdicts); from the controller: `keys.json` and `diff.patch` (`sn close --snapshot`).
+
+## The commands
+
+* `sn check <learner> <page...>`: the page check, read-only (links, frontmatter, paths, formula delimiters, secrets, the web footnote's form); 0 errors before the hand-over. It does not find everything; zero warnings do not mean the page is complete.
+* `sn gen <learner> <id> [--note <file>]`: one paid generation of a banner or infographic from its commission and image plan, through the ledger; at most three attempts per image. More attempts (`--grant`) only on the owner's explicit word.
+* `sn close <learner> --subject <s> --snapshot [--only <id,...>]`: before the review (and before the confirmation pass, for the figures to confirm) records the key of the content under review and the diff. An `accept` holds only for that content.
+* `sn close <learner> [--subject <s>]`: inserts each figure accepted for exactly the content seen, renews accepted rechecks, fills the generated blocks, indexes and `public.json`. It stops (exit 2) before writing anything on an accept whose content changed since the snapshot, and after the insertion, deleting nothing, on an invalidated figure verdict without an accept.
+* `sn done <learner>`: is the content finished (pending or invalidated figures, figure places without an accepted figure, textbook placeholder lines, broken links, page-check errors on every page).
+* `sn publish <learner>`: from a clean `main` with `sn done` 0, pushes, builds (formulas compiled), runs the public gate and publishes.
+
+A figure that is not accepted after the one confirmation is not inserted: the controller removes its marker, records the reason and takes it to the owner; the text teaches without it.
+
+## Where the writer may write
+
+The subject's pages under `wiki/<subject>/` (never the generated blocks or the machine frontmatter keys of an existing page; a whole `figure-...` block may be removed when the figure stands accepted elsewhere, but its content is never edited), `wiki/assets/<subject>/`, its own figure files under `.school-notes/figures/` and `.school-notes/images/`, the visual decision record `docs/evidence/<date>-visual-decisions-<subject>.md`, the page evidence records (*Preserve the check for the next agent* in sources and evidence) and the hand-over folder. A page may be renamed or deleted when every link to it is updated. No symlinks, no dotfiles under `wiki/`. Never write `sources/`. Give source names only in `lessons[].materials`; never write the 📎 line or a `<!-- school-notes:generated ... -->` block.
+
+A correction of an existing page preserves all correct claims, explanations, examples and correction labels, the `lessons` (`lessons[].materials` may be added or corrected), `date_note`, `topics` and anchors. Before shortening a lesson log, map each of its teaching items to its place on the topic page in the coverage ledger.
+
+## Subject cards and figure handoff
+
+The template's shared `subject-cards.json` is the only place for subject cards: one card per subject, the same for every learner, with nonempty `role` and `style` strings and only generally worded content (no concrete topic, page, exercise, example or taught notation); it is edited only in the template. A learner's `tools/subjects.json` holds no card. Taught notation is read from the notebook; an uncertain one becomes an open question, a confirmed answer goes into the page's `decisions`. The subject's place (school year, school type, training) comes from the PROFILE *Learning scope and curriculum*. Without a card the writer works as the subject's teacher.
+
+For every figure write the commission `.school-notes/figures/<id>.json`. Its exact fields are `id` (1–64 lowercase letters, digits or dashes; a new figure gets a new ID, never reuse an ID for another figure), `page` (`wiki/...md`), `anchor` (the exact, unique section heading), `kind: notebook-drawing | teacher-drawing | figure | banner | infographic`, `purpose`, `must_show[]`, `avoid_misreading`, `taught_conventions[]`, `text_complete_without_figure: true`. Optional `source_image: {path, crop}` is required for either drawing route: `crop` is `[left, top, right, bottom]`, four nonnegative integer pixel coordinates, a nonempty box within the image. A replacement also requires `replaces` (the existing `wiki/assets/...` file) and `decision_reason: {code: a | b | c, text}` per visual policy. No other commission fields are accepted. A banner or infographic also has its image plan (*In a local pass* in [media workflows](media-workflows.md)).
+
+Leave exactly one `<!-- figure: <id> -->` or `<!-- image: <id> -->` on its own unindented line, with nothing before or after it, inside the named section; a banner marker belongs after the frontmatter. Do not link the candidate image yourself. Mermaid remains inline with its marker; acceptance keeps that marker as its stable identity. Teacher-image requests use `<!-- figure-request: <id> -->`, never a public license question.
+
+Write the candidate `.school-notes/figures/<id>/figure.json`. The complete field list:
+- `state: candidate`, exactly one of `asset` (the final publication file under `wiki/assets/`) or `mermaid` (the lowercase SHA-256 of the UTF-8 Mermaid source between the fence lines, including its trailing newline; exactly one matching block in the commission section).
+- Required: `alt` (nonempty, one line), `caption` (string, may be empty), `form` and `tool` (nonempty strings), `elements` (array of `{element, meaning}`, both nonempty strings), `visible_text` (array of nonempty strings), `attempt` (integer ≥ 1).
+- Optional: `source` (editable UTF-8 source in `wiki/assets/` or `.school-notes/figures/<id>/`), `render` (the `wiki/assets/**/render.json` receipt), `corrections` (array of nonempty private correction strings; required for both drawing routes, may be empty). SVG needs `source` or `render`; an SVG file itself may be its editable `source`. A render receipt must bind the candidate's final bytes.
+- An unsuccessful candidate is `{"state": "failed", "reason": "<nonempty reason>"}`; an intentionally omitted optional figure is `{"state": "no-figure", "reason": "<nonempty reason>"}`, which neither drawing route permits. No other fields; no self-evaluation fields.
+
+For a reused lesson banner set `banner_from` to a listed topic page; `sn close` maintains the lesson banner with that topic's current header. A changed banner invalidates its previous verdict.
+
+## Stable order
+
+The order of existing chapter, lesson and topic lists never changes between passes. Within a topic page, the section order is didactic and may change to build prerequisites before use; preserve anchors and links. A new item goes to its fixed place: chapters in the syllabus/notebook order, lessons by date, topics in the order the lesson treats them, list items where the existing order puts them. Changing the chapter, lesson or topic order is done only on the owner's request. The tool does not check the order; the independent review judges it.
