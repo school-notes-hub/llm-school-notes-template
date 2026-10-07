@@ -33,3 +33,5 @@ for entry in config["pages"]:
     pages.append({"path": entry["path"], "route": route, "url": url, "title": entry["path"]})
 (out / "payload.json").write_text(json.dumps({"mode": "public", "base": config["base"],
                                               "site": config["site"], "pages": pages}))
+if "PDF_STEP" in "".join((repo / e["path"]).read_text() for e in config["pages"]):
+    print("PDFs: 1 generated, 2 reused\nPDF time: 3.5 s")   # lib/pdf.mjs and cli.mjs report the step

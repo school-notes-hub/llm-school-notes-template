@@ -289,6 +289,20 @@ def rmtree(root, rel, missing_ok: bool = True) -> None:
             raise
 
 
+RENAME_NOREPLACE = 1
+
+
+def move(root, src, dest) -> None:
+    """Rename `src` (a file or a directory) to `dest` inside the root, atomically and never onto
+    an existing path (renameat2 RENAME_NOREPLACE: FileExistsError); no component of either path
+    may be a link, and `dest`'s parents are created."""
+    with _parent(root, src, create=False) as (sfd, sname), _parent(root, dest, create=True) as (dfd, dname):
+        libc = ctypes.CDLL(None, use_errno=True)
+        if libc.renameat2(sfd, sname.encode(), dfd, dname.encode(), RENAME_NOREPLACE) != 0:
+            err = ctypes.get_errno()
+            raise OSError(err, os.strerror(err), f"{src} → {dest}")
+
+
 def listdir(root, rel="") -> list[str]:
     fd = _open_dir(root, rel, create=False)
     try:

@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+from ..log import Timer
 from ..state import safefs
 from ..wiki import check
 
@@ -24,18 +25,27 @@ def wrong(repo: Path, path: str) -> str | None:
 
 
 def run(local, pages: list[str]) -> int:
+    """The check, then its one `sn.check` line (page and finding counts, seconds)."""
+    with Timer() as t:
+        code, counts = _run(local, pages)
+    local.record("check", {0: "ok"}.get(code, "open" if "errors" in counts else "refused"),
+                 pages=len(pages), seconds=round(t.s, 3), **counts)
+    return code
+
+
+def _run(local, pages: list[str]) -> tuple[int, dict]:
     try:
         paths = sorted({rel(local.repo, p) for p in pages})
     except ValueError:
         print("hiba: a lap nem a tanuló munkapéldányában van")
-        return 1
+        return 1, {}
     bad = [(p, why) for p in paths if (why := wrong(local.repo, p))]
     for path, why in bad:
         print(f"hiba: {path}: {why}")
     if bad:
-        return 1
+        return 1, {}
     items = check.check_files(local.repo, paths, fix=False)
     print(json.dumps(items, ensure_ascii=False, indent=1))
     errors = check.errors(items)
     print(f"hiba: {len(errors)}, figyelmeztetés: {len(items) - len(errors)}")
-    return 1 if errors else 0
+    return (1 if errors else 0), {"errors": len(errors), "warnings": len(items) - len(errors)}

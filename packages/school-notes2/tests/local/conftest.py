@@ -34,7 +34,7 @@ class FakeLocal:
         self.cfg = SimpleNamespace(timeouts=Timeouts(), sources=Sources(), root=root,
                                    git_name="T", git_email="t@example.com")
         self.student = SimpleNamespace(name=name, drive_root=drive_root, site_repo=site_repo, grade=9)
-        self.quiet = Log(None, console=False)
+        self.steps = Log(None, console=False)
 
     def tools_dir(self):
         return TEMPLATE / "tools"
@@ -47,7 +47,7 @@ class FakeLocal:
         path = path or self.repo
         self.git_calls.append((Path(path), network))
         remote = HttpsToken("test-token") if network else None
-        return Git(git_dir(path), "T", "t@example.com", self.quiet, remote, path)
+        return Git(git_dir(path), "T", "t@example.com", self.steps, remote, path)
 
     def image_settings(self, worktree=None):
         return SimpleNamespace(learner=self.name, worktree=worktree or self.repo, ledger=lambda: self._ledger)

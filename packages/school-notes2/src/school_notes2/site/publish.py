@@ -45,21 +45,26 @@ def publish(site: Git, build_site: Path, *, student: str, source_commit: str, ru
     `site` is the learner's gh-pages clone (`local/publish.site_git`).
     A rejected push (someone else published) rebuilds the commit, up to three rounds.
     """
+    start = time.monotonic()
     for round_no in range(1, MAX_ROUNDS + 1):
         parent = fetch_gh_pages(site, log, fetch_s=fetch_s, ls_remote_s=ls_remote_s)
         commit = _stage(site, build_site, parent, source_commit, tool_version, rsync)
         if commit is None:
-            log.event("site.publish", "ok", target="no change", source=source_commit[:12])
+            log.event("site.publish", "ok", target="no change", duration_s=time.monotonic() - start,
+                      source=source_commit[:12])
             return Published(None, False)
         commit = _commit(site, commit, parent, student, source_commit, run_id)
         try:
             _push(site, commit, log, push_s, ls_remote_s)
         except Race:
-            log.event("site.publish", f"retry {round_no}/{MAX_ROUNDS}", target="push rejected")
+            log.event("site.publish", f"retry {round_no}/{MAX_ROUNDS}", target="push rejected",
+                      duration_s=time.monotonic() - start)
             continue
         site.run("update-ref", "--no-deref", "HEAD", commit)
-        log.event("site.publish", "ok", target=commit[:12], source=source_commit[:12])
+        log.event("site.publish", "ok", target=commit[:12], duration_s=time.monotonic() - start,
+                  source=source_commit[:12])
         return Published(commit, True)
+    log.event("site.publish", "error", target="push rejected", duration_s=time.monotonic() - start)
     raise Transient("gh-pages push kept being rejected (someone else keeps publishing)")
 
 
@@ -175,17 +180,18 @@ def wait_until_live(url: str, source_commit: str, log: Log, *, timeout_s: int = 
                     every_s: int = 20, fetch=None, sleep=time.sleep) -> bool:
     """Poll the live publish.json; a timeout is only a warning (6.10)."""
     fetch = fetch or _https_get
-    deadline = time.monotonic() + timeout_s
+    start = time.monotonic()
+    deadline = start + timeout_s
     while True:
         try:
             if json.loads(fetch(url)).get("source_commit") == source_commit:
-                log.event("site.live", "ok", target=url)
+                log.event("site.live", "ok", target=url, duration_s=time.monotonic() - start)
                 return True
         except (OSError, ValueError):
             pass
         if time.monotonic() >= deadline:
             log.event("site.live", "warning", level="warning", target=url,
-                      message="publish.json not live yet")
+                      duration_s=time.monotonic() - start, message="publish.json not live yet")
             return False
         sleep(every_s)
 

@@ -8,6 +8,7 @@ later copies to gh-pages.
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import tarfile
@@ -84,20 +85,25 @@ def build(git: Git, commit: str, task_dir: Path, renderer: Renderer, *, changed:
     src = task_dir / "build-src"
     for stale in (out, src):
         shutil.rmtree(stale, ignore_errors=True)
-    with Timer() as t:
-        extract(git, commit, src)
-        dates = last_updated(git, commit)
-        write_json(task_dir / "last-updated.json", dates)
-        _render(renderer, src, out, task_dir / "last-updated.json")
-        payload = read_json(out / "payload.json")
-        only = None if changed is None or deleted(changed, src) else pages_to_check(changed, [p["path"] for p in payload["pages"]])
-        try:
-            _browser_check(renderer, out, payload, only)
-        except BuildContentError as exc:
-            problems = browser_filter(exc.problems) if browser_filter else exc.problems
-            if problems:
-                raise BuildContentError(problems) from None
-        _check_public(renderer, out, payload)
+    t = Timer()
+    try:
+        with t:
+            extract(git, commit, src)
+            dates = last_updated(git, commit)
+            write_json(task_dir / "last-updated.json", dates)
+            _render(renderer, src, out, task_dir / "last-updated.json", log)
+            payload = read_json(out / "payload.json")
+            only = None if changed is None or deleted(changed, src) else pages_to_check(changed, [p["path"] for p in payload["pages"]])
+            try:
+                _browser_check(renderer, out, payload, only)
+            except BuildContentError as exc:
+                problems = browser_filter(exc.problems) if browser_filter else exc.problems
+                if problems:
+                    raise BuildContentError(problems) from None
+            _check_public(renderer, out, payload)
+    except Exception:
+        log.event("site.build", "error", target=commit[:12], duration_s=t.s)
+        raise
     shutil.rmtree(src, ignore_errors=True)
     record = {"commit": commit, "duration_s": round(t.s, 1), "pages": len(payload["pages"])}
     write_json(out / "build.json", record)  # written last: marks the build complete
@@ -184,12 +190,22 @@ def _env() -> dict:
     return env
 
 
-def _render(r: Renderer, src: Path, out: Path, dates: Path) -> None:
+# The renderer's report of its PDF step (counts from `lib/pdf.mjs`, time from `cli.mjs`): one
+# timed line in the JSONL log.
+PDF_TIME = re.compile(r"^PDF time: ([\d.]+) s$", re.M)
+PDF_COUNTS = re.compile(r"^PDFs: (\d+) generated, (\d+) reused$", re.M)
+
+
+def _render(r: Renderer, src: Path, out: Path, dates: Path, log: Log | None = None) -> None:
     argv = [r.node, str(r.study_site / "cli.mjs"), "build", "--repo", str(src),
             "--config", str(src / CONFIG), "--output", str(out), "--browser", str(r.browser),
             "--pdf-cache", str(r.pdf_cache), "--last-updated", str(dates)]
     proc = _run(argv, cwd=r.study_site, timeout=r.build_s, log_file=out.parent / "render.log",
                 what="site render")
+    timed, counts = PDF_TIME.search(proc.stdout or ""), PDF_COUNTS.search(proc.stdout or "")
+    if timed and log is not None:
+        made, reused = (int(counts[1]), int(counts[2])) if counts else (0, 0)
+        log.event("site.pdf", target=f"{made + reused} pdf", duration_s=float(timed[1]), generated=made, reused=reused)
     if proc.returncode == RENDER_EXIT_PAGE:
         problems = [_page_problem(line) for line in proc.stderr.splitlines()
                     if line.startswith(PAGE_ERROR)]

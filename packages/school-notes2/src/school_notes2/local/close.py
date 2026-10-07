@@ -31,11 +31,16 @@ files; the reviewer has no shell). An `accept` is valid only for the content it 
    figure must be looked at against the new text;
 7. reader-verdict bookkeeping (figure verdicts untouched), indexes, decisions overview,
    `public.json`, the tool-writes record the writer guard reads;
-8. the content check of `sn done` for the whole learner (the worktree is naturally not clean).
+8. the content check of `sn done` for the whole learner (the worktree is naturally not clean);
+9. only after exit 0: each consumed hand-over folder `.school-notes/out/<subject>/` is moved
+   (never deleted) to `.school-notes/done/<pass id>/` – the pass id of the evidence records,
+   `helyi-<digest>-<subject>`; a replayed pass gets `-2`, `-3`, … A STOP, exit 1 or an error
+   leaves the hand-over where it is.
 
 With `--subject` the STOP checks look only at the named subjects (a stalled subject does not
 block the others); `sn done` and `sn publish` stay strict for the whole learner. `--check`
-runs the same on a private copy and lists what would change; the working copy is untouched."""
+runs the same on a private copy and lists what would change; the working copy is untouched;
+neither `--check` nor `--snapshot` moves a hand-over."""
 
 import filecmp
 import json
@@ -52,6 +57,8 @@ from ..wiki import decisions, generate, public
 from . import done, figure_close as figs, guard, machine_data, tool_writes
 from .common import Refused, now_iso
 from .handoff import OUT, accepted, handoffs, in_scope
+
+DONE = ".school-notes/done"
 
 STOP = 2
 REVIEWER = figs.REVIEWER
@@ -128,6 +135,26 @@ def close(local, repo: Path, subjects: list[str] | None, out=print) -> int:
     for line in warnings:
         out(f"figyelmeztetés: {line}")
     return done.report(repo, out)
+
+
+def retire(repo: Path, subjects: list[str] | None, out=print) -> list[str]:
+    """Step 9: move each consumed hand-over to `.school-notes/done/<pass id>/` (the next
+    free `-2`, `-3`, … when that pass was closed before); nothing is deleted."""
+    moved = []
+    for h in handoffs(repo, subjects):
+        name = machine_data.pass_id(h)
+        for n in range(1, 1000):
+            dest = f"{DONE}/{name}" + (f"-{n}" if n > 1 else "")
+            try:
+                safefs.move(repo, f"{OUT}/{h.subject}", dest)
+                break
+            except FileExistsError:
+                continue
+        else:
+            raise Refused(f"{DONE}/{name}: no free name for the hand-over")
+        out(f"átadás elrakva: {OUT}/{h.subject} → {dest}")
+        moved.append(dest)
+    return moved
 
 
 def _head_generated(git, rel: str):
@@ -224,8 +251,9 @@ def run(local, subjects: list[str] | None, check: bool = False, out=print, *,
         return snapshot(local, subjects, snapshot_only, out)
     if not check:
         code = close(local, local.repo, subjects, out)
+        moved = retire(local.repo, subjects, out) if code == 0 else []
         local.record("close", {0: "ok", 1: "open", STOP: "stop"}.get(code, "error"),
-                     subjects=subjects or "all")
+                     subjects=subjects or "all", moved=len(moved))
         return code
     with tempfile.TemporaryDirectory(prefix=f"sn-close-{local.name}-") as tmp:
         copy = Path(tmp) / "repo"

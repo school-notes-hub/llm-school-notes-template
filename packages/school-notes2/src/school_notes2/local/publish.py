@@ -83,7 +83,7 @@ def run(local, reviewed: bool = False, build_only: Path | None = None, out=print
         local.record("publish", "refused", target=head, reason=reason)
         return 1
     if build_only is not None:
-        record = site_build.build(git, head, Path(build_only), renderer(local), changed=None, log=local.quiet)
+        record = site_build.build(git, head, Path(build_only), renderer(local), changed=None, log=local.steps)
         out(f"build: {record.output / 'site'} ({record.pages} lap, {record.duration_s} s)")
         local.record("publish", "built", target=head, pages=record.pages)
         return 0
@@ -96,7 +96,7 @@ def run(local, reviewed: bool = False, build_only: Path | None = None, out=print
         local.record("publish", "error", target=head, reason="main push not visible")
         return 1
     site = site_git(local)
-    site_publish.fetch_gh_pages(site, local.quiet, fetch_s=local.cfg.timeouts.fetch_s,
+    site_publish.fetch_gh_pages(site, local.steps, fetch_s=local.cfg.timeouts.fetch_s,
                                 ls_remote_s=local.cfg.timeouts.ls_remote_s)
     needed, why = site_publish.publish_needed(git, site, head, VERSION)
     commit, live = None, None
@@ -104,7 +104,7 @@ def run(local, reviewed: bool = False, build_only: Path | None = None, out=print
         changed = site_publish.changed_since_publish(git, site, head)
         with tempfile.TemporaryDirectory(prefix=f"sn-publish-{local.name}-") as tmp:
             try:
-                record = site_build.build(git, head, Path(tmp), renderer(local), changed=changed, log=local.quiet)
+                record = site_build.build(git, head, Path(tmp), renderer(local), changed=changed, log=local.steps)
             except site_build.BuildContentError as exc:
                 for problem in exc.problems[:30]:
                     out(f"  {problem['file']}: {problem['message']}")
@@ -113,12 +113,12 @@ def run(local, reviewed: bool = False, build_only: Path | None = None, out=print
                 return 1
             published = site_publish.publish(
                 site, record.output / "site", student=local.name, source_commit=head,
-                run_id=f"helyi-{today()}", tool_version=VERSION, log=local.quiet,
+                run_id=f"helyi-{today()}", tool_version=VERSION, log=local.steps,
                 fetch_s=local.cfg.timeouts.fetch_s, push_s=local.cfg.timeouts.push_s,
                 ls_remote_s=local.cfg.timeouts.ls_remote_s)
             commit = published.commit
             url = site_publish.live_url(record.output)
-            live = site_publish.wait_until_live(url, head, local.quiet) if url else None
+            live = site_publish.wait_until_live(url, head, local.steps) if url else None
         out(f"gh-pages: {commit or 'nem változott'}; élő: {'igen' if live else 'még nem' if url else '–'}")
     else:
         out(f"gh-pages: nincs teendő ({why})")

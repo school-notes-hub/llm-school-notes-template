@@ -16,7 +16,7 @@ from .common import today
 def run(local, figure_id: str | None, note: Path | None = None, *, settle: bool = False,
         grant: bool = False) -> int:
     settings = local.image_settings()
-    settled = generate.settle_unknown(settings, log=local.quiet)
+    settled = generate.settle_unknown(settings, log=local.steps)
     for item in settled:
         print(f"rendezve: {item['job']} ({item['state']}, {item['cost_usd']} USD)")
     if settle:
@@ -32,7 +32,7 @@ def run(local, figure_id: str | None, note: Path | None = None, *, settle: bool 
         local.record("gen", "granted" if new else "already-granted", target=figure_id)
         return 0
     text = note.read_text(encoding="utf-8").strip() if note else None
-    result = generate.generate(settings, figure_id, text, log=local.quiet)
+    result = generate.generate(settings, figure_id, text, log=local.steps)
     print(json.dumps(result, ensure_ascii=False, indent=1))
     local.record("gen", result["state"], target=figure_id, cost_usd=result.get("cost_usd"),
                  attempt=result.get("number"))

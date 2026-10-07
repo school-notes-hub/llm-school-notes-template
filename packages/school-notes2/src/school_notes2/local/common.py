@@ -1,8 +1,10 @@
 """What every local command shares (plan 3.1): the configuration, the learner's working copy,
 the release this process runs from, git over HTTPS with `gh`'s token, and the log.
 
-The library functions log into a quiet log; each command writes one line of its own to the
-JSONL log (`logs/school-notes.log`), so the log reads one line per command."""
+Each command writes one line of its own to the JSONL log (`logs/school-notes.log`); the
+library steps that take time (git network operations, site build, PDF render, gh-pages push,
+live check, image generation attempts) write one small line each with `seconds` into the same
+file (`STEPS`); every other library event goes nowhere."""
 
 import subprocess
 from dataclasses import dataclass
@@ -23,6 +25,8 @@ class Refused(SnError):
 
 
 GITHUB = "https://github.com/"
+STEPS = ("git.fetch", "git.push", "git.ls-remote", "git.clone", "git.pull",
+         "site.build", "site.pdf", "site.publish", "site.live", "image.attempt")
 
 
 def require_github(url: str, what: str) -> str:
@@ -64,8 +68,9 @@ class Local:
         return RELEASE / "tools"
 
     @property
-    def quiet(self) -> Log:
-        return Log(None, student=self.name, console=False)
+    def steps(self) -> Log:
+        """The library steps' log: only `STEPS`, one small timed line each, into the JSONL log."""
+        return Log(self.cfg.log_path, student=self.name, console=False, steps=STEPS)
 
     def record(self, command: str, outcome: str = "ok", **fields) -> None:
         """The command's one line in the JSONL log."""
@@ -76,7 +81,7 @@ class Local:
         the HTTPS token of `gh` goes into git's environment only."""
         path = path or self.repo
         remote = HttpsToken(gh_token()) if network else None
-        return Git(git_dir(path), self.cfg.git_name, self.cfg.git_email, self.quiet, remote, path)
+        return Git(git_dir(path), self.cfg.git_name, self.cfg.git_email, self.steps, remote, path)
 
     def image_settings(self, worktree: Path | None = None):
         """The shared host ledger and lock; the key is read from the ops `.env` at call time."""

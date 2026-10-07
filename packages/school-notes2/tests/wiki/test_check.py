@@ -85,7 +85,7 @@ def test_missing_cited_source_is_only_a_warning(repo):
 def test_a_web_footnote_is_title_one_url_and_a_retrieval_date():
     """Plan 5: the public view keeps a footnote with a web URL whole, so its form is fixed."""
     good = ["[^a]: Hidrogén - PubChem. https://pubchem.ncbi.nlm.nih.gov/element/1 (ellenőrizve: 2026-09-30).",
-            "[^b]: [NHS: Burns and scalds](https://www.nhs.uk/conditions/burns-and-scalds/). Ellenőrizve: 2026-09-29.",
+            "[^b]: [NHS: Burns and scalds](https://www.nhs.uk/conditions/burns-and-scalds/) (ellenőrizve: 2026-09-29).",
             "[^c]: Füzet, 3. oldal: a tanár magyarázata."]                       # no URL: not judged here
     bad = {"[^d]: [Web](https://example.org/x), 2026-09-30; [háttér](../../references/t/b/index.md).": "more than one link",
            "[^e]: Cikk. https://example.org/a https://example.org/b (2026-09-30).": "more than one link",
@@ -99,6 +99,55 @@ def test_a_web_footnote_is_title_one_url_and_a_retrieval_date():
     for line, problem in bad.items():
         [found] = check.check_web_footnotes("wiki/x/a.md", f"# A\n\n{line}\n")
         assert problem in found["message"] and found["severity"] == "error" and found["line"] == 3, line
+
+
+def test_a_web_footnote_has_nothing_but_title_url_and_date():
+    """0.3.2: the rule's form exactly – free text after the title has carried private details
+    ("PDF 15. oldal") onto the public site. Each extra is named, with the expected form."""
+    good = ["[^a]: Hidrogén - PubChem. https://pubchem.ncbi.nlm.nih.gov/element/1 (ellenőrizve: 2026-09-30).",
+            "[^a]: [NHS: Burns and scalds](https://www.nhs.uk/conditions/burns-and-scalds/) (ellenőrizve: 2026-09-29).",
+            "[^a]: [Code of Hammurabi (L. W. King fordítása)](https://avalon.law.yale.edu/x) (ellenőrizve: 2026-10-07).",
+            "[^a]: [St. Vrain Valley Schools: Student Safety Rules](https://www.svvsd.org/x/) (ellenőrizve: 2026-09-29).",
+            "[^a]: 2012. évi I. törvény a munka törvénykönyvéről. https://net.jogtar.hu/x (ellenőrizve: 2026-10-06).",
+            "[^a]: [A Theory of Human Motivation (1943)](https://psychclassics.yorku.ca/x.htm) (ellenőrizve: 2026-10-07).",
+            "[^a]: [Rendőrség: Mi a 112-es segélyhívószám?](https://www.police.hu/hu/112) (ellenőrizve: 2026-09-29)."]
+    bad = {"[^b]: [NHS: Burns](https://www.nhs.uk/b/). Ellenőrizve: 2026-09-29.": "after the link not exactly",
+           "[^b]: Cikk. https://example.org/a (ellenőrizve: 2026-09-30). PDF 15. oldal.": "text after the retrieval date: 'PDF 15. oldal.'",
+           "[^b]: NAV: [Diákmunka](https://nav.gov.hu/x) (ellenőrizve: 2026-09-30).": "text before the link: 'NAV:'",
+           "[^b]: [Mt.](https://net.jogtar.hu/x), 21. § (4) (ellenőrizve: 2026-10-06).": "text between the link and the date: ', 21. § (4)'",
+           "[^b]: Cikk, https://example.org/a (ellenőrizve: 2026-09-30).": "the title does not end with '. ' before the URL",
+           "[^b]: Cikk. <https://example.org/a> (ellenőrizve: 2026-09-30).": "the URL in angle brackets",
+           "[^b]: Cikk. https://example.org/a, letöltve 2026-10-06.": "after the URL not exactly",
+           "[^b]: Cikk. https://example.org/a (lekérve: 2026-10-06).": "after the URL not exactly",
+           "[^b]: Cikk. http://example.org/a (ellenőrizve: 2026-09-30).": "not an https URL",
+           "[^b]: Cikk. https://example.org/a (ellenőrizve: 2026-02-30).": "is not a real date",
+           "[^b]: Buddhist Art. The Metropolitan Museum. https://example.org/a (ellenőrizve: 2026-09-30).": "a second sentence in the title: 'The Metropolitan Museum'",
+           "[^b]: Cikk; lásd a végét. https://example.org/a (ellenőrizve: 2026-09-30).": "a second sentence",
+           "[^b]: OTSZ, 54/2014. BM rendelet, 9. §. https://njt.hu/x (ellenőrizve: 2026-09-30).": "a page or paragraph number",
+           "[^b]: Tankönyv, 15. oldal. https://example.org/a (ellenőrizve: 2026-09-30).": "a page or paragraph number",
+           "[^b]: Engineering Statics, 8.2. Sign Conventions. https://example.org/a (ellenőrizve: 2026-09-30).": "a section number",
+           "[^b]: 2024/1681/EU, melléklet. https://eur-lex.europa.eu/x (ellenőrizve: 2026-09-30).": "a section name",
+           "[^b]: [Cikk](https://example.org/a \"cím\") (ellenőrizve: 2026-09-30).": "a link with angle brackets or a link title"}
+    for line in good:
+        assert check.check_web_footnotes("wiki/x/a.md", f"# A\n\nSzöveg.[^a]\n\n{line}\n") == [], line
+    for line, problem in bad.items():
+        [found] = check.check_web_footnotes("wiki/x/a.md", f"# A\n\n{line}\n")
+        assert problem in found["message"] and found["line"] == 3, (line, found["message"])
+        assert found["message"].startswith("[^b]: ") and "expected exactly `[^id]: Title. https://" in found["message"]
+    cont = "# A\n\n[^b]: Cikk. https://example.org/a (ellenőrizve: 2026-09-30).\n\n    Lásd a 3. bekezdést.\n"
+    assert "a continuation paragraph" in check.check_web_footnotes("wiki/x/a.md", cont)[0]["message"]
+
+
+def test_the_done_report_names_page_line_and_what_is_extra(repo):
+    from school_notes2.local import done
+    (repo / "wiki/proba/elso.md").write_text((repo / "wiki/proba/elso.md").read_text() + "\nSzöveg.[^w]\n\n"
+                                             "[^w]: Cikk. https://example.org/a (ellenőrizve: 2026-09-30). PDF 15. oldal.\n")
+    line = (repo / "wiki/proba/elso.md").read_text().split("\n").index(
+        "[^w]: Cikk. https://example.org/a (ellenőrizve: 2026-09-30). PDF 15. oldal.") + 1
+    lines = []
+    done.report(repo, lines.append)
+    assert f"  wiki/proba/elso.md:{line} [^w]: text after the retrieval date: 'PDF 15. oldal.' – expected exactly" \
+        in "\n".join(lines)
 
 
 def test_the_done_check_counts_a_bad_web_footnote(repo):

@@ -19,12 +19,14 @@ is in git, tag `archiv/main-elotte` and the `archiv/<branch>` tags).
 | `sn check <t> <page…>` | page check, read-only (`check_files(fix=False)`) | `local/check.py` |
 | `sn gen <t> <id> [--note f]`, `--settle`, `--grant` | one paid image generation through the host ledger | `local/gen.py` |
 | `sn close <t> --subject s --snapshot [--only id,…]` | before the reviewer (and before the confirmation pass): the candidate preflight (STOP on a problem), then `keys.json` and `diff.patch` into the hand-over folder | `local/close.py` |
-| `sn close <t> [--subject a,b] [--check]` | hand-overs in `.school-notes/out/<subject>/` (`handoff.py`) → STOP checks (writer guard, preflight, snapshot keys, `adatok.json`) → insertion and renewals (`figure_close.py`) → machine data: lesson-log keys, stamps, evidence records, figure requests, draft notice, banner and 📎 blocks (`machine_data.py`) → STOP on invalidated verdicts → indexes, `public.json`, content check; never deletes a figure verdict | `local/close.py` |
+| `sn close <t> [--subject a,b] [--check]` | hand-overs in `.school-notes/out/<subject>/` (`handoff.py`) → STOP checks (writer guard, preflight, snapshot keys, `adatok.json`) → insertion and renewals (`figure_close.py`) → machine data: lesson-log keys, stamps, evidence records, figure requests, draft notice, banner and 📎 blocks (`machine_data.py`) → STOP on invalidated verdicts → indexes, `public.json`, content check → only on exit 0: each consumed hand-over moved to `.school-notes/done/<pass id>/` (never deleted; `--check` moves nothing); never deletes a figure verdict | `local/close.py` |
 | `sn done <t>` | is the content finished (exit 0/1); the facts it counts are in `local/places.py`, the writer guard in `local/guard.py` | `local/done.py` |
 | `sn publish <t> [--reviewed] [--build-only DIR]` | clean tree + `sn done` 0 → push main → build → public gate → gh-pages → live check | `local/publish.py` |
 
 Keys come only from `school-notes-ops/.env` at run time (`local/keys.py`); git runs over HTTPS with `gh`'s
-token in git's environment (`git/run.py` `HttpsToken`); each command writes one line to `logs/school-notes.log`.
+token in git's environment (`git/run.py` `HttpsToken`); each command writes one line to `logs/school-notes.log`
+(`sn check` too), and the library steps that take time – git network operations, site build, PDF render, gh-pages
+push, live check, image generation attempts – one small line each with `seconds` (`local/common.py` `STEPS`).
 
 ## Folders
 

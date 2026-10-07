@@ -18,18 +18,27 @@ def now_iso() -> str:
 
 @dataclass
 class Log:
-    """`main` None: a quiet log (the library functions' events go nowhere)."""
+    """`main` None: a quiet log (the library functions' events go nowhere).
+
+    `steps`: a step log – only these actions are written, each as one small line with its
+    `seconds` and only numeric counts besides (no message, no stderr, no content)."""
 
     main: Path | None
     student: str = ""
     console: bool = True
+    steps: tuple[str, ...] | None = None
 
     def event(self, action: str, outcome: str = "ok", *, level: str = "info",
               target: str = "", duration_s: float | None = None, **counts) -> None:
+        if self.steps is not None:
+            if action not in self.steps:
+                return
+            counts = {k: v for k, v in counts.items()
+                      if k == "error_class" or (isinstance(v, (int, float)) and not isinstance(v, bool))}
         record = {"ts": now_iso(), "level": level, "student": self.student,
                   "action": action, "target": target, "outcome": outcome}
         if duration_s is not None:
-            record["duration_s"] = round(duration_s, 3)
+            record["seconds" if self.steps is not None else "duration_s"] = round(duration_s, 3)
         record.update(counts)
         if self.main is not None:
             self.main.parent.mkdir(parents=True, exist_ok=True)

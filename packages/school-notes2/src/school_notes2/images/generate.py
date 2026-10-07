@@ -133,12 +133,19 @@ def awaiting_review(entry: dict) -> bool:
 def _attempts(settings, job, job_path, repair_note, log, sleep) -> dict:
     files = {"repair.txt": repair_note} if repair_note else None
     args = ["--job", str(job_path)] + (["--repair", "{tmp}/repair.txt"] if repair_note else [])
+    def attempt_line(outcome: str, started: float) -> None:
+        log.event("image.attempt", outcome, target=job["id"], duration_s=time.monotonic() - started)
+
     for delay in (*RETRY_DELAYS, None):
         before = _attempt_count(settings, job["id"])
+        started = time.monotonic()
         try:
             answer = call(settings, "generate", args, job["target"], with_key=True, files=files)
-            return _success(settings, job["id"], answer)
+            result = _success(settings, job["id"], answer)
+            attempt_line(result["state"], started)
+            return result
         except ExecutorTimeout:
+            attempt_line("unknown", started)
             return {"state": "unknown", "message": "the call timed out after sending; "
                                                    "generation waits until it is settled"}
         except ExecutorError as exc:
@@ -148,6 +155,7 @@ def _attempts(settings, job, job_path, repair_note, log, sleep) -> dict:
                 return {"state": "error", "message": str(exc)}
             last = _last_attempt(settings, job["id"])
             failure = last.get("failure") if last and last["state"] == "failed" else None
+            attempt_line(failure or (last or {}).get("state") or "error", started)
             if failure in RETRYABLE and delay is not None and _blocked(settings, job["id"], repairing=bool(repair_note)) is None:
                 log.event("image.generate", f"retry ({failure})", target=job["id"])
                 sleep(delay)

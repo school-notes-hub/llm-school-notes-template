@@ -101,7 +101,7 @@ class Git:
                                       timeout=timeout, cwd=cwd or self.work_tree or self.git_dir)
             except subprocess.TimeoutExpired:
                 self.log.event("git." + args[0], "error", target=" ".join(args[1:3]),
-                               error_class="transient", message="timeout")
+                               duration_s=time.monotonic() - t.start, error_class="transient", message="timeout")
                 raise Transient(f"git {args[0]} timed out after {timeout:.0f}s") from None
         stderr = proc.stderr.decode("utf-8", "replace")
         self.log.event("git." + args[0], "ok" if proc.returncode == 0 else "error",

@@ -65,7 +65,11 @@ if (command === 'build') {
   const code = await new Promise(resolve => child.on('exit', resolve));
   await fs.unlink(path.join(output, 'node_modules'));
   if (code !== 0) throw new Error(`Astro build failed: ${code}`);
+  // The PDF step's time, one line the tool reads into its JSONL log (school_notes2 site/build.py).
+  // Measured here, not in lib/pdf.mjs: that file is part of the PDF cache fingerprint.
+  const pdfStarted = Date.now();
   await generatePdfs({output,payload,browserPath,cacheDirectory:options['pdf-cache']});
+  if (wantsPdf) console.log(`PDF time: ${((Date.now()-pdfStarted)/1000).toFixed(1)} s`);
   console.log(`Built ${payload.pages.length} pages: ${path.join(output, 'site')}`);
 } else if (command === 'serve') {
   const base = options.base || '/';
