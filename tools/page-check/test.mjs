@@ -65,3 +65,10 @@ test('escaped interval brackets stay in the alt text and are never math',()=>{
  assert.ok(r.html.includes('alt="A = ]-2; 5] és [0; 5["'),r.html);
  assert.equal(r.mathCount,0);assert.ok(!r.html.includes('math-display'));
 });
+test('a lesson date is a quiet meta item with its tooltip (sn 0.3.8)',()=>{
+ const r=renderMarkdown('* [x](a.md) <span class="study-when study-when-unsure" title="Dátum nélküli óra: szept. 23. – okt. 4.">~szept. vége</span>\n');
+ assert.ok(r.html.includes('<span class="study-when study-when-unsure" title="Dátum nélküli óra: szept. 23. – okt. 4.">~szept. vége</span>'),r.html);
+ const css=fs.readFileSync(new URL('./style.css',import.meta.url),'utf8');
+ assert.match(css,/\.study-when::before \{[^}]*mask:/);
+ assert.match(css,/@media print[^\n]*\.study-when-unsure \{ display:none; \}/);
+});

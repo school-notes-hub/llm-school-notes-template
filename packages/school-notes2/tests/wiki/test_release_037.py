@@ -39,9 +39,11 @@ def test_a_strict_lower_bound_starts_the_next_day_and_an_undated_start_is_marked
     lesson_log(repo, "2026-09-04-x-jegyzet.md", "proba/x", ["{date: '2026-09-04', title: Kezd, topics: [ta.md]}"])
     lesson_log(repo, "2026-09-25-y-jegyzet.md", "proba/y", [
         "{date_note: '2026-09-10 után, legkésőbb 2026-09-25', title: Új, topics: [tb.md]}"])
-    assert most(repo) == "* **Most:** B (szeptember közepe óta, még tart ↕)"
+    tag = ('<span class="study-when study-when-unsure" title="Nem biztos: a kezdete dátum nélküli óra '
+           '(szept. 11. – 25.)">~szept. közepe óta</span>')
+    assert most(repo) == f"* **Most:** B {tag}"
     chapters = markers.read(generate.subject_index(repo, "proba"), "chapters")
-    assert "🗓️ szeptember közepe óta, még tart ↕" in chapters and "A ↕ jel" in chapters
+    assert tag in chapters
 
 
 def test_a_revisit_never_changes_the_current_chapter(tmp_path):
@@ -49,9 +51,9 @@ def test_a_revisit_never_changes_the_current_chapter(tmp_path):
     repo = base(tmp_path)
     lesson_log(repo, "2026-09-01-x-jegyzet.md", "proba/x", [
         "{date: '2026-09-01', title: Közös, topics: [ta.md, tb.md]}"])
-    assert chapter_order(repo) == ["a", "b"] and most(repo).startswith("* **Most:** B (")
+    assert chapter_order(repo) == ["a", "b"] and most(repo).startswith("* **Most:** B <span")
     lesson_log(repo, "2026-10-01-y-jegyzet.md", "proba/y", ["{date: '2026-10-01', title: Vissza, topics: [ta.md]}"])
-    assert chapter_order(repo) == ["a", "b"] and most(repo).startswith("* **Most:** B (")
+    assert chapter_order(repo) == ["a", "b"] and most(repo).startswith("* **Most:** B <span")
     # two chapters started in one lesson: the order taught in that lesson decides
     lesson_log(repo, "2026-09-01-x-jegyzet.md", "proba/x", [
         "{date: '2026-09-01', title: Közös, topics: [tb.md, ta.md]}"])
@@ -66,7 +68,7 @@ def test_a_later_revisit_never_becomes_the_start_of_an_evidenced_earlier_chapter
     lesson_log(repo, "2026-09-10-y-jegyzet.md", "proba/y", ["{date: '2026-09-10', title: B kezd, topics: [tb.md]}"])
     lesson_log(repo, "2026-10-01-z-jegyzet.md", "proba/z", ["{date: '2026-10-01', title: Vissza, topics: [ta.md]}"])
     assert chapter_order(repo) == ["a", "b"]
-    assert most(repo) == "* **Most:** B (szeptember 10. óta, még tart)"
+    assert most(repo) == '* **Most:** B <span class="study-when">szept. 10. óta</span>'
 
 
 def test_chapter_ties_never_use_file_names(tmp_path):

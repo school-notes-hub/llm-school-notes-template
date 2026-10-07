@@ -76,8 +76,7 @@ def test_an_undated_lesson_sorts_by_its_lower_bound(tmp_path):
     repo = subject_repo(tmp_path)
     assert titles(repo) == ["Új fejezet", "Pótolt óra", "Folytatás", "Kezdés"]
     table = markers.read(generate.subject_index(repo, "proba"), "lessons")
-    assert "| ? (2026-09-10 után, legkésőbb 2026-10-04) ↕ | Pótolt óra |" in table
-    assert "A ↕ jel: dátum nélküli óra, ezért a helye a sorban (vagy egy fejezet kezdete) nem biztos" in table
+    assert "| <span class=\"study-when study-when-unsure\" title=\"Dátum nélküli óra: szept. 11. – okt. 4.; a helye a sorban nem biztos\">~szept. közepe</span> | Pótolt óra |" in table
 
 
 def test_inside_one_lesson_log_the_notebook_order_tightens_the_range(tmp_path):
@@ -110,15 +109,13 @@ def test_the_now_block_names_the_chapter_the_latest_lesson_and_the_ones_before(t
     text = generate.subject_index(repo, "proba")
     assert markers.read(text, "now") == (
         "# 📍 Itt tartunk\n\n"
-        "* **Most:** Második fejezet (szeptember 22. óta, még tart)\n"
-        "* **Legutóbb:** [Új fejezet](2026-09-22-c-jegyzet.md) – 2026-09-22 · [Uj](uj.md)\n"
-        "* **Előtte:** Első fejezet (szeptember eleje – október eleje ↕)\n\n"
+        "* **Most:** Második fejezet <span class=\"study-when\">szept. 22. óta</span>\n"
+        "* **Legutóbb:** [Új fejezet](2026-09-22-c-jegyzet.md) <span class=\"study-when\">szept. 22.</span> · [Uj](uj.md)\n"
+        "* **Előtte:** Első fejezet <span class=\"study-when study-when-unsure\" title=\"Nem biztos: a vége dátum nélküli óra (szept. 11. – okt. 4.)\">~szept. eleje – okt. eleje</span>\n\n"
         "Eddig ebben a sorrendben vettük, a legújabb elöl:\n\n"
-        "* dátum nélkül, 2026-09-10 után, legkésőbb 2026-10-04 ↕ – [Pótolt óra](2026-10-04-b-jegyzet.md)\n"
-        "* 2026-09-10 – [Folytatás](2026-09-10-a-jegyzet.md)\n"
-        "* 2026-09-03 – [Kezdés](2026-09-10-a-jegyzet.md)\n\n"
-        "A ↕ jel: dátum nélküli óra, ezért a helye a sorban (vagy egy fejezet kezdete) nem biztos, mert az "
-        "időszaka átfed más órákéval.\n")
+        "* [Pótolt óra](2026-10-04-b-jegyzet.md) <span class=\"study-when study-when-unsure\" title=\"Dátum nélküli óra: szept. 11. – okt. 4.; a helye a sorban nem biztos\">~szept. közepe</span>\n"
+        "* [Folytatás](2026-09-10-a-jegyzet.md) <span class=\"study-when\">szept. 10.</span>\n"
+        "* [Kezdés](2026-09-10-a-jegyzet.md) <span class=\"study-when\">szept. 3.</span>\n")
     # its fixed place: after the back link, above the chapter lists; a refresh changes nothing
     assert text.index("../index.md)") < text.index("# 📍 Itt tartunk") < text.index("# 📘")
     write(repo, "wiki/proba/index.md", text)
@@ -129,13 +126,13 @@ def test_each_chapter_shows_when_it_was_taught(tmp_path):
     repo = subject_repo(tmp_path)
     chapters = markers.read(generate.subject_index(repo, "proba"), "chapters")
     # the undated catch-up lesson may come after the 09-22 start: the end is not cut as if certain
-    assert "# 📘 9. évfolyam: Első fejezet\n\n🗓️ szeptember eleje – október eleje ↕\n\n" in chapters
-    assert "# 📘 9. évfolyam: Második fejezet\n\n🗓️ szeptember 22. óta, még tart\n\n" in chapters
+    assert "# 📘 9. évfolyam: Első fejezet\n\n<span class=\"study-when study-when-unsure\" title=\"Nem biztos: a vége dátum nélküli óra (szept. 11. – okt. 4.)\">~szept. eleje – okt. eleje</span>\n\n" in chapters
+    assert "# 📘 9. évfolyam: Második fejezet\n\n<span class=\"study-when\">szept. 22. óta</span>\n\n" in chapters
     two = teaching_order.Chapter("x", "X", 0, [
         teaching_order.Lesson("a.md", 0, {}, "2026-09-03", "2026-09-03", True, "f", ()),
         teaching_order.Lesson("a.md", 1, {}, "2026-09-10", "2026-09-10", True, "f", ())])
     later = teaching_order.Lesson("b.md", 0, {}, "2026-10-01", "2026-10-01", True, "f", ())
-    assert teaching_order.span(two, later) == "szeptember 3. – szeptember 10."
+    assert teaching_order.span(two, later) == "<span class=\"study-when\">szept. 3. – 10.</span>"
 
 
 def test_a_revisit_is_the_latest_lesson_but_moves_no_chapter(tmp_path):
@@ -145,8 +142,8 @@ def test_a_revisit_is_the_latest_lesson_but_moves_no_chapter(tmp_path):
         "{date: '2026-10-06', title: Visszatérés, topics: [alap.md]}"])
     text = generate.subject_index(repo, "proba")
     now = markers.read(text, "now")
-    assert "* **Legutóbb:** [Visszatérés](2026-10-06-f-jegyzet.md) – 2026-10-06 · [Alap](alap.md)\n" in now
-    assert "* **Most:** Második fejezet (" in now                       # the chapter started last
+    assert "* **Legutóbb:** [Visszatérés](2026-10-06-f-jegyzet.md) <span class=\"study-when\">okt. 6.</span> · [Alap](alap.md)\n" in now
+    assert "* **Most:** Második fejezet <span" in now                      # the chapter started last
     assert markers.read(text, "chapters") == before                   # order and spans unchanged
     assert not [w for w in check.order_warnings(repo, ["wiki/proba/index.md"])]
 

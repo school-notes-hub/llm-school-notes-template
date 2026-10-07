@@ -6,6 +6,11 @@
 .study-content :is(h2,h3,h4) { line-height: 1.3; margin: 2.5rem 0 1rem; scroll-margin-top: 6rem; }
 .study-content :is(h2,h3,h4) + p { margin-top: .5em; }
 .study-content .study-label { display: inline; font-size: .85rem; line-height: 1.5; color: var(--sl-color-gray-2, #505c65); vertical-align: baseline; }
+/* A lesson date as a quiet meta item (rules 1.22.6), like a release line: a small outline clock,
+   small grey text. An uncertain one starts with `~`; its range is only the hover tooltip. */
+.study-content .study-when { font-size: .85rem; color: var(--sl-color-gray-3, #8b949c); white-space: nowrap; }
+.study-content .study-when::before { content: ""; display: inline-block; width: .9em; height: .9em; margin-inline-end: .28em; vertical-align: -.12em; background-color: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='6.25'/%3E%3Cpath d='M8 4.5V8l2.25 1.5'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='6.25'/%3E%3Cpath d='M8 4.5V8l2.25 1.5'/%3E%3C/svg%3E") center / contain no-repeat; }
+.study-content .study-when[title] { cursor: help; }
 .study-content .study-callout { margin: 1.6rem 0; border-inline-start: 3px solid #638dca; padding: .25rem 1.2rem; background: color-mix(in srgb, #638dca 5%, transparent); }
 .study-content .study-callout > :first-child { margin-top: .3rem; }
 .study-content .study-callout > :last-child { margin-bottom: .3rem; }
@@ -54,6 +59,9 @@
   .print-document main { max-width: none; margin: 0; padding: 0; }
   .study-content { font-size: 11.5pt; line-height: 1.45; color: #111; }
   .study-content .study-label { color: #404040; font-size: 9pt; }
+  /* On paper there is no tooltip: only certain dates are printed, small and grey. */
+  .study-content .study-when { color: #606060; font-size: 8.5pt; }
+  .study-content .study-when-unsure { display: none; }
   .study-content :is(h2,h3,h4), .print-chapter > h2 { break-after: avoid; }
   .study-content p { orphans: 3; widows: 3; }
   .study-content img { max-height: 220mm; max-width: 100%; object-fit: contain; break-inside: avoid; }

@@ -34,14 +34,12 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from ..sources.order import natural_key
+from . import hu_dates
 
 ISO = re.compile(r"\d{4}-\d{2}-\d{2}")
 LATEST = re.compile(r"legkésőbb\s+(\d{4}-\d{2}-\d{2})")
 GRADE = re.compile(r"^\d{1,2}\. évfolyam: ")
 NEVER = "9999-12-31"
-MONTHS = ("január", "február", "március", "április", "május", "június", "július", "augusztus",
-          "szeptember", "október", "november", "december")
-UNCERTAIN = " ↕"
 
 
 @dataclass
@@ -275,25 +273,17 @@ def plain_title(title: str) -> str:
     return GRADE.sub("", title)
 
 
-def _part(day: str) -> str:
-    d = int(day[8:10])
-    return "eleje" if d <= 10 else "közepe" if d <= 20 else "vége"
+def year_of(found: list[Lesson]) -> int:
+    return hu_dates.school_year([d for lesson in found for d in (lesson.lo, lesson.hi)])
 
 
-def month_part(day: str) -> str:
-    return f"{MONTHS[int(day[5:7]) - 1]} {_part(day)}"
-
-
-def exact(day: str) -> str:
-    return f"{MONTHS[int(day[5:7]) - 1]} {int(day[8:10])}."
-
-
-def span(chapter: Chapter, until: Lesson | None = None) -> str:
-    """When the chapter was taught, in learner words: from its start to the latest possible day
-    of its lessons that do not certainly come after the current chapter's start (`until`); exact days for one or
-    two dated lessons, else parts of months; the current chapter (no `until`) `… óta, még
-    tart`. An undated start, or an undated last lesson of a finished chapter, makes the span
-    uncertain (↕): its edge is a range, never cut as if certain."""
+def span(chapter: Chapter, until: Lesson | None = None, year: int = 0) -> str:
+    """When the chapter was taught, in learner words (`hu_dates`): from its start to the latest
+    possible day of its lessons that do not certainly come after the current chapter's start
+    (`until`; never cut as if certain); exact days for one or two dated lessons, else parts of
+    months; the current chapter (no `until`) `… óta`; as a quiet date item (`hu_dates.meta`). An
+    undated start, or an undated end of a finished chapter, makes it uncertain (`~`, the range in
+    its tooltip)."""
     first = chapter.start
     taught = [lesson for lesson in chapter.lessons
               if not known_before(lesson, first) and (until is None or not known_before(until, lesson))]
@@ -303,25 +293,27 @@ def span(chapter: Chapter, until: Lesson | None = None) -> str:
         return lesson.lo if lesson.dated else (lesson.hi if lesson.hi != NEVER else lesson.lo)
 
     last = max(taught, key=lambda lesson: (latest(lesson), lesson.dated))
-    mark = "" if first.dated and (until is None or last.dated) else UNCERTAIN
     if all(lesson.dated for lesson in taught) and len({lesson.lo for lesson in taught}) <= 2:
-        start, end = exact(first.lo), exact(last.lo)
+        start, end = hu_dates.short(first.lo, year), hu_dates.short(last.lo, year)
     else:
-        start = month_part(first.lo) if first.lo else (
-            f"legkésőbb {month_part(first.hi)}" if first.hi != NEVER else "?")
-        end = month_part(latest(last)) if latest(last) else "?"
-    if until is None:
-        return f"{start} óta, még tart{mark}"
-    return (start if start == end else f"{start} – {end}") + mark
+        start = hu_dates.part(first.lo or first.hi, year) if (first.lo or first.hi != NEVER) else "?"
+        end = hu_dates.part(latest(last), year) if latest(last) else "?"
+    notes = []
+    if not first.dated:
+        notes.append(f"a kezdete dátum nélküli óra ({hu_dates.range_text(first.lo, first.hi, year)})")
+    if until is not None and not last.dated and last is not first:
+        notes.append(f"a vége dátum nélküli óra ({hu_dates.range_text(last.lo, last.hi, year)})")
+    text = f"{start} óta" if until is None else hu_dates.between(start, end)
+    return hu_dates.meta(text, ("Nem biztos: " + "; ".join(notes)) if notes else "", unsure=bool(notes))
 
 
-def spans(found: list[Chapter]) -> dict[str, str]:
+def spans(found: list[Chapter], year: int = 0) -> dict[str, str]:
     """chapter id → its span; the chapter started last is the current one."""
     started = by_start(found)
     if not started:
         return {}
     current = started[-1]
-    return {c.id: span(c, None if c is current else current.start) for c in started}
+    return {c.id: span(c, None if c is current else current.start, year) for c in started}
 
 
 def order_warnings(repo: Path, paths: list[str]) -> list[dict]:

@@ -7,7 +7,7 @@ This file holds everything that belongs to **this** wiki; the rules shared by ev
 # Template
 
 * **Template repository**: https://github.com/dlaszlo/llm-school-notes-template (or the fork this wiki was made from).
-* **Template version**: `1.22.5`.
+* **Template version**: `1.22.6`.
 * **Template commit**: `<exact template commit recorded at bootstrap and every template update>`.
 
 Updates are optional and happen only when the user asks (see *Template updates* in [Wiki workflows](instructions/wiki-workflows.md)).
@@ -50,14 +50,14 @@ Every reader-facing string the rules prescribe lives here, in the wiki language 
 | review | `# 🔁 Review` | `# 🔁 Ismétlés` |
 | notes | `# 📝 Notes` | `# 📝 Jegyzetek` |
 | undated lesson | `? (after <earliest>, at the latest <latest>)` | `? (<legkorábbi> után, legkésőbb <legkésőbbi>)` |
-| uncertain place | `The ↕ mark: an undated lesson, so its place in the order (or a chapter's start) is not certain, because its range overlaps other lessons.` | `A ↕ jel: dátum nélküli óra, ezért a helye a sorban (vagy egy fejezet kezdete) nem biztos, mert az időszaka átfed más órákéval.` |
+| uncertain date | `~` before the date item; its range and reason only in the hover tooltip (`Undated lesson: Sept 23 – Oct 4`); never visible text; left out on paper | `~` a dátum előtt; az időszak és az ok csak a felugró súgóban (`Dátum nélküli óra: szept. 23. – okt. 4.`), sosem látható szövegként; papíron elmarad |
 | where we are | `# 📍 Where we are` | `# 📍 Itt tartunk` |
-| current chapter | `**Now:** <chapter> (<chapter span>)` | `**Most:** <fejezet> (<időszak>)` |
-| latest lesson | `**Latest:** <lesson> – <date> · <topics>` | `**Legutóbb:** <óra> – <dátum> · <témakörök>` |
-| earlier chapters | `**Before:** <chapter> (<chapter span>) → …` | `**Előtte:** <fejezet> (<időszak>) → …` |
+| current chapter | `**Now:** <chapter> <date item>` | `**Most:** <fejezet> <dátum>` |
+| latest lesson | `**Latest:** <lesson> <date item> · <topics>` | `**Legutóbb:** <óra> <dátum> · <témakörök>` |
+| earlier chapters | `**Before:** <chapter> <date item> → …` | `**Előtte:** <fejezet> <dátum> → …` |
 | lesson order | `So far, in this order, newest first:` | `Eddig ebben a sorrendben vettük, a legújabb elöl:` |
-| undated in the block | `undated, <range>` (in *Latest* and in the list) | `dátum nélkül, <időszak>` (a *Legutóbb* sorban és a listában is) |
-| chapter span | `🗓️ early September – late September`, one or two dated lessons `🗓️ September 3. – September 10.`; the current chapter `🗓️ since late September, still going` (parts: early 1-10, mid 11-20, late 21-) | `🗓️ szeptember eleje – szeptember vége`, egy-két datált óránál `🗓️ szeptember 3. – szeptember 10.`; a mostani fejezet `🗓️ szeptember vége óta, még tart` (eleje 1-10., közepe 11-20., vége 21-) |
+| lesson date | a quiet date item after the important information (small clock, small grey text): `Oct 4`, outside the school year `2025 Oct 4`, an undated lesson `~late Sept` | csendes dátum a fontos információ után (kis óra, kis szürke szöveg): `okt. 4.`, a tanéven kívül `2025. okt. 4.`, dátum nélküli óra `~szept. vége`; ISO dátum soha, teljes dátum `2026. 10. 04.` |
+| chapter span | `early Sept – early Oct`, one or two dated lessons `Sept 3 – 10`; the current chapter `since late Sept` | `szept. eleje – okt. eleje`, egy-két datált óránál `szept. 3. – 10.`; a mostani fejezet `szept. vége óta` (eleje 1-10., közepe 11-20., vége 21-) |
 | textbook line | `🔖 Textbook: <lesson>, pages <pages>` | `🔖 Tankönyv: <lecke>, <oldalak>. oldal` |
 | index-based note | `(from the table of contents)` | `(a tartalomjegyzék alapján)` |
 | in short | `⚡ **In short**` | `⚡ **Röviden**` |

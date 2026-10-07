@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..state import safefs
-from . import catch_up, markers, teaching_order
+from . import catch_up, hu_dates, markers, teaching_order
 from .pages import md_files, read_page, read_text
 from .pages import subjects as subject_slugs
 
@@ -69,15 +69,15 @@ def list_line(page: SubjectPage) -> str:
 def chapters_block(subject: Subject) -> str:
     """The chapters in the `chapters` list order (the writer keeps it in the order the class
     started them; `sn check` warns otherwise), each with when it was taught (🗓️)."""
-    spans = teaching_order.spans(subject_chapters(subject, ordered_lessons(subject)))
+    found = ordered_lessons(subject)
+    spans = teaching_order.spans(subject_chapters(subject, found), teaching_order.year_of(found))
     sections = []
     listed = subject.index_meta.get("chapters") if isinstance(subject.index_meta.get("chapters"), list) else []
     for chapter in listed:
         lines = "\n".join(list_line(p) for p in chapter_pages(subject, chapter["id"]))
-        when = f"🗓️ {spans[str(chapter['id'])]}\n\n" if str(chapter["id"]) in spans else ""
+        when = f"{spans[str(chapter['id'])]}\n\n" if str(chapter["id"]) in spans else ""
         sections.append(f"# 📘 {chapter['title']}\n\n{when}{lines}\n" if lines else f"# 📘 {chapter['title']}\n")
-    legend = f"\n{UNCERTAIN_LEGEND}\n" if any(v.endswith(teaching_order.UNCERTAIN) for v in spans.values()) else ""
-    return "\n<br />\n\n".join(sections) + legend
+    return "\n<br />\n\n".join(sections)
 
 
 PARTIAL_DATE = re.compile(r"^\d{4}-\d{2}-(?:\d\?|\?\d|\?\?)")
@@ -119,26 +119,40 @@ def topic_link(subject: Subject, topic: str) -> str:
     return f"[{title}]({topic})"
 
 
-UNCERTAIN = teaching_order.UNCERTAIN
-UNCERTAIN_LEGEND = ("A ↕ jel: dátum nélküli óra, ezért a helye a sorban (vagy egy fejezet kezdete) nem "
-                    "biztos, mert az időszaka átfed más órákéval.")
-
-
 def lesson_link(page: SubjectPage, lesson: dict) -> str:
     """The lesson log of a lesson, at its section when it names an `anchor`."""
     return f"{page.file}#{lesson['anchor']}" if lesson.get("anchor") else page.file
 
 
+def when(lesson: teaching_order.Lesson, year: int) -> str:
+    """The lesson's day as a quiet date item (`hu_dates.meta`): `okt. 6.` (a note on a dated
+    lesson as its tooltip); an undated lesson `~` + the part of the month of its lower bound,
+    its range only in the tooltip."""
+    note = str(lesson.data.get("date_note") or "")
+    if lesson.dated:
+        return hu_dates.meta(hu_dates.short(lesson.lo, year), hu_dates.in_text(note, year))
+    day = lesson.lo or (lesson.hi if lesson.hi != teaching_order.NEVER else "")
+    title = f"Dátum nélküli óra: {hu_dates.range_text(lesson.lo, lesson.hi, year)}" + (
+        "; a helye a sorban nem biztos" if lesson.uncertain else "")
+    return hu_dates.meta(hu_dates.part(day, year) if day else "?", title, unsure=True)
+
+
+def after(text: str, lesson: teaching_order.Lesson, year: int) -> str:
+    """The important information first, then the quiet date item."""
+    return f"{text} {when(lesson, year)}"
+
+
 def lessons_block(subject: Subject) -> str:
-    rows, states, marked = [], set(), False
-    for item in reversed(ordered_lessons(subject)):
+    found = ordered_lessons(subject)
+    year = teaching_order.year_of(found)
+    rows, states = [], set()
+    for item in reversed(found):
         page, lesson = subject.page(item.file), item.data
         topics = ", ".join(topic_link(subject, t) for t in lesson.get("topics") or [])
         states.add(page.meta.get("catch_up"))
-        marked |= item.uncertain
-        rows.append(f"| {catch_up.mark(page.meta)}{lesson_date(lesson)}{UNCERTAIN if item.uncertain else ''} | "
+        rows.append(f"| {catch_up.mark(page.meta)}{when(item, year)} | "
                     f"{lesson.get('title', '')} | [jegyzet]({lesson_link(page, lesson)}) | {topics} |")
-    key = " ".join(filter(None, [catch_up.legend(states), UNCERTAIN_LEGEND if marked else ""]))
+    key = catch_up.legend(states)
     return (f"{key}\n\n" if key else "") + TABLE_HEAD + "".join(r + "\n" for r in rows)
 
 
@@ -146,49 +160,41 @@ NOW_HEADING = "# 📍 Itt tartunk"
 RECENT = 5          # lessons listed before the latest one
 
 
-def block_date(lesson: dict) -> str:
-    """PROFILE *undated in the block*: `2026-10-06`, or `dátum nélkül, <range>` (a partly
-    legible date as written)."""
-    cell = lesson_date(lesson)
-    if cell == "?":
-        return "dátum nélkül"
-    return f"dátum nélkül, {lesson['date_note']}" if cell.startswith("? (") else cell
-
-
 def now_block(subject: Subject) -> str:
     """📍 Itt tartunk: the chapter the class started last, the latest lesson with its topics, the
-    chapters before, and the lessons before it, newest first (rules 1.22.5)."""
+    chapters before, and the lessons before it, newest first (rules 1.22.6: the important
+    information first, then the quiet date item)."""
     found = ordered_lessons(subject)
     if not found:
         return ""
+    year = teaching_order.year_of(found)
     chapters_ = subject_chapters(subject, found)
-    started, spans = teaching_order.by_start(chapters_), teaching_order.spans(chapters_)
+    started, spans = teaching_order.by_start(chapters_), teaching_order.spans(chapters_, year)
     latest = found[-1]
     topics = ", ".join(topic_link(subject, t) for t in latest.data.get("topics") or [])
     lines = [NOW_HEADING, ""]
     if started:
         now = started[-1]
-        lines.append(f"* **Most:** {teaching_order.plain_title(now.title)} ({spans[now.id]})")
-    lines.append(f"* **Legutóbb:** [{latest.data.get('title', '')}]({lesson_link(subject.page(latest.file), latest.data)}) – "
-                 f"{block_date(latest.data)}{UNCERTAIN if latest.uncertain else ''}" + (f" · {topics}" if topics else ""))
+        lines.append(f"* **Most:** {teaching_order.plain_title(now.title)} {spans[now.id]}")
+    link = f"[{latest.data.get('title', '')}]({lesson_link(subject.page(latest.file), latest.data)})"
+    lines.append(f"* **Legutóbb:** {after(link, latest, year)}" + (f" · {topics}" if topics else ""))
     if len(started) > 1:
         lines.append("* **Előtte:** " + " → ".join(
-            f"{teaching_order.plain_title(c.title)} ({spans[c.id]})" for c in started[:-1]))
+            f"{teaching_order.plain_title(c.title)} {spans[c.id]}" for c in started[:-1]))
     before = list(reversed(found[:-1]))[:RECENT]
     if before:
         lines += ["", "Eddig ebben a sorrendben vettük, a legújabb elöl:", ""]
-        lines += [f"* {block_date(item.data)}{UNCERTAIN if item.uncertain else ''} – "
-                  f"[{item.data.get('title', '')}]({lesson_link(subject.page(item.file), item.data)})"
-                  for item in before]
-    if any(UNCERTAIN in line for line in lines):
-        lines += ["", UNCERTAIN_LEGEND]
+        lines += ["* " + after(f"[{item.data.get('title', '')}]({lesson_link(subject.page(item.file), item.data)})",
+                               item, year) for item in before]
     return "\n".join(lines) + "\n"
 
 
 def catch_up_description(subject: Subject, page: SubjectPage) -> str:
     """`Dátum: …. Témakörök: ….` from the page's `lessons`, as in the lessons table."""
     lessons_ = [lesson for lesson in page.meta.get("lessons") or [] if isinstance(lesson, dict)]
-    dates = [lesson_date(lesson) for lesson in lessons_]
+    found = ordered_lessons(subject)
+    year = teaching_order.year_of(found)
+    dates = [when(item, year) for item in sorted((x for x in found if x.file == page.file), key=lambda x: x.index)]
     topics = list(dict.fromkeys(t for lesson in lessons_ for t in lesson.get("topics") or []))
     parts = ([f"Dátum: {', '.join(dates)}."] if dates else []) + \
         ([f"Témakörök: {', '.join(topic_link(subject, t) for t in topics)}."] if topics else [])

@@ -21,7 +21,7 @@ export const stripFrontmatter = s => s.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\
 export const inside = (root,p) => p===root || p.startsWith(root+path.sep);
 const safeHtml = html => sanitize(html, {
   allowedTags: [...sanitize.defaults.allowedTags, 'details','summary','sub','sup','img','br','input'],
-  allowedAttributes: {'*':['id','class'], a:['href','title'], img:['src','alt','title','width','height'],
+  allowedAttributes: {'*':['id','class'], a:['href','title'], img:['src','alt','title','width','height'], span:['title'],
     details:['open'], input:['type','checked','disabled'], th:['colspan','rowspan'],td:['colspan','rowspan']},
   allowedSchemes: ['http','https','mailto'], allowProtocolRelative:false,
 });

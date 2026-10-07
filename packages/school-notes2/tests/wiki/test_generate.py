@@ -5,18 +5,17 @@ def test_subject_blocks(repo):
     text = generate.subject_index(repo, "proba")
     chapters = markers.read(text, "chapters")
     assert chapters == (
-        "# 📘 9. évfolyam: Alapok\n\n🗓️ szeptember eleje ↕\n\n"
+        "# 📘 9. évfolyam: Alapok\n\n<span class=\"study-when study-when-unsure\" title=\"Nem biztos: a vége dátum nélküli óra (szept. 3. – 10.)\">~szept. eleje</span>\n\n"
         "* ⚡ [Összefoglaló: Alapok](osszefoglalo-alapok.md) - Rövid.\n"
         "* [Első](elso.md) - Az első téma.\n"
         "\n<br />\n\n"
-        "# 📘 9. évfolyam: Haladó\n\n🗓️ szeptember eleje óta, még tart ↕\n\n* [Második](masodik.md) - A második téma.\n"
-        "\nA ↕ jel: dátum nélküli óra, ezért a helye a sorban (vagy egy fejezet kezdete) nem biztos, mert az "
-        "időszaka átfed más órákéval.\n")
+        "# 📘 9. évfolyam: Haladó\n\n<span class=\"study-when study-when-unsure\" title=\"Nem biztos: a kezdete dátum nélküli óra (szept. 3. – 10.)\">~szept. eleje óta</span>\n\n"
+        "* [Második](masodik.md) - A második téma.\n")
     lessons = markers.read(text, "lessons").splitlines()
     assert lessons[0] == "| Dátum | Óra | Jegyzet | Témakörök |"
-    assert lessons[2].startswith("| ? (legkésőbb 2026-09-10) | Folytatás |")
+    assert lessons[2].startswith("| <span class=\"study-when study-when-unsure\" title=\"Dátum nélküli óra: szept. 3. – 10.\">~szept. eleje</span> | Folytatás |")
     assert "[Második](masodik.md#resz)" in lessons[2]
-    assert lessons[3].startswith("| 2026-09-03 | Bevezetés | [jegyzet](2026-09-10-elso-jegyzet.md)")
+    assert lessons[3].startswith("| <span class=\"study-when\">szept. 3.</span> | Bevezetés | [jegyzet](2026-09-10-elso-jegyzet.md)")
     assert markers.read(text, "review").startswith("# 🔁 Ismétlés\n\n* [Dolgozatra]")
     assert markers.read(text, "notes") == "# 📝 Jegyzetek\n\n* [Első óra](2026-09-10-elso-jegyzet.md) - Jegyzet.\n"
 
@@ -74,13 +73,13 @@ def test_catch_up_list_and_lesson_marks_are_neutral_and_stable(repo):
     assert markers.read(text, "catch-up") == (
         "# 📝 Pótolandó\n\n"
         "Ezeknek az óráknak az anyagát pótolnod kell: írd be a füzetedbe (vagy tanuld meg), és szólj, ha megvan.\n\n"
-        "* [Első óra](2026-09-10-elso-jegyzet.md) - Dátum: 2026-09-03, ? (legkésőbb 2026-09-10). "
+        "* [Első óra](2026-09-10-elso-jegyzet.md) - Dátum: <span class=\"study-when\">szept. 3.</span>, <span class=\"study-when study-when-unsure\" title=\"Dátum nélküli óra: szept. 3. – 10.\">~szept. eleje</span>. "
         "Témakörök: [Első](elso.md), [Második](masodik.md#resz).\n")
     assert text.index("../index.md") < text.index("# 📝 Pótolandó") < text.index("# 📘")
     assert markers.read(text, "lessons").startswith(
         "A 📝 jel pótolandó órát mutat: az anyagát írd be a füzetedbe (vagy tanuld meg), és szólj, ha megvan.\n\n"
         "| Dátum | Óra |")
-    assert "| 📝 2026-09-03 |" in text and "| 📝 ? (legkésőbb" in text
+    assert "| 📝 <span class=\"study-when\">szept. 3.</span> |" in text and '| 📝 <span class="study-when study-when-unsure"' in text
     # Neutral by rule (plan 7.13, the learner AGENTS.md): no illness icon, no absence statement.
     assert "🤒" not in text and "classmate" not in text and "hiányoz" not in text
     assert generate.write_indexes(repo) == []
@@ -89,7 +88,7 @@ def test_catch_up_list_and_lesson_marks_are_neutral_and_stable(repo):
     text = index.read_text()
     assert markers.read(text, "catch-up") == ""
     assert markers.read(text, "lessons").startswith("A ✅ jel a már pótolt órát mutatja.\n\n| Dátum |")
-    assert "| ✅ 2026-09-03 |" in text and "# 📝 Pótolandó" not in text
+    assert "| ✅ <span class=\"study-when\">szept. 3.</span> |" in text and "# 📝 Pótolandó" not in text
     assert generate.write_indexes(repo) == []
 
 

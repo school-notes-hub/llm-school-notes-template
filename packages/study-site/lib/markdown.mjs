@@ -26,7 +26,9 @@ const schema = structuredClone(defaultSchema);
 schema.tagNames.push('sub', 'sup', 'dl', 'dd', 'dt');
 schema.attributes.code = [...(schema.attributes.code || []), ['className', /^language-/, 'math-inline', 'math-display']];
 schema.attributes.div = [...(schema.attributes.div || []), ['className', 'math', 'math-display']];
-schema.attributes.span = [...(schema.attributes.span || []), ['className', 'math', 'math-inline']];
+// `study-when`: a lesson date as a quiet meta item (a small clock and grey text, the stylesheet);
+// `study-when-unsure` an uncertain one (`~`, its range in the global `title` tooltip, left out on paper).
+schema.attributes.span = [...(schema.attributes.span || []), ['className', 'math', 'math-inline', 'study-when', 'study-when-unsure']];
 schema.attributes.details = ['open'];
 schema.attributes.p = [...(schema.attributes.p || []), ['className', 'study-pending']];
 // The input never supplies executable HTML, CSS, embeds or arbitrary IDs/classes.
