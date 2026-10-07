@@ -38,7 +38,8 @@ def folders(repo):
 
 
 def names(repo, folder="2026-10-07"):
-    return sorted(p.name for p in (repo / "sources/matek" / folder).iterdir())
+    """The stored source files (the manifest `sn-fetch.json` left out)."""
+    return sorted(p.name for p in (repo / "sources/matek" / folder).iterdir() if p.name != "sn-fetch.json")
 
 
 def quiet(*a):
@@ -267,3 +268,27 @@ def test_ignored_files_are_listed_by_path_not_upload_time(world):
     fetch.run(world["local"], apply=False, out=lines.append)
     ignored = [line for line in lines if "kihagyva" in line]
     assert ignored == sorted(ignored) and len(ignored) == 2
+
+
+def test_the_placed_folder_keeps_a_source_manifest_and_a_new_subject_its_entry(world):
+    import json
+    assert fetch.run(world["local"], apply=True, out=quiet) == 0
+    repo = world["repo"]
+    data = json.loads((repo / "sources/matek/2026-10-07/sn-fetch.json").read_text())
+    assert data["package"]["drive_folder"] == "2026-10-07" and data["package"]["role"] == "fuzet"
+    assert [p["file"] for p in data["pages"]] == ["a.jpg", "b.jpg"]
+    assert all(p["drive_id"] and len(p["content_sha256"]) == 64 for p in data["pages"])
+    assert sorted(data["written"]) == ["sources/matek/2026-10-07/a.jpg", "sources/matek/2026-10-07/b.jpg"]
+    subjects = json.loads((repo / "tools/subjects.json").read_text())["subjects"]
+    assert subjects["matek"] == {"name": "Matek"}                      # D10; emoji/colour from the report
+
+
+def test_a_reuploaded_page_is_reported_and_not_placed_twice(world):
+    assert fetch.run(world["local"], apply=True, out=quiet) == 0
+    again = world["drive"].folder("2026-10-08", world["ready"])
+    world["drive"].file("ujra.jpg", again, jpeg("red"))                  # the same photo as b.jpg
+    world["drive"].file("uj.jpg", again, jpeg("green"))
+    lines = []
+    assert fetch.run(world["local"], apply=True, out=lines.append) == 0
+    assert names(world["repo"], "2026-10-08") == ["uj.jpg"]
+    assert any(line.startswith("  már ismert, nem tároltam újra: ujra.jpg = sources/matek/2026-10-07/") for line in lines)

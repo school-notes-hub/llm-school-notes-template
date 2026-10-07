@@ -20,7 +20,6 @@ ORIGINALS = (".pptx", ".ppt", ".docx", ".doc", ".pdf")
 class Settings:
     max_side_px: int = 2000
     jpeg_quality: int = 85
-    pdf_dpi: int = 200
     tools_dir: Path | None = None
 
 
@@ -42,6 +41,7 @@ class Placed:
     package: dict                                       # fetch.json `packages[]` entry
     pages: list[dict] = field(default_factory=list)     # fetch.json `pages[]` entries
     written: list[str] = field(default_factory=list)    # repo-relative paths the tool wrote
+    pdfs: list[dict] = field(default_factory=list)       # per PDF: {file, pages, extracted, rendered, seconds}
 
 
 def place_package(repo: Path, pkg: Downloaded, start_seq: int, known: Known,
@@ -78,7 +78,8 @@ def _place_pages(repo, folder, pkg, files, seq, known, settings, placed) -> None
         record = files[rel]
         if rel.lower().endswith(".pdf"):
             with tempfile.TemporaryDirectory() as tmp:
-                pngs = pdf_pages(Path(record["path"]), Path(tmp), settings.pdf_dpi)
+                pngs, stats = pdf_pages(Path(record["path"]), Path(tmp), settings.max_side_px)
+                placed.pdfs.append({"file": rel, **stats})
                 for page_no, png in enumerate(pngs, start=1):
                     number += 1
                     name = unique_name(taken, f"p{number:04d}.jpg")
@@ -109,7 +110,8 @@ def _one_page(repo, folder, pkg, record, page_no, image, name, seq, known, setti
             placed.written.append(path)
     placed.pages.append({"seq": seq, "package": pkg.drive_folder, "file": record["rel"],
                          "page": page_no, "path": path, "sha256": content,
-                         "original_sha256": record["sha256"], "duplicate_of": earlier})
+                         "original_sha256": record["sha256"], "original_key": original,
+                         "duplicate_of": earlier})
 
 
 def _place_document(repo, folder, pkg, files, seq, known, placed) -> None:
@@ -134,7 +136,7 @@ def _place_document(repo, folder, pkg, files, seq, known, placed) -> None:
         known.add(original, content, doc.relative_to(repo).as_posix())
     placed.pages.append({"seq": seq, "package": pkg.drive_folder, "file": "document.md",
                          "page": None, "path": doc.relative_to(repo).as_posix(), "sha256": content,
-                         "original_sha256": original, "duplicate_of": earlier})
+                         "original_sha256": original, "original_key": original, "duplicate_of": earlier})
     placed.package["files"].append(_file_entry(source_rel, original, 1))
 
 

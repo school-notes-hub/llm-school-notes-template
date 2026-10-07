@@ -80,3 +80,28 @@ def test_missing_cited_source_is_only_a_warning(repo):
     cited = [i for i in items if "not in this repository" in i["message"]]
     assert cited and cited[0]["severity"] == "warning"
     assert not [i for i in check.errors(items) if "sources" in i["message"]]
+
+
+def test_a_web_footnote_is_title_one_url_and_a_retrieval_date():
+    """Plan 5: the public view keeps a footnote with a web URL whole, so its form is fixed."""
+    good = ["[^a]: Hidrogén - PubChem. https://pubchem.ncbi.nlm.nih.gov/element/1 (ellenőrizve: 2026-09-30).",
+            "[^b]: [NHS: Burns and scalds](https://www.nhs.uk/conditions/burns-and-scalds/). Ellenőrizve: 2026-09-29.",
+            "[^c]: Füzet, 3. oldal: a tanár magyarázata."]                       # no URL: not judged here
+    bad = {"[^d]: [Web](https://example.org/x), 2026-09-30; [háttér](../../references/t/b/index.md).": "more than one link",
+           "[^e]: Cikk. https://example.org/a https://example.org/b (2026-09-30).": "more than one link",
+           "[^f]: Cikk. https://example.org/a, lásd p0002 (2026-09-30).": "page or photo id",
+           "[^g]: Cikk és 01.jpg. https://example.org/a (2026-09-30).": "a file name",
+           "[^h]: Cikk. https://example.org/a": "no retrieval date",
+           "[^i]: https://example.org/a (2026-09-30).": "no title",
+           "[^j]: Cikk, sources/fizika/x. https://example.org/a (2026-09-30).": "sources/ or references/ path"}
+    for line in good:
+        assert check.check_web_footnotes("wiki/x/a.md", f"# A\n\nSzöveg.[^a]\n\n{line}\n") == []
+    for line, problem in bad.items():
+        [found] = check.check_web_footnotes("wiki/x/a.md", f"# A\n\n{line}\n")
+        assert problem in found["message"] and found["severity"] == "error" and found["line"] == 3, line
+
+
+def test_the_done_check_counts_a_bad_web_footnote(repo):
+    (repo / "wiki/proba/elso.md").write_text((repo / "wiki/proba/elso.md").read_text()
+                                             + "\nSzöveg.[^w]\n\n[^w]: Cikk. https://example.org/a\n")
+    assert any("[^w]" in i["message"] for i in check.errors(check.check_files(repo, ["wiki/proba/elso.md"], fix=False)))

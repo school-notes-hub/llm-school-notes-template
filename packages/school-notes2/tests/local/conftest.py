@@ -33,7 +33,7 @@ class FakeLocal:
         self._ledger = ledger or {"jobs": {}}
         self.cfg = SimpleNamespace(timeouts=Timeouts(), sources=Sources(), root=root,
                                    git_name="T", git_email="t@example.com")
-        self.student = SimpleNamespace(name=name, drive_root=drive_root, site_repo=site_repo)
+        self.student = SimpleNamespace(name=name, drive_root=drive_root, site_repo=site_repo, grade=9)
         self.quiet = Log(None, console=False)
 
     def tools_dir(self):

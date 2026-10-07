@@ -83,6 +83,59 @@ def check_text(rel: str, text: str) -> list[dict]:
         out.append(item(rel, None, str(exc), kind=BLOCKING))
     out += check_formulas(rel, text)
     out += check_ids(rel, text)
+    out += check_web_footnotes(rel, text)
+    return out
+
+
+# A footnote that holds a web URL is kept whole on the public site (study-site
+# `publicMarkdown`), so its form is fixed: a title, exactly one web URL, a retrieval date.
+# Structure, not a word list ("óra", "dia" would be false alarms). A private source pointer
+# goes into a footnote of its own, which the public view drops.
+FOOTNOTE = re.compile(r"^\[\^([^\]]+)\]:[ \t]*(.*(?:\n(?:[ \t]{2,}|\t)\S.*)*)", re.M)
+WEB = re.compile(r"https?://[^\s)>\]]+", re.I)
+MD_LINK = re.compile(r"\[([^\]]*)\]\(\s*<?([^)\s>]+)>?[^)]*\)")
+ISO_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+FILE_EXT = re.compile(r"\b[\w.-]+\.(?:jpe?g|png|webp|gif|heic|tiff?|pdf|pptx?|docx?|xlsx?|odp|ods|md|svg)\b", re.I)
+PAGE_ID = re.compile(r"\bp\d{4}\b", re.I)
+PRIVATE = re.compile(r"(?<![\w/.-])(?:\.\./)*(?:sources|references)/", re.I)
+RETRIEVAL_WORDS = re.compile(r"(?i)\b(?:ellenőrizve|megtekintve|letöltve|lekérve|hozzáférés|elérés|retrieved|accessed)\b")
+WEB_FOOTNOTE_MESSAGE = ("a footnote with a web URL must be exactly: title, one web URL, retrieval date "
+                        "(`[^id]: Title. https://… (ellenőrizve: YYYY-MM-DD).`); put a private source pointer in a "
+                        "footnote of its own")
+
+
+def web_footnote_problems(body: str) -> list[str]:
+    """What is wrong with one footnote body that holds a web URL (empty: fine or no URL)."""
+    if not WEB.search(body):
+        return []
+    links = MD_LINK.findall(body)
+    targets = [t for _, t in links]
+    bare = WEB.findall(MD_LINK.sub(" ", body))
+    out = []
+    if len(targets) + len(bare) != 1 or any(not WEB.match(t) for t in targets):
+        out.append("more than one link, or a link that is not a web URL")
+    rest = WEB.sub(" ", MD_LINK.sub(lambda m: " " + m[1] + " ", body))
+    if PRIVATE.search(body):
+        out.append("a sources/ or references/ path")
+    if FILE_EXT.search(rest):
+        out.append("a file name")
+    if PAGE_ID.search(rest):
+        out.append("a page or photo id")
+    if not ISO_DATE.search(rest):
+        out.append("no retrieval date (YYYY-MM-DD)")
+    if not re.search(r"[^\W\d_]", RETRIEVAL_WORDS.sub(" ", ISO_DATE.sub(" ", rest))):
+        out.append("no title")
+    return out
+
+
+def check_web_footnotes(rel: str, text: str) -> list[dict]:
+    body = CODE_FENCE.sub(lambda m: re.sub(r"[^\n]", " ", m[0]), text)
+    out = []
+    for m in FOOTNOTE.finditer(body):
+        problems = web_footnote_problems(m.group(2))
+        if problems:
+            out.append(item(rel, line_of(body, m.start()), f"[^{m.group(1)}]: {WEB_FOOTNOTE_MESSAGE} "
+                            f"({'; '.join(problems)})"))
     return out
 
 

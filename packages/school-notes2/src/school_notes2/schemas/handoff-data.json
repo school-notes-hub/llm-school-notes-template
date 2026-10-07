@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "The writer's machine-readable hand-over: .school-notes/out/<subject>/adatok.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "writer"
+  ],
+  "properties": {
+    "writer": {
+      "type": "string",
+      "pattern": "^\\S+$",
+      "description": "model/effort, e.g. claude-opus-5-5/high"
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "file",
+          "pages"
+        ],
+        "properties": {
+          "file": {
+            "type": "string",
+            "pattern": "^wiki/(?!.*\\.\\.)[^\\\\]+\\.md$"
+          },
+          "pages": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "^sources/(?!.*\\.\\.)[^\\\\]+$"
+            }
+          }
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "page",
+          "image",
+          "locator",
+          "observed",
+          "decision"
+        ],
+        "properties": {
+          "page": {
+            "type": "string",
+            "pattern": "^wiki/(?!.*\\.\\.)[^\\\\]+\\.md$"
+          },
+          "image": {
+            "type": "string",
+            "pattern": "^(sources|wiki/assets)/(?!.*\\.\\.)"
+          },
+          "locator": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "observed": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "decision": {
+            "enum": [
+              "changed",
+              "confirmed",
+              "unresolved"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "requests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "page",
+          "source",
+          "crop",
+          "purpose",
+          "origin"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]{1,64}$"
+          },
+          "page": {
+            "type": "string",
+            "pattern": "^wiki/(?!.*\\.\\.)[^\\\\]+\\.md$"
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^sources/(?!.*\\.\\.)[^\\\\]+$"
+          },
+          "crop": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "purpose": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "origin": {
+            "enum": [
+              "teacher-own",
+              "third-party",
+              "unknown"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

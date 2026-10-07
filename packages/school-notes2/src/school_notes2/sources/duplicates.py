@@ -3,7 +3,8 @@
 Rule 1 compares the uploaded file's hash (for a PDF page: PDF hash + page number), rule 2 the
 stored image's hash. The wiki keeps both in the machine frontmatter of the lesson-notes pages
 (`original_sha256`, `content_sha256`); any value shaped like a hash counts, whatever the map
-key, so v1 maps (`01.jpg: <hash>`) and v2 entries are both recognised.
+key, so v1 maps (`01.jpg: <hash>`) and v2 entries are both recognised. The source manifests
+(`sources/**/sn-fetch.json`) add every page placed since, also before a lesson page names it.
 """
 
 import re
@@ -37,6 +38,9 @@ class Known:
 
 
 def known_hashes(repo: Path) -> Known:
+    """Hashes in the lesson-notes frontmatter, then in the source manifests (`sn fetch` records
+    a page there before any lesson page names it)."""
+    from . import manifest
     known = Known()
     for where in safefs.glob(repo, "wiki", "wiki/**/*.md"):
         try:
@@ -47,6 +51,8 @@ def known_hashes(repo: Path) -> Known:
             known.content.setdefault(value, where)
         for value in _hashes(meta.get("original_sha256")):
             known.original.setdefault(value, where)
+    for path, page in manifest.pages(repo).items():
+        known.add(page["original_sha256"], page["sha256"], path)
     return known
 
 

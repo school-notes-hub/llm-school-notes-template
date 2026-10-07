@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "school-notes2"
-version = "0.2.0"
+version = "0.3.0"
 description = "School Notes: the local `sn` command line for the learner wikis (fetch, figures, close, done, publish)"
 requires-python = ">=3.12"
 dependencies = [

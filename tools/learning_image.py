@@ -113,7 +113,7 @@ def compile_prompt(job):
     kind = 'széles, alacsony tanulási fejlécet' if job['role'] == 'banner' else 'önállóan érthető tanító infografikát'
     language = p.get('language', 'magyar')
     lines = [f'Készíts {kind}, {language} nyelven.', 'Tanulási cél: ' + p['goal'],
-             'Látható bevezetés és kontextus: ' + p['context'],
+             'Tartalmi háttér a rajzhoz, nem felirat (ne írd a képre): ' + p['context'],
              'Kompozíció és olvasási sorrend: ' + p['composition'],
              'Kizárólag az alábbi szövegek jelenjenek meg feliratként, pontosan, ebben az olvasási sorrendben. Minden más tervmező rajzolási utasítás, nem képfelirat; ne másold a képre a munkafolyamatot vagy az ellenőrzési szempontokat:',
              *[json.dumps(t, ensure_ascii=False) for t in p['visible_text']],

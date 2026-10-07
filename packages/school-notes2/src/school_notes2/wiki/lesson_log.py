@@ -32,7 +32,25 @@ def material_problems(lesson: dict) -> list[str]:
     return out
 
 
-def source_line(meta: dict) -> str:
+PARTIAL = re.compile(r"^(\d{4}-\d{2}-(?:\d\?|\?\d|\?\?))(?=$|[\s(;,])")
+
+
+def lesson_label(lesson: dict) -> str:
+    """The date of one lesson as the 📎 line shows it: the date the writer recorded from the
+    notebook page (`date`), else a partly legible one (`date_note` starting with e.g.
+    `2026-09-1?`), else none. Never a folder name: a Drive folder's date is its upload label."""
+    value = lesson.get("date")
+    if value:
+        return str(value).replace("-", ". ") + "."
+    partial = PARTIAL.match(str(lesson.get("date_note") or ""))
+    if not partial:
+        return "dátum nélküli óra"
+    return partial[1].replace("-", ". ") + ("" if partial[1].endswith("?") else ".")
+
+
+def source_line(meta: dict, notebook: bool = True) -> str:
+    """`📎 Füzet: <dates>[ · Tanári anyag: <names>]`; a lesson log with no notebook source (only
+    a teacher's material) starts with `📎 Óra:` instead of `Füzet:`."""
     dates, materials = [], []
     lessons = meta.get("lessons")
     if not isinstance(lessons, list):
@@ -45,7 +63,7 @@ def source_line(meta: dict) -> str:
         value = lesson.get("date")
         if value is not None and not valid_date(value):
             raise ValueError("lesson date must be a real YYYY-MM-DD date")
-        label = str(value).replace("-", ". ") + "." if value else "dátum nélküli óra"
+        label = lesson_label(lesson)
         if not dates or dates[-1] != label:
             dates.append(label)
         names = lesson.get("materials", [])
@@ -54,7 +72,7 @@ def source_line(meta: dict) -> str:
         for name in names:  # A badly formed name is a warning; it is still shown as text.
             if isinstance(name, str) and name.strip() and name not in materials:
                 materials.append(name)
-    line = "📎 Füzet: " + ", ".join(dates)
+    line = ("📎 Füzet: " if notebook else "📎 Óra: ") + ", ".join(dates)
     if materials:
         line += " · Tanári anyag: " + "; ".join(plain(" ".join(name.split())) for name in materials)
     return line + "\n"

@@ -14,13 +14,13 @@ is in git, tag `archiv/main-elotte` and the `archiv/<branch>` tags).
 
 | Command | What it does | Code |
 |---|---|---|
-| `sn fetch <t> [--apply]` | Drive inbox list; `--apply`: download → place in the working copy → move on Drive → delete the download; resumable | `local/fetch.py` |
+| `sn fetch <t> [--apply]` | Drive inbox list; `--apply`: download → place in the working copy with its source manifest `sn-fetch.json` (a page known by its hash is listed, not stored again; a full-page PDF scan is taken out, any other PDF page rendered to 1.25 × the target size) → move on Drive → delete the download; resumable | `local/fetch.py` |
 | `sn book <t> <subject> <code> [<source>] [--offset N]` | a converted textbook into `references/`, README table, map | `local/book.py` |
 | `sn check <t> <page…>` | page check, read-only (`check_files(fix=False)`) | `local/check.py` |
 | `sn gen <t> <id> [--note f]`, `--settle`, `--grant` | one paid image generation through the host ledger | `local/gen.py` |
-| `sn close <t> --subject s --snapshot [--only id,…]` | before the reviewer (and before the confirmation pass): `keys.json` and `diff.patch` into the hand-over folder | `local/close.py` |
-| `sn close <t> [--subject a,b] [--check]` | hand-overs in `.school-notes/out/<subject>/` → STOP checks → insertion, renewals, machine blocks, STOP on invalidated verdicts, indexes, `public.json`, content check; never deletes a figure verdict | `local/close.py` |
-| `sn done <t>` | is the content finished (exit 0/1); the facts it counts are in `local/places.py` | `local/done.py` |
+| `sn close <t> --subject s --snapshot [--only id,…]` | before the reviewer (and before the confirmation pass): the candidate preflight (STOP on a problem), then `keys.json` and `diff.patch` into the hand-over folder | `local/close.py` |
+| `sn close <t> [--subject a,b] [--check]` | hand-overs in `.school-notes/out/<subject>/` (`handoff.py`) → STOP checks (writer guard, preflight, snapshot keys, `adatok.json`) → insertion and renewals (`figure_close.py`) → machine data: lesson-log keys, stamps, evidence records, figure requests, draft notice, banner and 📎 blocks (`machine_data.py`) → STOP on invalidated verdicts → indexes, `public.json`, content check; never deletes a figure verdict | `local/close.py` |
+| `sn done <t>` | is the content finished (exit 0/1); the facts it counts are in `local/places.py`, the writer guard in `local/guard.py` | `local/done.py` |
 | `sn publish <t> [--reviewed] [--build-only DIR]` | clean tree + `sn done` 0 → push main → build → public gate → gh-pages → live check | `local/publish.py` |
 
 Keys come only from `school-notes-ops/.env` at run time (`local/keys.py`); git runs over HTTPS with `gh`'s
@@ -30,12 +30,13 @@ token in git's environment (`git/run.py` `HttpsToken`); each command writes one 
 
 | Folder | Responsibility |
 |---|---|
-| `cli.py`, `local/` | the commands; `local/common.py` builds the learner's working copy, git, image settings and Drive client from the configuration |
+| `cli.py`, `local/` | the commands; `local/common.py` builds the learner's working copy, git, image settings and Drive client from the configuration; `local/tool_writes.py` records what the tool wrote since the last commit (the writer guard accepts exactly that) |
 | `config.py` | reads `~/.config/school-notes/config.toml`; a key it does not read is ignored with one warning line |
 | `drive/` | listing, download, move to `Feldolgozva` (built on `tools/drive_media.py`) |
-| `sources/` | natural order, photo and PDF preparation, names, duplicates, subject cards, placing a package |
+| `sources/` | natural order, photo and PDF preparation, names, duplicates, subject cards, placing a package, the source manifest |
+| `evidence/` | the page evidence records `docs/evidence/pages/…` |
 | `images/` | wrapper of `tools/learning_image.py`: monthly budget, shared lock, generation, settle, grant |
-| `figures/` | commissions, the verdict key of a figure's content, insertion from an accept, licences, figure requests, the pending queue |
+| `figures/` | commissions, the candidate preflight, the verdict key of a figure's content, insertion from an accept, licences, figure requests, the pending queue |
 | `wiki/` | page check, frontmatter, machine blocks (banner, 📎 lesson log), indexes, decisions overview, `public.json`, rights |
 | `site/` | public build from a commit (`packages/study-site`) and the `gh-pages` release |
 | `git/` | the only Git caller (`run.py`) and three remote helpers (`repos.py`) |

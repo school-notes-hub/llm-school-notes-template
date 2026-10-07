@@ -28,6 +28,20 @@ def test_source_line_collapses_only_consecutive_dates(dates, expected):
     assert lesson_log.source_line(meta) == f"📎 Füzet: {expected} · Tanári anyag: Mérés (prezentáció)\n"
 
 
+def test_source_line_labels_and_partial_dates():
+    """Plan 3.3/17: a teacher-only lesson log is not 'Füzet'; a partly legible date is shown as
+    written, not as an undated lesson; only the page's own dates count, never a folder name."""
+    lessons = [{"date": "2026-09-29", "materials": ["Diasor (tanári diasor)"]}]
+    assert lesson_log.source_line({"lessons": lessons}, notebook=False) == \
+        "📎 Óra: 2026. 09. 29. · Tanári anyag: Diasor (tanári diasor)\n"
+    partial = {"lessons": [{"date_note": "2026-09-1? (levágva: 2026-09-10 és 2026-09-19 között)"},
+                           {"date_note": "2026-09-14 után, legkésőbb 2026-10-03"}]}
+    assert lesson_log.source_line(partial) == "📎 Füzet: 2026. 09. 1?, dátum nélküli óra\n"
+    folder = {"lessons": [{"title": "Pótlás"}], "drive_folder": "2026-10-04-betegseg-potlas",
+              "source_file": "tortenelem/2026-10-04-betegseg-potlas/"}
+    assert lesson_log.source_line(folder) == "📎 Füzet: dátum nélküli óra\n"
+
+
 def test_yaml_on_is_a_key_and_real_booleans_still_work():
     meta = frontmatter.split("---\non: 2026-09-29\nflag: true\nother: false\n---\n").meta
     assert meta == {"on": date(2026, 9, 29), "flag": True, "other": False}

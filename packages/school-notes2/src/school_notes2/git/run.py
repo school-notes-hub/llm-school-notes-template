@@ -143,8 +143,7 @@ def classify(command: str, stderr: str, rc: int) -> Exception:
                           todo="check the remote repository; the tool never force-updates")
     if any(m in stderr for m in PERMANENT):
         return NeedsOwner(f"git {command}: {_first_line(stderr)}",
-                          todo="fix the GitHub side (key, permission, rule), then "
-                               "`school-notes status --clear <learner> <kind> --continue`")
+                          todo="fix the GitHub side (token, permission, rule), then run the command again")
     if any(m in stderr for m in TRANSIENT):
         return Transient(f"git {command}: {_first_line(stderr)}")
     if command in ("fetch", "push", "ls-remote", "clone"):

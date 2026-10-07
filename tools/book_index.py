@@ -14,8 +14,10 @@ the whole book. It is built from two things that are always there:
   last column: printed start page or printed page range).
 
 Printed page = PDF page - offset. The offset is read from the README
-("printed-page offset: N" in the README, or "one less" / "eggyel kisebb" = 1) or given with --offset. The output is regenerated from
-scratch every time; never edit index.md by hand.
+("printed-page offset: N" in the README, or "one less" / "eggyel kisebb" = 1) or given with --offset.
+A book whose numbering jumps (inserted plates, a second part) has one line per band:
+"printed-page offset: N from PDF p" - the offset holds from PDF page p up to the next band.
+The output is regenerated from scratch every time; never edit index.md by hand.
 """
 import json
 import re
@@ -80,11 +82,44 @@ def toc_rows(doc_lines):
     return rows
 
 
-def readme_offset(readme):
+def readme_bands(readme):
+    """[(first PDF page, offset)] in PDF page order; None when the README gives no offset."""
+    found = [(int(m.group(2) or 1), int(m.group(1))) for m in re.finditer(
+        r"printed-page offset:\s*(\d+)(?:\s+from\s+PDF\s+(?:p\.?\s*)?(\d+))?", readme, re.IGNORECASE)]
+    if found:
+        return sorted(dict(found).items())
     if re.search(r"eggyel\s+kisebb|one\s+(less|lower)|printed\s*=\s*PDF\s*-\s*1", readme, re.IGNORECASE):
-        return 1
-    m = re.search(r"printed-page offset:\s*(\d+)", readme, re.IGNORECASE)
-    return int(m.group(1)) if m else None
+        return [(1, 1)]
+    return None
+
+
+def band_offset(bands, pdf):
+    """The offset of the band PDF page `pdf` is in (before the first band: the first one)."""
+    return next((off for first, off in reversed(bands) if first <= pdf), bands[0][1])
+
+
+def printed_of(bands, pdf):
+    """The printed number of PDF page `pdf`, or None for an unnumbered insert: a page whose
+    number would reach the first number of the next band (plates before a band's start)."""
+    i = max((k for k, (first, _) in enumerate(bands) if first <= pdf), default=0)
+    number = pdf - bands[i][1]
+    if i + 1 < len(bands) and number >= bands[i + 1][0] - bands[i + 1][1]:
+        return None
+    return number
+
+
+def pdf_of(bands, printed):
+    """The PDF page that carries printed page `printed` (the later band wins a tie)."""
+    for first, off in reversed(bands):
+        if printed + off >= first:
+            return printed + off
+    return printed + bands[0][1]
+
+
+def bands_text(bands):
+    if len(bands) == 1:
+        return str(bands[0][1])
+    return ", ".join(f"{off} (PDF {first}-)" for first, off in bands)
 
 
 def readme_rows(readme):
@@ -105,9 +140,9 @@ def readme_rows(readme):
     return rows
 
 
-def line_of_printed(pages, printed, offset):
+def line_of_printed(pages, printed, bands):
     """First document line of a printed page (or of the next page that has one)."""
-    pdf = printed + offset
+    pdf = pdf_of(bands, printed)
     for p, n in pages.items():
         if p >= pdf:
             return n
@@ -120,14 +155,14 @@ def main():
     if not args:
         sys.exit(__doc__)
     book = Path(args[0])
-    offset = None
+    bands = None
     if "--offset" in args:
-        offset = int(args[args.index("--offset") + 1])
+        bands = [(1, int(args[args.index("--offset") + 1]))]
     doc_lines = (book / "document.md").read_text(encoding="utf-8").split("\n")
     readme = (book / "README.md").read_text(encoding="utf-8")
-    if offset is None:
-        offset = readme_offset(readme)
-    if offset is None:
+    if bands is None:
+        bands = readme_bands(readme)
+    if bands is None:
         sys.exit("printed-page offset not found in README.md; pass --offset N")
     total = len(doc_lines)
     pages = page_lines(doc_lines)
@@ -135,7 +170,7 @@ def main():
 
     out = [
         labels["map"].format(title=title), "", labels["generated"], "",
-        labels["intro"].format(total=total, offset=offset), "",
+        labels["intro"].format(total=total, offset=bands_text(bands)), "",
     ]
 
     rows = toc_rows(doc_lines)
@@ -149,7 +184,7 @@ def main():
         if more:
             rows += more
             source += labels["completed"]
-    max_printed = max(pages) - offset
+    max_printed = max(pages) - band_offset(bands, max(pages))
     if rows:
         out += [labels["lessons"], "", labels["source"].format(source=source), "", labels["columns"], "|---|---|---|"]
         for i, (name, start, end) in enumerate(rows):
@@ -159,8 +194,8 @@ def main():
             if end is None:
                 nxt = next((r[1] for r in rows[i + 1:] if r[1] is not None and r[1] > start), None)
                 end = nxt - 1 if nxt else max_printed
-            a = line_of_printed(pages, start, offset)
-            b = line_of_printed(pages, end + 1, offset) if end else None
+            a = line_of_printed(pages, start, bands)
+            b = line_of_printed(pages, end + 1, bands) if end else None
             b = (b - 1) if b else total
             pages_txt = f"{start}-{end}" if end and end != start else f"{start}" if end else f"{start}-"
             out.append(f"| {name} | {pages_txt} | {a}-{b} |" if a else f"| {name} | {pages_txt} | ? |")
@@ -174,7 +209,7 @@ def main():
         out.append("")
 
     out += [labels["pages"], "", labels["pages_intro"], ""]
-    items = [f"{p - offset}: {n}" for p, n in pages.items() if p - offset >= 1]
+    items = [f"{printed_of(bands, p)}: {n}" for p, n in pages.items() if (printed_of(bands, p) or 0) >= 1]
     for i in range(0, len(items), 10):
         out.append("* " + " · ".join(items[i:i + 10]))
     out.append("")

@@ -32,7 +32,7 @@ def world(tmp_path, fake_local, local_origin, monkeypatch):
         return site_build.BuildRecord(commit, out, 0.1, 1)
     monkeypatch.setattr(publish.site_build, "build", fake_build)
     monkeypatch.setattr(publish, "renderer", lambda local: None)
-    monkeypatch.setattr(publish.done, "report", lambda repo, out=print: 0)
+    monkeypatch.setattr(publish.done, "report", lambda repo, out=print, git=None: 0)
     # local bare origins stand in for GitHub; the real guard has its own tests below
     monkeypatch.setattr(publish, "require_github", lambda url, what: url)
     return {"local": local, "repo": repo, "origin": origin, "site": site, "builds": builds}
@@ -89,7 +89,7 @@ def test_preconditions_refuse_before_any_push(world, monkeypatch, why):
     elif why == "untracked":
         (repo / "wiki/new.md").write_text("# New\n")
     elif why == "done":
-        monkeypatch.setattr(publish.done, "report", lambda repo, out=print: 1)
+        monkeypatch.setattr(publish.done, "report", lambda repo, out=print, git=None: 1)
     else:
         git(repo, "switch", "-q", "-c", "other")
     lines = []

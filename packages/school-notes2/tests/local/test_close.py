@@ -3,7 +3,7 @@ import json
 import pytest
 
 from school_notes2.figures import insert
-from school_notes2.local import close, done
+from school_notes2.local import close, done, figure_close
 from school_notes2.local.common import today
 from school_notes2.state import safefs
 from tests.local.conftest import git
@@ -249,6 +249,6 @@ def test_svg_receipt_run_id_is_dated_and_per_subject(repo, make_figure):
     safefs.write_text(repo, "wiki/assets/physics/forces.svg", "<svg/>")
     safefs.write_json(repo, ".school-notes/figures/forces/figure.json", {**candidate, "asset": "wiki/assets/physics/forces.svg"})
     changed = []
-    close.svg_receipts(repo, [("physics", {"id": "forces"})], changed)
+    figure_close.svg_receipts(repo, [("physics", {"id": "forces"})], changed)
     data = json.loads(safefs.read_text(repo, "docs/evidence/media/writer-svg.json"))
     assert data["svgs"][0]["run_id"] == f"helyi-{today()}-physics" and changed

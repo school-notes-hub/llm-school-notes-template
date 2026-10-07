@@ -11,9 +11,20 @@ from ..wiki.pages import links, resolve, wiki_pages
 REQUEST = "<!-- figure-request: "
 
 
+def requested(repo: Path) -> set[str]:
+    """IDs whose every marker is a `figure-request`: the image waits for the owner's licence
+    decision (`docs/figure-requests.json`); the text teaches without it."""
+    out = set()
+    for fid, found in commissions.markers(repo).items():
+        if all(safefs.read_text(repo, page).startswith(REQUEST, position) for page, position in found):
+            out.add(fid)
+    return out
+
+
 def missing_parts(repo: Path) -> tuple[set[str], set[str]]:
-    """(figure places without an accepted figure, image links to a missing file)."""
-    missing = set(commissions.markers(repo))
+    """(figure places without an accepted figure, image links to a missing file); a
+    `figure-request` place is never missing (`requested`)."""
+    missing = set(commissions.markers(repo)) - requested(repo)
     for fid in sorted(missing):
         try:
             evidence = safefs.read_json(repo, f"docs/evidence/media/{fid}/figure.json", {})
@@ -41,6 +52,7 @@ def orphan_places(repo: Path) -> list[dict]:
     docs/figure-requests.json). A marker id repeated on one page is one place (its first line)."""
     missing, _ = missing_parts(repo)
     queued = {e["commission"]["id"] for e in pending.load(repo)}
+    # A figure-request marker never makes a place an orphan (only its own line is skipped).
     found = commissions.markers(repo)
     out = {}
     for fid in sorted(missing - queued):

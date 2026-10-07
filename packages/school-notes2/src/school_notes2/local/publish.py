@@ -37,7 +37,7 @@ def preconditions(local, git, out) -> str | None:
     dirty = git.out("status", "--porcelain", "--untracked-files=all").splitlines()
     if dirty:
         return "a munkafa nem tiszta: " + "; ".join(sorted(dirty)[:10])
-    if done.report(local.repo, out) != 0:
+    if done.report(local.repo, out, git=git) != 0:
         return "az sn done nem 0"
     return None
 

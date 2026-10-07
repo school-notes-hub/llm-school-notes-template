@@ -94,3 +94,18 @@ def test_unknown_learner():
 def test_missing_file(tmp_path):
     with pytest.raises(config.ConfigError, match="configuration missing"):
         config.load(tmp_path / "none.toml")
+
+
+@pytest.mark.parametrize("section, key", [("limits", "image_monthy_usd"), ("sources", "max_side"),
+                                          ("timeouts", "push")])
+def test_a_typo_inside_a_section_the_tool_reads_is_an_error(section, key):
+    """D9: a misspelt budget key must not silently give the default budget."""
+    with pytest.raises(config.ConfigError, match=rf"\[{section}\] unknown keys: {key}"):
+        config.parse({**BASE, section: {key: 1}})
+
+
+def test_vm_era_keys_inside_kept_sections_only_warn():
+    cfg = config.parse({**BASE, "limits": {"image_daily_usd": 1.0, "image_monthly_usd": 5.0},
+                        "sources": {"pdf_dpi": 200, "ready_after_s": 0}})
+    assert cfg.limits.image_monthly_usd == 5.0
+    assert cfg.ignored == ("limits.image_daily_usd", "sources.pdf_dpi", "sources.ready_after_s")

@@ -1,6 +1,6 @@
 """`image_generate` (plan 4.6, 5.5): budget, lock, call, preview, hand back to the LLM.
 
-Expected outcomes are returned as a `state`, never raised, so the MCP answer can explain
+Expected outcomes are returned as a `state`, never raised, so `sn gen` can explain
 them: generated, accepted, waiting-unknown, budget-exhausted, exhausted, failed,
 unknown, error. Retries only on a connection error and on 429.
 """

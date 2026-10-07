@@ -4,7 +4,9 @@ Counted: pending and invalidated figures, inserted figures gone from their page 
 verdict is kept), orphan figure places, textbook placeholder lines,
 figure places without an accepted figure, broken image links, and every page-check error on
 every wiki page (`check_files(..., fix=False)`: unlike `check_text` it also checks links).
-The worktree's cleanliness is not looked at here (`sn publish` checks it)."""
+With a git handle (`sn done`, `sn publish`) the writer guard runs too: a change since HEAD no
+writer may make (`guard.py`). The worktree's cleanliness is not looked at here (`sn publish`
+checks it)."""
 
 from pathlib import Path
 
@@ -12,10 +14,10 @@ from ..figures import insert, pending
 from ..state import safefs
 from ..wiki import check
 from ..wiki.pages import wiki_pages
-from . import places as facts
+from . import guard, places as facts
 
 
-def problems(repo: Path) -> list[tuple[str, list[str]]]:
+def problems(repo: Path, git=None) -> list[tuple[str, list[str]]]:
     """(name, items) in a fixed order; every item list sorted by content."""
     places, links = facts.missing_parts(repo)
     errors = check.errors(check.check_files(repo, sorted(wiki_pages(repo)), fix=False))
@@ -30,11 +32,11 @@ def problems(repo: Path) -> list[tuple[str, list[str]]]:
         ("ábrahely elfogadott ábra nélkül", sorted(places)),
         ("törött képlink", sorted(links)),
         ("lapellenőrzési hiba", sorted(f"{e['file']}:{e.get('line') or ''} {e['message']}" for e in errors)),
-    ]
+    ] + ([("író-őr: tiltott módosítás", guard.violations(repo, git))] if git is not None else [])
 
 
-def report(repo: Path, out=print) -> int:
-    found = problems(repo)
+def report(repo: Path, out=print, git=None) -> int:
+    found = problems(repo, git)
     for name, items in found:
         out(f"{name}: {len(items)}")
         for item in items[:20]:
@@ -47,6 +49,6 @@ def report(repo: Path, out=print) -> int:
 
 
 def run(local) -> int:
-    code = report(local.repo)
+    code = report(local.repo, git=local.git())
     local.record("done", "ok" if code == 0 else "open")
     return code

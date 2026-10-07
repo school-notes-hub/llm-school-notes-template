@@ -32,6 +32,7 @@ from ..drive import inventory
 from ..drive.download import download_package
 from ..drive.inventory import Package, order
 from ..drive.move import move_to_processed
+from ..sources import manifest
 from ..sources.duplicates import known_hashes
 from ..sources.naming import slug, subject_key, unique_dir
 from ..sources.place import Downloaded, Settings, place_package
@@ -43,10 +44,15 @@ STAGE = ".school-notes/fetch"
 
 
 def new_subject(repo: Path, subject: str, drive_name: str) -> list[str]:
-    """The index skeleton of a subject seen for the first time (plan 5.9)."""
+    """A subject seen for the first time: its index skeleton and its `tools/subjects.json`
+    entry (the Drive name; emoji and colours come from the writer's report)."""
     from ..wiki import machine
+    from . import tool_writes
     path = machine.create_subject(repo, subject, drive_name, f"{subject}-banner")
-    return [path] if path else []
+    if path:
+        tool_writes.record(repo, parts=[path])
+    added = machine.add_subject(repo, subject, drive_name)
+    return ([path] if path else []) + (["tools/subjects.json"] if added else [])
 
 
 def inbox(local, drive) -> tuple[list[Package], list[dict]]:
@@ -181,14 +187,20 @@ def _place(local, repo: Path, pkg: Package, folder: Path, out) -> None:
     stage_root = repo / STAGE / pkg.id
     shutil.rmtree(stage_root, ignore_errors=True)       # our own private preparation folder
     stage_root.mkdir(parents=True)
-    settings = Settings(local.cfg.sources.max_side_px, local.cfg.sources.jpeg_quality,
-                        local.cfg.sources.pdf_dpi, local.tools_dir())
+    settings = Settings(local.cfg.sources.max_side_px, local.cfg.sources.jpeg_quality, local.tools_dir())
     files = [{**f, "path": str(folder / "files" / f["rel"])} for f in data["files"]]
     placed = place_package(stage_root, Downloaded(
         drive_folder=pkg.name, subject=claim["subject"], role=pkg.role, description=pkg.description,
         new_subject=claim["new_subject"], preconverted=pkg.preconverted, files=files), 1,
         known_hashes(repo), settings, folder=stage_root / rel)
     staged = stage_root / rel
+    if staged.is_dir() and any(staged.iterdir()):
+        drive_ids = {f["rel"]: f.get("drive_id", "") for f in data["files"]}
+        package = {"drive_id": pkg.id, "drive_folder": pkg.name, "subject_name": pkg.subject_name,
+                   "role": pkg.role, "description": pkg.description}
+        files = {f"{rel}/{k}": v for k, v in _tree(staged).items()}
+        (staged / manifest.NAME).write_text(manifest.dumps(manifest.build(package, placed.pages, drive_ids, files)),
+                                            encoding="utf-8")
     written = _tree(staged) if staged.is_dir() else {}
     outside = [p for p in placed.written if not p.startswith(rel + "/")]
     if outside:
@@ -203,6 +215,14 @@ def _place(local, repo: Path, pkg: Package, folder: Path, out) -> None:
     shutil.rmtree(stage_root, ignore_errors=True)
     _write(folder / PLACED, record)
     out(f"elhelyezve: {rel} ({len(written)} fájl, {len(record['duplicates'])} már ismert oldal)")
+    for pdf in placed.pdfs:
+        out(f"  PDF {pdf['file']}: {pdf['pages']} oldal ({pdf['extracted']} kivéve, {pdf['rendered']} renderelve), "
+            f"{pdf['seconds']} s")
+        local.record("fetch.pdf", target=f"{rel}/{pdf['file']}", **{k: pdf[k] for k in ("pages", "extracted", "rendered", "seconds")})
+    for page in placed.pages:
+        if page["duplicate_of"]:
+            where = page["file"] + (f", {page['page']}. oldal" if page.get("page") else "")
+            out(f"  már ismert, nem tároltam újra: {where} = {page['duplicate_of']}")
 
 
 def _ours(local, repo: Path, rel: str, folder: Path, version: str) -> bool:

@@ -1,13 +1,15 @@
-"""Persistent draft age, reset only by an additional linked lesson (repair plan 7.11)."""
+"""Persistent draft age, reset only by an additional linked lesson, and the ⏳ notice that
+tells the learner a draft topic continues in class (`sn close` maintains both)."""
 
 from datetime import date
 from pathlib import Path
 
-from . import lesson_log
+from . import frontmatter, lesson_log, markers
 from .decisions import valid_date
 from .pages import PageError, read_page, resolve, wiki_pages
 
 KEY = "draft_tracking"
+NOTICE = "⏳ Ez a téma az órán folytatódik; a jegyzet az eddig tanult részt tartalmazza.\n"
 
 
 def lesson_keys(repo: Path, skip=()) -> dict[str, list[str]]:
@@ -50,6 +52,22 @@ def problems(meta: dict) -> list[str]:
     if state["lessons"] != sorted(set(state["lessons"])):
         return ["draft_tracking lessons must be unique and sorted"]
     return []
+
+
+def update(text: str, lessons: list[str], today: date) -> str:
+    """A `status: draft` page gets its tracking and the ⏳ notice; any other page loses both
+    (an empty tool block stays, as with the other generated blocks)."""
+    meta = frontmatter.split(text).meta
+    if meta.get("status") == "draft":
+        text = frontmatter.set_keys(text, {KEY: tracking(meta, lessons, today)})
+        if markers.read(text, "pending") in (None, "", NOTICE):
+            text = lesson_log.after_header(text, "pending", NOTICE)
+        return text
+    if KEY in meta:
+        text = frontmatter.set_keys(text, {}, remove=(KEY,))
+    if markers.read(text, "pending") == NOTICE:
+        text = markers.replace(text, "pending", "")
+    return text
 
 
 def warnings(repo: Path, today: date, *, paths: list[str] | None = None) -> list[tuple[str, str]]:

@@ -461,6 +461,14 @@ class ExecutorTest(unittest.TestCase):
         self.assertNotIn('wiki/history',text)
         self.assertNotIn('child',text)
 
+    def test_context_is_drawing_background_not_a_caption(self):
+        """HANDOFF (c): the plan's `context` was labelled 'Látható bevezetés' and got written on the image."""
+        text=m.compile_prompt(self.job)
+        self.assertNotIn('Látható bevezetés',text)
+        line=next(l for l in text.split('\n\n') if 'Ancient place' in l)
+        self.assertIn('nem felirat',line)
+        self.assertLess(text.index('Ancient place'),text.index('"Title"'))
+
     def test_missing_state_blocks_generation_and_readonly_status(self):
         other = self.root/'missing-state'
         self.config['state_dir'] = str(other)

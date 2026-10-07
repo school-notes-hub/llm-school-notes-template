@@ -146,7 +146,8 @@ def test_preconverted_package_is_one_item(tmp_path):
     assert placed.pages == [{"seq": 7, "package": "Tanári dia", "file": "document.md", "page": None,
                              "path": "sources/matek/tanari-dia/document.md",
                              "sha256": hashlib.sha256(b"# Dia\n").hexdigest(),
-                             "original_sha256": files[1]["sha256"], "duplicate_of": None}]
+                             "original_sha256": files[1]["sha256"], "original_key": files[1]["sha256"],
+                             "duplicate_of": None}]
     assert (repo / "sources/matek/tanari-dia/media/k1.png").read_bytes() == b"png"
 
 
@@ -177,3 +178,31 @@ def test_prepare_photo_cli_keeps_working(tmp_path):
     assert small.returncode == 0
     with Image.open(tmp_path / "b.jpg") as im:
         assert im.size == (1000, 333)
+
+
+def test_a_full_page_scan_is_taken_out_not_rendered(tmp_path):
+    """Plan 3.3/2: a scanner PDF page (one full-page image) costs no rendering at all."""
+    from school_notes2.sources.prepare import pdf_pages
+    pdf(tmp_path / "scan.pdf", 3)
+    images, stats = pdf_pages(tmp_path / "scan.pdf", tmp_path / "out", 2000)
+    assert stats["extracted"] == 3 and stats["rendered"] == 0 and stats["seconds"] >= 0
+    assert [Image.open(p).size for p in images] == [(595, 842)] * 3
+
+
+def test_any_other_page_is_rendered_to_the_target_size(tmp_path, monkeypatch):
+    from school_notes2.sources import prepare
+    pdf(tmp_path / "doc.pdf", 2)
+    monkeypatch.setattr(prepare, "full_page_image", lambda page: False)
+    images, stats = prepare.pdf_pages(tmp_path / "doc.pdf", tmp_path / "out", 400)
+    assert stats["rendered"] == 2
+    assert [max(Image.open(p).size) for p in images] == [500, 500]          # 1.25 × max_side_px, no DPI
+
+
+def test_only_one_unrotated_image_covering_the_page_is_taken_out():
+    from school_notes2.sources.prepare import full_page_image
+    page = {"size": (1680.0, 2543.0), "rot": 0, "images": [(1680, 2543, 72.0, 72.0)]}
+    assert full_page_image(page)
+    assert not full_page_image({**page, "rot": 90})
+    assert not full_page_image({**page, "images": page["images"] * 2})
+    assert not full_page_image({**page, "images": [(1680, 2543, 144.0, 144.0)]})     # covers a quarter
+    assert full_page_image({**page, "images": [(3360, 5086, 144.0, 144.0)]})         # a finer scan

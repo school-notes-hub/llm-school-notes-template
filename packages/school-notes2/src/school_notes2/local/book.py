@@ -15,6 +15,7 @@ from pathlib import Path
 from ..sources.naming import slug
 from ..sources.toolload import load_tool
 from ..state import safefs
+from . import tool_writes
 from .common import Refused
 
 ORIGINALS = (".pdf", ".pptx", ".ppt", ".docx", ".doc")
@@ -60,5 +61,8 @@ def run(local, subject: str, code: str, source: Path | None, offset: int | None)
     argv = [sys.executable, "tools/book_index.py", rel] + (["--offset", str(offset)] if offset is not None and source is None else [])
     proc = subprocess.run(argv, cwd=repo, capture_output=True, text=True, timeout=300)
     print(proc.stdout.strip() or proc.stderr.strip())
+    # The writer guard accepts the book's files as they are now (a README checked by hand is
+    # taken over by this run; editing it again needs another `sn book`).
+    tool_writes.record(repo, files=safefs.walk_files(repo, rel))
     local.record("book", "ok" if proc.returncode == 0 else "error", target=rel)
     return proc.returncode

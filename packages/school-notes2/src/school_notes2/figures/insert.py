@@ -13,7 +13,7 @@ VERDICTS = "docs/review/verdicts.json"
 
 
 def insert(repo: Path, brief: dict, receipt: dict, *, at: str) -> list[str]:
-    """`receipt` must come from run_batch, never from the writer or an MCP argument.
+    """`receipt` must carry the reviewer's verdict (`sn close` builds it), never the writer's.
 
     The page is written last: a crash during evidence writes is harmless to replay.
     Recompute the key at call time, including after rebase; never trust an earlier check.

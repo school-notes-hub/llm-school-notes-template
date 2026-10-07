@@ -6,12 +6,14 @@ secrets (the keys are in the ops repo's `.env`).
     [git]            name, email               # the tool's commits
     [students.<t>]   drive_root, grade, site_repo, local_repo (optional)
     [limits]         image_monthly_usd, image_reservation_usd, image_year_total_usd, image_year_learner_usd
-    [sources]        max_side_px, jpeg_quality, pdf_dpi
+    [sources]        max_side_px, jpeg_quality
     [timeouts]       per external call, seconds
 
-A key the tool no longer reads (from the VM era: `[roles.*]`, `email_to`, `secrets_dir`,
-`ssh_hostname`, `repo_key`, `ready_after_s`, …) is ignored with one warning line; it never stops
-a command."""
+A leftover of the VM era (`[roles.*]`, `email_to`, `secrets_dir`, `release_dir`, `[git]`
+`ssh_hostname`/`ssh_port`, `[students.*]` `repo`, `repo_key`, `site_key`, `publish`,
+`[sources] ready_after_s`, `[limits] image_daily_usd`, …) is ignored with one warning line. Any
+other unknown key inside `[limits]`, `[sources]` or `[timeouts]` is an error: a typo there must
+not silently give the default (for example the default image budget)."""
 
 import re
 import sys
@@ -52,7 +54,6 @@ class Timeouts:
 class Sources:
     max_side_px: int = 2000
     jpeg_quality: int = 85
-    pdf_dpi: int = 200
 
 
 @dataclass(frozen=True)
@@ -93,6 +94,14 @@ def _path(value: str) -> Path:
     return Path(value).expanduser()
 
 
+# Keys the VM-era tool read inside sections this model still has: ignored with the warning.
+LEGACY = {"sources.": {"ready_after_s", "pages_per_call", "pdf_dpi"},
+          "limits.": {"image_daily_usd", "max_agents", "fix_runs_per_day", "min_free_gb", "chat_lock_alert_h",
+                      "review_closures_per_run", "owner_after_open", "mcp_wait_s", "review_max_images",
+                      "review_max_diff_kb"},
+          "timeouts.": {"msmtp_s", "rasterize_s"}}
+
+
 def _known(table: dict, names, where: str, ignored: list[str]) -> dict:
     """The keys this tool reads; every other key goes to `ignored` as `<where>.<key>`."""
     ignored += sorted(f"{where}{k}" for k in table if k not in names)
@@ -100,7 +109,12 @@ def _known(table: dict, names, where: str, ignored: list[str]) -> dict:
 
 
 def _sub(cls, table: dict | None, where: str, ignored: list[str]):
-    values = _known(dict(table or {}), {f.name for f in fields(cls)}, where, ignored)
+    table = dict(table or {})
+    names = {f.name for f in fields(cls)}
+    unknown = sorted(set(table) - names - LEGACY[where])
+    if unknown:
+        raise ConfigError(f"[{where.rstrip('.')}] unknown keys: {', '.join(unknown)}")
+    values = _known(table, names, where, ignored)
     for key, value in values.items():
         if type(value) not in (int, float) or value < 0:
             raise ConfigError(f"[{where.rstrip('.')}] {key} must be a non-negative number")

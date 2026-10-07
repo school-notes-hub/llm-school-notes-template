@@ -38,7 +38,7 @@ PAGES = ["wiki/index.md", "wiki/gazd/index.md", "wiki/gazd/tema.md",
 FILES = {
     "wiki/index.md": "# Kezdőlap\n",
     "wiki/gazd/index.md": "# Gazdaság\n",
-    "wiki/gazd/tema.md": "# Téma\n\nTartalom. [Fotó](../../sources/gazd/p/p0001.jpg)\n",
+    "wiki/gazd/tema.md": "# Téma\n\nTartalom.\n",
     "wiki/gazd/2026-09-25-ora-jegyzet.md": "# Óra\n\n# Nyitott kérdések\n\nEgy szó.[^a]\n\n[^a]: Füzet, 01.jpg\n",
     "publication/public.json": public_json(PAGES),
     "sources/gazd/p/p0001.jpg": "JPEGBYTES",
@@ -179,9 +179,19 @@ def test_browser_error_points_to_the_page(env):
     assert "overflow at 320px" in caught.value.problems[0]["message"]
 
 
-def test_check_public_blocks_secrets_and_machine_paths_but_not_source_names(env):
-    env.push({"wiki/gazd/tema.md": "# Téma\n\nLásd sources/gazd/p/p0001.jpg és 2026-09-25-x/01.jpg.\n"})
-    env.build(env.main())  # source names and sources/ text are allowed now (1:1 wiki)
+@pytest.mark.parametrize("leak", ["Lásd sources/gazd/p/x.jpg.", "Lásd references/konyv/document.md.",
+                                  "A füzet p0002 oldala.", '<span data-private-link="1">x</span>'])
+def test_check_public_blocks_private_source_names_in_the_output(env, leak):
+    """Plan 5: no sources/ or references/ text, no page or photo id, no private-link marker."""
+    env.push({"wiki/gazd/tema.md": f"# Téma\n\n{leak}\n"})
+    with pytest.raises(BadWork) as caught:
+        env.build(env.main())
+    assert caught.value.problems[0]["file"] == "wiki/gazd/tema.md"
+
+
+def test_check_public_blocks_secrets_and_machine_paths(env):
+    env.push({"wiki/gazd/tema.md": "# Téma\n\nForrás: a füzet 2026-09-25-i oldala.\n"})
+    env.build(env.main())
     env.push({"wiki/gazd/tema.md": "# Téma\n\nútvonal: /home/dlaszlo/titok\n"})
     with pytest.raises(BadWork) as caught:
         env.build(env.main())

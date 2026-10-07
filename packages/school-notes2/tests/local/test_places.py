@@ -4,7 +4,7 @@ receipt `sn close` writes (local/close.py)."""
 from types import SimpleNamespace
 
 from school_notes2.local import places
-from school_notes2.local.close import generation_outputs
+from school_notes2.local.figure_close import generation_outputs
 from school_notes2.state import safefs
 from tests.figures.conftest import add_pending
 
