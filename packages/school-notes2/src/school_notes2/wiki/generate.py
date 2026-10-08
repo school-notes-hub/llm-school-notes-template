@@ -347,12 +347,16 @@ def root_index(repo: Path) -> str:
 
 
 def write_indexes(repo: Path) -> list[str]:
-    """Refresh every index; returns the repo-relative paths that changed."""
+    """Refresh every index and the Podcast page (while there is an episode: its list shows the
+    topic pages' current titles); returns the repo-relative paths that changed."""
+    from . import podcast
     changed = []
     targets = [(f"wiki/{s}/index.md", lambda s=s: subject_index(repo, s)) for s in subject_order(repo)]
     targets.append(("wiki/index.md", lambda: root_index(repo)))
+    if podcast.records(repo):
+        targets.append((podcast.PAGE, lambda: podcast.podcast_page(repo)))
     for rel, build in targets:
-        old = read_text(repo, rel)
+        old = read_text(repo, rel) if safefs.is_file(repo, rel) else None
         new = build()
         if new != old:
             safefs.write_text(repo, rel, new)

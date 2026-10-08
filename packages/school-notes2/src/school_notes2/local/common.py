@@ -3,7 +3,7 @@ the release this process runs from, git over HTTPS with `gh`'s token, and the lo
 
 Each command writes one line of its own to the JSONL log (`logs/school-notes.log`); the
 library steps that take time (git network operations, site build, PDF render, gh-pages push,
-live check, image generation attempts) write one small line each with `seconds` into the same
+live check, image generation attempts, paid podcast calls) write one small line each with `seconds` into the same
 file (`STEPS`); every other library event goes nowhere."""
 
 import subprocess
@@ -26,7 +26,7 @@ class Refused(SnError):
 
 GITHUB = "https://github.com/"
 STEPS = ("git.fetch", "git.push", "git.ls-remote", "git.clone", "git.pull",
-         "site.build", "site.pdf", "site.publish", "site.live", "image.attempt")
+         "site.build", "site.pdf", "site.publish", "site.live", "image.attempt", "podcast.call")
 
 
 def require_github(url: str, what: str) -> str:
@@ -97,6 +97,18 @@ class Local:
             monthly_usd=Decimal(str(limits.image_monthly_usd)),
             reservation_usd=Decimal(str(limits.image_reservation_usd)),
             timeout_s=self.cfg.timeouts.image_generate_s)
+
+    def podcast_settings(self):
+        """The podcast's own budget, ledger, cache and lock (all learners share them); the key
+        is read from the ops `.env` at call time."""
+        from ..podcast.ledger import PodcastSettings
+        state, limits = self.cfg.state_dir, self.cfg.limits
+        return PodcastSettings(
+            learner=self.name, state_root=state / "podcast", lock_path=state / "podcast.lock",
+            key_file=keys.ENV_FILE, music=self.cfg.podcast.music,
+            monthly_usd=Decimal(str(limits.podcast_monthly_usd)),
+            year_total_usd=Decimal(str(limits.podcast_year_total_usd)),
+            timeout_s=self.cfg.timeouts.podcast_call_s)
 
     def drive(self):
         from ..drive.client import DriveClient, DriveMediaTransport

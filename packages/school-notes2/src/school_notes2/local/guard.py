@@ -17,7 +17,9 @@ looked at):
   into `sources/`) count – a web or textbook entry is the writer's; removing a whole generated
   block is the writer's choice;
 * a new raster image link outside a generated block, or changed bytes of a committed raster
-  image: a raster image goes in only through a commission and the reviewer's accept.
+  image: a raster image goes in only through a commission and the reviewer's accept;
+* a podcast MP3 under `wiki/` or a podcast receipt under `docs/evidence/podcast/` (new, changed
+  or deleted) that is not `sn podcast`'s last write (`tool_writes` files).
 
 With `subjects` the `wiki/` part looks only at those subjects; the `sources/` part stays global.
 Each finding is one line: `<path>: <what>`, in path order."""
@@ -37,6 +39,7 @@ from ..wiki.pages import links, resolve, wiki_pages
 from . import tool_writes
 
 RASTER = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".heic", ".heif", ".avif")
+PODCAST_RECEIPTS = "docs/evidence/podcast/"
 INTERRUPTED = " (if an earlier `sn close` was interrupted, run it again: it records its own writes)"
 
 
@@ -86,6 +89,9 @@ def violations(repo: Path, git, subjects=None) -> list[str]:
     for rel, sha in sorted(known.items()):
         if sha is not None and _sha(repo, rel) != sha:
             out.append(f"{rel}: a file of its source manifest is missing or changed")
+    for rel in sorted({*tracked, *untracked}):
+        if rel.startswith(PODCAST_RECEIPTS) and (tracked.get(rel) == "D" or record["files"].get(rel) != _sha(repo, rel)):
+            out.append(f"{rel}: a podcast receipt only `sn podcast` writes ({tracked.get(rel, 'A')})")
     deleted = sorted(r for r, s in tracked.items() if s == "D" and r.startswith("wiki/") and r.endswith(".md"))
     present = sorted(r for r in {*(r for r, s in tracked.items() if s != "D"), *untracked} if r.startswith("wiki/"))
     renamed = _pairs(repo, deleted, [r for r in present if r in added and r.endswith(".md")], base)
@@ -108,6 +114,8 @@ def violations(repo: Path, git, subjects=None) -> list[str]:
         elif _raster(rel) and tracked.get(rel) == "M":
             out.append(f"{rel}: the bytes of a committed image changed (a replacement is a new file "
                        "with `replaces`)")
+        elif rel.lower().endswith(".mp3") and record["files"].get(rel) != _sha(repo, rel):
+            out.append(f"{rel}: a podcast MP3 only `sn podcast` writes")
     moved = set(renamed.values())
     standing = None
     for rel in deleted:

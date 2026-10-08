@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The podcast writer's hand-over `adas.json` (`.school-notes/out/podcast/<subject>/<page>/`): the reader's version of one episode about one topic page, as it goes to the speech model (B mode: one call per scene, the turns as a two-speaker `input` list, each with its own tone instruction).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["writer", "title", "summary", "style", "speakers", "scenes", "names"],
+  "properties": {
+    "writer": {"type": "string", "minLength": 1, "maxLength": 200},
+    "title": {"type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[^\\n\\[\\]]+$"},
+    "summary": {"type": "string", "minLength": 1, "maxLength": 300, "pattern": "^[^\\n]+$"},
+    "style": {"type": "string", "minLength": 1, "maxLength": 1000},
+    "speakers": {
+      "type": "object",
+      "minProperties": 2,
+      "propertyNames": {"pattern": "^[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]{1,30}$"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["voice", "role"],
+        "properties": {
+          "voice": {"type": "string", "pattern": "^[A-Z][a-z]{1,30}$"},
+          "role": {"enum": ["host", "guest"]}
+        }
+      }
+    },
+    "scenes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "turns"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Za-z0-9-]{1,16}$"},
+          "turns": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["speaker", "text", "style"],
+              "properties": {
+                "speaker": {"type": "string", "minLength": 1},
+                "text": {"type": "string", "minLength": 1, "maxLength": 4000},
+                "style": {"type": "string", "maxLength": 500}
+              }
+            }
+          }
+        }
+      }
+    },
+    "names": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["form", "targets"],
+        "properties": {
+          "form": {"type": "string", "minLength": 1, "maxLength": 100},
+          "targets": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "pattern": "^[a-záéíóöőúüű ]{1,100}$"}
+          }
+        }
+      }
+    }
+  }
+}

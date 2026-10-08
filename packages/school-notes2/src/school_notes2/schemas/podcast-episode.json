@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The release receipt of one podcast episode (`docs/evidence/podcast/<subject>/<page>.json`, written by `sn podcast`): what was published, from what, with which rights, and what the blind name check found.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["show", "subject", "page", "title", "summary", "speakers", "asset", "output_sha256", "bytes",
+               "duration_s", "key", "script_sha256", "reviewer", "verdict", "speech", "mix", "names", "rights",
+               "drive", "first_released", "released", "tool"],
+  "properties": {
+    "show": {"const": "Képben vagy?"},
+    "subject": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "page": {"type": "string", "pattern": "^wiki/[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9-]*\\.md$"},
+    "title": {"type": "string", "minLength": 1},
+    "summary": {"type": "string", "minLength": 1},
+    "speakers": {
+      "type": "array", "minItems": 2,
+      "items": {"type": "object", "additionalProperties": false, "required": ["name", "role", "voice"],
+                "properties": {"name": {"type": "string"}, "role": {"enum": ["host", "guest"]},
+                               "voice": {"type": "string"}}}
+    },
+    "asset": {"type": "string", "pattern": "^wiki/assets/[a-z0-9][a-z0-9-]*/podcast/[a-z0-9][a-z0-9-]*\\.mp3$"},
+    "output_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "bytes": {"type": "integer", "minimum": 1},
+    "duration_s": {"type": "number", "exclusiveMinimum": 0},
+    "key": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "script_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "reviewer": {"type": "string", "minLength": 1},
+    "verdict": {"type": "object"},
+    "speech": {"type": "object", "required": ["model", "route", "scenes"]},
+    "mix": {"type": "object", "required": ["music_sha256", "graph", "encoding", "ffmpeg"]},
+    "names": {
+      "type": "array",
+      "items": {"type": "object", "required": ["form", "targets", "scene", "verified"],
+                "properties": {"verified": {"type": "boolean"}}}
+    },
+    "rights": {
+      "type": "object", "additionalProperties": false, "required": ["class", "speech", "music", "text"],
+      "properties": {"class": {"const": "generated"}, "speech": {"type": "string", "minLength": 1},
+                     "music": {"type": "string", "minLength": 1}, "text": {"type": "string", "minLength": 1}}
+    },
+    "drive": {"type": "object", "required": ["folder", "name"]},
+    "first_released": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+    "released": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+    "tool": {"type": "string"}
+  }
+}

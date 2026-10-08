@@ -258,3 +258,35 @@ test('an animation exports its mp4 and its PNG poster as two media files', async
     assert.deepEqual(await fs.readFile(path.join(tmp, 'build/public/media', `${sha256(video)}.mp4`)), video);
   } finally { await fs.rm(tmp, { recursive: true, force: true }); }
 });
+test('a podcast episode exports its mp3 in the public mode, and the Podcast page is a menu item after the home page', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'study-podcast-'));
+  try {
+    const repo = path.join(tmp, 'repo');
+    await fs.cp(fixture, repo, { recursive: true });
+    await fs.mkdir(path.join(repo, 'wiki/assets/proba/podcast'), { recursive: true });
+    const audio = Buffer.from('ID3\x03\0\0\0\0\0\0not-a-real-mp3');
+    await fs.writeFile(path.join(repo, 'wiki/assets/proba/podcast/elso.mp3'), audio);
+    await fs.writeFile(path.join(repo, 'wiki/podcast.md'), '---\ntitle: Podcast\n---\n\n# Podcast\n\n## Az első téma\n\n![Képben vagy? – Az első téma](assets/proba/podcast/elso.mp3)\n');
+    const config = await settings();
+    config.mode = 'public'; config.site = 'https://example.github.io';
+    config.pages.splice(1, 0, { path: 'wiki/podcast.md', sha256: sha256(await fs.readFile(path.join(repo, 'wiki/podcast.md'))), navigationLabel: '🎧 Podcast', navigation: 'info' });
+    config.assets = config.assets.map(a => ({ ...a, rights: 'authored' }));
+    config.assets.push({ path: 'wiki/assets/proba/podcast/elso.mp3', sha256: sha256(audio), rights: 'generated' });
+    const { payload } = await exportSite({ repo, config, output: path.join(tmp, 'build') });
+    const page = payload.pages.find(p => p.path === 'wiki/podcast.md');
+    assert.equal(payload.pages.indexOf(page), 1);
+    assert.equal(page.navigation, 'info');
+    assert.equal(page.navigationLabel, '🎧 Podcast');
+    assert.match(page.html, new RegExp(`<audio controls preload="none" src="/pelda/media/${sha256(audio)}\\.mp3"`));
+    assert.deepEqual(await fs.readFile(path.join(tmp, 'build/public/media', `${sha256(audio)}.mp3`)), audio);
+  } finally { await fs.rm(tmp, { recursive: true, force: true }); }
+});
+test('a public mp3 without a rights class is refused', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'study-podcast-'));
+  try {
+    const config = await settings();
+    config.mode = 'public'; config.site = 'https://example.github.io';
+    config.assets = [{ path: 'wiki/assets/proba/podcast/elso.mp3', sha256: 'a'.repeat(64) }];
+    await assert.rejects(exportSite({ repo: fixture, config, output: path.join(tmp, 'build') }), /Asset rights class required/);
+  } finally { await fs.rm(tmp, { recursive: true, force: true }); }
+});

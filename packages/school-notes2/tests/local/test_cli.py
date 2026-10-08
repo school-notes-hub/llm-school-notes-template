@@ -6,7 +6,7 @@ from school_notes2 import cli
 def test_cli_knows_only_the_local_commands():
     parser = cli._parser()
     choices = parser._subparsers._group_actions[0].choices
-    assert sorted(choices) == ["book", "check", "close", "done", "fetch", "gen", "publish"]
+    assert sorted(choices) == ["book", "check", "close", "done", "fetch", "gen", "podcast", "publish"]
     for old in ("run", "nightly", "round", "status", "repair", "chat", "mcp", "setup", "finish"):
         with pytest.raises(SystemExit):
             parser.parse_args([old, "barna"])

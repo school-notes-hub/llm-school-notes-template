@@ -224,7 +224,23 @@ def check_links(repo: Path, rel: str, text: str, *, fs=safefs) -> list[dict]:
             out.append(item(rel, link.line, f"link target does not exist: {target!r}"))
         elif link.image and resolved.lower().endswith(".mp4"):
             out += check_animation(repo, rel, link.line, resolved, fs=fs)
+        elif link.image and resolved.lower().endswith(".mp3"):
+            out += check_episode(repo, rel, link.line, resolved, fs=fs)
     return out
+
+
+def check_episode(repo: Path, rel: str, line: int, audio: str, *, fs=safefs) -> list[dict]:
+    """A podcast episode is `sn podcast`'s: its receipt names exactly these bytes (the receipt is
+    its rights evidence on the public site)."""
+    from .podcast import by_asset
+    record = by_asset(repo).get(audio)
+    if record is None:
+        return [item(rel, line, "a podcast episode needs its receipt (docs/evidence/podcast/…); "
+                                "only `sn podcast` puts an MP3 on a page")]
+    if hashlib.sha256(fs.read_bytes(repo, audio)).hexdigest() != record["output_sha256"]:
+        return [item(rel, line, "the podcast MP3 differs from the bytes its receipt names; release it again "
+                                "with `sn podcast`")]
+    return []
 
 
 def check_animation(repo: Path, rel: str, line: int, video: str, *, fs=safefs) -> list[dict]:

@@ -17,6 +17,7 @@ from .common import Refused
 
 OUT = ".school-notes/out"
 DONE = ".school-notes/done"           # hand-overs `sn close` has finished (`close.retire`)
+PODCAST = "podcast"                   # `OUT/podcast/<subject>/<page>/`: `sn podcast`'s, never a subject's
 
 
 @dataclass
@@ -59,7 +60,7 @@ def retired_notes(repo: Path) -> set[str]:
 def handoffs(repo: Path, subjects: list[str] | None, *, allow_retired: bool = False) -> list[Handoff]:
     """The hand-overs in `OUT`, by subject; a named subject without one is refused – with
     `allow_retired` not when it has a finished hand-over (`sn close` re-run after a move)."""
-    found = sorted(safefs.listdir(repo, OUT)) if safefs.is_dir(repo, OUT) else []
+    found = sorted(d for d in safefs.listdir(repo, OUT) if d != PODCAST) if safefs.is_dir(repo, OUT) else []
     if subjects:
         missing = sorted(s for s in set(subjects) - set(found) if not (allow_retired and retired(repo, s)))
         if missing:

@@ -5,14 +5,16 @@ secrets (the keys are in the ops repo's `.env`).
     browser = "…/chrome"                       # optional: the site build's browser check
     [git]            name, email               # the tool's commits
     [students.<t>]   drive_root, grade, site_repo, local_repo (optional)
-    [limits]         image_monthly_usd, image_reservation_usd, image_year_total_usd, image_year_learner_usd
+    [limits]         image_monthly_usd, image_reservation_usd, image_year_total_usd, image_year_learner_usd,
+                     podcast_monthly_usd, podcast_year_total_usd
     [sources]        max_side_px, jpeg_quality
     [timeouts]       per external call, seconds
+    [podcast]        music = "~/jegyzet/podcast-zene/outro.mp3"   # the owner's track (`sn podcast`)
 
 A leftover of the VM era (`[roles.*]`, `email_to`, `secrets_dir`, `release_dir`, `[git]`
 `ssh_hostname`/`ssh_port`, `[students.*]` `repo`, `repo_key`, `site_key`, `publish`,
 `[sources] ready_after_s`, `[limits] image_daily_usd`, …) is ignored with one warning line. Any
-other unknown key inside `[limits]`, `[sources]` or `[timeouts]` is an error: a typo there must
+other unknown key inside `[limits]`, `[sources]`, `[timeouts]` or `[podcast]` is an error: a typo there must
 not silently give the default (for example the default image budget)."""
 
 import re
@@ -48,6 +50,7 @@ class Timeouts:
     build_s: int = 1800
     browser_check_s: int = 900
     check_public_s: int = 300
+    podcast_call_s: int = 600      # one paid podcast call (speech, transcription, name check)
 
 
 @dataclass(frozen=True)
@@ -62,6 +65,13 @@ class Limits:
     image_reservation_usd: float = 0.05
     image_year_total_usd: float = 120.0     # safety cap: twelve monthly caps
     image_year_learner_usd: float = 120.0
+    podcast_monthly_usd: float = 5.0        # podcast plan 12.2: its own budget, apart from images
+    podcast_year_total_usd: float = 40.0
+
+
+@dataclass(frozen=True)
+class Podcast:
+    music: Path = Path("~/jegyzet/podcast-zene/outro.mp3").expanduser()   # the owner's Suno track
 
 
 @dataclass(frozen=True)
@@ -73,6 +83,7 @@ class Config:
     timeouts: Timeouts = field(default_factory=Timeouts)
     sources: Sources = field(default_factory=Sources)
     limits: Limits = field(default_factory=Limits)
+    podcast: Podcast = field(default_factory=Podcast)
     browser: Path = Path("~/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome").expanduser()
     ignored: tuple[str, ...] = ()     # keys in the file the tool does not read, sorted
 
@@ -121,6 +132,18 @@ def _sub(cls, table: dict | None, where: str, ignored: list[str]):
     return cls(**values)
 
 
+def _podcast(table: dict | None) -> Podcast:
+    table = dict(table or {})
+    unknown = sorted(set(table) - {"music"})
+    if unknown:
+        raise ConfigError(f"[podcast] unknown keys: {', '.join(unknown)}")
+    if "music" not in table:
+        return Podcast()
+    if not isinstance(table["music"], str) or not table["music"].strip():
+        raise ConfigError("[podcast] music must be a file path")
+    return Podcast(music=_path(table["music"]))
+
+
 def _student(name: str, t: dict, ignored: list[str]) -> Student:
     if not re.fullmatch(r"[a-z0-9-]+", name):
         raise ConfigError(f"learner name {name!r} must be lowercase ascii")
@@ -137,7 +160,8 @@ def _student(name: str, t: dict, ignored: list[str]) -> Student:
 
 def parse(data: dict) -> Config:
     ignored: list[str] = []
-    top = _known(data, {"root", "browser", "git", "students", "timeouts", "sources", "limits"}, "", ignored)
+    top = _known(data, {"root", "browser", "git", "students", "timeouts", "sources", "limits", "podcast"},
+                 "", ignored)
     git = _known(top.get("git", {}), {"name", "email"}, "git.", ignored)
     try:
         name, email = git["name"], git["email"]
@@ -150,6 +174,7 @@ def parse(data: dict) -> Config:
         timeouts=_sub(Timeouts, top.get("timeouts"), "timeouts.", ignored),
         sources=_sub(Sources, top.get("sources"), "sources.", ignored),
         limits=_sub(Limits, top.get("limits"), "limits.", ignored),
+        podcast=_podcast(top.get("podcast")),
         **({"browser": _path(top["browser"])} if "browser" in top else {}),
         ignored=tuple(sorted(ignored)),
     )

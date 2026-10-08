@@ -36,7 +36,7 @@ export async function exportSite({ repo, config, output, browserPath, printEngin
   for (const a of config.assets || []) {
     relativeFile(a.path);
     if (a.path.startsWith('wiki/assets/orai/')) throw new Error('Teacher-material copies cannot be exported; replace with an independently authored or licensed asset');
-    if (!a.path.startsWith('wiki/assets/') || !/\.(svg|webp|png|jpg|jpeg|gif|mp4)$/i.test(a.path)) throw new Error(`Unsupported asset: ${a.path}`);
+    if (!a.path.startsWith('wiki/assets/') || !/\.(svg|webp|png|jpg|jpeg|gif|mp4|mp3)$/i.test(a.path)) throw new Error(`Unsupported asset: ${a.path}`);
     if (!/^[a-f0-9]{64}$/.test(a.sha256)) throw new Error(`Asset hash required: ${a.path}`);
     if (isPublic && !['authored', 'generated', 'licensed', 'public-domain', 'standard'].includes(a.rights)) throw new Error(`Asset rights class required: ${a.path}`);
     assets.set(a.path, a);

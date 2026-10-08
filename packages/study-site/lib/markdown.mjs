@@ -328,6 +328,16 @@ export async function renderMarkdown(source, { resolveUrl, mermaid, pageId = '',
               const still = el('img', { src: poster, alt, loading: 'eager', decoding: 'async', className: ['study-figure', 'study-video-poster'] });
               Object.assign(node, el('span', { className: ['study-video'] }, [player, still]));
             })());
+          } else if (/\.mp3$/i.test(source)) {
+            // A podcast episode (`sn podcast`): a player on screen; paper leaves it out (the line
+            // with the show and the episode title stays).
+            jobs.push((async () => {
+              const audio = await resolveUrl(source, true);
+              const alt = String(node.properties.alt || 'Podcast');
+              audit.images[order] = audio;
+              const player = el('audio', { controls: true, preload: 'none', src: audio, ariaLabel: alt, className: ['study-audio-player'] }, [{ type: 'text', value: alt }]);
+              Object.assign(node, el('span', { className: ['study-audio'] }, [player]));
+            })());
           } else jobs.push((async () => {
             node.properties.src = await resolveUrl(source, true);
             node.properties.decoding = 'async';
@@ -390,8 +400,8 @@ export async function printSection(html, prefix) {
     });
     visit(tree, 'element', (node, index, parent) => {
       if (node.tagName === 'img') node.properties.loading = 'eager';
-      // Print and PDF show an animation's poster only.
-      if (node.tagName === 'video') { parent.children.splice(index, 1); return index; }
+      // Print and PDF show an animation's poster only, and no audio player.
+      if (node.tagName === 'video' || node.tagName === 'audio') { parent.children.splice(index, 1); return index; }
       if (node.tagName === 'p') {
         let hasImage = false; visit(node, 'element', child => { if (child.tagName === 'img') hasImage = true; });
         if (hasImage) node.properties.className = ['print-figure'];

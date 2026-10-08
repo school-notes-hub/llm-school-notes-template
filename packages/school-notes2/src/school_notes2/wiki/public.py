@@ -34,8 +34,11 @@ class PublicError(ValueError):
 
 
 def page_order(repo: Path) -> list[str]:
-    """B7: root index → per subject: index, chapter pages, lessons table, other lists → info pages."""
-    order: list[str] = ["wiki/index.md"]
+    """B7: root index → the Podcast page while there is one (its menu item right under the home
+    page, owner 2026-10-08) → per subject: index, chapter pages, lessons table, other lists →
+    info pages."""
+    from . import podcast
+    order: list[str] = ["wiki/index.md"] + ([podcast.PAGE] if is_file(repo, podcast.PAGE) else [])
     for slug in generate.subject_order(repo):
         subject = generate.load_subject(repo, slug)
         seq = ["index.md"]
@@ -55,6 +58,9 @@ def page_entry(repo: Path, rel: str) -> dict:
     parts = rel.split("/")
     if rel == "wiki/index.md":
         entry["navigationLabel"] = "🏠 Kezdőlap"
+    elif rel == "wiki/podcast.md":
+        entry["navigationLabel"] = "🎧 Podcast"
+        entry["navigation"] = "info"
     elif len(parts) == 3 and parts[2] == "index.md":
         entry["navigationLabel"] = generate.subject_label(repo, parts[1])
     elif len(parts) == 2:
@@ -97,6 +103,8 @@ def linked_targets(repo: Path, pages: list[str]) -> tuple[set[str], set[str]]:
                 images.add(target)
             elif target.startswith("wiki/") and target.lower().endswith(".mp4"):
                 images.update((target, target[:-4] + ".png"))   # animation and its poster
+            elif target.startswith("wiki/") and target.lower().endswith(".mp3"):
+                images.add(target)                              # a podcast episode (its receipt)
     return images, citations
 
 
@@ -117,6 +125,7 @@ def build(repo: Path, rights: RightsLookup, existing: dict | None = None) -> dic
     from ..figures import licenses
     recorded = licenses.records(repo)
     existing = existing if existing is not None else read_existing(repo)
+    rights = either(podcast_rights(repo), rights)
     order = page_order(repo)
     images, citations = linked_targets(repo, order)
     known = {a["path"]: a for a in existing.get("assets", [])}
@@ -169,6 +178,21 @@ def source_copies(repo: Path, new_assets: list[str]) -> list[str]:
     from ..sources.duplicates import known_hashes      # sources imports wiki: import late
     sources = set(known_hashes(repo).content)
     return [rel for rel in new_assets if sha256(repo, rel) in sources]
+
+
+def podcast_rights(repo: Path) -> RightsLookup:
+    """A podcast MP3 is `generated` (machine speech, the owner's own music, the notes' own text)
+    exactly while its receipt names its current bytes."""
+    from .podcast import RECORDS, by_asset
+    found = by_asset(repo)
+
+    def lookup(rel: str):
+        record = found.get(rel)
+        if record and is_file(repo, rel) and sha256(repo, rel) == record["output_sha256"]:
+            stem = rel.rsplit("/", 1)[1][:-4]
+            return record["rights"]["class"], f"{RECORDS}/{record['subject']}/{stem}.json"
+        return None
+    return lookup
 
 
 def media_receipt_rights(repo: Path) -> RightsLookup:

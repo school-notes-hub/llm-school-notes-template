@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The reviewer's verdict on one podcast script (`verdict.json` in the podcast hand-over). The key is not the reviewer's: `sn podcast --snapshot` writes it to `keys.json`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "observed", "defects"],
+  "properties": {
+    "verdict": {"enum": ["accept", "reject"]},
+    "observed": {"type": "string", "minLength": 1},
+    "defects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["location", "observed", "expected", "severity"],
+        "properties": {
+          "location": {"type": "string", "minLength": 1},
+          "observed": {"type": "string", "minLength": 1},
+          "expected": {"type": "string", "minLength": 1},
+          "severity": {"enum": ["hiba", "javaslat"]}
+        }
+      }
+    }
+  }
+}

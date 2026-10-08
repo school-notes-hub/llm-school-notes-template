@@ -13,8 +13,11 @@ commands; each lives in `school_notes2/local/<command>.py`:
   sn close <t> --dates                       hand-written date spans and lessons legends as generated
   sn done <t>                                content finished? exit 0/1
   sn publish <t> [--reviewed] [--build-only DIR]   push main, build, gate, gh-pages, live
+  sn podcast <t> <subject> <page> --snapshot  the podcast script's checks + keys.json for the reviewer
+  sn podcast <t> <subject> <page>            release an accepted episode: paid speech, name check, mix,
+                                             page block, Podcast page, receipt, Drive
 
-Exit codes: 0 done, 1 not done or an error, 2 `sn close` stopped (invalidated figure verdict).
+Exit codes: 0 done, 1 not done or an error, 2 `sn close` or `sn podcast` stopped before writing.
 """
 
 import argparse
@@ -81,6 +84,12 @@ def _parser() -> argparse.ArgumentParser:
     publish.add_argument("learner")
     publish.add_argument("--reviewed", action="store_true", help="move claude-reviewed to HEAD")
     publish.add_argument("--build-only", type=Path, metavar="DIR", help="build into DIR, push nothing")
+    podcast = sub.add_parser("podcast", help="one podcast episode about a topic page")
+    podcast.add_argument("learner")
+    podcast.add_argument("subject")
+    podcast.add_argument("page", help="the topic page's file name without .md")
+    podcast.add_argument("--snapshot", action="store_true",
+                         help="before the reviewer: check the script, write keys.json; nothing is paid")
     return p
 
 
@@ -141,6 +150,9 @@ def _dispatch(local, args) -> int:
     if args.command == "publish":
         from .local import publish
         return publish.run(local, args.reviewed, args.build_only)
+    if args.command == "podcast":
+        from .local import podcast
+        return podcast.run(local, args.subject, args.page, args.snapshot)
     raise SystemExit(f"unknown command {args.command}")
 
 

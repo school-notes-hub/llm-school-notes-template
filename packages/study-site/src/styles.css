@@ -59,6 +59,9 @@
 .study-video { display: block; }
 .study-video-player { display: block; max-width: 100%; height: auto; }
 .study-video-poster { display: none; }
+.study-audio { display: block; margin-block: .25rem .5rem; }
+.study-audio-player { display: block; width: 100%; max-width: 32rem; }
+@media print { .study-audio { display: none; } }
 @media (max-width: 50rem) { .study-content { font-size: 1rem; } }
 @media print {
   @page { size: A4 portrait; margin: 16mm; }

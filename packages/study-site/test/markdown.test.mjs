@@ -17,6 +17,20 @@ test('a jump-target anchor with an accented Hungarian id keeps its plain id', as
   assert.ok(!html.includes('user-content-2-dia'), html);
 });
 
+test('a podcast mp3 becomes an audio player that paper leaves out, the line around it stays', async () => {
+  const { renderMarkdown, printSection } = await import('../lib/markdown.mjs');
+  const resolveUrl = async h => h.replace('../assets/', 'assets/');
+  const source = '# T\n\n🎧 **Képben vagy?** · *Az első téma* (3:58)\n\n![Képben vagy? – Az első téma](../assets/proba/podcast/elso.mp3)\n';
+  const out = await renderMarkdown(source, { resolveUrl });
+  assert.match(out.html, /<span class="study-audio"><audio controls preload="none" src="assets\/proba\/podcast\/elso.mp3" aria-label="Képben vagy\? – Az első téma" class="study-audio-player">Képben vagy\? – Az első téma<\/audio><\/span>/);
+  assert.doesNotMatch(out.html, /<img/);
+  assert.deepEqual(out.audit.images, ['assets/proba/podcast/elso.mp3']);
+  assert.equal((await renderMarkdown(source, { resolveUrl })).html, out.html);
+  const printed = (await printSection(out.html, 'p1-')).html;
+  assert.doesNotMatch(printed, /<audio/);
+  assert.match(printed, /Képben vagy\?<\/strong> · <em>Az első téma<\/em> \(3:58\)/);
+});
+
 test('an mp4 image becomes a video with its PNG poster; print keeps only the poster', async () => {
   const { renderMarkdown, printSection } = await import('../lib/markdown.mjs');
   const resolveUrl = async h => h.replace('../assets/', 'assets/');
