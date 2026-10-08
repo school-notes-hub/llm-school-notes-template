@@ -6,7 +6,8 @@ and on Drive (owner, 2026-10-08).
 only the spoken form – no digit, Roman numeral, `%`, `§`, common abbreviation –, every listed
 name in the text, nothing private in what goes public); a problem is a STOP (exit 2, nothing
 written). Then `keys.json` in the hand-over: the review key of the script and the topic page as
-they are now.
+they are now. A `verdict.json` given to other content (another key, or before any snapshot) is
+moved aside to `verdict-<old key>.json`: an old accept never counts for a new version.
 
 **Release** (no flag), in this order, stopping at the first failure:
 
@@ -69,6 +70,14 @@ def snapshot(local, ep, out=print) -> int:
         local.record("podcast", "stop", target=ep.ident)
         return stop(out, "STOP: a forgatókönyv nem mehet a lektorhoz (nem írtam semmit):", problems)
     key = scripts.review_key(local.repo, ep, script)
+    old = scripts.read(local.repo, ep, "keys.json", {}) or {}
+    if old.get("key") != key and safefs.is_file(local.repo, f"{ep.folder}/verdict.json"):
+        # a verdict given to other content must not count for this one: kept aside, never deleted
+        base = f"{ep.folder}/verdict-{str(old.get('key') or 'elotte')[:12]}"
+        kept = next(f"{base}{'' if n == 1 else f'-{n}'}.json" for n in range(1, 1000)
+                    if not safefs.exists(local.repo, f"{base}{'' if n == 1 else f'-{n}'}.json"))
+        safefs.move(local.repo, f"{ep.folder}/verdict.json", kept)
+        out(f"a korábbi ítélet félretéve (más változatra szólt): {kept}")
     safefs.write_text(local.repo, f"{ep.folder}/keys.json",
                       json.dumps({"key": key, "page": ep.page}, indent=1) + "\n")
     seconds = scripts.characters(script) / 16

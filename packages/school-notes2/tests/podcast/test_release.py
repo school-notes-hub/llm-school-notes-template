@@ -86,13 +86,12 @@ def test_rerun_after_commit_is_clean_for_the_guard_and_publishable(world):
 
 
 def test_retitled_episode_updates_the_same_drive_file(world):
-    from tests.podcast.conftest import SCRIPT, hand_over
-    from school_notes2.local import podcast
+    from tests.podcast.conftest import SCRIPT, hand_over, snapshot_and_accept
     assert release(world)[0] == 0
     repo = world["repo"]
     safefs.write_text(repo, TOPIC, safefs.read_text(repo, TOPIC).replace("title: Első", "title: Első lépések"))
     hand_over(repo, {**SCRIPT, "title": "Új cím"})
-    assert podcast.run(world["local"], "proba", "elso", True, out=lambda *_: None) == 0
+    snapshot_and_accept(world["local"])
     code, lines = release(world)
     assert code == 0, lines
     drive = world["drive"]
@@ -119,14 +118,15 @@ def test_names_not_verified_do_not_block_and_go_into_the_receipt_with_their_mome
 
 def test_both_learners_get_the_same_episode_from_the_same_input(world, tmp_path, music):
     from school_notes2.local import podcast
-    from tests.podcast.conftest import FakeDrive, FakeOpenRouter, PodcastLocal, hand_over, learner_repo
+    from tests.podcast.conftest import FakeDrive, FakeOpenRouter, PodcastLocal, hand_over, learner_repo, \
+        snapshot_and_accept
     assert release(world)[0] == 0
     other = learner_repo(tmp_path / "other")
     hand_over(other)
     drive = FakeDrive()
     drive.items["root-id"] = {"id": "root-id", "name": "Root", "mimeType": "x", "parents": [], "appProperties": {}}
     local = PodcastLocal(other, tmp_path / "other-state", music, drive, name="masik")
-    assert podcast.run(local, "proba", "elso", True, out=lambda *_: None) == 0
+    snapshot_and_accept(local)
     c = openrouter.Client("test-key", 30, transport=FakeOpenRouter(), sleep=lambda s: None)
     assert podcast.run(local, "proba", "elso", False, out=lambda *_: None, client=c, sleep=lambda s: None) == 0
     for rel in (ASSET, TOPIC, "wiki/podcast.md"):

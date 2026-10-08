@@ -217,10 +217,19 @@ def learner_repo(path: Path) -> Path:
     return path
 
 
-def hand_over(repo: Path, script=None, verdict=ACCEPT) -> None:
+def hand_over(repo: Path, script=None) -> None:
     safefs.write_json(repo, f"{FOLDER_OUT}/adas.json", script or SCRIPT)
-    if verdict is not None:
-        safefs.write_json(repo, f"{FOLDER_OUT}/verdict.json", verdict)
+
+
+def accept(repo: Path, verdict=ACCEPT) -> None:
+    """The reviewer's verdict, after the snapshot."""
+    safefs.write_json(repo, f"{FOLDER_OUT}/verdict.json", verdict)
+
+
+def snapshot_and_accept(local, verdict=ACCEPT) -> None:
+    from school_notes2.local import podcast
+    assert podcast.run(local, "proba", "elso", True, out=lambda *_: None) == 0
+    accept(local.repo, verdict)
 
 
 @pytest.fixture
@@ -235,7 +244,7 @@ def world(tmp_path, music):
     drive.items["root-id"]["id"] = "root-id"
     local = PodcastLocal(repo, tmp_path / "state-root", music, drive)
     router = FakeOpenRouter()
-    assert podcast.run(local, "proba", "elso", True, out=lambda *_: None) == 0
+    snapshot_and_accept(local)
     return {"repo": repo, "local": local, "drive": drive, "router": router, "tmp": tmp_path}
 
 

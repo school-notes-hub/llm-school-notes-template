@@ -162,3 +162,31 @@ def test_missing_music_is_a_prerequisite(world, tmp_path):
 def test_accept_fixture_is_valid():
     from school_notes2.schemas import errors
     assert errors("podcast-verdict", ACCEPT) == [] and errors("podcast-script", SCRIPT) == []
+
+
+def test_a_new_snapshot_of_changed_content_sets_the_old_verdict_aside(world):
+    repo = world["repo"]
+    old_key = safefs.read_json(repo, f"{FOLDER_OUT}/keys.json")["key"]
+    hand_over(repo, {**SCRIPT, "summary": "Más összefoglaló, ugyanarról."})
+    lines = []
+    assert podcast.run(world["local"], "proba", "elso", True, out=lines.append) == 0
+    kept = f"{FOLDER_OUT}/verdict-{old_key[:12]}.json"
+    assert safefs.read_json(repo, kept) == ACCEPT and not safefs.is_file(repo, f"{FOLDER_OUT}/verdict.json")
+    assert any("a korábbi ítélet félretéve" in line for line in lines)
+    code, lines = release(world)
+    assert code == 2 and any("nincs lektori ítélet" in line for line in lines)
+    assert world["router"].calls == []
+
+
+def test_a_repeated_snapshot_of_the_same_content_keeps_the_verdict(world):
+    repo = world["repo"]
+    assert podcast.run(world["local"], "proba", "elso", True, out=lambda *_: None) == 0
+    assert safefs.read_json(repo, f"{FOLDER_OUT}/verdict.json") == ACCEPT
+
+
+def test_a_verdict_written_before_any_snapshot_does_not_count(world):
+    repo = world["repo"]
+    safefs.unlink(repo, f"{FOLDER_OUT}/keys.json")
+    assert podcast.run(world["local"], "proba", "elso", True, out=lambda *_: None) == 0
+    assert safefs.is_file(repo, f"{FOLDER_OUT}/verdict-elotte.json")
+    assert not safefs.is_file(repo, f"{FOLDER_OUT}/verdict.json")
