@@ -72,17 +72,14 @@ A kép legyen szép, elnézegethető, szellős; maradjon alacsony banner. Ne apr
 
 ## Podcast script
 
+The „Képben vagy?” script is written by the podcast writer under its role text (`school-notes-ops/docs/helyi/szerepek/podcastiro.md`) and handed over as `adas.json` ([Helyi menet](helyi-menet.md) *Podcast episodes*); the rules in short are in [Media workflows](media-workflows.md) *Podcast*. A prompt for it:
+
 ```text
-Írj {wiki_nyelv} alapnyelvű podcastot a {tartalmi_szerzodes} alapján, a {profil} tanulójának. A célnyelvi példák és funkcionális szövegek őrizzék meg eredeti nyelvüket. Kért időkeret: {keret_vagy_nincs}.
-Előbb készíts témablokktervet: blokkonként tanulási pont, szükséges előfeltétel, kapcsolódó CORE-elemek, fontos kérdések, átvezetés. Becsüld meg a hosszt; ne nyújtsd ismétléssel.
-Ezután írd meg a TELJES párbeszédet, megszólalásazonosítókkal, Anna és Bence között.
-A nyitás természetes beszélgetésben nevezze meg a témát és a tágabb tananyagi területet, az alapkérdést és annak jelentőségét. Add meg a CONTEXT ténylegesen szükséges részét; a hallgató most találkozhat először a témával.
-A nélkülözhetetlen fogalmakat használat előtt vagy az első használatkor érthetően vezesd be. Az ismeretlen jelöléseket mondd ki és magyarázd meg.
-Minden érdemi témablokk magyarázata után beszéljétek meg a hozzá tartozó fontos kérdéseket és a válaszok miértjét. Lehet rövid, szelíd felidéző kérdés és gondolkodási szünet, utána magyarázat. Ne váljon minden mondat kikérdezéssé, és ne ismételj merev blokkzáró formulát.
-Mindkét szereplő kérdezhet és magyarázhat. Legyenek barátságosak, kíváncsiak és természetesek; ne gyárts nézeteltérést, túlzó lelkesedést vagy állandó helyeslést.
-A kapcsolatok kép nélkül is követhetők legyenek. Kerüld az olyan utalást, hogy "itt látható". A szemléltető helyzetet szóban is azonosítsd példaként.
-A lezárás kapcsolja össze a fő gondolatokat, és térjen vissza az alapkérdéshez.
-Add vissza a párbeszédet és a CORE-elemek megszólalásokhoz rendelt lefedettségét. Még ne indíts TTS-t.
+Írj egy „Képben vagy?” adást {wiki_nyelv} nyelven a(z) {témalap} témalapról, a {profil} tanulójának: 2–5 perc beszélgetés Dani (műsorvezető) és a tantárgy vendége, {vendég} között. Egy adás egy téma.
+A vendég köszön be, azután Dani viszi a műsort. Konkrét helyzettel nyiss, a fogalom erre feleljen; beszéljétek meg, miért fontos és mire jó. A végén: mit kell ebből biztosan tudni a dolgozatra (2–3 pont), aztán Dani elköszön.
+Igazi beszélgetés legyen: egymásra reagálnak, összekötnek, visszamondják a saját szavukkal. Nincs „gondold végig” szünet, kikérdezés, előre tudott válaszú kérdés, szándékos tévedés vagy kijavítás, töltelékmondat.
+Minden nevet, fogalmat és utalást az első előfordulásakor vezess be. Csak a témalap tényei; forrásra ne utalj. Számolós tárgynál levezetés nincs.
+A felolvasói változatban mindent úgy írj ki, ahogy kimondjuk (szám, dátum, sorszám, római szám, rövidítés); a nevekhez add meg az elfogadott kiejtést.
 ```
 
 ## Presentation storyboard
@@ -159,7 +156,7 @@ Ha megfelel, állj meg. Javításhoz csak konkrét hibából indulj ki, nevezd m
 
 ## Speech synthesis
 
-Use stable fictional speaker names and the configured voice mapping throughout the recording. The example dialogue names Anna and Bence are fictional characters, not learner identities. Check pronunciation aids against evidence before sending the script to TTS.
+Use the show's stable speaker names (the host Dani and each subject's own guest) and their voices throughout an episode; the speech request is `sn podcast`'s (one call per scene, each turn with its own tone instruction). Check pronunciation aids against evidence before the script goes to the reviewer.
 
 ```text
 A megadott megszólalást mondd el természetesen, nyugodt, érdeklődő hangon. Alapnyelv: {wiki_nyelv}; a jelölt idegen nyelvű példákat saját nyelvükön mondd. Őrizd meg a szöveget; a szereplő nevét, azonosítóját és technikai jelzéseit ne olvasd fel. Kiejtési támpontok: {ellenorzott_kiejtesek}.

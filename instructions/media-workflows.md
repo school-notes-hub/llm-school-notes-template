@@ -30,7 +30,7 @@ For historical topics, apply *Orient historical learning in time and place* in [
 |---|---|---|
 | Infographic | PNG, or a verified smaller lossless WebP for wiki publication; JPG on request; landscape A4 composition, portrait on request | A clear visual explanation that serves the chosen learning task |
 | Presentation | Landscape A4 PDF; one slide per page | Brief context, prerequisite bridge, coherent progression and recap |
-| Podcast | MP3 with a companion script; two fictional voices | Friendly conversation with an accessible opening, connected topic blocks, key questions and a closing synthesis |
+| Podcast | The „Képben vagy?” episode: MP3 of one topic page, 2-5 minutes, released by `sn podcast` | A real conversation of the host (Dani) and the subject's guest: a concrete opening, the concept and why it matters, what the test needs at the end |
 | Printable study notes | Portrait A4 PDF with selectable/searchable body text | Connected explanation, examples, figures, recap and separate final answers |
 
 These are separate requested outputs. An ingest does not automatically trigger a podcast, a slide deck or a printed packet. Redraw required notebook/board diagrams as the same drawing in the same role, correct, in an editable representation appropriate to the content. Only meaning-bearing layout is binding; improve clutter and keep the lasting correction label with private evidence of changes. This covers mathematical and linguistic notation, graphs and technical drawings. A useful generated infographic may supplement them in any subject; these are compatible choices, not mutually exclusive subject categories.
@@ -87,13 +87,15 @@ Give every slide prompt the same visual specification: A4 orientation, margins, 
 
 ## Podcast
 
-Support one friendly conversational format; do not introduce an unnecessary debate or style selector. Both fictional speakers may ask and explain. Avoid forced disagreement, repetitive praise and a rigid question-answer pattern on every line. Use the profile's language; retain language-learning examples in their relevant language with an accessible explanation.
+The podcast is the „Képben vagy?” show (owner decisions of 2026-10-07/08). The detailed rules are the controller's role texts, `school-notes-ops/docs/helyi/szerepek/podcastiro.md` (writer) and `podcastlektor.md` (reviewer); the hand-over and the release are in [Helyi menet](helyi-menet.md) *Podcast episodes*. What every agent must know:
 
-Before TTS, plan the topic blocks and approximate duration, then write and verify the complete dialogue. The opening must orient someone who has not read the wiki or heard another episode: name the topic and broader subject, establish the central question and explain why it matters. Aim to make this clear within roughly the first half-minute without imposing a rigid spoken timer. Choose the necessary spatial, historical, conceptual or practical background from the actual lesson. Do not start in the middle of an explanation or assume advanced vocabulary.
-
-Build prerequisites, connect the blocks and discuss the important questions and reasoning after explaining each substantive topic. Small recall pauses may help but must not turn the dialogue into an exam. Describe meaningful visual relationships audibly; do not rely on phrases such as "this arrow here". Clearly identify a made-up illustrative example as an example. End by connecting the key ideas and returning to the opening question.
-
-Without a requested duration, start around 3-5 minutes for a short topic or 5-8 for an ordinary summary; do not automatically exceed 10 minutes. These are planning estimates, not filler targets; measure the final recording. Keep speaker-to-voice assignments stable. Verify text fidelity, pronunciation, speaker identity, joins, pace and intelligibility across the complete recording. Transcription is supplementary evidence, not direct listening. Record an audio-check limitation honestly; do not mark unlistened audio fully verified.
+* **One episode, one topic page**, 2-5 minutes of speech; a chapter gets several episodes, not one long one. An episode is made only on request; an ingest never triggers one.
+* **Two speakers who talk with each other**: the young host Dani and the subject's guest, equals of the learner's age group (the guest knows the subject well); never a teacher and a pupil, never two voices reading the notes in turn. The guest says hello first, then Dani carries the show; it ends with what the test needs, then Dani's goodbye.
+* **A conversation, not a quiz**: no "think about it" pause, no recall question with a silence, no planted question whose answer the asker already knows, no deliberate mistake or correction of each other, no filler sentence; every sentence carries content. Humour only where it really works and can never be taken for subject matter.
+* **Everything is introduced** at its first mention (who, what, when, why it matters here); no name-dropping, no jump away from the topic, no reference to something explained only later. Counting subjects are discussed (the concept, what it is good for, what depends on it), never a worked calculation.
+* **The spoken form only**: numbers, dates, ordinals, Roman numerals and abbreviations written out as said in Hungarian (`sn podcast --snapshot` stops on a digit, `%`, `§`, a Roman numeral with a dot, `pl.`, `stb.`, `kb.` and the like); names with their accepted pronunciations listed for the blind name check.
+* **Facts from the topic page**; nothing about the sources ("the notebook says"), no private data.
+* The speech is a machine voice (Gemini TTS) and the page says so; the music is the owner's own. The reviewer judges the script before any paid call; the owner listens to the finished episode.
 
 ## Printable notes and A4 checks
 

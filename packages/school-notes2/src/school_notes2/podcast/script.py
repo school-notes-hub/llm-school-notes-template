@@ -8,13 +8,12 @@
   the text, `targets` – the accepted pronunciations in Hungarian spelling);
 * `keys.json` – `sn podcast --snapshot`: the review key of the script and the topic page as
   they are now; the reviewer's accept is valid for this key only;
-* `verdict.json` – the reviewer's verdict (schema `podcast-verdict`).
+* `verdict.json` – the reviewer's verdict (schema `podcast-verdict`), with the `key` of
+  `keys.json` it was given for (copied by the reviewer, as in a figure verdict).
 
 The review key binds the script and the topic page's author text (generated blocks, machine
 frontmatter keys and the lesson and textbook lines left out, as for a figure's section)."""
 
-import hashlib
-import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,10 +23,11 @@ from ..schemas import errors as schema_errors
 from ..state import safefs
 from ..wiki import frontmatter, markers
 from ..wiki.date_spans import META_LINE
+from ..wiki.podcast import SHOW  # noqa: F401 - the show's name, one place
+from .ledger import request_sha as digest
 
 ROOT = ".school-notes/out/podcast"
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
-SHOW = "Képben vagy?"
 
 # What the speech model must not get (owner rule 2026-10-07: only the spoken form goes to the
 # TTS): digits, percent and paragraph signs, Roman numerals with a dot, common abbreviations.
@@ -141,11 +141,6 @@ def page_text(repo: Path, ep: Episode) -> str:
     return str(page.meta.get("title", "")) + "\n" + re.sub(r"\n(?:[ \t]*\n)+", "\n\n", body).strip()
 
 
-def digest(value) -> str:
-    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
-                                     separators=(",", ":")).encode()).hexdigest()
-
-
 def review_key(repo: Path, ep: Episode, script: dict) -> str:
     return digest({"script": script, "page": page_text(repo, ep)})
 
@@ -173,6 +168,9 @@ def verdict_problems(repo: Path, ep: Episode, script: dict) -> list[str]:
     if keys["key"] != review_key(repo, ep, script):
         return ["az accept nem erre a változatra szól (a forgatókönyv vagy a témalap változott a pillanatkép óta) "
                 "– új pillanatkép és megerősítés kell"]
+    if verdict["key"] != keys["key"]:
+        return ["az accept más kulcsra szól, mint a mostani pillanatkép (verdict.json `key` ≠ keys.json) "
+                "– a lektor a mostani keys.json kulcsára ítéljen"]
     return []
 
 

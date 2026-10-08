@@ -10,7 +10,7 @@ from school_notes2.podcast import openrouter
 from school_notes2.podcast.ledger import BudgetExhausted, Ledger
 from school_notes2.state import safefs
 from school_notes2.state.errors import NeedsOwner, Transient
-from tests.podcast.conftest import (ACCEPT, FOLDER_OUT, SCRIPT, TOPIC, PodcastLocal, hand_over, http_error,
+from tests.podcast.conftest import (ACCEPT, FOLDER_OUT, SCRIPT, TOPIC, PodcastLocal, accept, hand_over, http_error,
                                     needs_ffmpeg, release)
 
 
@@ -70,12 +70,14 @@ def test_no_hand_over_or_unknown_page_is_a_stop(world):
 
 @pytest.mark.parametrize("change, message", [
     (lambda repo: safefs.unlink(repo, f"{FOLDER_OUT}/verdict.json"), "nincs lektori ítélet"),
-    (lambda repo: safefs.write_json(repo, f"{FOLDER_OUT}/verdict.json", {
+    (lambda repo: accept(repo, {
         "verdict": "reject", "observed": "x", "defects": [
             {"location": "J1", "observed": "a", "expected": "b", "severity": "hiba"}]}), "nem fogadta el (reject)"),
-    (lambda repo: safefs.write_json(repo, f"{FOLDER_OUT}/verdict.json", {
+    (lambda repo: accept(repo, {
         "verdict": "accept", "observed": "x", "defects": [
             {"location": "J1", "observed": "a", "expected": "b", "severity": "hiba"}]}), "`hiba` súlyosságú"),
+    (lambda repo: accept(repo, {**ACCEPT, "key": "0" * 64}), "az accept más kulcsra szól"),
+    (lambda repo: safefs.write_json(repo, f"{FOLDER_OUT}/verdict.json", ACCEPT), "key"),
     (lambda repo: safefs.unlink(repo, f"{FOLDER_OUT}/keys.json"), "nincs pillanatkép"),
     (lambda repo: safefs.write_text(repo, TOPIC, safefs.read_text(repo, TOPIC).replace(
         "További szöveg.", "Más szöveg.")), "az accept nem erre a változatra szól"),
@@ -161,7 +163,8 @@ def test_missing_music_is_a_prerequisite(world, tmp_path):
 
 def test_accept_fixture_is_valid():
     from school_notes2.schemas import errors
-    assert errors("podcast-verdict", ACCEPT) == [] and errors("podcast-script", SCRIPT) == []
+    assert errors("podcast-verdict", {"key": "a" * 64, **ACCEPT}) == [] and errors("podcast-script", SCRIPT) == []
+    assert errors("podcast-verdict", ACCEPT)                           # the key is required
 
 
 def test_a_new_snapshot_of_changed_content_sets_the_old_verdict_aside(world):
@@ -171,7 +174,7 @@ def test_a_new_snapshot_of_changed_content_sets_the_old_verdict_aside(world):
     lines = []
     assert podcast.run(world["local"], "proba", "elso", True, out=lines.append) == 0
     kept = f"{FOLDER_OUT}/verdict-{old_key[:12]}.json"
-    assert safefs.read_json(repo, kept) == ACCEPT and not safefs.is_file(repo, f"{FOLDER_OUT}/verdict.json")
+    assert safefs.read_json(repo, kept) == {"key": old_key, **ACCEPT} and not safefs.is_file(repo, f"{FOLDER_OUT}/verdict.json")
     assert any("a korábbi ítélet félretéve" in line for line in lines)
     code, lines = release(world)
     assert code == 2 and any("nincs lektori ítélet" in line for line in lines)
@@ -181,7 +184,7 @@ def test_a_new_snapshot_of_changed_content_sets_the_old_verdict_aside(world):
 def test_a_repeated_snapshot_of_the_same_content_keeps_the_verdict(world):
     repo = world["repo"]
     assert podcast.run(world["local"], "proba", "elso", True, out=lambda *_: None) == 0
-    assert safefs.read_json(repo, f"{FOLDER_OUT}/verdict.json") == ACCEPT
+    assert safefs.read_json(repo, f"{FOLDER_OUT}/verdict.json")["verdict"] == "accept"
 
 
 def test_a_verdict_written_before_any_snapshot_does_not_count(world):

@@ -141,6 +141,15 @@ class FakeDrive:
         parts = urllib.parse.urlsplit(url)
         query = dict(urllib.parse.parse_qsl(parts.query))
         self.requests.append((method, parts.path, query))
+        if parts.path == "/upload/drive/v3/files" and method == "POST":
+            assert query["uploadType"] == "multipart"
+            boundary = headers["Content-Type"].split("boundary=")[1]
+            _, meta_part, data_part, _ = payload.split(f"--{boundary}".encode())
+            meta = json.loads(meta_part.split(b"\r\n\r\n", 1)[1].rstrip(b"\r\n"))
+            data = data_part.split(b"\r\n\r\n", 1)[1][:-2]
+            fid = self.add(meta["name"], meta["parents"][0], meta["mimeType"], data=data,
+                           props=meta.get("appProperties"))
+            return 200, {}, self._public(fid)
         if parts.path.startswith("/upload/drive/v3/files/") and method == "PATCH":
             fid = urllib.parse.unquote(parts.path.rsplit("/", 1)[1])
             assert query["uploadType"] == "media" and headers["Content-Type"] == "audio/mpeg"
@@ -221,8 +230,9 @@ def hand_over(repo: Path, script=None) -> None:
 
 
 def accept(repo: Path, verdict=ACCEPT) -> None:
-    """The reviewer's verdict, after the snapshot."""
-    safefs.write_json(repo, f"{FOLDER_OUT}/verdict.json", verdict)
+    """The reviewer's verdict, after the snapshot, for the key of `keys.json`."""
+    key = safefs.read_json(repo, f"{FOLDER_OUT}/keys.json")["key"]
+    safefs.write_json(repo, f"{FOLDER_OUT}/verdict.json", {"key": key, **verdict})
 
 
 def snapshot_and_accept(local, verdict=ACCEPT) -> None:

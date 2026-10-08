@@ -9,12 +9,15 @@
    voice ends, 10 → 18 %, full 1.5 s after the last word, the track's own ending closes the
    episode); the voice loudness-normalised alone, the music at a fixed gain. `MIX_GRAPH` is the
    script's filter graph, unchanged to the parameter.
-3. **Encoding** (the only part that differs from `kevero.sh`, which wrote 128 kbit/s stereo):
-   64 kbit/s CBR **mono** MP3, 48 kHz. The speech is mono (the model gives 24 kHz mono, the mixer
+3. **Mono and encoding** (the only parts that differ from `kevero.sh`, which wrote 128 kbit/s
+   stereo): after the script's limiter the two channels are averaged
+   (`pan=mono|c0=0.5*c0+0.5*c1`, `MONO`) – an `-ac 1` downmix would be 3 dB louder than each
+   channel and would come after the limiter (measured in the 0.4.0 review: peak +0.56 dBFS) –,
+   then 64 kbit/s CBR MP3, 48 kHz. The speech is mono (the model gives 24 kHz mono, the mixer
    only copies it to both channels); only the music at the two ends is stereo. 64 kbit/s mono is
    0.48 MB a minute: a 3–4 minute episode with the 26 s of music is 1.6–2.2 MB. Bit-exact flags,
    input metadata dropped, ID3v2.3 with only `title` (the episode) and `album` (the show):
-   the same input gives the same bytes."""
+   the same input gives the same bytes. An ffmpeg failure is an `SnError` (`MixError`)."""
 
 import json
 import re
@@ -22,8 +25,12 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from ..state.errors import Prerequisite
+from ..state.errors import Prerequisite, SnError
 from .speech import RATE
+
+
+class MixError(SnError):
+    """ffmpeg or ffprobe failed on the episode's audio (the message is its last lines)."""
 
 LEAD, GAP_SCENE, TAIL = 0.3, 0.6, 1.0
 VOICE_START = 12.0               # the mix delays the voice by 12 s (adelay=12000)
@@ -41,6 +48,8 @@ MIX_GRAPH = (
     "volume='if(lt(t,6),0.10+0.08*t/6,if(lt(t,7.5),0.18+0.82*(t-6)/1.5,1))':eval=frame,adelay=$OS|$OS[o];"
     "[i][v][o]amix=inputs=3:normalize=0,alimiter=limit=0.89[a]")
 
+LIMITER = "alimiter=limit=0.89[a]"
+MONO = "alimiter=limit=0.89,pan=mono|c0=0.5*c0+0.5*c1[a]"   # the channels averaged after the limiter
 EXACT = ["-fflags", "+bitexact", "-flags:a", "+bitexact", "-map_metadata", "-1"]
 
 
@@ -68,18 +77,30 @@ def voice_track(scenes: list[bytes]) -> tuple[bytes, list[float]]:
     return b"".join(parts), starts
 
 
-def _run(args: list[str]) -> subprocess.CompletedProcess:
-    proc = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", *args], capture_output=True, text=True)
+def _run(args: list[str], tool: str = "ffmpeg") -> subprocess.CompletedProcess:
+    base = ["ffmpeg", "-hide_banner", "-nostats"] if tool == "ffmpeg" else [tool]
+    proc = subprocess.run([*base, *args], capture_output=True, text=True)
     if proc.returncode != 0:
-        raise RuntimeError("ffmpeg: " + " ".join(proc.stderr.strip().splitlines()[-3:])[:400])
+        raise MixError(f"{tool}: " + " ".join(proc.stderr.strip().splitlines()[-3:])[:400],
+                       todo="nézd meg az ffmpeg telepítését és a zenefájlt")
     return proc
+
+
+def check_music(music: Path) -> None:
+    tools()
+    if not music.is_file():
+        raise Prerequisite(f"a zene nincs meg: {music}",
+                           todo="[podcast] music a config.toml-ban, vagy a fájl a helyére")
 
 
 def normalized(pcm: Path, wav: Path) -> None:
     """Two-pass loudnorm of the raw voice into a 24 kHz mono WAV."""
     raw = ["-f", "s16le", "-ar", str(RATE), "-ac", "1", "-i", str(pcm)]
     first = _run([*raw, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json", "-f", "null", "-"])
-    m = json.loads(first.stderr[first.stderr.rindex("{"):first.stderr.rindex("}") + 1])
+    try:
+        m = json.loads(first.stderr[first.stderr.rindex("{"):first.stderr.rindex("}") + 1])
+    except ValueError:
+        raise MixError("ffmpeg loudnorm: no measurement in its output") from None
     af = (f"loudnorm=I=-16:TP=-1.5:LRA=11:measured_I={m['input_i']}:measured_TP={m['input_tp']}:"
           f"measured_LRA={m['input_lra']}:measured_thresh={m['input_thresh']}:offset={m['target_offset']}:"
           "linear=true")
@@ -87,18 +108,17 @@ def normalized(pcm: Path, wav: Path) -> None:
 
 
 def duration(path: Path) -> float:
-    proc = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
-                           str(path)], capture_output=True, text=True, check=True)
-    return float(proc.stdout.strip())
+    """The duration as ffprobe prints it (`kevero.sh` reads the voice's this way)."""
+    out = _run(["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)], "ffprobe").stdout
+    return float(out.strip())
 
 
 def mix_graph(voice: Path) -> str:
-    """The filter graph with `$OS` as `kevero.sh` computes it: int((12 + D − 6) × 1000), D the
-    voice file's duration as ffprobe prints it."""
-    proc = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
-                           str(voice)], capture_output=True, text=True, check=True)
-    offset = int((12 + float(proc.stdout.strip()) - 6) * 1000)
-    return MIX_GRAPH.replace("$OS", str(offset))
+    """The published graph: `kevero.sh`'s with `$OS` as the script computes it,
+    int((12 + D − 6) × 1000), D the voice file's duration, and the channels averaged after its
+    limiter (`MONO`)."""
+    offset = int((12 + duration(voice) - 6) * 1000)
+    return MIX_GRAPH.replace("$OS", str(offset)).replace(LIMITER, MONO)
 
 
 def mix(voice: Path, music: Path, out: Path, *, title: str, album: str) -> None:
@@ -131,9 +151,7 @@ def ffmpeg_version() -> str:
 def episode(scenes: list[bytes], music: Path, work: Path, *, title: str,
             album: str) -> tuple[bytes, list[float], float]:
     """The published MP3's bytes, each scene's start in the final episode and its length (s)."""
-    tools()
-    if not music.is_file():
-        raise Prerequisite(f"a zene nincs meg: {music}", todo="[podcast] music a config.toml-ban, vagy a fájl a helyére")
+    check_music(music)
     pcm, starts = voice_track(scenes)
     (work / "voice.pcm").write_bytes(pcm)
     normalized(work / "voice.pcm", work / "voice.wav")

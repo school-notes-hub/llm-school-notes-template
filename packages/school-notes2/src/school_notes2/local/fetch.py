@@ -42,6 +42,7 @@ from .common import today
 
 DOWNLOADED, PLACING, STAGED, PLACED = "download.json", "placing.json", "staged.json", "placed.json"
 STAGE = ".school-notes/fetch"
+RESERVED = ("podcast",)        # `wiki/podcast.md` and `.school-notes/out/podcast/` belong to `sn podcast`
 
 
 def new_subject(repo: Path, subject: str, drive_name: str) -> list[str]:
@@ -169,6 +170,10 @@ def _place(local, repo: Path, pkg: Package, folder: Path, out) -> None:
     claim = _read(folder / PLACING) if (folder / PLACING).is_file() else None
     if claim is None:
         subject, is_new = subject_key(pkg.subject_name, repo)
+        if subject in RESERVED:
+            raise NeedsOwner(f"a {pkg.subject_name!r} tantárgy azonosítója ({subject}) foglalt: a wiki/{subject}.md "
+                             f"és a .school-notes/out/{subject}/ az sn podcasté",
+                             todo="nevezd át a tantárgy Drive-mappáját")
         if is_new:
             for path in new_subject(repo, subject, pkg.subject_name):
                 out(f"új tantárgy: {path}")

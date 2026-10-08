@@ -90,7 +90,7 @@ def violations(repo: Path, git, subjects=None) -> list[str]:
         if sha is not None and _sha(repo, rel) != sha:
             out.append(f"{rel}: a file of its source manifest is missing or changed")
     for rel in sorted({*tracked, *untracked}):
-        if rel.startswith(PODCAST_RECEIPTS) and (tracked.get(rel) == "D" or record["files"].get(rel) != _sha(repo, rel)):
+        if rel.startswith(PODCAST_RECEIPTS) and not _tool_file(record, repo, rel):
             out.append(f"{rel}: a podcast receipt only `sn podcast` writes ({tracked.get(rel, 'A')})")
     deleted = sorted(r for r, s in tracked.items() if s == "D" and r.startswith("wiki/") and r.endswith(".md"))
     present = sorted(r for r in {*(r for r, s in tracked.items() if s != "D"), *untracked} if r.startswith("wiki/"))
@@ -114,7 +114,7 @@ def violations(repo: Path, git, subjects=None) -> list[str]:
         elif _raster(rel) and tracked.get(rel) == "M":
             out.append(f"{rel}: the bytes of a committed image changed (a replacement is a new file "
                        "with `replaces`)")
-        elif rel.lower().endswith(".mp3") and record["files"].get(rel) != _sha(repo, rel):
+        elif rel.lower().endswith(".mp3") and not _tool_file(record, repo, rel):
             out.append(f"{rel}: a podcast MP3 only `sn podcast` writes")
     moved = set(renamed.values())
     standing = None
@@ -254,6 +254,27 @@ def _raster_links(rel: str, text: str, old: str | None) -> list[str]:
         out.append(f"{rel}: new raster image link {target} outside a figure block (a raster image "
                    "goes in through a commission and the reviewer's accept)")
     return out
+
+
+def _tool_file(record: dict, repo: Path, rel: str) -> bool:
+    """The file is exactly the tool's last write – or its deletion (recorded as null)."""
+    return rel in record["files"] and record["files"][rel] == _sha(repo, rel)
+
+
+def hand_edited(repo: Path, git, rel: str, record: dict | None = None) -> list[str]:
+    """The machine parts of page `rel` that differ from the HEAD and are not the tool's last write
+    (`key <k>`, `block <name>`; `frontmatter` when unreadable); [] for a missing page. A command
+    that writes the page stops on these: recording its own write would make them look the tool's."""
+    if not safefs.is_file(repo, rel):
+        return []
+    record = record if record is not None else tool_writes.load(repo)
+    text = safefs.read_text(repo, rel)
+    if record["parts"].get(rel) == tool_writes.sha(tool_writes.machine_parts(text)):
+        return []
+    proc = git.run("show", f"HEAD:{rel}", check=False)
+    head = proc.stdout.decode("utf-8", "replace") if proc.returncode == 0 else None
+    found = machine_differences(text, head)
+    return ["frontmatter"] if found is None else sorted(found)
 
 
 def _sha(repo: Path, rel: str) -> str | None:

@@ -6,9 +6,12 @@ The tool's existing full `drive` scope is used as it is; nothing here changes a 
 a share (the owner shares the folder). The folder is created when it is missing. An episode's
 file is found by its private app property (`schoolNotesPodcast` = `<subject>/<page>`), never by
 its name: a re-release updates the same file (content and, when the title changed, its name),
-never a second one. The upload is verified by the size and MD5 Drive reports."""
+never a second one. A new file is created with its content in one multipart request, so an
+interruption never leaves an empty file behind. The upload is verified by the size and MD5 Drive
+reports."""
 
 import hashlib
+import json
 import urllib.parse
 
 from ..state.errors import NeedsOwner, Transient
@@ -62,10 +65,8 @@ def upload(client: DriveClient, root_id: str, ident: str, name: str, data: bytes
             _media(client, meta["id"], data)
             state = "updated"
     else:
-        meta = client.t.request("POST", f"{API}/files?" + urllib.parse.urlencode({"fields": FIELDS}),
-                                {"name": name, "mimeType": MIME, "parents": [folder],
-                                 "appProperties": {APP_KEY: ident}})[2]
-        _media(client, meta["id"], data)
+        meta = _create(client, {"name": name, "mimeType": MIME, "parents": [folder],
+                                 "appProperties": {APP_KEY: ident}}, data)
         state = "created"
     final = client.get(meta["id"])
     if final.get("md5Checksum") != md5 or str(final.get("size")) != str(len(data)):
@@ -75,6 +76,18 @@ def upload(client: DriveClient, root_id: str, ident: str, name: str, data: bytes
               if nfc(i["name"]) == nfc(name) and i["id"] != meta["id"]]
     return {"id": meta["id"], "name": final.get("name", name), "state": state, "folder_created": created,
             "same_name": len(others)}
+
+
+def _create(client: DriveClient, meta: dict, data: bytes) -> dict:
+    """One `uploadType=multipart` request: the metadata and the content together."""
+    boundary = "sn-podcast-" + hashlib.sha256(data).hexdigest()[:32]
+    while boundary.encode() in data:
+        boundary += "x"
+    body = (f"--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n"
+            f"{json.dumps(meta, ensure_ascii=False)}\r\n--{boundary}\r\nContent-Type: {MIME}\r\n\r\n").encode() + \
+        data + f"\r\n--{boundary}--\r\n".encode()
+    url = f"{UPLOAD}/files?" + urllib.parse.urlencode({"uploadType": "multipart", "fields": FIELDS})
+    return client.t.request("POST", url, body, {"Content-Type": f"multipart/related; boundary={boundary}"})[2]
 
 
 def _media(client: DriveClient, file_id: str, data: bytes) -> None:

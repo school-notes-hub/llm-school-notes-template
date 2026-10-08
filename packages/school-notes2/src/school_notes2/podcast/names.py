@@ -145,7 +145,7 @@ def transcribe(paid, pcm: bytes) -> dict:
                "timestamp_granularities": ["word", "segment"],
                "input_audio": {"data": base64.b64encode(speech_mp3(pcm)).decode(), "format": "mp3"}}
     answer = paid.json("transcription", openrouter.TRANSCRIPTION, request,
-                       transcription_reserve(len(pcm) / 2 / RATE))["answer"]
+                       transcription_reserve(len(pcm) / 2 / RATE), expect="text")["answer"]
     return {"text": (answer.get("text") or "").strip(), "words": answer.get("words") or []}
 
 
@@ -157,7 +157,8 @@ def blind(paid, clip: bytes, context: str, repeat: int) -> str | None:
                    {"type": "input_audio", "input_audio": {"data": base64.b64encode(wav_bytes(clip)).decode(),
                                                            "format": "wav"}}]}]}
     # the repeat makes the runs separate cache entries; it is not sent
-    value = paid.json("judge", openrouter.CHAT, request, JUDGE_RESERVE, cache_key={**request, "sn_repeat": repeat})
+    value = paid.json("judge", openrouter.CHAT, request, JUDGE_RESERVE, cache_key={**request, "sn_repeat": repeat},
+                      expect="choices")
     text = (((value["answer"].get("choices") or [{}])[0].get("message") or {}).get("content")) or ""
     found = re.search(r"\{.*\}", text, re.S)
     try:

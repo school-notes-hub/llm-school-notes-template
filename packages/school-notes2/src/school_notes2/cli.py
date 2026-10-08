@@ -16,6 +16,7 @@ commands; each lives in `school_notes2/local/<command>.py`:
   sn podcast <t> <subject> <page> --snapshot  the podcast script's checks + keys.json for the reviewer
   sn podcast <t> <subject> <page>            release an accepted episode: paid speech, name check, mix,
                                              page block, Podcast page, receipt, Drive
+  sn podcast <t> <subject> <page> --retire   take a released episode off the wiki (Drive copy stays)
 
 Exit codes: 0 done, 1 not done or an error, 2 `sn close` or `sn podcast` stopped before writing.
 """
@@ -45,7 +46,7 @@ def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="sn", description=f"School Notes, local ({VERSION})",
                                 formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     p.add_argument("--config", type=Path, default=None)
-    p.set_defaults(only=None, snapshot=False, rekey=False, dates=False)
+    p.set_defaults(only=None, snapshot=False, rekey=False, dates=False, retire=False)
     sub = p.add_subparsers(dest="command", required=True)
     fetch = sub.add_parser("fetch", help="Drive inbox")
     fetch.add_argument("learner")
@@ -88,8 +89,11 @@ def _parser() -> argparse.ArgumentParser:
     podcast.add_argument("learner")
     podcast.add_argument("subject")
     podcast.add_argument("page", help="the topic page's file name without .md")
-    podcast.add_argument("--snapshot", action="store_true",
-                         help="before the reviewer: check the script, write keys.json; nothing is paid")
+    podcast_mode = podcast.add_mutually_exclusive_group()
+    podcast_mode.add_argument("--snapshot", action="store_true",
+                              help="before the reviewer: check the script, write keys.json; nothing is paid")
+    podcast_mode.add_argument("--retire", action="store_true",
+                              help="take a released episode off the wiki: block, MP3, receipt (the Drive copy stays)")
     return p
 
 
@@ -152,7 +156,7 @@ def _dispatch(local, args) -> int:
         return publish.run(local, args.reviewed, args.build_only)
     if args.command == "podcast":
         from .local import podcast
-        return podcast.run(local, args.subject, args.page, args.snapshot)
+        return podcast.run(local, args.subject, args.page, args.snapshot, retire_=args.retire)
     raise SystemExit(f"unknown command {args.command}")
 
 

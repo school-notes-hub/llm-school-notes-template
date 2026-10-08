@@ -4,7 +4,11 @@ shared tone sentence followed by the turn's own; the top-level voice is the host
 is raw PCM, 24 kHz, 16 bit, mono.
 
 `Paid` runs every paid call of an episode the same way: cache first (the exact request), then
-the budget check and the ledger entry, then the call, then the answer into the cache."""
+the budget check and the ledger entry, then the call, then the answer into the cache and only
+then the ledger entry closed (an interruption between the two leaves a booked reservation and a
+cached answer: no second payment). An answer with status 200 that is not what was asked (an
+error body, no audio, no transcript, no choices) is never cached. A request whose earlier call
+is `unknown` or still `sent` in the ledger may already have been paid: `warnings` names it."""
 
 import time
 from dataclasses import dataclass, field
@@ -40,6 +44,17 @@ class Paid:
     episode: str                      # `<subject>/<page>`, the ledger's episode field
     log: Log = field(default_factory=lambda: Log(None, console=False))
     opened: list = field(default_factory=list)       # this run's ledger entries
+    warnings: list = field(default_factory=list)     # requests that may be paid a second time
+
+    def _open(self, kind: str, sha: str, reserve: Decimal) -> dict:
+        earlier = [c for c in self.ledger.value["calls"]
+                   if c["request_sha256"] == sha and c["state"] in ("unknown", "sent")]
+        if earlier:
+            self.warnings.append(f"{kind}: ugyanez a kérés korábban {earlier[-1]['state']} állapotban maradt "
+                                 f"({earlier[-1]['started_at']}); lehet, hogy most másodszor fizetünk érte")
+        call = self.ledger.open(kind, self.episode, sha, reserve)
+        self.opened.append(call)
+        return call
 
     def cached_speech(self, request: dict) -> bytes | None:
         return self.cache.audio(request_sha(request))
@@ -49,8 +64,7 @@ class Paid:
         found = self.cache.audio(sha)
         if found is not None:
             return found
-        call = self.ledger.open("speech", self.episode, sha, speech_reserve(characters_))
-        self.opened.append(call)
+        call = self._open("speech", sha, speech_reserve(characters_))
         answer = self._post(call, openrouter.SPEECH, request)
         kind = answer.headers.get("content-type", "")
         pcm = answer.body
@@ -60,27 +74,35 @@ class Paid:
                           todo="futtasd újra; ha ismétlődik, nézd meg a modellt és a hangokat")
         gid = answer.headers.get("x-generation-id")
         seconds = round(len(pcm) / 2 / RATE, 3)
-        self.ledger.close(call, "ok", generation_id=gid, seconds=seconds)
         self.cache.put_audio(sha, pcm, {"kind": "speech", "model": request["model"], "generation_id": gid,
                                         "seconds": seconds, "at": call["started_at"]})
+        self.ledger.close(call, "ok", generation_id=gid, seconds=seconds)
         return pcm
 
-    def json(self, kind: str, url: str, request: dict, reserve: Decimal, cache_key: dict | None = None) -> dict:
+    def json(self, kind: str, url: str, request: dict, reserve: Decimal, cache_key: dict | None = None,
+             expect: str = "") -> dict:
         """A JSON call (transcription, blind check), its answer cached by `cache_key` (default:
-        the request itself); `usage.cost` is booked."""
+        the request itself) when it holds `expect` and no `error`; `usage.cost` is booked."""
         sha = request_sha(cache_key if cache_key is not None else request)
         found = self.cache.result(sha)
         if found is not None:
             return found
-        call = self.ledger.open(kind, self.episode, sha, reserve)
-        self.opened.append(call)
-        answer = self._post(call, url, request).json()
+        call = self._open(kind, sha, reserve)
+        try:
+            answer = self._post(call, url, request).json()
+        except NeedsOwner:
+            self.ledger.close(call, "failed")               # not JSON: may be paid, the reservation stays
+            raise
+        answer = answer if isinstance(answer, dict) else {"error": "not an object"}
         cost = (answer.get("usage") or {}).get("cost")
-        self.ledger.close(call, "ok", generation_id=answer.get("id"),
-                          **({"cost_usd": float(cost), "cost_source": "openrouter usage.cost"}
-                             if cost is not None else {}))
+        booked = {"cost_usd": float(cost), "cost_source": "openrouter usage.cost"} if cost is not None else {}
+        if answer.get("error") or (expect and expect not in answer):
+            self.ledger.close(call, "failed", generation_id=answer.get("id"), **booked)
+            raise BadWork(f"OpenRouter: a válasz nem {expect or 'várt'} ({str(answer.get('error'))[:120]})",
+                          todo="futtasd újra; a hibás válasz nem került a gyorsítótárba")
         value = {"kind": kind, "at": call["started_at"], "answer": answer}
         self.cache.put_result(sha, value)
+        self.ledger.close(call, "ok", generation_id=answer.get("id"), **booked)
         return value
 
     def _post(self, call: dict, url: str, request: dict):

@@ -3,8 +3,9 @@
 
 `parts`: for a wiki page whose machine frontmatter keys or generated blocks the tool wrote
 (`sn close`, a new subject's index by `sn fetch`), the SHA-256 of those parts as written.
-`files`: for a whole file the tool wrote outside `sources/` (a textbook by `sn book`), its
-SHA-256. The writer guard accepts exactly these as the tool's own work; anything else in those
+`files`: for a whole file the tool wrote outside `sources/` (a textbook by `sn book`, a podcast
+MP3 or receipt by `sn podcast`), its SHA-256 – or null for a file the tool deleted (`sn podcast
+--retire`). The writer guard accepts exactly these as the tool's own work; anything else in those
 places is a hand edit."""
 
 import hashlib
@@ -43,6 +44,5 @@ def record(repo: Path, *, parts=(), files=()) -> None:
         if safefs.is_file(repo, rel):
             value["parts"][rel] = sha(machine_parts(safefs.read_text(repo, rel)))
     for rel in files:
-        if safefs.is_file(repo, rel):
-            value["files"][rel] = sha(safefs.read_bytes(repo, rel))
+        value["files"][rel] = sha(safefs.read_bytes(repo, rel)) if safefs.is_file(repo, rel) else None
     safefs.write_json(repo, PATH, {k: dict(sorted(v.items())) for k, v in value.items()})

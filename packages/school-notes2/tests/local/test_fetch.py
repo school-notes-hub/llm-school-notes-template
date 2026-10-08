@@ -313,3 +313,16 @@ def test_a_page_is_never_a_duplicate_of_a_placement_that_can_still_be_replaced(w
     assert fetch.run(world["local"], apply=True, out=quiet) == 0
     assert names(world["repo"], "2026-10-06") == ["ugyanaz.jpg"]
     assert names(world["repo"], "2026-10-07") == ["a.jpg", "c.jpg"]
+
+
+def test_a_subject_named_podcast_is_refused_before_anything_is_placed(world):
+    """0.4.0 review J6: `wiki/podcast.md` and `.school-notes/out/podcast/` belong to `sn podcast`."""
+    drive = world["drive"]
+    subject = drive.folder("Podcast", drive.folder("Tanári-tanulni", world["root"]))
+    ready = drive.folder("Feltöltés_Kész", subject)
+    drive.folder("Feldolgozva", subject)
+    drive.file("x.jpg", drive.folder("2026-10-08", ready), jpeg("green"))
+    lines = []
+    assert fetch.run(world["local"], apply=True, out=lines.append) == 1
+    assert any(line.startswith("NEM KÉSZ:") and "foglalt" in line for line in lines)
+    assert not (world["repo"] / "wiki/podcast").exists() and not (world["repo"] / "sources/podcast").exists()

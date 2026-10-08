@@ -217,3 +217,32 @@ def test_backfill_waits_only_for_this_runs_calls(tmp_path):
     assert ledger.backfill(Client(), sleep=sleeps.append, only=[new]) == 0
     assert sleeps == [15] and new["cost_usd"] == 0.04 and old["cost_usd"] is None
     assert ledger.spent_year() == Decimal("0.1") + Decimal("0.04")
+
+
+def _levels(path):
+    proc = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(path), "-af",
+                           "astats=measure_overall=Peak_level+RMS_level:measure_perchannel=none", "-f", "null", "-"],
+                          capture_output=True, text=True, check=True)
+    peak = float(re.findall(r"Peak level dB: (-?[\d.]+)", proc.stderr)[-1])
+    rms = float(re.findall(r"RMS level dB: (-?[\d.]+)", proc.stderr)[-1])
+    return peak, rms
+
+
+@needs_ffmpeg
+def test_mono_stays_under_the_limiter_ceiling_at_the_level_of_one_kevero_channel(tmp_path):
+    """0.4.0 review H1: an `-ac 1` downmix after the graph was 3 dB louder than each channel and
+    passed the limiter (peak +0.56 dBFS on the real track)."""
+    loud = tmp_path / "loud.wav"                      # full-scale music: ×0.7 in the graph is −3.1 dBFS
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=330:duration=30:sample_rate=48000",
+                    "-af", "volume=7.99", "-ac", "2", "-c:a", "pcm_s16le", str(loud)], check=True)
+    data, _, _ = audio.episode([tone(6.0, 220)], loud, tmp_path, title="x", album="y")
+    (tmp_path / "mono.mp3").write_bytes(data)
+    graph = audio.MIX_GRAPH.replace("$OS", str(int((12 + audio.duration(tmp_path / "voice.wav") - 6) * 1000)))
+    subprocess.run(["ffmpeg", "-v", "error", "-i", str(loud), "-i", str(tmp_path / "voice.wav"), "-sseof", "-20",
+                    "-i", str(loud), "-filter_complex", graph, "-map", "[a]", "-c:a", "libmp3lame", "-b:a", "128k",
+                    "-ac", "2", "-bitexact", str(tmp_path / "kevero.mp3")], check=True)     # kevero.sh exactly
+    peak, rms = _levels(tmp_path / "mono.mp3")
+    ref_peak, ref_rms = _levels(tmp_path / "kevero.mp3")
+    assert peak < -1.0 and abs(peak - ref_peak) < 0.5
+    assert abs(rms - ref_rms) < 0.15
+    assert "alimiter=limit=0.89,pan=mono|c0=0.5*c0+0.5*c1[a]" in audio.mix_graph(tmp_path / "voice.wav")

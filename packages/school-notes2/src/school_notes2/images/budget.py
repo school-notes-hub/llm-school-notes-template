@@ -57,8 +57,9 @@ def unknown_calls(ledger: dict) -> list[dict]:
 
 
 @contextmanager
-def images_lock(path: Path, timeout_s: float, poll_s: float = 1.0):
-    """Blocking flock with timeout on state/images.lock (all learners share it)."""
+def images_lock(path: Path, timeout_s: float, poll_s: float = 1.0, what: str = "image"):
+    """Blocking flock with timeout on state/images.lock (all learners share it); `sn podcast`
+    uses it on state/podcast.lock with `what="podcast"`."""
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
     deadline = time.monotonic() + timeout_s
@@ -69,7 +70,7 @@ def images_lock(path: Path, timeout_s: float, poll_s: float = 1.0):
                 break
             except BlockingIOError:
                 if time.monotonic() >= deadline:
-                    raise LockTimeout(f"image lock busy for {timeout_s:.0f}s") from None
+                    raise LockTimeout(f"{what} lock busy for {timeout_s:.0f}s ({path})") from None
                 time.sleep(poll_s)
         yield
     finally:

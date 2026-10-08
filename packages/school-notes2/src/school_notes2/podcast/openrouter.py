@@ -75,7 +75,7 @@ def urllib_transport(method: str, url: str, body: bytes | None, headers: dict, t
 
 @dataclass
 class Client:
-    key: str
+    key: str = field(repr=False)
     timeout_s: float = 600
     transport: Callable[..., Answer] = urllib_transport
     sleep: Callable[[float], None] = time.sleep
