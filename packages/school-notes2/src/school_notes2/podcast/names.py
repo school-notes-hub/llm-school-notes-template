@@ -139,9 +139,11 @@ def locate(text: str, transcript: dict, pcm: bytes, i0: int, i1: int) -> tuple[f
 
 
 def transcribe(paid, pcm: bytes) -> dict:
+    """Whisper on the whole scene, sent as MP3 (as in the measured run)."""
+    from .audio import speech_mp3
     request = {"model": WHISPER, "temperature": 0, "response_format": "verbose_json", "language": "hu",
                "timestamp_granularities": ["word", "segment"],
-               "input_audio": {"data": base64.b64encode(wav_bytes(pcm)).decode(), "format": "wav"}}
+               "input_audio": {"data": base64.b64encode(speech_mp3(pcm)).decode(), "format": "mp3"}}
     answer = paid.json("transcription", openrouter.TRANSCRIPTION, request,
                        transcription_reserve(len(pcm) / 2 / RATE))["answer"]
     return {"text": (answer.get("text") or "").strip(), "words": answer.get("words") or []}

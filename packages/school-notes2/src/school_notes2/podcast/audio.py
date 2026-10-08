@@ -108,6 +108,19 @@ def mix(voice: Path, music: Path, out: Path, *, title: str, album: str) -> None:
           "-id3v2_version", "3", "-metadata", f"title={title}", "-metadata", f"album={album}", str(out)])
 
 
+def speech_mp3(pcm: bytes) -> bytes:
+    """A scene's raw speech as a 64 kbit/s mono MP3 (bit-exact) for the transcription: the size the
+    measured Whisper run sent (a 3.6 minute episode, 1.7 MB) instead of a 10 MB WAV."""
+    import tempfile
+    tools()
+    with tempfile.TemporaryDirectory(prefix="sn-podcast-stt-") as tmp:
+        raw, out = Path(tmp) / "scene.pcm", Path(tmp) / "scene.mp3"
+        raw.write_bytes(pcm)
+        _run(["-y", "-f", "s16le", "-ar", str(RATE), "-ac", "1", "-i", str(raw), "-c:a", "libmp3lame",
+              "-b:a", BITRATE, "-ac", "1", *EXACT, str(out)])
+        return out.read_bytes()
+
+
 def ffmpeg_version() -> str:
     proc = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
     first = proc.stdout.splitlines()[0] if proc.stdout else ""

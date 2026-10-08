@@ -75,10 +75,9 @@ class FakeOpenRouter:
                                      pcm)
         if url == openrouter.TRANSCRIPTION:
             import base64
-            import wave
+            assert payload["input_audio"]["format"] == "mp3"
             data = base64.b64decode(payload["input_audio"]["data"])
-            with wave.open(io.BytesIO(data)) as w:
-                seconds = w.getnframes() / w.getframerate()
+            seconds = (len(data) - 200) * 8 / 64000          # 64 kbit/s CBR, minus the header
             text = self.whisper_text or self._transcript()
             words = text.split()
             step = seconds / max(len(words), 1)
