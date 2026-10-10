@@ -12,7 +12,7 @@ from ..figures.review import is_error
 from ..schemas import validate
 from ..state import safefs
 from ..wiki import markers, public, rights
-from ..wiki.pages import links, relative, resolve, sha256
+from ..wiki.pages import links, resolve, sha256
 from ..wiki.rights import SVG_RECEIPTS
 from .common import today
 from .handoff import Handoff, _json, accepted, in_scope
