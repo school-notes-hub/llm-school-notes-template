@@ -31,8 +31,14 @@
     "names": {
       "type": "array",
       "items": {"type": "object", "required": ["form", "targets", "scene", "verified"],
-                "properties": {"verified": {"type": "boolean"}}}
+                "properties": {"verified": {"type": "boolean"},
+                               "timing": {"enum": ["word", "segment", "gap", "none"]},
+                               "window_s": {"type": "array", "items": {"type": "number"},
+                                            "minItems": 2, "maxItems": 2},
+                               "window": {"type": "string"}}}
     },
+    "names_version": {"description": "The form of `names`: 2 from sn 0.4.1 (`timing`, `window_s`; `at` only with a word time); without it 1 (sn 0.4.0).",
+                      "type": "integer", "minimum": 2},
     "rights": {
       "type": "object", "additionalProperties": false, "required": ["class", "speech", "music", "text"],
       "properties": {"class": {"const": "generated"}, "speech": {"type": "string", "minLength": 1},

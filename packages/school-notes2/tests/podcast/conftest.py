@@ -60,6 +60,7 @@ class FakeOpenRouter:
         self.heard = heard or {}          # context marker → what the blind check hears (default: the target)
         self.fail = []                    # exceptions raised by the next calls, in order
         self.whisper_text = None
+        self.whisper_segments_only = False   # a provider that answers with segment times only
         self.voices = {}
 
     def __call__(self, method, url, body, headers, timeout):
@@ -81,6 +82,12 @@ class FakeOpenRouter:
             text = self.whisper_text or self._transcript()
             words = text.split()
             step = seconds / max(len(words), 1)
+            if self.whisper_segments_only:
+                half = len(words) // 2
+                return self._json({"text": text, "words": [], "usage": {"cost": 0.0004}, "segments": [
+                    {"id": 0, "start": 0.0, "end": round(half * step, 3), "text": " ".join(words[:half])},
+                    {"id": 1, "start": round(half * step, 3), "end": round(seconds, 3),
+                     "text": " ".join(words[half:])}]})
             return self._json({"text": text, "words": [{"word": w, "start": round(i * step, 3),
                                                         "end": round((i + 1) * step, 3)} for i, w in enumerate(words)],
                                "usage": {"cost": 0.0004}})

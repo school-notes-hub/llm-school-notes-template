@@ -17,6 +17,8 @@ commands; each lives in `school_notes2/local/<command>.py`:
   sn podcast <t> <subject> <page>            release an accepted episode: paid speech, name check, mix,
                                              page block, Podcast page, receipt, Drive
   sn podcast <t> <subject> <page> --retire   take a released episode off the wiki (Drive copy stays)
+  sn podcast <t> <subject> <page> --names-only   a released episode's name check again, from the cache
+                                             only (nothing paid; only the receipt's names change)
 
 Exit codes: 0 done, 1 not done or an error, 2 `sn close` or `sn podcast` stopped before writing.
 """
@@ -94,6 +96,8 @@ def _parser() -> argparse.ArgumentParser:
                               help="before the reviewer: check the script, write keys.json; nothing is paid")
     podcast_mode.add_argument("--retire", action="store_true",
                               help="take a released episode off the wiki: block, MP3, receipt (the Drive copy stays)")
+    podcast_mode.add_argument("--names-only", action="store_true",
+                              help="count a released episode's name check again from the cache; nothing is paid")
     return p
 
 
@@ -156,7 +160,8 @@ def _dispatch(local, args) -> int:
         return publish.run(local, args.reviewed, args.build_only)
     if args.command == "podcast":
         from .local import podcast
-        return podcast.run(local, args.subject, args.page, args.snapshot, retire_=args.retire)
+        return podcast.run(local, args.subject, args.page, args.snapshot, retire_=args.retire,
+                           names_only=args.names_only)
     raise SystemExit(f"unknown command {args.command}")
 
 
