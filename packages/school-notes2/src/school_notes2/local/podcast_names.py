@@ -141,7 +141,7 @@ def kept(old: dict, fresh: dict, kind: str) -> dict:
                 + (f" (a 0.4.0-s nyugta a kivágás kezdetét adta: {old['at']})" if old.get("at") else ""))
     if earlier:
         note += f"{EARLIER}{earlier}"
-    return {**item, "note": note}
+    return {**item, "note": note} if note else item
 
 
 def _read(local, ep) -> tuple[dict, list[dict], dict | None, list[str]]:

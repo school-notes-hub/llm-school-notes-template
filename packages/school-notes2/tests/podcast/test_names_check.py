@@ -112,6 +112,19 @@ def test_an_assimilated_ending_doubles_the_names_own_last_consonant():
     assert [(w, names.whisper_heard(w, e)) for w, e, _ in ASSIMILATED] == [(w, x) for w, _, x in ASSIMILATED]
 
 
+def test_x_assimilates_as_ksz():
+    """Review of 0.4.2: `Marx` + -val is `Marxszal`."""
+    assert names.whisper_heard(["Marxszal"], {"form": "Marx", "targets": ["marksz"]})
+    assert not names.whisper_heard(["Marxxal"], {"form": "Marx", "targets": ["marksz"]})
+
+
+def test_a_kept_entry_without_a_note_gets_no_empty_note():
+    from school_notes2.local import podcast_names
+    old = {"form": "Marx", "targets": ["marksz"], "heard": [], "whisper": False, "verified": False,
+           "scene": "J1", "timing": "gap", "at_s": None, "at": None}
+    assert "note" not in podcast_names.kept(old, {}, "transcription")
+
+
 def test_segment_times_only_give_the_segment_span_and_no_blind_check():
     text = "Ma Széchenyi István és Kossuth beszél."
     paid = FakePaid({"text": "", "words": [], "segments": [

@@ -71,11 +71,14 @@ VARIANT_FROM = 5                       # letters; a shorter name gets no one-let
 def _assimilated(stem: str) -> tuple[int, str] | None:
     """(where the stem's written form changes, the assimilated stem) of a consonant-final stem:
     its last consonant doubled – a digraph by its first letter (`zeusz` → `zeussz`), `th` read as
-    t (`kossuth` → `kossutht`); None after a vowel or a lone `y` (Kölcsey: -vel stays)."""
+    t (`kossuth` → `kossutht`), `x` read as ksz (`marx` → `marxsz`); None after a vowel or a lone `y`
+    (Kölcsey: -vel stays)."""
     if not stem or stem[-1] in VOWELS:
         return None
     if stem.endswith("th"):
         return len(stem), stem + "t"
+    if stem.endswith("x"):
+        return len(stem), stem + "sz"
     if stem[-2:] in DIGRAPHS:
         return len(stem) - 2, stem[:-2] + stem[-2] + stem[-2:]
     if stem[-1] == "y":

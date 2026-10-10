@@ -78,7 +78,7 @@ def build(git: Git, commit: str, task_dir: Path, renderer: Renderer, *, changed:
     `changed` lists the wiki paths changed since the last publish; the browser check visits
     those pages and their indexes. None means "check every page" (first publish). On a failure
     the steps' `render.log` is copied to `keep_log` (the task folder may be a temporary one) and
-    a step failure names that file (sn 0.4.2).
+    a step failure names that file (sn 0.4.2); a failing copy leaves the build's error as it is.
     """
     found = existing(task_dir, commit)
     if found:
@@ -228,11 +228,14 @@ def _keep_log(log: Path, keep: Path | None, commit: str) -> Path | None:
     headed by the commit; None when there is nothing to keep or nowhere to keep it."""
     if keep is None or not log.is_file():
         return None
-    keep.parent.mkdir(parents=True, exist_ok=True)
-    tmp = keep.with_name(keep.name + ".part")
-    tmp.write_text(f"# sn publish build of {commit}\n" + log.read_text(encoding="utf-8", errors="replace"),
-                   encoding="utf-8")
-    tmp.replace(keep)
+    try:
+        keep.parent.mkdir(parents=True, exist_ok=True)
+        tmp = keep.with_name(keep.name + ".part")
+        tmp.write_text(f"# sn publish build of {commit}\n" + log.read_text(encoding="utf-8", errors="replace"),
+                       encoding="utf-8")
+        tmp.replace(keep)
+    except OSError:
+        return None            # never hides the build's own failure
     return keep
 
 

@@ -189,6 +189,16 @@ def test_a_render_failure_keeps_its_log_and_names_the_renderers_error(env, tmp_p
     assert text.startswith(f"# sn publish build of {commit}\n") and "at readInput" in text
 
 
+def test_a_log_that_cannot_be_kept_does_not_hide_the_build_error(env, tmp_path):
+    from school_notes2.state.errors import Transient
+    env.push({"wiki/gazd/tema.md": "# Téma\n\nRENDER_CRASH\n"})
+    (tmp_path / "state").write_text("not a folder")
+    with pytest.raises(Transient) as caught:
+        env.build(env.main(), keep_log=tmp_path / "state" / "benedek" / "publish-render.log")
+    assert str(caught.value).startswith("site render failed (rc=1): Error: Changed input")
+    assert "teljes napló" not in str(caught.value)
+
+
 def test_browser_error_points_to_the_page(env):
     env.push({"wiki/gazd/tema.md": "# Téma\n\nOVERFLOW table\n"})
     with pytest.raises(BadWork) as caught:
