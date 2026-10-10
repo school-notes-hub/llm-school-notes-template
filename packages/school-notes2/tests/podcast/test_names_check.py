@@ -79,6 +79,23 @@ def test_whisper_check_takes_a_one_letter_spelling_variant_but_no_changed_letter
     assert names.whisper_heard(["Beranger"], {"form": "Béranger", "targets": ["béranzsé"]})
 
 
+CASES = [
+    (["Kossuth", "Lajos", "és", "Petőfi"], KO, False),            # an ending only inside the last word
+    (["Rémület"], {"form": "Ré", "targets": ["ré"]}, False),      # „mület” is no case ending
+    (["Heraklész"], {"form": "Héra", "targets": ["héra"]}, False),
+    (["Ionok"], {"form": "Ión", "targets": ["ión"]}, False),
+    (["Zesz"], {"form": "Zeusz", "targets": ["zeusz"]}, False),   # a vowel is never the variant letter
+    (["Zeuss"], {"form": "Zeusz", "targets": ["zeusz"]}, False),  # a changed letter neither
+    (["Szécheny", "István"], SZ, False),
+    (["Hérát"], {"form": "Héra", "targets": ["héra"]}, True),
+    (["Zeuszt"], {"form": "Zeusz", "targets": ["zeusz"]}, True),
+    (["Kosuth"], KO, True), (["Kossuthtal"], KO, True), (["Széchényi", "István"], SZ, True)]
+
+
+def test_whisper_check_takes_a_case_ending_in_the_last_word_and_a_consonant_variant_only():
+    assert [(w, names.whisper_heard(w, e)) for w, e, _ in CASES] == [(w, x) for w, _, x in CASES]
+
+
 def test_segment_times_only_give_the_segment_span_and_no_blind_check():
     text = "Ma Széchenyi István és Kossuth beszél."
     paid = FakePaid({"text": "", "words": [], "segments": [
@@ -99,7 +116,7 @@ def test_names_in_one_sentence_get_their_own_moments_and_their_own_clips():
     words = timed_words("Kettő a magyar előzmények Kölcsei, Vörös Marti, a világirodalmiak Beranger és Hejne. "
                         "Sziasztok!", step=0.4)
     paid = FakePaid({"text": "", "words": words},
-                    {"előzmények [NÉV]": "kölcsei", "Kölcsei, [NÉV]": "vörösmarti", "világirodalmiak [NÉV]": "béranzsé",
+                    {"előzmények [NÉV]": "kölcsei", "[NÉV] a": "vörösmarti", "világirodalmiak [NÉV]": "béranzsé",
                      "és [NÉV]": "hejne"})
     found = names.check_scene(paid, LIST_TEXT, tone(6.0, 220), LIST)
     starts = {r["form"]: r["start_s"] for r in found}
@@ -108,6 +125,10 @@ def test_names_in_one_sentence_get_their_own_moments_and_their_own_clips():
     # one name per clip: the name's own words and one word on each side (≤ 4 words of 0.4 s)
     assert all(seconds <= 1.8 for _, seconds in paid.blind)
     assert all(context.count("[NÉV]") == 1 for context, _ in paid.blind)
+    # side by side (review of 0.4.1, m2): no word of the other name is the neighbour in the clip
+    clips = dict(paid.blind)
+    assert list(clips)[:2] == ["előzmények [NÉV]", "[NÉV] a"]
+    assert all("Kölcsei" not in c and "Vörös" not in c for c in clips)
 
 
 def test_names_whisper_skipped_get_only_the_span_between_the_neighbours():
@@ -188,3 +209,104 @@ def test_names_only_is_a_podcast_mode_of_its_own():
     assert args.names_only and not args.snapshot and not args.retire
     with pytest.raises(SystemExit):
         cli._parser().parse_args(["podcast", "barna", "proba", "elso", "--names-only", "--retire"])
+
+
+SPELLED = ("Sziasztok itt a Képben vagy Ma Batthyány Lajos a téma Dani vagyok és ez tényleg "
+           "érdekes Kossuth Lajos pedig a pénzügyeket vitte Ez volt a Képben vagy Sziasztok")
+RECEIPT = "docs/evidence/podcast/proba/elso.json"
+
+
+def released_040(world):
+    """A released episode whose committed receipt has the 0.4.0 names; returns (fresh, old)."""
+    from tests.local.conftest import git
+    world["router"].whisper_text = SPELLED
+    assert release(world)[0] == 0
+    repo = world["repo"]
+    fresh = safefs.read_json(repo, RECEIPT)
+    old = {k: v for k, v in fresh.items() if k != "names_version"}
+    old["names"] = [{"form": n["form"], "targets": n["targets"], "heard": ["régi"], "whisper": False,
+                     "verified": False, "scene": n["scene"], "at": "0:13", "at_s": 13.0} for n in fresh["names"]]
+    safefs.write_text(repo, RECEIPT, json.dumps(old, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "0.4.0 receipt")
+    return fresh, old
+
+
+def scene_transcript(world, index):
+    """The cache file of one scene's Whisper answer (by the request the run sent)."""
+    from school_notes2.podcast import audio, ledger
+    local = world["local"]
+    record = safefs.read_json(world["repo"], RECEIPT)
+    cache = ledger.Cache(local.podcast_settings().cache_dir)
+    pcm = cache.audio(record["speech"]["scenes"][index]["request_sha256"])
+    request = {"model": names.WHISPER, "temperature": 0, "response_format": "verbose_json", "language": "hu",
+               "timestamp_granularities": ["word", "segment"],
+               "input_audio": {"data": base64.b64encode(audio.speech_mp3(pcm)).decode(), "format": "mp3"}}
+    return local.podcast_settings().cache_dir / f"{ledger.request_sha(request)}.json"
+
+
+@needs_ffmpeg
+def test_names_only_keeps_the_earlier_entry_where_the_cache_lacks_a_call(world):
+    from school_notes2.local import podcast
+    fresh, old = released_040(world)
+    scene_transcript(world, 1).unlink()                     # J2's transcript (Kossuth Lajos) is gone
+    lines = []
+    assert podcast.run(world["local"], "proba", "elso", False, out=lines.append, names_only=True) == 0
+    after = safefs.read_json(world["repo"], RECEIPT)
+    batthyany, kossuth = after["names"]
+    assert batthyany == fresh["names"][0]                   # counted again
+    note = kossuth.pop("note")
+    assert kossuth == old["names"][1] and note.startswith("nem számoltam újra (hiányzó tárolt Whisper-átirat")
+    assert any(line.startswith("nem számoltam újra: 1 név") for line in lines)
+    assert "missing" not in json.dumps(after)
+
+
+@needs_ffmpeg
+def test_names_only_with_nothing_in_the_cache_writes_nothing(world):
+    from school_notes2.local import podcast
+    _, old = released_040(world)
+    before = safefs.read_bytes(world["repo"], RECEIPT)
+    for index in (0, 1):
+        scene_transcript(world, index).unlink()
+    lines = []
+    assert podcast.run(world["local"], "proba", "elso", False, out=lines.append, names_only=True) == 2
+    assert safefs.read_bytes(world["repo"], RECEIPT) == before
+    assert any("egyik név sem számolható újra" in line for line in lines)
+
+
+@needs_ffmpeg
+def test_names_only_never_overwrites_a_hand_edited_receipt_and_takes_the_podcast_lock(world, monkeypatch):
+    import contextlib
+    from school_notes2.local import podcast
+    released_040(world)
+    repo = world["repo"]
+    hand = safefs.read_text(repo, RECEIPT).replace('"régi"', '"kézzel"')
+    safefs.write_text(repo, RECEIPT, hand)
+    lines = []
+    assert podcast.run(world["local"], "proba", "elso", False, out=lines.append, names_only=True) == 2
+    assert safefs.read_text(repo, RECEIPT) == hand and any("nem az sn podcast utolsó írása" in l for l in lines)
+    from tests.local.conftest import git
+    git(repo, "checkout", "--", RECEIPT)
+    taken = []
+
+    @contextlib.contextmanager
+    def lock(path, timeout, what):
+        taken.append(what)
+        yield
+    monkeypatch.setattr(podcast, "images_lock", lock)
+    assert podcast.run(world["local"], "proba", "elso", False, out=lambda *_: None, names_only=True) == 0
+    assert taken == ["podcast"]
+
+
+@needs_ffmpeg
+def test_names_only_on_an_incomplete_receipt_is_an_error_line_not_a_traceback(world):
+    from school_notes2.local import podcast
+    from school_notes2.state.errors import SnError
+    from tests.local.conftest import git
+    released_040(world)
+    repo = world["repo"]
+    broken = {k: v for k, v in safefs.read_json(repo, RECEIPT).items() if k != "speech"}
+    safefs.write_text(repo, RECEIPT, json.dumps(broken, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    git(repo, "commit", "-qam", "broken receipt")
+    with pytest.raises(SnError, match="hiányos nyugta"):
+        podcast.run(world["local"], "proba", "elso", False, out=lambda *_: None, names_only=True)

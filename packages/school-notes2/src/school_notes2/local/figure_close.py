@@ -19,8 +19,6 @@ from .handoff import Handoff, _json, accepted, in_scope
 
 LEDGER = "docs/evidence/image-generation/ledger.json"
 
-OPEN_LARGE = fctx.OPEN_LARGE
-
 END = "<!-- /school-notes:generated -->"
 
 REVIEWER = "claude-opus-5-5/high"     # the owner's fixed reviewer (plan 0/2): Claude Opus 5.5, high

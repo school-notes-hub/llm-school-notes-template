@@ -61,3 +61,47 @@ def test_a_failing_insertion_leaves_the_page_as_it_was(repo, make_figure, fake_l
     with pytest.raises(ValueError):
         close.close(local, repo, None, quiet)
     assert safefs.read_text(repo, PAGE) == before
+
+
+@pytest.mark.parametrize("first", ["forces", "torque"])
+def test_a_replacing_figure_and_another_in_the_same_section_both_go_in(repo, make_figure, fake_local, first):
+    """Review of 0.4.1 (M2): the open-large link is section text of every figure there; its target
+    is the tool's and is not part of any verdict key, so the rewrite invalidates neither."""
+    replacing(repo, make_figure)
+    make_figure(fid="torque")
+    entries = {"forces": {"id": "forces", "page": PAGE, "route": "figure", "replaces": OLD},
+               "torque": {"id": "torque", "page": PAGE, "route": "figure"}}
+    order = [first] + [f for f in entries if f != first]
+    handoff(repo, [entries[f] for f in order], {"forces": ACCEPT, "torque": ACCEPT})
+    local = fake_local(repo)
+    out = []
+    assert close.snapshot(local, None, None, out.append) == 0, out
+    lines = []
+    assert close.close(local, repo, None, lines.append) == 0, lines
+    text = safefs.read_text(repo, PAGE)
+    assert "school-notes:generated figure-forces" in text and "school-notes:generated figure-torque" in text
+    assert "[Az ábra megnyitása nagy méretben](<../assets/physics/forces.png>)" in text
+    assert insert.invalidated(repo) == []
+
+
+def test_a_verdict_with_the_040_key_stays_valid_and_is_renewed(repo, make_figure, fake_local):
+    """The open-large link's target left the key in 0.4.1: a verdict recorded with the 0.4.0 key
+    (target in it) is still valid and `rekey` gives it the current key, nothing else changes."""
+    from school_notes2.figures import context
+    replacing(repo, make_figure)
+    local = fake_local(repo)
+    assert close.snapshot(local, None, None, quiet) == 0
+    assert close.close(local, repo, None, quiet) == 0
+    records = safefs.read_json(repo, insert.VERDICTS)
+    [record] = [r for r in records if r.get("id") == "forces"]
+    current = record["key"]
+    old = context.verdict_key(repo, record["commission"], record["candidate"], legacy="0.4.0")
+    assert old != current
+    record["key"] = old
+    safefs.write_json(repo, insert.VERDICTS, records)
+    evidence = safefs.read_json(repo, "docs/evidence/media/forces/figure.json")
+    safefs.write_json(repo, "docs/evidence/media/forces/figure.json",
+                      {**evidence, "verdict": {**evidence["verdict"], "key": old}})
+    assert insert.invalidated(repo) == []
+    assert sorted(context.rekey(repo)) == ["docs/evidence/media/forces/figure.json", insert.VERDICTS]
+    assert [r["key"] for r in safefs.read_json(repo, insert.VERDICTS) if r.get("id") == "forces"] == [current]

@@ -43,8 +43,11 @@ Nothing is paid; the hand-over stays.
 the podcast cache only – the scenes' speech by the receipt's request hashes, the script whose
 digest is the receipt's `script_sha256` (`adas.json` or a kept `adas-<n>.json` of the hand-over),
 the stored Whisper transcripts and blind answers; nothing is sent or paid, only the receipt's
-`names` (and `names_version`) change. A call missing from the cache is not made: the name's note
-says so (a new blind check is due where the cut changed – another name between the neighbours).
+`names` (and `names_version`) change, under the podcast lock. A call missing from the cache is not
+made: that name keeps its earlier receipt entry unchanged (`heard`, `verified`, its moment) with a
+note saying it was not counted again; when no name can be counted again nothing is written (exit
+2). A receipt changed by hand since the HEAD (not the tool's last write) is never overwritten
+(exit 2); an incomplete receipt is a `Hiba:` line (exit 1).
 
 The command does not commit; the controller commits and publishes (`sn publish`)."""
 
@@ -369,59 +372,104 @@ def released_script(repo: Path, ep, record: dict) -> dict | None:
     return None
 
 
+KEPT = "nem számoltam újra"
+
+
 def recount(local, ep, out=print) -> int:
     """`--names-only`: the name check of a released episode counted again with this tool, from
     the cache only (the scenes' speech, the Whisper transcripts, the blind answers – nothing is
-    sent, nothing is paid); only the receipt's `names` change. A call that is not in the cache is
-    not made: the name's `note` says what is missing (a new, paid run would be a full release)."""
+    sent, nothing is paid); only the receipt's `names` change, under the podcast lock. A name
+    whose call is not in the cache keeps its earlier receipt entry as it was (`heard`,
+    `verified`, its moment), with a note; when no name can be counted again nothing is written.
+    A receipt that is not the tool's last write (changed since the HEAD by hand) is never
+    overwritten; an incomplete one is an error, not a traceback."""
     repo = local.repo
     if not safefs.is_file(repo, ep.record):
         local.record("podcast", "stop", target=ep.ident)
         return stop(out, "STOP (nem írtam semmit):", [f"nincs kiadott adás: {ep.record}"])
+    if guard.hand_edited_file(repo, local.git(), ep.record):
+        local.record("podcast", "stop", target=ep.ident)
+        return stop(out, "STOP (nem írtam semmit):", [
+            f"{ep.record}: a nyugta nem az sn podcast utolsó írása (kézzel módosították a HEAD óta) – "
+            "nem írom felül; előbb állítsd vissza (git checkout)"])
     record = safefs.read_json(repo, ep.record)
+    try:
+        scenes = [{"id": s["id"], "request_sha256": s["request_sha256"], "audio_sha256": s["audio_sha256"],
+                   "start_s": float(s["start_s"])} for s in record["speech"]["scenes"]]
+        old = list(record["names"])
+        if not isinstance(record["script_sha256"], str):
+            raise TypeError("script_sha256")
+    except (KeyError, TypeError, ValueError) as exc:
+        raise Refused(f"{ep.record}: hiányos nyugta (hiányzik vagy hibás: {exc}); a nevek csak teljes "
+                      "újrakiadással számolhatók újra") from None
     script = released_script(repo, ep, record)
     if script is None:
         local.record("podcast", "stop", target=ep.ident)
         return stop(out, "STOP (nem írtam semmit):", [
             f"a kiadott forgatókönyv (script_sha256 {str(record.get('script_sha256'))[:12]}…) nincs meg a "
             f"{ep.folder}/ adas*.json fájljai között; a nevek csak teljes újrakiadással számolhatók újra"])
-    scenes = record["speech"]["scenes"]
     if [s["id"] for s in scenes] != [s["id"] for s in script["scenes"]]:
         local.record("podcast", "stop", target=ep.ident)
         return stop(out, "STOP (nem írtam semmit):", ["a nyugta jelenetei nem a forgatókönyv jelenetei"])
-    cache = Cache(local.podcast_settings().cache_dir)
-    pcms = [cache.audio(s["request_sha256"]) for s in scenes]
-    lost = [s["id"] for s, pcm in zip(scenes, pcms)
-            if pcm is None or hashlib.sha256(pcm).hexdigest() != s["audio_sha256"]]
-    if lost:
-        local.record("podcast", "stop", target=ep.ident)
-        return stop(out, "STOP (nem írtam semmit):", [
-            f"a jelenetek hangja nincs a gyorsítótárban ({', '.join(lost)}); a nevek csak teljes, fizetős "
-            "újrakiadással számolhatók újra"])
-    paid = names.CacheOnly(cache)
-    checked = []
-    for index, (scene, pcm) in enumerate(zip(script["scenes"], pcms)):
-        text = " ".join(t["text"] for t in scene["turns"])
-        for item in names.check_scene(paid, text, pcm, script["names"]):
-            checked.append({**item, "scene": scene["id"], "scene_index": index})
-    new = {**record, "names": timed(checked, [s["start_s"] for s in scenes]),
-           "names_version": names.RECEIPT_VERSION}
-    validate("podcast-episode", new)
-    changed = new != record
-    try:
-        if changed:
-            safefs.write_text(repo, ep.record, wiki_podcast.dumps(new))
-    finally:
-        tool_writes.record(repo, files=[ep.record])
+    settings = local.podcast_settings()
+    with images_lock(settings.lock_path, settings.lock_timeout_s, what="podcast"):
+        cache = Cache(settings.cache_dir)
+        pcms = [cache.audio(s["request_sha256"]) for s in scenes]
+        lost = [s["id"] for s, pcm in zip(scenes, pcms)
+                if pcm is None or hashlib.sha256(pcm).hexdigest() != s["audio_sha256"]]
+        if lost:
+            local.record("podcast", "stop", target=ep.ident)
+            return stop(out, "STOP (nem írtam semmit):", [
+                f"a jelenetek hangja nincs a gyorsítótárban ({', '.join(lost)}); a nevek csak teljes, fizetős "
+                "újrakiadással számolhatók újra"])
+        paid = names.CacheOnly(cache)
+        checked = []
+        for index, (scene, pcm) in enumerate(zip(script["scenes"], pcms)):
+            text = " ".join(t["text"] for t in scene["turns"])
+            for item in names.check_scene(paid, text, pcm, script["names"]):
+                checked.append({**item, "scene": scene["id"], "scene_index": index})
+        fresh = timed(checked, [s["start_s"] for s in scenes])
+        missing = [i for i, item in enumerate(fresh) if item.get("missing")]
+        if missing and len(missing) == len(fresh):
+            local.record("podcast", "stop", target=ep.ident)
+            return stop(out, "STOP (nem írtam semmit):", [
+                f"egyik név sem számolható újra a gyorsítótárból ({len(missing)} név: hiányzó tárolt válasz); "
+                "a nyugta marad, ahogy volt"])
+        if missing and [(n.get("form"), n.get("scene")) for n in old] != [(n["form"], n["scene"]) for n in fresh]:
+            local.record("podcast", "stop", target=ep.ident)
+            return stop(out, "STOP (nem írtam semmit):", [
+                "a régi nyugta nevei nem párosíthatók az újraszámoltakkal, és van, ami nem számolható újra: "
+                "a régi eredmény nem tartható meg név szerint"])
+        merged = []
+        for i, item in enumerate(fresh):
+            kind = item.pop("missing", None)
+            if kind is None:
+                merged.append(item)
+                continue
+            kept = dict(old[i])
+            what = "Whisper-átirat" if kind == "transcription" else "vak ellenőrzés"
+            if not str(kept.get("note", "")).startswith(KEPT):
+                kept["note"] = (f"{KEPT} (hiányzó tárolt {what}; új, fizetős hívás kellene): a korábbi eredmény "
+                                "maradt" + (f"; korábbi megjegyzés: {kept['note']}" if kept.get("note") else ""))
+            merged.append(kept)
+        new = {**record, "names": merged, "names_version": names.RECEIPT_VERSION}
+        validate("podcast-episode", new)
+        changed = new != record
+        try:
+            if changed:
+                safefs.write_text(repo, ep.record, wiki_podcast.dumps(new))
+        finally:
+            tool_writes.record(repo, files=[ep.record])
     out(f"nyugta: {ep.record} ({'frissítve' if changed else 'változatlan'}; csak a nevek)")
     names_lines(out, new)
-    if paid.missing:
-        out(f"hiányzó tárolt válasz: {len(paid.missing)} (Whisper-átirat: {paid.missing.count('transcription')}, "
-            f"vak ellenőrzés: {paid.missing.count('judge')}) – ezekhez új, fizetős hívás kellene; nem küldtem el")
+    if missing:
+        out(f"nem számoltam újra: {len(missing)} név (hiányzó tárolt válasz – Whisper-átirat: "
+            f"{paid.missing.count('transcription')}, vak ellenőrzés: {paid.missing.count('judge')}); "
+            "ezeknél a korábbi eredmény maradt, új, fizetős hívást nem küldtem")
     out("költség: 0 USD (csak a gyorsítótár; nem küldtem semmit)")
     unverified = [n for n in new["names"] if not n["verified"]]
     local.record("podcast", "names", target=ep.ident, names=len(new["names"]), unverified=len(unverified),
-                 missing=len(paid.missing))
+                 kept=len(missing))
     return 0
 
 

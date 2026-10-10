@@ -47,6 +47,12 @@ def request_sha(payload) -> str:
                                      separators=(",", ":")).encode()).hexdigest()
 
 
+def cache_sha(request: dict, cache_key: dict | None = None) -> str:
+    """The cache (and ledger) key of a JSON call: its `cache_key` when given (the blind check's
+    repeat), else the request itself – one rule for the paid run and the recount (`CacheOnly`)."""
+    return request_sha(cache_key if cache_key is not None else request)
+
+
 class BudgetExhausted(NeedsOwner):
     """The podcast budget does not cover what the episode still needs: the owner decides."""
 

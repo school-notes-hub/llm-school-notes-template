@@ -256,6 +256,18 @@ def _raster_links(rel: str, text: str, old: str | None) -> list[str]:
     return out
 
 
+def hand_edited_file(repo: Path, git, rel: str, record: dict | None = None) -> bool:
+    """A tool-only file (a podcast receipt) that differs from the HEAD and is not the tool's last
+    write – what the writer guard reports; a command that rewrites it stops on it."""
+    if not safefs.is_file(repo, rel):
+        return False
+    record = record if record is not None else tool_writes.load(repo)
+    if _tool_file(record, repo, rel):
+        return False
+    proc = git.run("show", f"HEAD:{rel}", check=False)
+    return proc.returncode != 0 or proc.stdout != safefs.read_bytes(repo, rel)
+
+
 def _tool_file(record: dict, repo: Path, rel: str) -> bool:
     """The file is exactly the tool's last write – or its deletion (recorded as null)."""
     return rel in record["files"] and record["files"][rel] == _sha(repo, rel)

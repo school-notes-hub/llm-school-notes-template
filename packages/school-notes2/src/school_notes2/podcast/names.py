@@ -3,14 +3,16 @@
 Hungarian, word times) transcribes the whole scene; the name is cut out at the quietest 10 ms
 next to its neighbour words; the audio model (`google/gemini-3.8-flash`) writes down what it
 hears **without** the target (blind), three times. A name is verified when all three blind
-transcriptions equal a target and Whisper wrote the name where it stands (0/12 false accepts in
-the measurement; a good clip passes 3 times in 5).
+transcriptions equal a target and Whisper wrote the name where it stands. The measurement (0/12
+false accepts, a good clip passes 3 times in 5) asked Whisper for a target literally; the 0.4.1
+Whisper condition (`whisper_heard`: the spelling too) is not measured.
 
-Since sn 0.4.1 (receipt `names_version` 2):
+Since sn 0.4.1 (receipt `names_version` 2; the alignment and the Whisper check live in `align.py`):
 
 * **Whisper check per occurrence, by spelling too** (`whisper_heard`): Whisper writes a name
   mostly as it is spelled (`Kossuth`, `Széchenyi`), so its words at the name are compared with
-  the form (accents aside) and the targets, a case ending or one letter more or less allowed;
+  the form and the targets, accents aside, a case ending (`ENDINGS`) in the last word and – from 5
+  letters on – one consonant more or less allowed;
   sn 0.4.0 looked for a pronunciation target (`kosut`) in the whole scene's text and so almost
   never found one.
 * **Where each name is** (`place`): the name's own Whisper words – also where the text and
@@ -21,8 +23,9 @@ Since sn 0.4.1 (receipt `names_version` 2):
   `gap` (Whisper wrote nothing like the name between its neighbours, e.g. a 30 s window it
   skipped).
 * **The cut** stays the measured one (one matching neighbour word on each side) unless another
-  listed name stands between those neighbours: then the name's own Whisper words with the word
-  next to them on each side (one name per clip).
+  listed name stands between those neighbours or a neighbour is another name's word: then the
+  name's own Whisper words with the word next to them on each side, and where that word is
+  another name's, the cut ends at the boundary between the two (one name per clip, `locate`).
 
 A name that is not verified does not stop the episode: it goes into the receipt with the moment
 it is heard in the final episode (or the span it lies in), for the owner, who listens to the
@@ -30,19 +33,19 @@ finished episode only. `CacheOnly` replays a released episode's check from the c
 (`sn podcast --names-only`)."""
 
 import base64
-import difflib
 import io
 import json
 import math
 import re
 import sys
-import unicodedata
 import wave
 from array import array
 from decimal import Decimal
 
 from . import openrouter
-from .ledger import JUDGE_RESERVE, transcription_reserve
+from .align import (SIMILAR, TIMING_GAP, TIMING_NONE, TIMING_SEGMENT, TIMING_WORD, _equal, compact,  # noqa: F401
+                    norm_ph, place, timeline, whisper_heard, words_of)
+from .ledger import JUDGE_RESERVE, cache_sha, transcription_reserve
 from .speech import RATE
 
 WHISPER = "openai/whisper-large-v3"
@@ -60,21 +63,6 @@ A felvétel szövege tájékozódásul; a [NÉV] helyén a vizsgált név vagy s
 
 A válaszod kizárólag egy JSON-objektum legyen, más szöveg nélkül:
 {{"hallott": "<a név vagy szó magyar fonetikus átírásban, csak a [NÉV] helyén elhangzott rész>", "megjegyzes": "<ha valamelyik hangban bizonytalan vagy, melyikben; különben üres>"}}"""
-
-
-def norm_ph(text: str) -> str:
-    text = unicodedata.normalize("NFC", (text or "").lower())
-    text = re.sub(r"[^a-záéíóöőúüű ]", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def compact(text: str) -> str:
-    """The comparison form: no spaces, `ly` as `j` (the same sound)."""
-    return norm_ph(text).replace(" ", "").replace("ly", "j")
-
-
-def words_of(text: str) -> list[tuple[str, str]]:
-    return [(w, norm_ph(w).replace(" ", "")) for w in text.split() if norm_ph(w)]
 
 
 def occurrences(text: str, names: list[dict]) -> list[tuple[dict, int, int]]:
@@ -126,10 +114,6 @@ def refine(pcm: bytes, t: float, lo: float, hi: float, hop: float = 0.01) -> flo
     return (best + 0.5) * hop
 
 
-TIMING_WORD, TIMING_SEGMENT, TIMING_GAP, TIMING_NONE = "word", "segment", "gap", "none"
-SIMILAR = 0.6          # the least similarity of a Whisper window to the name among other unmatched words
-
-
 class NotCached(Exception):
     """`CacheOnly`: the answer of this call is not in the cache (it would be a paid call)."""
 
@@ -144,136 +128,27 @@ class CacheOnly:
 
     def json(self, kind: str, url: str, request: dict, reserve, cache_key: dict | None = None,
              expect: str = "") -> dict:
-        from .ledger import request_sha
-        found = self.cache.result(request_sha(cache_key if cache_key is not None else request))
+        found = self.cache.result(cache_sha(request, cache_key))
         if found is None:
             self.missing.append(kind)
             raise NotCached(kind)
         return found
 
 
-def timeline(transcript: dict) -> tuple[list[tuple[str, float, float, str]], str]:
-    """Whisper's words as (normalised, start, end, as written) and how they are timed: `word`
-    (word times), `segment` (the answer has segment times only – some OpenRouter providers give
-    no word times: every word of a segment gets the segment's span) or `none`."""
-    words = [(norm_ph(w.get("word", "")).replace(" ", ""), w["start"], w["end"], str(w.get("word", "")).strip())
-             for w in transcript.get("words") or [] if "start" in w and "end" in w]
-    if words:
-        return words, TIMING_WORD
-    words = [(norm_ph(w).replace(" ", ""), seg["start"], seg["end"], w)
-             for seg in transcript.get("segments") or [] if "start" in seg and "end" in seg
-             for w in str(seg.get("text") or "").split()]
-    return (words, TIMING_SEGMENT) if words else ([], TIMING_NONE)
-
-
-def _equal(tw: list, ww: list) -> dict[int, int]:
-    """Text word index → Whisper word index for the words the two agree on."""
-    matcher = difflib.SequenceMatcher(None, [n for _, n in tw], [w[0] for w in ww], autojunk=False)
-    t2w = {}
-    for tag, a0, a1, b0, _ in matcher.get_opcodes():
-        if tag == "equal":
-            for k in range(a1 - a0):
-                t2w[a0 + k] = b0 + k
-    return t2w
-
-
-def _fold(text: str) -> str:
-    return "".join(c for c in unicodedata.normalize("NFD", text) if not unicodedata.combining(c))
-
-
-def _one_letter_more(a: str, b: str) -> bool:
-    """`b` is `a` with one letter inserted, or the other way round (no letter changed)."""
-    if abs(len(a) - len(b)) != 1:
-        return False
-    if len(a) > len(b):
-        a, b = b, a
-    return any(b[:i] + b[i + 1:] == a for i in range(len(b)))
-
-
-def _written_as(got: str, wanted: str, fold: bool) -> bool:
-    """`got` is `wanted` (accents aside when `fold`), maybe with a case ending (`kossuthot`);
-    from 5 letters on also with one letter more or less (a spelling variant: Whisper's `Zeus` for
-    `Zeusz`). A changed letter (`szícsényi`, `kusut`) is never accepted."""
-    if not wanted:
-        return False
-    if got.startswith(wanted) or (fold and _fold(got).startswith(_fold(wanted))):
-        return True
-    return len(wanted) >= 5 and any(_one_letter_more(got[:n], wanted) for n in (len(wanted) - 1, len(wanted) + 1)
-                                    if 0 < n <= len(got))
-
-
-def whisper_heard(written: list[str], entry: dict) -> bool:
-    """Did Whisper write this name where it stands? Whisper writes a name mostly as it is spelled
-    (`Kossuth`, `Széchenyi`, `Zeus`), sometimes as it sounds (`Kölcsei`): the window's words are
-    the form (accents aside) or a target (`_written_as`: a case ending or one letter more or less
-    allowed). A different sound (`Szícsinyi` for Széchenyi) is not the name. Whisper is the second
-    check only: the pronunciation itself is the blind check's."""
-    got = compact(" ".join(written))
-    return bool(got) and (_written_as(got, compact(entry["form"]), True)
-                          or any(_written_as(got, compact(t), False) for t in entry["targets"]))
-
-
-def _similarity(written: list[str], entry: dict) -> float:
-    got = compact(" ".join(written))
-    wanted = [compact(entry["form"]), *(compact(t) for t in entry["targets"])]
-    return max(difflib.SequenceMatcher(None, _fold(got), _fold(w), autojunk=False).ratio() for w in wanted)
-
-
-def place(tw: list, ww: list, t2w: dict, found: list[tuple[dict, int, int]]) -> list[dict]:
-    """Where Whisper has each occurrence (in text order): `window` (first, end) of its own Whisper
-    words, or None and `gap` (first, end) – the Whisper words between the agreeing neighbours.
-
-    1. Every word of the name agrees with Whisper: those words.
-    2. Between the agreeing neighbours the text has only the name: everything Whisper wrote
-       there (`Szícsinyi István` for `Széchenyi István`).
-    3. Other unmatched text words too: the shortest earliest window of at most the name's length
-       + 2 words that Whisper wrote as the name (`whisper_heard`), else the most similar one if at
-       least `SIMILAR` (ties: the earliest, then the shortest).
-
-    A later occurrence is looked for only after the earlier one's window: two names never get
-    the same Whisper words (and so the same moment)."""
-    out, last = [], 0
-    for entry, i0, i1 in found:
-        prev = max((i for i in t2w if i < i0), default=None)
-        nxt = min((i for i in t2w if i >= i1), default=None)
-        lo = max(t2w[prev] + 1 if prev is not None else 0, last)
-        hi = t2w[nxt] if nxt is not None else len(ww)
-        window = None
-        if all(i in t2w for i in range(i0, i1)):
-            window = (t2w[i0], t2w[i1 - 1] + 1)
-        elif lo < hi:
-            first, end = prev + 1 if prev is not None else 0, nxt if nxt is not None else len(tw)
-            others = [i for i in range(first, end) if not i0 <= i < i1]
-            if not others:
-                window = (lo, hi)
-            else:
-                size = (i1 - i0) + 2
-                spans = [(s, e) for s in range(lo, hi) for e in range(s + 1, min(hi, s + size) + 1)]
-                written = {(s, e): [w[3] for w in ww[s:e]] for s, e in spans}
-                exact = [span for span in spans if whisper_heard(written[span], entry)]
-                if exact:
-                    window = min(exact, key=lambda span: (span[0], span[1]))
-                elif spans:
-                    best = min(spans, key=lambda span: (-_similarity(written[span], entry), span[0], span[1]))
-                    if _similarity(written[best], entry) >= SIMILAR:
-                        window = best
-        if window is not None:
-            last = window[1]
-        out.append({"window": window, "gap": (lo, hi),
-                    "between": (prev + 1 if prev is not None else 0, nxt if nxt is not None else len(tw))})
-    return out
-
-
 def locate(text: str, transcript: dict, pcm: bytes, i0: int, i1: int,
-           window: tuple[int, int] | None = None) -> tuple[float, float, str]:
+           window: tuple[int, int] | None = None, others: frozenset = frozenset(),
+           tight: bool = False) -> tuple[float, float, str]:
     """(start, end, context) of a name occurrence in the scene audio, the outer edges moved to the
     quietest frame nearby; the context is the text with [NÉV] for the name.
 
-    Without `window` (the measured method): the text's words are aligned with Whisper's; the cut
-    keeps one matching neighbour word on each side, the unmatched words between become context.
-    With `window` (`place`: the name's own Whisper words; used when another listed name stands
-    between the matching neighbours, so the cut would hold both): the cut keeps the Whisper word
-    next to the window on each side (the text's word where Whisper agrees, else Whisper's)."""
+    The measured method: the text's words are aligned with Whisper's; the cut keeps one matching
+    neighbour word on each side, the unmatched words between become context. The name's own cut
+    (`window` from `place`, the name's own Whisper words) instead when `tight` (another listed name
+    stands between the matching neighbours) or when a matching neighbour is another name's word
+    (`others`: the Whisper word indices of the scene's other names): the Whisper word next to the
+    window on each side (the text's word where Whisper agrees, else Whisper's) – unless that word
+    is another name's: then the cut ends at the boundary between the two names, nothing of the
+    other name in the clip. One listed name per clip."""
     tw = words_of(text)
     ww, timing = timeline(transcript)
     total = len(pcm) / 2 / RATE
@@ -281,30 +156,49 @@ def locate(text: str, transcript: dict, pcm: bytes, i0: int, i1: int,
         raise ValueError("nincs szó-szintű időbélyeg")
     t2w = _equal(tw, ww)
     if window is None:
-        prev = max((i for i in t2w if i < i0), default=None)
-        nxt = min((i for i in t2w if i >= i1), default=None)
-        left, right = (t2w[prev] if prev is not None else None), (t2w[nxt] if nxt is not None else None)
-        before = [w for w, _ in tw[(prev if prev is not None else 0):i0]]
-        after = [w for w, _ in tw[i1:(nxt + 1 if nxt is not None else len(tw))]]
-    else:
+        entry = {"form": " ".join(w for w, _ in tw[i0:i1]), "targets": []}
+        window = place(tw, ww, t2w, [(entry, i0, i1)])[0]["window"]
+    prev = max((i for i in t2w if i < i0), default=None)
+    nxt = min((i for i in t2w if i >= i1), default=None)
+    left, right = (t2w[prev] if prev is not None else None), (t2w[nxt] if nxt is not None else None)
+    if window is not None and (tight or left in others or right in others):
         s, e = window
         w2t = {w: t for t, w in t2w.items()}
         left, right = (s - 1 if s > 0 else None), (e if e < len(ww) else None)
         p, n = w2t.get(s - 1), w2t.get(e)
-        before = ([w for w, _ in tw[:i0]] if left is None else
-                  [w for w, _ in tw[p:i0]] if p is not None and p < i0 else [ww[left][3]])
-        after = ([w for w, _ in tw[i1:]] if right is None else
-                 [w for w, _ in tw[i1:n + 1]] if n is not None and n >= i1 else [ww[right][3]])
-    if left is not None:
-        t = ww[left][1]
-        start = refine(pcm, t, max(0.0, t - 0.1), t + 0.03)
+        if left in others:
+            before, t = [], ww[s][1]
+            start = refine(pcm, t, max(0.0, t - 0.1), t + 0.03)
+        else:
+            before = ([w for w, _ in tw[:i0]] if left is None else
+                      [w for w, _ in tw[p:i0]] if p is not None and p < i0 else [ww[left][3]])
+            start = None
+        if right in others:
+            after, t = [], ww[e - 1][2]
+            end = refine(pcm, t, t - 0.03, min(total, t + 0.1))
+        else:
+            after = ([w for w, _ in tw[i1:]] if right is None else
+                     [w for w, _ in tw[i1:n + 1]] if n is not None and n >= i1 else [ww[right][3]])
+            end = None
+        left, right = (None if left in others else left), (None if right in others else right)
+    elif window is None and tight:
+        raise ValueError("a név nincs meg a Whisper szavai között")
     else:
-        start = 0.0
-    if right is not None:
-        t = ww[right][2]
-        end = refine(pcm, t, t - 0.03, min(total, t + 0.1))
-    else:
-        end = total
+        before = [w for w, _ in tw[(prev if prev is not None else 0):i0]]
+        after = [w for w, _ in tw[i1:(nxt + 1 if nxt is not None else len(tw))]]
+        start = end = None
+    if start is None:
+        if left is not None:
+            t = ww[left][1]
+            start = refine(pcm, t, max(0.0, t - 0.1), t + 0.03)
+        else:
+            start = 0.0
+    if end is None:
+        if right is not None:
+            t = ww[right][2]
+            end = refine(pcm, t, t - 0.03, min(total, t + 0.1))
+        else:
+            end = total
     return round(start, 3), round(end, 3), " ".join(before + ["[NÉV]"] + after)
 
 
@@ -355,7 +249,8 @@ def check_scene(paid, scene_text: str, pcm: bytes, names: list[dict]) -> list[di
     wrote the name). The blind check runs only on a name with its own Whisper word times; without
     them (`segment`: the answer had segment times only, `gap`: Whisper wrote nothing like the name
     between its neighbours) the receipt says so in `note`. With `CacheOnly` a call that is not in
-    the cache is not made: the receipt says what is missing."""
+    the cache is not made: the item's `missing` names it (`transcription`, `judge`; the recount
+    keeps the receipt's earlier result there and never writes `missing`)."""
     found = occurrences(scene_text, names)
     if not found:
         return []
@@ -364,14 +259,15 @@ def check_scene(paid, scene_text: str, pcm: bytes, names: list[dict]) -> list[di
         transcript = transcribe(paid, pcm)
     except NotCached:
         return [{"form": e["form"], "targets": e["targets"], "heard": [], "whisper": False, "verified": False,
-                 "timing": TIMING_NONE, "start_s": None, "window_s": None,
+                 "timing": TIMING_NONE, "start_s": None, "window_s": None, "missing": "transcription",
                  "note": "nincs tárolt Whisper-átirat (csak új, fizetős hívással számolható)"}
                 for e, _, _ in found]
     tw = words_of(scene_text)
     ww, timing = timeline(transcript)
     t2w = _equal(tw, ww)
     out = []
-    for (entry, i0, i1), where in zip(found, place(tw, ww, t2w, found)):
+    placed = place(tw, ww, t2w, found)
+    for (entry, i0, i1), where in zip(found, placed):
         result = {"form": entry["form"], "targets": entry["targets"], "heard": [], "whisper": False,
                   "verified": False, "timing": TIMING_NONE, "start_s": None, "window_s": None}
         window = where["window"]
@@ -398,7 +294,9 @@ def check_scene(paid, scene_text: str, pcm: bytes, names: list[dict]) -> list[di
         result.update(timing=TIMING_WORD, start_s=round(ww[s][1], 3))
         first, end_ = where["between"]
         crowded = any(first <= j0 < end_ and j0 != i0 for _, j0, _ in found)
-        start, end, context = locate(scene_text, transcript, pcm, i0, i1, window if crowded else None)
+        others = frozenset(k for other in placed if other is not where and other["window"]
+                           for k in range(*other["window"]))
+        start, end, context = locate(scene_text, transcript, pcm, i0, i1, window, others, crowded)
         clip = pcm[int(start * RATE) * 2:int(end * RATE) * 2]
         try:
             for repeat in range(1, REPEATS + 1):
@@ -409,6 +307,7 @@ def check_scene(paid, scene_text: str, pcm: bytes, names: list[dict]) -> list[di
                 if heard is None or not any(compact(heard) == compact(t) for t in entry["targets"]):
                     break
         except NotCached:
+            result["missing"] = "judge"
             result["note"] = ("a vak ellenőrzés tárolt válasza hiányzik ehhez a kivágáshoz "
                               "(csak új, fizetős hívással számolható)")
         blind_ok = len(result["heard"]) == REPEATS and all(

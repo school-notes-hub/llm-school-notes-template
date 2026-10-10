@@ -17,7 +17,7 @@ from decimal import Decimal
 from ..log import Log
 from ..state.errors import BadWork, NeedsOwner, Transient
 from . import openrouter
-from .ledger import Cache, Ledger, request_sha, speech_reserve
+from .ledger import Cache, Ledger, cache_sha, request_sha, speech_reserve
 from .script import characters, host
 
 MODEL = "google/gemini-3.8-flash-tts"
@@ -83,7 +83,7 @@ class Paid:
              expect: str = "") -> dict:
         """A JSON call (transcription, blind check), its answer cached by `cache_key` (default:
         the request itself) when it holds `expect` and no `error`; `usage.cost` is booked."""
-        sha = request_sha(cache_key if cache_key is not None else request)
+        sha = cache_sha(request, cache_key)
         found = self.cache.result(sha)
         if found is not None:
             return found

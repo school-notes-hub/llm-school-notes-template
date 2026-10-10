@@ -20,13 +20,19 @@ DESCRIPTION = re.compile(r"\s*<!-- image-description(?:\n|:).*?-->", re.S)
 from ..wiki.date_spans import META_LINE  # noqa: E402 - shared with the date normaliser
 
 
-OPEN_LARGE = "[Az ábra megnyitása nagy méretben]"
+OPEN_LARGE_TEXT = "Az ábra megnyitása nagy méretben"
+OPEN_LARGE = f"[{OPEN_LARGE_TEXT}]"
+# The verdict keys a recorded verdict may still carry (`key_matches`, renewed by `rekey`):
+# "0.4.0" – sn 0.3.9-0.4.0, the open-large link's target still in the key; True – sn 0.3.8 and
+# before, also the lesson and textbook lines.
+LEGACY = ("0.4.0", True)
 
 
 def follow_replacement(text: str, brief: dict, candidate: dict) -> str:
     """A replacing figure's „open large” link to the old asset, pointed at the new one – what the
-    insertion writes (sn 0.4.1: one page write with the figure). The verdict key is taken of this
-    text, so the snapshot (old link) and the insertion (new link) see the same section."""
+    insertion writes (sn 0.4.1: in the one page write of the figure, so a failing insertion writes
+    nothing). The link's target is not part of any verdict key (`canonical`): the rewrite changes
+    no figure's key, the replacing one's or another's in the same section."""
     old, new = brief.get("replaces"), candidate.get("asset")
     if not old or not new:
         return text
@@ -54,15 +60,23 @@ def without_replaced(text: str, page: str, asset: str | None) -> str:
     return sub_links(text, remove, pattern)
 
 
-def canonical(text: str, page: str, brief: dict, legacy: bool = False) -> str:
+def canonical(text: str, page: str, brief: dict, legacy: bool | str = False) -> str:
     # Other figures and tool bookkeeping cannot invalidate this figure's context.
-    # Its own image, alt and caption are bound separately in verdict_key. `legacy`: the key of
-    # sn 0.3.8 and before, which still held the lesson and textbook lines (`rekey`).
+    # Its own image, alt and caption are bound separately in verdict_key; the „open large” link
+    # keeps its words, its target is the tool's (sn 0.4.1, `follow_replacement`). `legacy`
+    # (`LEGACY`): "0.4.0" kept that target, True (sn 0.3.8) also the lesson and textbook lines.
     text = markers.BLOCK.sub("", text)
-    if not legacy:
+    if legacy is not True:
         text = META_LINE.sub("", text)
     text = DESCRIPTION.sub("", text)
-    text = sub_links(text, lambda m: "" if m["img"] else m[0])
+
+    def link(m):
+        if m["img"]:
+            return ""
+        if not legacy and m["text"] == OPEN_LARGE_TEXT:
+            return OPEN_LARGE
+        return m[0]
+    text = sub_links(text, link)
     text = MARKER.sub("", text)
     return re.sub(r"\n(?:[ \t]*\n)+", "\n\n", text).strip()
 
@@ -91,9 +105,9 @@ def section(text: str, anchor: str) -> tuple[str, str]:
     return body[start:end].strip(), "\n\n".join(before + [body[start:end].strip()] + after)
 
 
-def embedding(repo: Path, brief: dict, candidate: dict, legacy: bool = False) -> dict:
+def embedding(repo: Path, brief: dict, candidate: dict, legacy: bool | str = False) -> dict:
     page = brief["page"]
-    text = with_markers(follow_replacement(safefs.read_text(repo, page), brief, candidate))
+    text = with_markers(safefs.read_text(repo, page))
     meta = frontmatter.split(text).meta
     if brief["kind"] == "banner":
         return {"page": page, "title": meta.get("title", ""),
@@ -108,7 +122,7 @@ def embedding(repo: Path, brief: dict, candidate: dict, legacy: bool = False) ->
             "alt": candidate["alt"], "caption": candidate["caption"].rstrip("\n")}
 
 
-def verdict_key(repo: Path, brief: dict, candidate: dict, legacy: bool = False) -> str:
+def verdict_key(repo: Path, brief: dict, candidate: dict, legacy: bool | str = False) -> str:
     fid = brief["id"]
     text = safefs.read_text(repo, brief["page"])
     if markers.read(text, f"figure-{fid}") is None:
@@ -132,21 +146,23 @@ def verdict_key(repo: Path, brief: dict, candidate: dict, legacy: bool = False) 
 
 
 def key_matches(repo: Path, brief: dict, candidate: dict, stored: str) -> bool:
-    """A recorded verdict key is valid for the content as it is now: the current key, or the
-    sn 0.3.8 key a verdict recorded before 0.3.9 carries (until `rekey` renews it)."""
+    """A recorded verdict key is valid for the content as it is now: the current key, or an older
+    key of the same content (`LEGACY`: sn 0.4.0, sn 0.3.8) a verdict still carries until `rekey`
+    renews it."""
     try:
         if stored == verdict_key(repo, brief, candidate):
             return True
-        return stored == verdict_key(repo, brief, candidate, legacy=True)
+        return any(stored == verdict_key(repo, brief, candidate, legacy=level) for level in LEGACY)
     except (OSError, ValueError):
         return False
 
 
 def rekey(repo: Path) -> list[str]:
-    """One mechanical step (sn close): a figure verdict whose recorded key is the sn 0.3.8 key of
-    the content exactly as it is now gets the current key – safe, because the two keys differ only
-    by the lesson and textbook lines. In `docs/review/verdicts.json` and the figure's evidence
-    record; returns the paths written."""
+    """One mechanical step (sn close, before any insertion): a figure verdict whose recorded key is
+    an older key (`LEGACY`) of the content exactly as it is now gets the current key – safe,
+    because the keys differ only by the lesson and textbook lines (sn 0.3.8) and the open-large
+    link's target (sn 0.4.0). In `docs/review/verdicts.json` and the figure's evidence record;
+    returns the paths written."""
     from .insert import VERDICTS, removed
     records = safefs.read_json(repo, VERDICTS, []) if safefs.is_file(repo, VERDICTS) else []
     written, renewed = [], {}
@@ -155,8 +171,8 @@ def rekey(repo: Path) -> list[str]:
             continue
         try:
             new = verdict_key(repo, record["commission"], record["candidate"])
-            if record.get("key") != new and record.get("key") == verdict_key(
-                    repo, record["commission"], record["candidate"], legacy=True):
+            if record.get("key") != new and any(record.get("key") == verdict_key(
+                    repo, record["commission"], record["candidate"], legacy=level) for level in LEGACY):
                 renewed[record["key"]] = new
                 record["key"] = new
         except (OSError, ValueError, KeyError):
@@ -177,7 +193,8 @@ def rekey(repo: Path) -> list[str]:
         if new is None and evidence.get("commission") and evidence.get("candidate"):
             try:
                 current = verdict_key(repo, evidence["commission"], evidence["candidate"])
-                if old != current and old == verdict_key(repo, evidence["commission"], evidence["candidate"], legacy=True):
+                if old != current and any(old == verdict_key(repo, evidence["commission"], evidence["candidate"],
+                                                             legacy=level) for level in LEGACY):
                     new = current
             except (OSError, ValueError, KeyError):
                 new = None
@@ -238,7 +255,7 @@ def embedded_candidate(repo: Path, brief: dict, candidate: dict) -> dict:
     return {**candidate, "asset": asset, "alt": alt, "caption": caption}
 
 
-def usage_keys(repo: Path, brief: dict, candidate: dict, legacy: bool = False) -> list[dict]:
+def usage_keys(repo: Path, brief: dict, candidate: dict, legacy: bool | str = False) -> list[dict]:
     result = []
     asset = candidate.get("asset")
     if not asset:
