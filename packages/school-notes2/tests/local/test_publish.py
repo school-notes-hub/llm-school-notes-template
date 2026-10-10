@@ -21,9 +21,10 @@ def world(tmp_path, fake_local, local_origin, monkeypatch):
     (repo / "wiki/index.md").write_text("# Kezdőlap\n\nÚj.\n")
     git(repo, "commit", "-qam", "notes")
     local = fake_local(repo, site_repo=str(site))
-    builds = []
+    builds, kept = [], []
 
-    def fake_build(git_, commit, task_dir, renderer, *, changed, log, browser_filter=None):
+    def fake_build(git_, commit, task_dir, renderer, *, changed, log, browser_filter=None, keep_log=None):
+        kept.append(keep_log)
         out = Path(task_dir) / "build"
         (out / "site").mkdir(parents=True)
         (out / "site" / "index.html").write_text(f"<p>{commit}</p>")
@@ -35,7 +36,14 @@ def world(tmp_path, fake_local, local_origin, monkeypatch):
     monkeypatch.setattr(publish.done, "report", lambda repo, out=print, git=None: 0)
     # local bare origins stand in for GitHub; the real guard has its own tests below
     monkeypatch.setattr(publish, "require_github", lambda url, what: url)
-    return {"local": local, "repo": repo, "origin": origin, "site": site, "builds": builds}
+    return {"local": local, "repo": repo, "origin": origin, "site": site, "builds": builds, "kept": kept}
+
+
+def test_a_failed_build_keeps_its_render_log_in_the_learners_state_folder(world):
+    """sn 0.4.2: the build folder is temporary; the render log of a failure goes to one fixed file."""
+    assert publish.run(world["local"], out=lambda *_: None) == 0
+    local = world["local"]
+    assert world["kept"] == [local.cfg.state_dir / local.name / "publish-render.log"]
 
 
 def ref(bare, name):

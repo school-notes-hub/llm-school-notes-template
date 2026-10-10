@@ -96,6 +96,22 @@ def test_whisper_check_takes_a_case_ending_in_the_last_word_and_a_consonant_vari
     assert [(w, names.whisper_heard(w, e)) for w, e, _ in CASES] == [(w, x) for w, _, x in CASES]
 
 
+ASSIMILATED = [
+    (["Zeusszal"], {"form": "Zeusz", "targets": ["zeusz"]}, True),     # -val after sz: the digraph doubles
+    (["Kossuthtal"], KO, True), (["Kosuttal"], KO, True),              # after th / t: -tal
+    (["Batthyánnyal"], {"form": "Batthyány", "targets": ["battyányi"]}, True),
+    (["Pesttel"], {"form": "Pest", "targets": ["pest"]}, True),
+    (["Réka"], {"form": "Ré", "targets": ["ré"]}, False),              # a vowel-final name assimilates nothing
+    (["Kossuthka"], KO, False), (["Kossuthsal"], KO, False),           # not the name's last consonant
+    (["Zeuszal"], {"form": "Zeusz", "targets": ["zeusz"]}, False)]
+
+
+def test_an_assimilated_ending_doubles_the_names_own_last_consonant():
+    """sn 0.4.2: -val/-vel/-vá/-vé after a consonant is that consonant doubled (Kossuthtal,
+    Zeusszal); any other consonant before -al/-a is not a case ending (Kossuthka, Réka)."""
+    assert [(w, names.whisper_heard(w, e)) for w, e, _ in ASSIMILATED] == [(w, x) for w, _, x in ASSIMILATED]
+
+
 def test_segment_times_only_give_the_segment_span_and_no_blind_check():
     text = "Ma Széchenyi István és Kossuth beszél."
     paid = FakePaid({"text": "", "words": [], "segments": [
@@ -256,9 +272,31 @@ def test_names_only_keeps_the_earlier_entry_where_the_cache_lacks_a_call(world):
     batthyany, kossuth = after["names"]
     assert batthyany == fresh["names"][0]                   # counted again
     note = kossuth.pop("note")
-    assert kossuth == old["names"][1] and note.startswith("nem számoltam újra (hiányzó tárolt Whisper-átirat")
+    # sn 0.4.2: the kept entry has the v2 form too – its blind result as it was, no 0.4.0 moment
+    # passed off as the name's own time (that was the start of the cut): only named in the note
+    earlier = {k: v for k, v in old["names"][1].items() if k not in ("at", "at_s")}
+    assert kossuth == {**earlier, "timing": "none", "at": None, "at_s": None}
+    assert note.startswith("nem számoltam újra (hiányzó tárolt Whisper-átirat")
+    assert note.endswith("(a 0.4.0-s nyugta a kivágás kezdetét adta: 0:13)")
+    assert all("timing" in n for n in after["names"]) and after["names_version"] == 2
     assert any(line.startswith("nem számoltam újra: 1 név") for line in lines)
     assert "missing" not in json.dumps(after)
+    # a second recount gives the same receipt
+    assert podcast.run(world["local"], "proba", "elso", False, out=lines.append, names_only=True) == 0
+    assert safefs.read_json(world["repo"], RECEIPT) == {**after, "names": [batthyany, {**kossuth, "note": note}]}
+
+
+def test_a_kept_entry_without_blind_answers_takes_the_new_place_and_keeps_the_verdict():
+    from school_notes2.local import podcast_names
+    old = {"form": "Kossuth", "targets": ["kosut"], "heard": ["kosut"] * 3, "whisper": True, "verified": True,
+           "scene": "J1", "at": "0:13", "at_s": 13.0, "note": "régi megjegyzés"}
+    fresh = {"form": "Kossuth", "targets": ["kosut"], "heard": [], "whisper": False, "verified": False,
+             "scene": "J1", "timing": "word", "at_s": 14.2, "at": "0:14", "missing": "judge"}
+    item = podcast_names.kept(old, fresh, "judge")
+    assert {k: item[k] for k in ("heard", "whisper", "verified", "timing", "at_s", "at")} == {
+        "heard": ["kosut"] * 3, "whisper": True, "verified": True, "timing": "word", "at_s": 14.2, "at": "0:14"}
+    assert item["note"].endswith("korábbi megjegyzés: régi megjegyzés") and "missing" not in item
+    assert podcast_names.kept(item, fresh, "judge") == item
 
 
 @needs_ffmpeg
@@ -277,7 +315,7 @@ def test_names_only_with_nothing_in_the_cache_writes_nothing(world):
 @needs_ffmpeg
 def test_names_only_never_overwrites_a_hand_edited_receipt_and_takes_the_podcast_lock(world, monkeypatch):
     import contextlib
-    from school_notes2.local import podcast
+    from school_notes2.local import podcast, podcast_names
     released_040(world)
     repo = world["repo"]
     hand = safefs.read_text(repo, RECEIPT).replace('"régi"', '"kézzel"')
@@ -293,7 +331,7 @@ def test_names_only_never_overwrites_a_hand_edited_receipt_and_takes_the_podcast
     def lock(path, timeout, what):
         taken.append(what)
         yield
-    monkeypatch.setattr(podcast, "images_lock", lock)
+    monkeypatch.setattr(podcast_names, "images_lock", lock)
     assert podcast.run(world["local"], "proba", "elso", False, out=lambda *_: None, names_only=True) == 0
     assert taken == ["podcast"]
 
@@ -310,3 +348,51 @@ def test_names_only_on_an_incomplete_receipt_is_an_error_line_not_a_traceback(wo
     git(repo, "commit", "-qam", "broken receipt")
     with pytest.raises(SnError, match="hiányos nyugta"):
         podcast.run(world["local"], "proba", "elso", False, out=lambda *_: None, names_only=True)
+
+
+@needs_ffmpeg
+def test_fill_missing_sends_only_the_missing_calls_within_the_budget_and_counts_again(world):
+    """sn 0.4.2: `--names-only --fill-missing` – the transcript missing from the cache is sent
+    through the paid path (ledger, budget, estimate first); everything cached costs nothing."""
+    from school_notes2.local import podcast
+    from tests.podcast.conftest import client
+    fresh, _ = released_040(world)
+    scene_transcript(world, 1).unlink()
+    router = world["router"]
+    calls = len(router.calls)
+    lines = []
+    assert podcast.run(world["local"], "proba", "elso", False, out=lines.append, names_only=True,
+                       fill_missing=True, client=client(router)) == 0
+    sent = [u for _, u, _ in router.calls[calls:] if not u.startswith(openrouter.GENERATION)]
+    assert sent == [openrouter.TRANSCRIPTION]                       # the blind answers were cached
+    assert safefs.read_json(world["repo"], RECEIPT) == fresh
+    assert any(line.startswith("pótlás: 1 névnél hiányzik tárolt válasz (Whisper-átirat: 1, vak ellenőrzés: 0)")
+               and "USD" in line for line in lines)
+    assert any(line.startswith("költség: ") and "(1 új hívás)" in line for line in lines)
+
+
+@needs_ffmpeg
+def test_fill_missing_over_the_budget_sends_nothing_and_writes_nothing(world):
+    from decimal import Decimal
+    from school_notes2.local import podcast
+    from school_notes2.podcast.ledger import BudgetExhausted
+    from tests.podcast.conftest import client
+    released_040(world)
+    before = safefs.read_bytes(world["repo"], RECEIPT)
+    scene_transcript(world, 1).unlink()
+    world["local"].monthly = Decimal("0.0001")
+    router = world["router"]
+    calls = len(router.calls)
+    with pytest.raises(BudgetExhausted):
+        podcast.run(world["local"], "proba", "elso", False, out=lambda *_: None, names_only=True,
+                    fill_missing=True, client=client(router))
+    assert [u for _, u, _ in router.calls[calls:] if not u.startswith(openrouter.GENERATION)] == []
+    assert safefs.read_bytes(world["repo"], RECEIPT) == before
+
+
+def test_fill_missing_belongs_to_names_only():
+    from school_notes2 import cli
+    args = cli._parser().parse_args(["podcast", "barna", "proba", "elso", "--names-only", "--fill-missing"])
+    assert args.fill_missing and args.names_only
+    with pytest.raises(SystemExit):
+        cli.main(["podcast", "barna", "proba", "elso", "--fill-missing"])

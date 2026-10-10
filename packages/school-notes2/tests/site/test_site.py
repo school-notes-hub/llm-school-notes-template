@@ -88,10 +88,10 @@ class Env:
         subprocess.run(["git", "-C", str(clone), "commit", "-qm", message], check=True, env=ENV)
         subprocess.run(["git", "-C", str(clone), "push", "-q", "origin", "main"], check=True, env=ENV)
 
-    def build(self, commit, changed=None, name=None):
+    def build(self, commit, changed=None, name=None, **kw):
         task = self.tmp / "tasks" / (name or commit[:8])
         task.mkdir(parents=True, exist_ok=True)
-        return site_build.build(self.bare, commit, task, self.renderer, changed=changed, log=self.log)
+        return site_build.build(self.bare, commit, task, self.renderer, changed=changed, log=self.log, **kw)
 
     def publish(self, record, run_id="r1"):
         return site_publish.publish(self.site, record.output / "site", student="benedek",
@@ -169,6 +169,24 @@ def test_render_error_is_a_content_problem_of_the_page(env):
         env.build(env.main())
     assert caught.value.problems == [{"file": "wiki/gazd/tema.md", "line": None,
                                       "message": "public build: Math rendering failed"}]
+
+
+def test_a_render_failure_keeps_its_log_and_names_the_renderers_error(env, tmp_path):
+    """sn 0.4.2 (live 2026-10-10): „site render failed (rc=1); see render.log” pointed into a
+    deleted temporary folder. The log is kept at `keep_log`, the message has the renderer's line."""
+    from school_notes2.state.errors import Transient
+    env.push({"wiki/gazd/tema.md": "# Téma\n\nRENDER_CRASH\n"})
+    keep = tmp_path / "state" / "benedek" / "publish-render.log"
+    commit = env.main()
+    with pytest.raises(Transient) as caught:
+        env.build(commit, keep_log=keep)
+    message = str(caught.value)
+    assert message.startswith("site render failed (rc=1): Error: Changed input; review and update its hash: "
+                              "wiki/gazd/tema.md")
+    assert message.endswith(f"teljes napló: {keep}")
+    assert "sn close" in caught.value.todo
+    text = keep.read_text()
+    assert text.startswith(f"# sn publish build of {commit}\n") and "at readInput" in text
 
 
 def test_browser_error_points_to_the_page(env):

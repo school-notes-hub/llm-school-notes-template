@@ -21,6 +21,11 @@ dates = json.loads(Path(opts["--last-updated"]).read_text())
 pages = []
 for entry in config["pages"]:
     text = (repo / entry["path"]).read_text()
+    if "RENDER_CRASH" in text:                           # cli.mjs: an error outside a page (stack, exit 1)
+        print(f"Error: Changed input; review and update its hash: {entry['path']}\n"
+              "    at readInput (file:///study-site/lib/paths.mjs:18:42)\n    at async main (cli.mjs:30:5)",
+              file=sys.stderr)
+        sys.exit(1)
     if "RENDER_FAIL" in text:
         print("study-site-page-error " + json.dumps({"file": entry["path"], "message": "Math rendering failed"}),
               file=sys.stderr)

@@ -51,6 +51,12 @@ def renderer(local) -> site_build.Renderer:
         browser_check_s=t.browser_check_s, check_public_s=t.check_public_s)
 
 
+def render_log(local) -> Path:
+    """Where a failed build's render.log is kept (the build folder is a temporary one): one file
+    per learner under the state folder, the last failure."""
+    return local.cfg.state_dir / local.name / "publish-render.log"
+
+
 def effective_remote(git, what: str) -> None:
     """Both the fetch and the push address of `origin` (after any `insteadOf`/`pushurl`) must
     be https://github.com/…; only then may git get the token."""
@@ -83,7 +89,8 @@ def run(local, reviewed: bool = False, build_only: Path | None = None, out=print
         local.record("publish", "refused", target=head, reason=reason)
         return 1
     if build_only is not None:
-        record = site_build.build(git, head, Path(build_only), renderer(local), changed=None, log=local.steps)
+        record = site_build.build(git, head, Path(build_only), renderer(local), changed=None, log=local.steps,
+                                  keep_log=render_log(local))
         out(f"build: {record.output / 'site'} ({record.pages} lap, {record.duration_s} s)")
         local.record("publish", "built", target=head, pages=record.pages)
         return 0
@@ -104,7 +111,8 @@ def run(local, reviewed: bool = False, build_only: Path | None = None, out=print
         changed = site_publish.changed_since_publish(git, site, head)
         with tempfile.TemporaryDirectory(prefix=f"sn-publish-{local.name}-") as tmp:
             try:
-                record = site_build.build(git, head, Path(tmp), renderer(local), changed=changed, log=local.steps)
+                record = site_build.build(git, head, Path(tmp), renderer(local), changed=changed, log=local.steps,
+                                          keep_log=render_log(local))
             except site_build.BuildContentError as exc:
                 for problem in exc.problems[:30]:
                     out(f"  {problem['file']}: {problem['message']}")

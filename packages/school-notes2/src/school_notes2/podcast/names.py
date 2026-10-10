@@ -135,6 +135,36 @@ class CacheOnly:
         return found
 
 
+def _left_edge(pcm: bytes, t: float) -> float:
+    return refine(pcm, t, max(0.0, t - 0.1), t + 0.03)
+
+
+def _right_edge(pcm: bytes, t: float, total: float) -> float:
+    return refine(pcm, t, t - 0.03, min(total, t + 0.1))
+
+
+def _own_cut(tw, ww, t2w, pcm, i0, i1, window, others, total) -> tuple[float, float, list, list]:
+    """The name's own cut (`locate`): its Whisper words and the word next to them on each side,
+    or the boundary where that word is another name's."""
+    s, e = window
+    w2t = {w: t for t, w in t2w.items()}
+    left, right = (s - 1 if s > 0 else None), (e if e < len(ww) else None)
+    p, n = w2t.get(s - 1), w2t.get(e)
+    if left in others:
+        before, start = [], _left_edge(pcm, ww[s][1])
+    else:
+        before = ([w for w, _ in tw[:i0]] if left is None else
+                  [w for w, _ in tw[p:i0]] if p is not None and p < i0 else [ww[left][3]])
+        start = _left_edge(pcm, ww[left][1]) if left is not None else 0.0
+    if right in others:
+        after, end = [], _right_edge(pcm, ww[e - 1][2], total)
+    else:
+        after = ([w for w, _ in tw[i1:]] if right is None else
+                 [w for w, _ in tw[i1:n + 1]] if n is not None and n >= i1 else [ww[right][3]])
+        end = _right_edge(pcm, ww[right][2], total) if right is not None else total
+    return start, end, before, after
+
+
 def locate(text: str, transcript: dict, pcm: bytes, i0: int, i1: int,
            window: tuple[int, int] | None = None, others: frozenset = frozenset(),
            tight: bool = False) -> tuple[float, float, str]:
@@ -143,12 +173,12 @@ def locate(text: str, transcript: dict, pcm: bytes, i0: int, i1: int,
 
     The measured method: the text's words are aligned with Whisper's; the cut keeps one matching
     neighbour word on each side, the unmatched words between become context. The name's own cut
-    (`window` from `place`, the name's own Whisper words) instead when `tight` (another listed name
-    stands between the matching neighbours) or when a matching neighbour is another name's word
-    (`others`: the Whisper word indices of the scene's other names): the Whisper word next to the
-    window on each side (the text's word where Whisper agrees, else Whisper's) – unless that word
-    is another name's: then the cut ends at the boundary between the two names, nothing of the
-    other name in the clip. One listed name per clip."""
+    (`_own_cut`; `window` from `place`, the name's own Whisper words) instead when `tight` (another
+    listed name stands between the matching neighbours) or when a matching neighbour is another
+    name's word (`others`: the Whisper word indices of the scene's other names): the Whisper word
+    next to the window on each side (the text's word where Whisper agrees, else Whisper's) – unless
+    that word is another name's: then the cut ends at the boundary between the two names, nothing
+    of the other name in the clip. One listed name per clip."""
     tw = words_of(text)
     ww, timing = timeline(transcript)
     total = len(pcm) / 2 / RATE
@@ -162,43 +192,14 @@ def locate(text: str, transcript: dict, pcm: bytes, i0: int, i1: int,
     nxt = min((i for i in t2w if i >= i1), default=None)
     left, right = (t2w[prev] if prev is not None else None), (t2w[nxt] if nxt is not None else None)
     if window is not None and (tight or left in others or right in others):
-        s, e = window
-        w2t = {w: t for t, w in t2w.items()}
-        left, right = (s - 1 if s > 0 else None), (e if e < len(ww) else None)
-        p, n = w2t.get(s - 1), w2t.get(e)
-        if left in others:
-            before, t = [], ww[s][1]
-            start = refine(pcm, t, max(0.0, t - 0.1), t + 0.03)
-        else:
-            before = ([w for w, _ in tw[:i0]] if left is None else
-                      [w for w, _ in tw[p:i0]] if p is not None and p < i0 else [ww[left][3]])
-            start = None
-        if right in others:
-            after, t = [], ww[e - 1][2]
-            end = refine(pcm, t, t - 0.03, min(total, t + 0.1))
-        else:
-            after = ([w for w, _ in tw[i1:]] if right is None else
-                     [w for w, _ in tw[i1:n + 1]] if n is not None and n >= i1 else [ww[right][3]])
-            end = None
-        left, right = (None if left in others else left), (None if right in others else right)
+        start, end, before, after = _own_cut(tw, ww, t2w, pcm, i0, i1, window, others, total)
     elif window is None and tight:
         raise ValueError("a név nincs meg a Whisper szavai között")
     else:
         before = [w for w, _ in tw[(prev if prev is not None else 0):i0]]
         after = [w for w, _ in tw[i1:(nxt + 1 if nxt is not None else len(tw))]]
-        start = end = None
-    if start is None:
-        if left is not None:
-            t = ww[left][1]
-            start = refine(pcm, t, max(0.0, t - 0.1), t + 0.03)
-        else:
-            start = 0.0
-    if end is None:
-        if right is not None:
-            t = ww[right][2]
-            end = refine(pcm, t, t - 0.03, min(total, t + 0.1))
-        else:
-            end = total
+        start = _left_edge(pcm, ww[left][1]) if left is not None else 0.0
+        end = _right_edge(pcm, ww[right][2], total) if right is not None else total
     return round(start, 3), round(end, 3), " ".join(before + ["[NÉV]"] + after)
 
 
@@ -242,6 +243,41 @@ def _span(ww: list, first: int, end: int, total: float, timing: str) -> list[flo
     return [round(min(a, b), 3), round(max(a, b), 3)]
 
 
+NOTE_NO_TIMES = "a Whisper-válaszban nincs időbélyeg: a hely ismeretlen, a vak ellenőrzés nem futott"
+NOTE_SEGMENT = ("a Whisper-válaszban csak mondatszintű (szakasz-) idő van, szóidő nincs: a név nem vágható ki, "
+                "a vak ellenőrzés nem futott")
+NOTE_GAP_WORD = "a Whisper itt nem írt a névhez hasonlót: csak a két szomszéd szó közötti szakasz ismert"
+NOTE_GAP_SEGMENT = ("a Whisper-válaszban csak mondatszintű idő van, és a név nincs meg a szavai között: csak a "
+                    "szomszéd mondatok szakasza ismert")
+
+
+def _heard_ok(heard: list, targets: list[str]) -> bool:
+    return len(heard) == REPEATS and all(
+        h is not None and any(compact(h) == compact(t) for t in targets) for h in heard)
+
+
+def _blind_runs(paid, clip: bytes, context: str, targets: list[str], heard: list) -> None:
+    """The blind transcriptions of one clip into `heard`: up to `REPEATS`, stopping at the first
+    miss (an unusable answer gets one more run); a `NotCached` leaves the runs made so far."""
+    for repeat in range(1, REPEATS + 1):
+        value = blind(paid, clip, context, repeat)
+        if value is None:
+            value = blind(paid, clip, context, repeat + 10)
+        heard.append(value)
+        if value is None or not any(compact(value) == compact(t) for t in targets):
+            break
+
+
+def _unplaced(result: dict, timing: str, where: dict, ww: list, total: float) -> dict | None:
+    """The result of a name the blind check cannot run on (no times, a gap), else None."""
+    if timing == TIMING_NONE:
+        return {**result, "note": NOTE_NO_TIMES}
+    if where["window"] is None:
+        return {**result, "timing": TIMING_GAP, "window_s": _span(ww, *where["gap"], total, timing),
+                "note": (NOTE_GAP_WORD if timing == TIMING_WORD else NOTE_GAP_SEGMENT) + ", a vak ellenőrzés nem futott"}
+    return None
+
+
 def check_scene(paid, scene_text: str, pcm: bytes, names: list[dict]) -> list[dict]:
     """Every listed name in one scene, per occurrence: where it is heard (`timing`, `start_s`,
     `window_s`, scene-relative), whether Whisper wrote it there (`whisper`), the blind check's
@@ -270,49 +306,30 @@ def check_scene(paid, scene_text: str, pcm: bytes, names: list[dict]) -> list[di
     for (entry, i0, i1), where in zip(found, placed):
         result = {"form": entry["form"], "targets": entry["targets"], "heard": [], "whisper": False,
                   "verified": False, "timing": TIMING_NONE, "start_s": None, "window_s": None}
-        window = where["window"]
-        if timing == TIMING_NONE:
-            out.append({**result, "note": "a Whisper-válaszban nincs időbélyeg: a hely ismeretlen, "
-                                          "a vak ellenőrzés nem futott"})
+        unplaced = _unplaced(result, timing, where, ww, total)
+        if unplaced is not None:
+            out.append(unplaced)
             continue
-        if window is None:
-            out.append({**result, "timing": TIMING_GAP, "window_s": _span(ww, *where["gap"], total, timing),
-                        "note": ("a Whisper itt nem írt a névhez hasonlót: csak a két szomszéd szó közötti "
-                                 "szakasz ismert" if timing == TIMING_WORD else
-                                 "a Whisper-válaszban csak mondatszintű idő van, és a név nincs meg a szavai "
-                                 "között: csak a szomszéd mondatok szakasza ismert")
-                                + ", a vak ellenőrzés nem futott"})
-            continue
-        s, e = window
+        s, e = where["window"]
         result["whisper"] = whisper_heard([w[3] for w in ww[s:e]], entry)
         if timing == TIMING_SEGMENT:
-            out.append({**result, "timing": TIMING_SEGMENT,
-                        "window_s": [round(ww[s][1], 3), round(ww[e - 1][2], 3)],
-                        "note": "a Whisper-válaszban csak mondatszintű (szakasz-) idő van, szóidő nincs: "
-                                "a név nem vágható ki, a vak ellenőrzés nem futott"})
+            out.append({**result, "timing": TIMING_SEGMENT, "note": NOTE_SEGMENT,
+                        "window_s": [round(ww[s][1], 3), round(ww[e - 1][2], 3)]})
             continue
         result.update(timing=TIMING_WORD, start_s=round(ww[s][1], 3))
         first, end_ = where["between"]
         crowded = any(first <= j0 < end_ and j0 != i0 for _, j0, _ in found)
         others = frozenset(k for other in placed if other is not where and other["window"]
                            for k in range(*other["window"]))
-        start, end, context = locate(scene_text, transcript, pcm, i0, i1, window, others, crowded)
+        start, end, context = locate(scene_text, transcript, pcm, i0, i1, where["window"], others, crowded)
         clip = pcm[int(start * RATE) * 2:int(end * RATE) * 2]
         try:
-            for repeat in range(1, REPEATS + 1):
-                heard = blind(paid, clip, context, repeat)
-                if heard is None:                       # an unusable answer: one more run
-                    heard = blind(paid, clip, context, repeat + 10)
-                result["heard"].append(heard)
-                if heard is None or not any(compact(heard) == compact(t) for t in entry["targets"]):
-                    break
+            _blind_runs(paid, clip, context, entry["targets"], result["heard"])
         except NotCached:
             result["missing"] = "judge"
             result["note"] = ("a vak ellenőrzés tárolt válasza hiányzik ehhez a kivágáshoz "
                               "(csak új, fizetős hívással számolható)")
-        blind_ok = len(result["heard"]) == REPEATS and all(
-            h is not None and any(compact(h) == compact(t) for t in entry["targets"]) for h in result["heard"])
-        result["verified"] = blind_ok and result["whisper"]
+        result["verified"] = _heard_ok(result["heard"], entry["targets"]) and result["whisper"]
         out.append(result)
     return out
 

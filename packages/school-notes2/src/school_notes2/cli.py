@@ -19,6 +19,8 @@ commands; each lives in `school_notes2/local/<command>.py`:
   sn podcast <t> <subject> <page> --retire   take a released episode off the wiki (Drive copy stays)
   sn podcast <t> <subject> <page> --names-only   a released episode's name check again, from the cache
                                              only (nothing paid; only the receipt's names change)
+  sn podcast <t> <subject> <page> --names-only --fill-missing   the same, the calls missing from the
+                                             cache sent first (paid, within the podcast budget)
 
 Exit codes: 0 done, 1 not done or an error, 2 `sn close` or `sn podcast` stopped before writing.
 """
@@ -98,6 +100,8 @@ def _parser() -> argparse.ArgumentParser:
                               help="take a released episode off the wiki: block, MP3, receipt (the Drive copy stays)")
     podcast_mode.add_argument("--names-only", action="store_true",
                               help="count a released episode's name check again from the cache; nothing is paid")
+    podcast.add_argument("--fill-missing", action="store_true",
+                         help="with --names-only: send the calls missing from the cache (paid, within the podcast budget)")
     return p
 
 
@@ -110,6 +114,8 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--settle and --grant are separate")
         if not args.settle and not (args.learner and args.figure_id):
             parser.error("sn gen <learner> <figure-id> (or --settle)")
+    if getattr(args, "fill_missing", False) and not args.names_only:
+        parser.error("--fill-missing belongs to --names-only")
     if args.only and not (args.command == "close" and args.snapshot):
         parser.error("--only belongs to --snapshot")
     from .config import ConfigError
@@ -161,7 +167,7 @@ def _dispatch(local, args) -> int:
     if args.command == "podcast":
         from .local import podcast
         return podcast.run(local, args.subject, args.page, args.snapshot, retire_=args.retire,
-                           names_only=args.names_only)
+                           names_only=args.names_only, fill_missing=args.fill_missing)
     raise SystemExit(f"unknown command {args.command}")
 
 

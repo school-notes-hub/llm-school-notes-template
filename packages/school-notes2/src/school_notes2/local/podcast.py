@@ -1,4 +1,4 @@
-"""`sn podcast <t> <subject> <page> [--snapshot | --retire | --names-only]`: one episode of the „Képben vagy?”
+"""`sn podcast <t> <subject> <page> [--snapshot | --retire | --names-only [--fill-missing]]`: one episode of the „Képben vagy?”
 podcast about one topic page (`wiki/<subject>/<page>.md`), released on the page, on the Podcast
 page and on Drive (owner, 2026-10-08).
 
@@ -39,15 +39,8 @@ tool's deletion, so the writer guard accepts it), refreshes the Podcast page (re
 last episode) and `public.json`. The Drive copy is never deleted: a line names it for the owner.
 Nothing is paid; the hand-over stays.
 
-**`--names-only`** (sn 0.4.1): a released episode's name check counted again with this tool from
-the podcast cache only – the scenes' speech by the receipt's request hashes, the script whose
-digest is the receipt's `script_sha256` (`adas.json` or a kept `adas-<n>.json` of the hand-over),
-the stored Whisper transcripts and blind answers; nothing is sent or paid, only the receipt's
-`names` (and `names_version`) change, under the podcast lock. A call missing from the cache is not
-made: that name keeps its earlier receipt entry unchanged (`heard`, `verified`, its moment) with a
-note saying it was not counted again; when no name can be counted again nothing is written (exit
-2). A receipt changed by hand since the HEAD (not the tool's last write) is never overwritten
-(exit 2); an incomplete receipt is a `Hiba:` line (exit 1).
+**`--names-only [--fill-missing]`**: the name check of a released episode counted again
+(`podcast_names.py`).
 
 The command does not commit; the controller commits and publishes (`sn publish`)."""
 
@@ -65,29 +58,22 @@ from ..podcast import audio, names, openrouter, script as scripts, speech
 from ..podcast.ledger import Cache, Ledger, request_sha, speech_reserve
 from ..schemas import validate
 from ..state import safefs
-from ..state.errors import Prerequisite, SnError
+from ..state.errors import SnError
 from ..wiki import markers, public
 from ..wiki import podcast as wiki_podcast
 from ..wiki.pages import links, resolve, sha256, wiki_pages
-from . import guard, keys, tool_writes
+from . import guard, podcast_names, tool_writes
+from .podcast_names import STOP, _client, names_lines, stop, timed, where  # noqa: F401 - one place
 from .common import Refused, today
 from .figure_close import REVIEWER
 
-STOP = 2
 GRAPH = "kevero.sh (tulajdonosi jóváhagyás 2026-10-08), utána pan=mono (a két csatorna átlaga)"
 ENCODING = "MP3, 64 kbit/s CBR, mono, 48 kHz; ID3v2.3: title, album"
 
 
-def stop(out, title: str, lines: list[str]) -> int:
-    out(title)
-    for line in lines:
-        out(f"  {line}")
-    return STOP
-
-
 def run(local, subject: str, page: str, take_snapshot: bool = False, out=print, *,
         client: openrouter.Client | None = None, sleep=time.sleep, retire_: bool = False,
-        names_only: bool = False) -> int:
+        names_only: bool = False, fill_missing: bool = False) -> int:
     try:
         ep = scripts.episode(subject, page)
     except ValueError as exc:
@@ -97,7 +83,7 @@ def run(local, subject: str, page: str, take_snapshot: bool = False, out=print, 
     if retire_:
         return retire(local, ep, out)
     if names_only:
-        return recount(local, ep, out)
+        return podcast_names.recount(local, ep, out, fill=fill_missing, client=client, sleep=sleep)
     return release(local, ep, out, client=client, sleep=sleep)
 
 
@@ -161,13 +147,6 @@ def release(local, ep, out, *, client=None, sleep=time.sleep) -> int:
     return drive(local, ep, record, data, cost, out)
 
 
-def _client(settings, sleep) -> openrouter.Client:
-    key = keys.load(settings.key_file).get("OPENROUTER_API_KEY")
-    if not key:
-        raise Prerequisite("OPENROUTER_API_KEY hiányzik az ops .env-ből", todo="tedd be a kulcsot a school-notes-ops/.env-be")
-    return openrouter.Client(key, settings.timeout_s, sleep=sleep)
-
-
 def paid_phase(local, settings, client, ep, script, requests, sleep) -> tuple[list[bytes], list[dict], Decimal, list]:
     """Speech per scene and the name check, under the podcast lock and budget."""
     with images_lock(settings.lock_path, settings.lock_timeout_s, what="podcast"):
@@ -193,38 +172,6 @@ def paid_phase(local, settings, client, ep, script, requests, sleep) -> tuple[li
         ledger.backfill(client, sleep=sleep, only=paid.opened)
         cost = ledger.episode_cost(ep.ident, settings.learner)
     return pcms, checked, cost, paid.warnings
-
-
-def timed(checked: list[dict], starts: list[float]) -> list[dict]:
-    """The name results in the final episode's time: `at_s`/`at` (`m:ss`) only for a name with
-    its own Whisper word time, `window_s`/`window` (`m:ss–m:ss`) for one known only to a segment
-    or between two neighbour words – never a moment more exact than the transcript gives."""
-    out = []
-    for item in checked:
-        item = dict(item)
-        start = item.pop("start_s", None)
-        item.pop("end_s", None)
-        index = item.pop("scene_index")
-        window = item.pop("window_s", None)
-        at = None if start is None else round(starts[index] + start, 1)
-        item.update(at_s=at, at=None if at is None else wiki_podcast.length(at))
-        if window is not None:
-            span = [round(starts[index] + window[0], 1), round(starts[index] + window[1], 1)]
-            item.update(window_s=span, window=f"{wiki_podcast.length(span[0])}–{wiki_podcast.length(span[1])}")
-        out.append(item)
-    return out
-
-
-def where(item: dict) -> str:
-    """Where a name is heard, as the terminal says it (an old receipt has `at` only)."""
-    timing = item.get("timing")
-    if item.get("at"):
-        return item["at"]
-    if timing == names.TIMING_SEGMENT:
-        return f"{item['window']} között (csak mondatszintű idő)"
-    if timing == names.TIMING_GAP:
-        return f"{item['window']} között (a Whisper itt nem írta le)"
-    return "ismeretlen helyen"
 
 
 def build_record(local, ep, script: dict, requests: list[dict], data: bytes, seconds: float,
@@ -342,135 +289,6 @@ def summary(out, ep, record: dict, data: bytes, cost: Decimal) -> None:
     out(f"lapok: {ep.page} (lejátszó), {wiki_podcast.PAGE}")
     names_lines(out, record)
     out(f"költség: {cost} USD (ez az adás, az eddigi hívásaival együtt)")
-
-
-def names_lines(out, record: dict) -> None:
-    total = len(record["names"])
-    open_ = [n for n in record["names"] if not n["verified"]]
-    out(f"nevek: {total - len(open_)}/{total} gépileg igazolt")
-    for item in open_:
-        heard = ", ".join(h or "–" for h in item["heard"]) or "–"
-        out(f"  nem igazolt: {item['form']} – {where(item)} ({item['scene']}; "
-            f"hallott: {heard}; Whisper: {'igen' if item['whisper'] else 'nem'})")
-        if item.get("note"):
-            out(f"    {item['note']}")
-
-
-def released_script(repo: Path, ep, record: dict) -> dict | None:
-    """The script the episode was released from: `adas.json` or a kept `adas-<n>.json` of the
-    hand-over whose digest is the receipt's `script_sha256` (in name order: the same one each time)."""
-    files = safefs.listdir(repo, ep.folder) if safefs.is_dir(repo, ep.folder) else []
-    candidates = sorted((n for n in files if n.startswith("adas") and n.endswith(".json")),
-                        key=lambda n: (n != "adas.json", n))
-    for name in candidates:
-        try:
-            script = json.loads(safefs.read_text(repo, f"{ep.folder}/{name}"))
-        except (OSError, ValueError):
-            continue
-        if isinstance(script, dict) and scripts.digest(script) == record.get("script_sha256"):
-            return script
-    return None
-
-
-KEPT = "nem számoltam újra"
-
-
-def recount(local, ep, out=print) -> int:
-    """`--names-only`: the name check of a released episode counted again with this tool, from
-    the cache only (the scenes' speech, the Whisper transcripts, the blind answers – nothing is
-    sent, nothing is paid); only the receipt's `names` change, under the podcast lock. A name
-    whose call is not in the cache keeps its earlier receipt entry as it was (`heard`,
-    `verified`, its moment), with a note; when no name can be counted again nothing is written.
-    A receipt that is not the tool's last write (changed since the HEAD by hand) is never
-    overwritten; an incomplete one is an error, not a traceback."""
-    repo = local.repo
-    if not safefs.is_file(repo, ep.record):
-        local.record("podcast", "stop", target=ep.ident)
-        return stop(out, "STOP (nem írtam semmit):", [f"nincs kiadott adás: {ep.record}"])
-    if guard.hand_edited_file(repo, local.git(), ep.record):
-        local.record("podcast", "stop", target=ep.ident)
-        return stop(out, "STOP (nem írtam semmit):", [
-            f"{ep.record}: a nyugta nem az sn podcast utolsó írása (kézzel módosították a HEAD óta) – "
-            "nem írom felül; előbb állítsd vissza (git checkout)"])
-    record = safefs.read_json(repo, ep.record)
-    try:
-        scenes = [{"id": s["id"], "request_sha256": s["request_sha256"], "audio_sha256": s["audio_sha256"],
-                   "start_s": float(s["start_s"])} for s in record["speech"]["scenes"]]
-        old = list(record["names"])
-        if not isinstance(record["script_sha256"], str):
-            raise TypeError("script_sha256")
-    except (KeyError, TypeError, ValueError) as exc:
-        raise Refused(f"{ep.record}: hiányos nyugta (hiányzik vagy hibás: {exc}); a nevek csak teljes "
-                      "újrakiadással számolhatók újra") from None
-    script = released_script(repo, ep, record)
-    if script is None:
-        local.record("podcast", "stop", target=ep.ident)
-        return stop(out, "STOP (nem írtam semmit):", [
-            f"a kiadott forgatókönyv (script_sha256 {str(record.get('script_sha256'))[:12]}…) nincs meg a "
-            f"{ep.folder}/ adas*.json fájljai között; a nevek csak teljes újrakiadással számolhatók újra"])
-    if [s["id"] for s in scenes] != [s["id"] for s in script["scenes"]]:
-        local.record("podcast", "stop", target=ep.ident)
-        return stop(out, "STOP (nem írtam semmit):", ["a nyugta jelenetei nem a forgatókönyv jelenetei"])
-    settings = local.podcast_settings()
-    with images_lock(settings.lock_path, settings.lock_timeout_s, what="podcast"):
-        cache = Cache(settings.cache_dir)
-        pcms = [cache.audio(s["request_sha256"]) for s in scenes]
-        lost = [s["id"] for s, pcm in zip(scenes, pcms)
-                if pcm is None or hashlib.sha256(pcm).hexdigest() != s["audio_sha256"]]
-        if lost:
-            local.record("podcast", "stop", target=ep.ident)
-            return stop(out, "STOP (nem írtam semmit):", [
-                f"a jelenetek hangja nincs a gyorsítótárban ({', '.join(lost)}); a nevek csak teljes, fizetős "
-                "újrakiadással számolhatók újra"])
-        paid = names.CacheOnly(cache)
-        checked = []
-        for index, (scene, pcm) in enumerate(zip(script["scenes"], pcms)):
-            text = " ".join(t["text"] for t in scene["turns"])
-            for item in names.check_scene(paid, text, pcm, script["names"]):
-                checked.append({**item, "scene": scene["id"], "scene_index": index})
-        fresh = timed(checked, [s["start_s"] for s in scenes])
-        missing = [i for i, item in enumerate(fresh) if item.get("missing")]
-        if missing and len(missing) == len(fresh):
-            local.record("podcast", "stop", target=ep.ident)
-            return stop(out, "STOP (nem írtam semmit):", [
-                f"egyik név sem számolható újra a gyorsítótárból ({len(missing)} név: hiányzó tárolt válasz); "
-                "a nyugta marad, ahogy volt"])
-        if missing and [(n.get("form"), n.get("scene")) for n in old] != [(n["form"], n["scene"]) for n in fresh]:
-            local.record("podcast", "stop", target=ep.ident)
-            return stop(out, "STOP (nem írtam semmit):", [
-                "a régi nyugta nevei nem párosíthatók az újraszámoltakkal, és van, ami nem számolható újra: "
-                "a régi eredmény nem tartható meg név szerint"])
-        merged = []
-        for i, item in enumerate(fresh):
-            kind = item.pop("missing", None)
-            if kind is None:
-                merged.append(item)
-                continue
-            kept = dict(old[i])
-            what = "Whisper-átirat" if kind == "transcription" else "vak ellenőrzés"
-            if not str(kept.get("note", "")).startswith(KEPT):
-                kept["note"] = (f"{KEPT} (hiányzó tárolt {what}; új, fizetős hívás kellene): a korábbi eredmény "
-                                "maradt" + (f"; korábbi megjegyzés: {kept['note']}" if kept.get("note") else ""))
-            merged.append(kept)
-        new = {**record, "names": merged, "names_version": names.RECEIPT_VERSION}
-        validate("podcast-episode", new)
-        changed = new != record
-        try:
-            if changed:
-                safefs.write_text(repo, ep.record, wiki_podcast.dumps(new))
-        finally:
-            tool_writes.record(repo, files=[ep.record])
-    out(f"nyugta: {ep.record} ({'frissítve' if changed else 'változatlan'}; csak a nevek)")
-    names_lines(out, new)
-    if missing:
-        out(f"nem számoltam újra: {len(missing)} név (hiányzó tárolt válasz – Whisper-átirat: "
-            f"{paid.missing.count('transcription')}, vak ellenőrzés: {paid.missing.count('judge')}); "
-            "ezeknél a korábbi eredmény maradt, új, fizetős hívást nem küldtem")
-    out("költség: 0 USD (csak a gyorsítótár; nem küldtem semmit)")
-    unverified = [n for n in new["names"] if not n["verified"]]
-    local.record("podcast", "names", target=ep.ident, names=len(new["names"]), unverified=len(unverified),
-                 kept=len(missing))
-    return 0
 
 
 def players(repo: Path, asset: str) -> list[str]:

@@ -72,11 +72,13 @@ def existing(task_dir: Path, commit: str) -> BuildRecord | None:
 
 
 def build(git: Git, commit: str, task_dir: Path, renderer: Renderer, *, changed: list[str] | None,
-          log: Log, browser_filter=None) -> BuildRecord:
+          log: Log, browser_filter=None, keep_log: Path | None = None) -> BuildRecord:
     """Build and check the public site of `commit` into `<task>/build`.
 
     `changed` lists the wiki paths changed since the last publish; the browser check visits
-    those pages and their indexes. None means "check every page" (first publish).
+    those pages and their indexes. None means "check every page" (first publish). On a failure
+    the steps' `render.log` is copied to `keep_log` (the task folder may be a temporary one) and
+    a step failure names that file (sn 0.4.2).
     """
     found = existing(task_dir, commit)
     if found:
@@ -104,6 +106,9 @@ def build(git: Git, commit: str, task_dir: Path, renderer: Renderer, *, changed:
     except Exception as exc:
         log.event("site.build", "error", target=commit[:12], duration_s=t.s,
                   error_class=getattr(exc, "kind", type(exc).__name__))
+        kept = _keep_log(task_dir / "render.log", keep_log, commit)
+        if kept and isinstance(exc, Transient):
+            raise Transient(f"{exc.message}\nteljes napló: {kept}", todo=exc.todo, details=exc.details) from exc
         raise
     shutil.rmtree(src, ignore_errors=True)
     record = {"commit": commit, "duration_s": round(t.s, 1), "pages": len(payload["pages"])}
@@ -215,7 +220,41 @@ def _render(r: Renderer, src: Path, out: Path, dates: Path, log: Log | None = No
         raise BuildContentError(problems or [{"file": CONFIG, "line": None,
                                               "message": "rendering failed on a page"}])
     if proc.returncode != 0:
-        raise Transient(f"site render failed (rc={proc.returncode}); see render.log")
+        raise _step_failed("site render", proc)
+
+
+def _keep_log(log: Path, keep: Path | None, commit: str) -> Path | None:
+    """The failed build's `render.log` at `keep` (one fixed file per learner, the last failure),
+    headed by the commit; None when there is nothing to keep or nowhere to keep it."""
+    if keep is None or not log.is_file():
+        return None
+    keep.parent.mkdir(parents=True, exist_ok=True)
+    tmp = keep.with_name(keep.name + ".part")
+    tmp.write_text(f"# sn publish build of {commit}\n" + log.read_text(encoding="utf-8", errors="replace"),
+                   encoding="utf-8")
+    tmp.replace(keep)
+    return keep
+
+
+ERROR_LINE = re.compile(r"^(?:[A-Z]\w*)?Error\b")
+
+
+def error_line(text: str) -> str:
+    """The renderer's own error line from its stderr: the last `…Error: …` line (a Node stack's
+    head), else the last line that is not a stack frame."""
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    errors = [line for line in lines if ERROR_LINE.match(line)]
+    rest = [line for line in lines if not line.startswith("at ")]
+    found = errors[-1] if errors else rest[-1] if rest else ""
+    return found[:400]
+
+
+def _step_failed(what: str, proc: subprocess.CompletedProcess) -> Transient:
+    line = error_line(proc.stderr)
+    todo = ("nézd meg a teljes naplót" if "Changed input" not in line else
+            "a publication/public.json egy lapjának hash-e régi (a lap változott): futtasd az sn close-t "
+            "(az írja újra), commitold, majd újra az sn publish-t")
+    return Transient(f"{what} failed (rc={proc.returncode})" + (f": {line}" if line else ""), todo=todo)
 
 
 def _page_problem(line: str) -> dict:
@@ -238,7 +277,7 @@ def _browser_check(r: Renderer, out: Path, payload: dict, only: list[str] | None
                     log_file=out.parent / "render.log", what="browser check")
     data = read_json(report)
     if proc.returncode != 0 and not (data and data.get("errors")):
-        raise Transient(f"browser check failed (rc={proc.returncode}); see render.log")
+        raise _step_failed("browser check", proc)
     problems = _browser_problems(data["errors"]) if data else []
     if problems:
         raise BuildContentError(problems)
@@ -272,7 +311,7 @@ def _check_public(r: Renderer, out: Path, payload: dict) -> None:
     if proc.returncode == 0:
         return
     if not data or not data.get("errors"):
-        raise Transient(f"check-public failed (rc={proc.returncode}); see render.log")
+        raise _step_failed("check-public", proc)
     routes = {p["url"]: p["path"] for p in payload["pages"]}
     problems = []
     for err in data["errors"]:

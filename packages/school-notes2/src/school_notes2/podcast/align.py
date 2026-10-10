@@ -57,16 +57,38 @@ def _fold(text: str) -> str:
 
 VOWELS = frozenset("aeiouöü")          # after `_fold`; `y` (Kölcsey) counts with the consonants
 # The case endings Whisper may write after a name (accents folded): -t/-ot/-at/-et/-öt, -nak/-nek,
-# -val/-vel (also assimilated: Kossuth-tal), -ról, -tól, -hoz, -ban, -ba, -ból, -ra, -on, -n, -ig,
-# -ért, -ként, -nál, -ul, -vá (also assimilated), -kor, -é. Nothing else: `Ionok` is not `Ión`.
+# -val/-vel, -ról, -tól, -hoz, -ban, -ba, -ból, -ra, -on, -n, -ig, -ért, -ként, -nál, -ul, -vá,
+# -kor, -é. Nothing else: `Ionok` is not `Ión`. After a consonant -val/-vel/-vá/-vé assimilate
+# (`_assimilated`).
 ENDINGS = frozenset({"t", "ot", "at", "et", "nak", "nek", "val", "vel", "rol", "tol", "hoz", "hez", "ban",
                      "ben", "ba", "be", "bol", "ra", "re", "on", "en", "n", "ig", "ert", "kent", "nal", "nel",
                      "ul", "va", "ve", "kor", "e", "ek"})
+ASSIMILATED = ("al", "el", "a", "e")    # -val, -vel, -vá, -vé after the doubled consonant (folded)
+DIGRAPHS = ("sz", "cs", "zs", "gy", "ny", "ty", "dz")
 VARIANT_FROM = 5                       # letters; a shorter name gets no one-letter spelling variant
 
 
-def _ending(rest: str) -> bool:
-    return rest in ENDINGS or (len(rest) in (2, 3) and rest[0] not in VOWELS and rest[1:] in ("al", "el", "a", "e"))
+def _assimilated(stem: str) -> tuple[int, str] | None:
+    """(where the stem's written form changes, the assimilated stem) of a consonant-final stem:
+    its last consonant doubled – a digraph by its first letter (`zeusz` → `zeussz`), `th` read as
+    t (`kossuth` → `kossutht`); None after a vowel or a lone `y` (Kölcsey: -vel stays)."""
+    if not stem or stem[-1] in VOWELS:
+        return None
+    if stem.endswith("th"):
+        return len(stem), stem + "t"
+    if stem[-2:] in DIGRAPHS:
+        return len(stem) - 2, stem[:-2] + stem[-2] + stem[-2:]
+    if stem[-1] == "y":
+        return None
+    return len(stem), stem + stem[-1]
+
+
+def _inflected(got: str, stem: str, last: int) -> bool:
+    """`got` is `stem` with a case ending, all of it inside the last word (it starts at `last`)."""
+    if got.startswith(stem) and len(stem) > last and got[len(stem):] in ENDINGS:
+        return True
+    found = _assimilated(stem)
+    return bool(found) and found[0] > last and any(got == found[1] + ending for ending in ASSIMILATED)
 
 
 def _one_consonant(a: str, b: str) -> bool:
@@ -82,16 +104,19 @@ def _one_consonant(a: str, b: str) -> bool:
 def _written_as(words: list[str], wanted: str) -> bool:
     """Whisper's words (`_fold`ed, compact) are `wanted` (folded, compact): equal, or – from
     `VARIANT_FROM` letters on – with one consonant more or less; then at most a case ending
-    (`ENDINGS`) inside the last word: `Kossuth Lajos és Petőfi` is not `Kossuth`, `Rémület` is not
-    `Ré`."""
+    (`_inflected`: `ENDINGS`, or -val/-vel/-vá/-vé assimilated to the name's own last consonant)
+    inside the last word: `Kossuth Lajos és Petőfi` is not `Kossuth`, `Rémület` is not `Ré`,
+    `Kossuthka` is not `Kossuth`."""
     got = "".join(words)
     if not wanted or not got:
         return False
     last = len(got) - len(words[-1])
-    bases = [len(wanted)] if got.startswith(wanted) else []
+    stems = [wanted] if got.startswith(wanted) else []
     if len(wanted) >= VARIANT_FROM:
-        bases += [n for n in (len(wanted) - 1, len(wanted) + 1) if 0 < n <= len(got) and _one_consonant(got[:n], wanted)]
-    return any(m == len(got) or (m > last and _ending(got[m:])) for m in bases)
+        stems += [got[:n] for n in (len(wanted) - 1, len(wanted) + 1)
+                  if 0 < n <= len(got) and _one_consonant(got[:n], wanted)]
+    return got == wanted or any(got == stem or _inflected(got, stem, last) for stem in stems) \
+        or _inflected(got, wanted, last)
 
 
 def whisper_heard(written: list[str], entry: dict) -> bool:

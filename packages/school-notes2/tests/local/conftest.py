@@ -31,7 +31,7 @@ class FakeLocal:
         self.repo, self.name, self.records, self._drive = repo, name, [], drive
         self.git_calls = []
         self._ledger = ledger or {"jobs": {}}
-        self.cfg = SimpleNamespace(timeouts=Timeouts(), sources=Sources(), root=root,
+        self.cfg = SimpleNamespace(timeouts=Timeouts(), sources=Sources(), root=root, state_dir=root / "state",
                                    git_name="T", git_email="t@example.com")
         self.student = SimpleNamespace(name=name, drive_root=drive_root, site_repo=site_repo, grade=9)
         self.steps = Log(None, console=False)
