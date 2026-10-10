@@ -19,7 +19,7 @@ from .handoff import Handoff, _json, accepted, in_scope
 
 LEDGER = "docs/evidence/image-generation/ledger.json"
 
-OPEN_LARGE = "[Az ábra megnyitása nagy méretben]"
+OPEN_LARGE = fctx.OPEN_LARGE
 
 END = "<!-- /school-notes:generated -->"
 
@@ -222,13 +222,8 @@ def insert_one(repo: Path, fig: dict, given: dict, key: str, at: str) -> bool:
     brief = commissions.read(repo, fid)
     if is_inserted(repo, brief["page"], fid):
         return False        # already inserted; a stale verdict of it is the STOP rule's case
-    candidate = commissions.candidate(repo, brief)
-    if brief.get("replaces"):
-        old = relative(brief["page"], brief["replaces"])
-        new = relative(brief["page"], candidate["asset"])
-        text = safefs.read_text(repo, brief["page"])
-        if f"{OPEN_LARGE}({old})" in text:
-            safefs.write_text(repo, brief["page"], text.replace(f"{OPEN_LARGE}({old})", f"{OPEN_LARGE}(<{new}>)"))
+    # the „open large” link of a replaced figure follows in the insertion's one page write
+    # (`context.follow_replacement`): a failing insertion leaves the page as it was
     insert.insert(repo, brief, receipt(figure_verdict(fid, key, given)), at=at)
     return True
 

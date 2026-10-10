@@ -27,7 +27,11 @@ def banner(repo: Path, page: str, *, read=read_page) -> str:
 
 
 def leading(text: str) -> str:
-    # Only a leading image is a header; an illustration later in the lesson is not.
+    """The page's header image line: the first content line, when it is an image. Only a leading
+    image is a header; an illustration later in the lesson is not. A tool block other than a
+    figure block is not content (sn 0.4.1: the podcast player `sn podcast` puts above a banner that
+    stands before the title emptied every lesson log's banner); a figure block's image is."""
+    text = markers.BLOCK.sub(lambda m: m[0] if m["name"].startswith("figure-") else "", text)
     for line in CODE_FENCE.sub("", text).splitlines():
         if not line.strip() or line.startswith(("<!--", "# ")):
             continue

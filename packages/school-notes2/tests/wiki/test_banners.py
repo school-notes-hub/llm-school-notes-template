@@ -54,3 +54,20 @@ def test_nested_notice_cleanup_preserves_reused_banner_author_key(repo):
     banner = markers.read(updated, banners.BLOCK)
     nested = markers.replace(updated, banners.BLOCK, markers.wrap("pending", "Pending\n") + banner)
     assert author.part(nested) == author.part(updated) == author.part(text)
+
+
+def test_the_podcast_player_above_the_topic_banner_does_not_hide_it(repo):
+    """sn 0.4.1 (live 2026-10-10): `sn podcast` puts its player block right after the frontmatter
+    of a topic page whose banner stands before the title; the lesson log's banner must still be
+    the topic's banner, not empty (a figure block is still a header, any other tool block is not)."""
+    from school_notes2.wiki import podcast
+    topic = safefs.read_text(repo, "wiki/proba/elso.md")
+    record = {"page": "wiki/proba/elso.md", "title": "Az első", "duration_s": 200.0,
+              "asset": "wiki/assets/proba/podcast/elso.mp3"}
+    with_player = podcast.with_block(topic, record)
+    assert markers.read(with_player, podcast.BLOCK) is not None
+    safefs.write_text(repo, "wiki/proba/elso.md", with_player)
+    text = banners.update(repo, LESSON, reuse(repo))
+    assert "../assets/abra.svg" in markers.read(text, banners.BLOCK)
+    assert banners.leading("<!-- school-notes:generated figure-fejlec -->\n![Fejléc](a.webp)\n"
+                           "<!-- /school-notes:generated -->\n\n# Cím\n") == "![Fejléc](a.webp)"

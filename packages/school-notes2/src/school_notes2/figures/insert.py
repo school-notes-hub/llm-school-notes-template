@@ -50,6 +50,7 @@ def insert(repo: Path, brief: dict, receipt: dict, *, at: str) -> list[str]:
         elif rights.authored_candidate(repo, candidate):
             record["rights"] = "authored"
     new_text = text if "mermaid" in candidate else _insert(text, page, brief, candidate, verdict, directory, repo)
+    new_text = context.follow_replacement(new_text, brief, candidate)
     files = [f"{directory}/figure.json", VERDICTS]
     safefs.write_json(repo, files[0], record)
     _record_verdict(repo, brief, candidate, verdict, receipt["model"], at)

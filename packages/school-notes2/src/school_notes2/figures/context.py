@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..state import safefs
 from ..wiki import frontmatter, markers
-from ..wiki.pages import CODE_FENCE, LINK, links, resolve, sub_links, wiki_pages
+from ..wiki.pages import CODE_FENCE, LINK, links, relative, resolve, sub_links, wiki_pages
 from .commissions import MARKER, MERMAID, markers as figure_markers
 
 HEAD = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$", re.M)
@@ -18,6 +18,20 @@ DESCRIPTION = re.compile(r"\s*<!-- image-description(?:\n|:).*?-->", re.S)
 # sn 0.3.9 (exactly this form since 0.3.10), so a date-form edit does not invalidate a verdict;
 # anything else on such a line keeps the line in the key.
 from ..wiki.date_spans import META_LINE  # noqa: E402 - shared with the date normaliser
+
+
+OPEN_LARGE = "[Az ábra megnyitása nagy méretben]"
+
+
+def follow_replacement(text: str, brief: dict, candidate: dict) -> str:
+    """A replacing figure's „open large” link to the old asset, pointed at the new one – what the
+    insertion writes (sn 0.4.1: one page write with the figure). The verdict key is taken of this
+    text, so the snapshot (old link) and the insertion (new link) see the same section."""
+    old, new = brief.get("replaces"), candidate.get("asset")
+    if not old or not new:
+        return text
+    page = brief["page"]
+    return text.replace(f"{OPEN_LARGE}({relative(page, old)})", f"{OPEN_LARGE}(<{relative(page, new)}>)")
 
 
 def digest(value) -> str:
@@ -79,7 +93,7 @@ def section(text: str, anchor: str) -> tuple[str, str]:
 
 def embedding(repo: Path, brief: dict, candidate: dict, legacy: bool = False) -> dict:
     page = brief["page"]
-    text = with_markers(safefs.read_text(repo, page))
+    text = with_markers(follow_replacement(safefs.read_text(repo, page), brief, candidate))
     meta = frontmatter.split(text).meta
     if brief["kind"] == "banner":
         return {"page": page, "title": meta.get("title", ""),
