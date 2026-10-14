@@ -4,6 +4,7 @@ config, the public gate's view of the MP3."""
 
 import json
 import re
+import shutil
 import subprocess
 import urllib.error
 from pathlib import Path
@@ -246,3 +247,35 @@ def test_mono_stays_under_the_limiter_ceiling_at_the_level_of_one_kevero_channel
     assert peak < -1.0 and abs(peak - ref_peak) < 0.5
     assert abs(rms - ref_rms) < 0.15
     assert "alimiter=limit=0.89,pan=mono|c0=0.5*c0+0.5*c1[a]" in audio.mix_graph(tmp_path / "voice.wav")
+
+
+@needs_ffmpeg
+def test_the_public_gate_takes_the_real_site_mp3_and_refuses_the_drive_copys_tags(tmp_path, music):
+    """sn 0.4.3: the site's MP3 as `audio.mix` writes it with `site_tags` passes `check-public.py`;
+    the Drive copy's comment (ffmpeg writes it as TXXX) and track never could."""
+    import importlib.util
+    from school_notes2.local import media_files
+    spec = importlib.util.spec_from_file_location("gate", Path(__file__).parents[3] / "study-site" / "check-public.py")
+    gate = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gate)
+    data, _, _ = audio.episode([tone(1.0, 300)], music, tmp_path, title="Az erő – ő", album="School Notes – Statika",
+                               tags=media_files.site_tags("Statika", "Az erő – ő"))
+    _, frames, v1 = gate.id3(data)
+    assert sorted(frames) == ["TALB", "TCON", "TIT2", "TPE1", "TPE2"] and not v1
+
+    def gate_on(mp3: bytes) -> list[str]:
+        root = tmp_path / "gate"
+        shutil.rmtree(root, ignore_errors=True)
+        (root / "site" / "assets").mkdir(parents=True)
+        (root / "payload.json").write_text(json.dumps({"mode": "public"}))
+        (root / "site" / "assets" / "adas.mp3").write_bytes(mp3)
+        gate.main(root)
+        return [e["pattern"] for e in json.loads((root / "privacy-report.json").read_text())["errors"]]
+
+    assert gate_on(data) == []
+    site = tmp_path / "site.mp3"
+    site.write_bytes(data)
+    copy = tmp_path / "drive.mp3"
+    media_files.tag(site, copy, {**media_files.site_tags("Statika", "Az erő – ő"), "comment": "Egy mondat.",
+                                 "track": "150"})
+    assert gate_on(copy.read_bytes()) == ["unexpected MP3 tag: TRCK, TXXX"]

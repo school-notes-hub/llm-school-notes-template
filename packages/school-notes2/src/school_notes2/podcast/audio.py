@@ -17,8 +17,8 @@
    only copies it to both channels); only the music at the two ends is stereo. 64 kbit/s mono is
    0.48 MB a minute: a 3–4 minute episode with the 26 s of music is 1.6–2.2 MB. Bit-exact flags,
    input metadata dropped, ID3v2.3 with `title` (the episode), `album` (`School Notes –
-   <Tantárgy>`), `artist`, `album_artist`, `genre` and `comment` (the summary; sn 0.4.3,
-   `local.media_files.site_tags` – no `track`, which follows the order and goes only into the
+   <Tantárgy>`), `artist`, `album_artist` and `genre` (sn 0.4.3, `local.media_files.site_tags` –
+   exactly the public gate's allowed frames; no comment and no `track`, those go only into the
    Drive copy): the same input gives the same bytes. An ffmpeg failure is an `SnError` (`MixError`)."""
 
 import json

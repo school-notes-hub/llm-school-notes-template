@@ -28,8 +28,8 @@ def test_release_writes_the_mp3_receipt_page_block_podcast_page_and_drive_copy(w
     info = json.loads(probe(repo / ASSET, "stream=channels,sample_rate,bit_rate:format=duration:format_tags"))
     assert info["streams"][0]["channels"] == 1 and info["streams"][0]["bit_rate"] == "64000"
     assert info["format"]["tags"] == {"title": "Az első téma röviden", "album": "School Notes – Próba",
-                                      "artist": "School Notes", "album_artist": "School Notes", "genre": "Podcast",
-                                      "comment": SCRIPT["summary"]}                    # no track on the site
+                                      "artist": "School Notes", "album_artist": "School Notes",
+                                      "genre": "Podcast"}                 # no track and no comment on the site
     record = safefs.read_json(repo, RECORD)
     assert record["output_sha256"] == __import__("hashlib").sha256(data).hexdigest()
     assert record["rights"]["class"] == "generated" and "Suno" in record["rights"]["music"]

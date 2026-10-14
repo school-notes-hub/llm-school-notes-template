@@ -160,7 +160,7 @@ def release(local, ep, out, *, client=None, sleep=time.sleep) -> int:
         subject = wiki_podcast.subject_name(local.repo, ep.subject)
         data, starts, seconds = audio.episode(pcms, settings.music, Path(tmp), title=script["title"],
                                               album=media_files.album(subject),
-                                              tags=media_files.site_tags(subject, script["title"], script["summary"]))
+                                              tags=media_files.site_tags(subject, script["title"]))
     record = build_record(local, ep, script, requests, data, seconds, pcms, starts, timed(checked, starts))
     write_repo(local, ep, record, data, out)
     summary(out, ep, record, data, cost)

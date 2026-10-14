@@ -47,12 +47,10 @@ class PrivacyTests(unittest.TestCase):
 
         cases = {
             "ok.mp3": (tag(frame("TIT2", "Az első téma"), frame("TALB", "Képben vagy?")), []),
-            # sn 0.4.3: artist, album artist, genre and the summary as a comment are expected too
-            "tags.mp3": (tag(frame("TIT2", "Cím"), frame("TALB", "School Notes – Próba"), frame("TPE1", "School Notes"),
-                             frame("TPE2", "School Notes"), frame("TCON", "Podcast"),
-                             frame("COMM", "hun\0Egy mondat a témáról.")), []),
-            "extra.mp3": (tag(frame("TIT2", "Cím"), frame("TRCK", "150")), ["unexpected MP3 tag: TRCK"]),
-            "comment.mp3": (tag(frame("COMM", "hun\0lásd sources/proba/p0001.jpg")), ["\\bsources/", "\\bp\\d{4}\\b"]),
+            # the Drive copy's track and comment never belong on the site (sn 0.4.3; the real sn
+            # output is checked by school-notes2 tests/podcast/test_parts.py)
+            "extra.mp3": (tag(frame("TIT2", "Cím"), frame("TRCK", "150"), frame("TXXX", "comment\0x")),
+                          ["unexpected MP3 tag: TRCK, TXXX"]),
             "path.mp3": (tag(frame("TIT2", "sources/proba/p0001.jpg")), ["\\bsources/", "\\bp\\d{4}\\b"]),
         }
         for name, (data, expected) in cases.items():

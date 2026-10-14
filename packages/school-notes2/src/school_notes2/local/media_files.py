@@ -16,11 +16,13 @@ video; `album` – `School Notes – <Tantárgy>`; `artist`, `album_artist` – 
 `Podcast` or `Oktatóvideó`; `comment` (MP4 also `description`) – the stored description: an
 episode's `summary` (the podcast writer's sentence, in the receipt), a video's
 `docs/evidence/video/<tantárgy>/<videó>/leiras.txt` (the video writer's 1–2 sentences, copied by
-`video.py --vegleges`); `track` – the stored order number itself (00150 → 150): stable and
-increasing in the teaching order, so a player sorts right and nothing is uploaded again when a
-later item comes (MP4's track field holds at most 65535: above it the MP4 has no track). The
-site's MP3 gets every tag but `track` when `sn podcast` mixes it (`site_tags`; its bytes are what
-the receipt names), the Drive copy all of them. A missing description stays empty, and one line
+`video.py --vegleges`; in an MP3 ffmpeg writes it as `TXXX:comment` – no ID3 library among the
+dependencies writes a real `COMM`); `track` – the stored order number itself (00150 → 150):
+stable and increasing in the teaching order, so a player sorts right and nothing is uploaded
+again when a later item comes (MP4's track field holds at most 65535: above it the MP4 has no
+track). The site's MP3 gets title, album, artist, album_artist and genre when `sn podcast` mixes
+it (`site_tags`; its bytes are what the receipt names, and the public gate takes only these), the
+Drive copy all of them. A missing description stays empty, and one line
 names the items that lack it. A video receipt's SHA-256 is that of the untagged render. No LLM
 call."""
 
@@ -53,10 +55,12 @@ def _one_line(text: str) -> str:
     return " ".join(str(text or "").split())
 
 
-def site_tags(subject_name: str, title: str, summary: str) -> dict[str, str]:
-    """The tags of an episode's MP3 that never change with the order (the site's copy)."""
+def site_tags(subject_name: str, title: str) -> dict[str, str]:
+    """The tags of the site's MP3: those that never change with the order, and no comment (ffmpeg
+    writes an MP3 comment as a `TXXX` frame, which the public gate does not take; the five here
+    are exactly its allowed frames TIT2, TALB, TPE1, TPE2, TCON)."""
     return {"title": title, "album": album(subject_name), "artist": ARTIST, "album_artist": ARTIST,
-            "genre": PODCAST_GENRE, "comment": _one_line(summary)}
+            "genre": PODCAST_GENRE}
 
 
 def _with_track(tags: dict, number: int | None) -> dict:
@@ -78,7 +82,8 @@ def podcast_items(repo: Path, numbers: dict | None = None) -> list[dict]:
                 number = numbers.get(slug, {}).get(stem)
                 items.append({"ident": f"{slug}/{stem}", "subject": slug, "record": r, "number": number,
                               "subject_name": subject, "page_title": wiki_podcast.page_title(repo, r["page"]),
-                              "tags": _with_track(site_tags(subject, r["title"], r.get("summary", "")), number)})
+                              "tags": _with_track({**site_tags(subject, r["title"]),
+                                                   "comment": _one_line(r.get("summary", ""))}, number)})
     names = wiki_podcast.drive_names({i["ident"]: (i["subject_name"], i["page_title"], i["record"]["first_released"],
                                                    i["number"]) for i in items if i["number"] is not None})
     for item in items:
