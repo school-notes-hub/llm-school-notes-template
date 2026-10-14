@@ -76,7 +76,7 @@ def test_an_undated_lesson_sorts_by_its_lower_bound(tmp_path):
     repo = subject_repo(tmp_path)
     assert titles(repo) == ["Új fejezet", "Pótolt óra", "Folytatás", "Kezdés"]
     table = markers.read(generate.subject_index(repo, "proba"), "lessons")
-    assert "| <span class=\"study-when study-when-unsure\" title=\"Dátum nélküli óra: szept. 11. – okt. 4.; a helye a sorban nem biztos\">~szept. közepe</span> | Pótolt óra |" in table
+    assert "<a id=\"ora-2026-10-04-b-jegyzet\"></a>Pótolt óra <span class=\"study-when study-when-unsure\" title=\"Dátum nélküli óra: szept. 11. – okt. 4.; a helye a sorban nem biztos\">~szept. közepe</span>" in table
 
 
 def test_inside_one_lesson_log_the_notebook_order_tightens_the_range(tmp_path):
@@ -104,20 +104,23 @@ def test_one_folder_keeps_its_notebook_order_and_a_lesson_without_lower_bound_ma
     assert not any(lesson.uncertain for lesson in teaching_order.ordered(pages, {"t/2026-10-03"}))
 
 
-def test_the_now_block_names_the_chapter_the_latest_lesson_and_the_ones_before(tmp_path):
+def test_the_now_block_shows_the_chapter_path_and_the_latest_lesson(tmp_path):
     repo = subject_repo(tmp_path)
     text = generate.subject_index(repo, "proba")
+    # plan terv-oldalszerkezet T2: a box without a heading – the chapters in list order (✓ started
+    # before, ◉ the current one), the latest lesson's worked lessons; no lesson log link, no
+    # earlier lessons (the 🗓️ Órák list has them)
     assert markers.read(text, "now") == (
-        "# 📍 Itt tartunk\n\n"
-        "* **Most:** Második fejezet <span class=\"study-when\">szept. 22. óta</span>\n"
-        "* **Legutóbb:** [Új fejezet](2026-09-22-c-jegyzet.md) <span class=\"study-when\">szept. 22.</span> · [Uj](uj.md)\n"
-        "* **Előtte:** Első fejezet <span class=\"study-when study-when-unsure\" title=\"Nem biztos: a vége dátum nélküli óra (szept. 11. – okt. 4.)\">~szept. eleje – okt. eleje</span>\n\n"
-        "Eddig ebben a sorrendben vettük, a legújabb elöl:\n\n"
-        "* [Pótolt óra](2026-10-04-b-jegyzet.md) <span class=\"study-when study-when-unsure\" title=\"Dátum nélküli óra: szept. 11. – okt. 4.; a helye a sorban nem biztos\">~szept. közepe</span>\n"
-        "* [Folytatás](2026-09-10-a-jegyzet.md) <span class=\"study-when\">szept. 10.</span>\n"
-        "* [Kezdés](2026-09-10-a-jegyzet.md) <span class=\"study-when\">szept. 3.</span>\n")
+        "> [!TIP]\n> 🧭 **Hol tartunk**\n>\n"
+        '> <ol class="study-path"><li class="study-path-done"><a href="#fejezet-elso">Első fejezet</a> ✓ '
+        '<span class="study-when study-when-unsure" title="Nem biztos: a vége dátum nélküli óra (szept. 11. – okt. 4.)">'
+        "~szept. eleje – okt. eleje</span></li>"
+        '<li class="study-path-now"><a href="#fejezet-masodik">Második fejezet</a> ◉ '
+        '<span class="study-when">szept. 22. óta</span></li></ol>\n'
+        ">\n> **Most:** 📄 [Uj](uj.md)\n")
+    assert "-jegyzet.md" not in markers.read(text, "now")
     # its fixed place: after the back link, above the chapter lists; a refresh changes nothing
-    assert text.index("../index.md)") < text.index("# 📍 Itt tartunk") < text.index("# 📘")
+    assert text.index("../index.md)") < text.index("🧭 **Hol tartunk**") < text.index("# <a id=\"fejezet-elso\">")
     write(repo, "wiki/proba/index.md", text)
     assert generate.subject_index(repo, "proba") == text
 
@@ -126,8 +129,10 @@ def test_each_chapter_shows_when_it_was_taught(tmp_path):
     repo = subject_repo(tmp_path)
     chapters = markers.read(generate.subject_index(repo, "proba"), "chapters")
     # the undated catch-up lesson may come after the 09-22 start: the end is not cut as if certain
-    assert "# 📘 9. évfolyam: Első fejezet\n\n<span class=\"study-when study-when-unsure\" title=\"Nem biztos: a vége dátum nélküli óra (szept. 11. – okt. 4.)\">~szept. eleje – okt. eleje</span>\n\n" in chapters
-    assert "# 📘 9. évfolyam: Második fejezet\n\n<span class=\"study-when\">szept. 22. óta</span>\n\n" in chapters
+    assert ("# <a id=\"fejezet-elso\"></a>📘 1. fejezet: Első fejezet ✓\n\n<span class=\"study-when study-when-unsure\" "
+            "title=\"Nem biztos: a vége dátum nélküli óra (szept. 11. – okt. 4.)\">~szept. eleje – okt. eleje</span>\n\n") in chapters
+    assert ("# <a id=\"fejezet-masodik\"></a>📘 2. fejezet: Második fejezet ◉ most\n\n"
+            "<span class=\"study-when\">szept. 22. óta</span>\n\n") in chapters
     two = teaching_order.Chapter("x", "X", 0, [
         teaching_order.Lesson("a.md", 0, {}, "2026-09-03", "2026-09-03", True, "f", ()),
         teaching_order.Lesson("a.md", 1, {}, "2026-09-10", "2026-09-10", True, "f", ())])
@@ -142,9 +147,11 @@ def test_a_revisit_is_the_latest_lesson_but_moves_no_chapter(tmp_path):
         "{date: '2026-10-06', title: Visszatérés, topics: [alap.md]}"])
     text = generate.subject_index(repo, "proba")
     now = markers.read(text, "now")
-    assert "* **Legutóbb:** [Visszatérés](2026-10-06-f-jegyzet.md) <span class=\"study-when\">okt. 6.</span> · [Alap](alap.md)\n" in now
-    assert "* **Most:** Második fejezet <span" in now                      # the chapter started last
-    assert markers.read(text, "chapters") == before                   # order and spans unchanged
+    assert now.endswith("> **Most:** 📄 [Alap](alap.md)\n")         # the latest lesson's pages
+    assert '<li class="study-path-now"><a href="#fejezet-masodik">' in now  # the chapter started last
+    unmarked = lambda block: block.replace(" ◀ itt tartunk", "")
+    assert unmarked(markers.read(text, "chapters")) == unmarked(before)  # order and spans unchanged
+    assert "📄 1. [Alap](alap.md) ◀ itt tartunk" in markers.read(text, "chapters")
     assert not [w for w in check.order_warnings(repo, ["wiki/proba/index.md"])]
 
 

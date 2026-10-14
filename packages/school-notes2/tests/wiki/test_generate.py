@@ -2,29 +2,70 @@ from school_notes2.wiki import generate, markers
 
 
 def test_subject_blocks(repo):
+    # plan terv-oldalszerkezet T2: numbered chapters with a jump target and a ✓/◉ mark, 📄 numbered
+    # worked lessons with the description apart, the summary last with its fixed note, `◀ itt
+    # tartunk` at the latest lesson's pages; the lessons as a list with row targets, never a link
+    # to a lesson log; the lesson-log list empty
     text = generate.subject_index(repo, "proba")
-    chapters = markers.read(text, "chapters")
-    assert chapters == (
-        "# 📘 9. évfolyam: Alapok\n\n<span class=\"study-when study-when-unsure\" title=\"Nem biztos: a vége dátum nélküli óra (szept. 3–10.)\">~szept. eleje</span>\n\n"
-        "* ⚡ [Összefoglaló: Alapok](osszefoglalo-alapok.md) - Rövid.\n"
-        "* [Első](elso.md) - Az első téma.\n"
+    assert markers.read(text, "chapters") == (
+        '# <a id="fejezet-alapok"></a>📘 1. fejezet: Alapok ✓\n\n'
+        '<span class="study-when study-when-unsure" title="Nem biztos: a vége dátum nélküli óra (szept. 3–10.)">~szept. eleje</span>\n\n'
+        '* 📄 1. [Első](elso.md) ◀ itt tartunk <span class="study-desc">Az első téma.</span>\n'
+        '* ⚡ [Összefoglaló: Alapok](osszefoglalo-alapok.md) <span class="study-desc">A fejezet röviden, ismétléshez és dolgozat előtt.</span>\n'
         "\n<br />\n\n"
-        "# 📘 9. évfolyam: Haladó\n\n<span class=\"study-when study-when-unsure\" title=\"Nem biztos: a kezdete dátum nélküli óra (szept. 3–10.)\">~szept. eleje óta</span>\n\n"
-        "* [Második](masodik.md) - A második téma.\n")
-    lessons = markers.read(text, "lessons").splitlines()
-    assert lessons[0] == "| Dátum | Óra | Jegyzet | Témakörök |"
-    assert lessons[2].startswith("| <span class=\"study-when study-when-unsure\" title=\"Dátum nélküli óra: szept. 3–10.\">~szept. eleje</span> | Folytatás |")
-    assert "[Második](masodik.md#resz)" in lessons[2]
-    assert lessons[3].startswith("| <span class=\"study-when\">szept. 3.</span> | Bevezetés | [jegyzet](2026-09-10-elso-jegyzet.md)")
+        '# <a id="fejezet-halado"></a>📘 2. fejezet: Haladó ◉ most\n\n'
+        '<span class="study-when study-when-unsure" title="Nem biztos: a kezdete dátum nélküli óra (szept. 3–10.)">~szept. eleje óta</span>\n\n'
+        '* 📄 1. [Második](masodik.md) ◀ itt tartunk <span class="study-desc">A második téma.</span>\n')
+    assert markers.read(text, "lessons") == (
+        "# 🗓️ Órák – melyik órán mit vettünk\n\n"
+        "A legújabb óra van legfelül. A `~` bizonytalan dátumot jelöl; az időszakot az egér rávitelekor vagy koppintásra látod.\n\n"
+        '* <a id="ora-2026-09-10-elso-jegyzet"></a>Folytatás <span class="study-when study-when-unsure" title="Dátum nélküli óra: szept. 3–10.">~szept. eleje</span>'
+        "<br />→ [Első](elso.md) · [Második](masodik.md#resz)\n"
+        '* Bevezetés <span class="study-when">szept. 3.</span><br />→ [Első](elso.md)\n')
     assert markers.read(text, "review").startswith("# 🔁 Ismétlés\n\n* [Dolgozatra]")
-    assert markers.read(text, "notes") == "# 📝 Jegyzetek\n\n* [Első óra](2026-09-10-elso-jegyzet.md) - Jegyzet.\n"
+    assert markers.read(text, "notes") == ""
+    # the hand-written heading and legend moved into the block (one-time sweep)
+    assert "\n# 🗓️ Órák\n" not in text and text.count("A legújabb óra van legfelül.") == 1
+
+
+def test_lesson_titles_never_start_markdown_structure():
+    assert generate.plain_line("1. óra: atomok") == "1\\. óra: atomok"
+    assert generate.plain_line("# cím") == "\\# cím"
+    assert generate.plain_line("Hővezetés, 2. rész") == "Hővezetés, 2. rész"
+    assert generate.anchor_id("ora-2026-09-29-x-jegyzet-Pdf_15 oldal") == "ora-2026-09-29-x-jegyzet-pdf-15-oldal"
 
 
 def test_root_block_and_label(repo):
     text = generate.root_index(repo)
-    assert markers.read(text, "subjects") == "* 🧪 [Próba](proba/index.md) - A próba tantárgy témakörei.\n"
+    # T12: no template sentence; the chapters, smaller
+    assert markers.read(text, "subjects") == ("* 🧪 [Próba](proba/index.md) <span class=\"study-desc\">"
+                                              "Fejezetek: Alapok · Haladó</span>\n")
     assert generate.subject_label(repo, "proba") == "🧪 Próba"
     assert generate.subject_sentence("Irodalom") == "Az irodalom tantárgy témakörei és jegyzetei."
+    for sentence in ("Az irodalom tantárgy témakörei és jegyzetei.",
+                     "A történelem tantárgy témakörei és jegyzetei, évfolyamonként.", "A próba tantárgy témakörei."):
+        assert generate.TEMPLATE_SENTENCE.match(sentence)
+    assert not generate.TEMPLATE_SENTENCE.match("Kémiai és fizikai anyagtulajdonságok.")
+
+
+def test_home_page_guide_and_legend_blocks(repo):
+    # T4: the hand-written legend section becomes the two blocks, once; the text after it stays
+    root = repo / "wiki/index.md"
+    root.write_text(root.read_text() + "\n# 🔎 Jelmagyarázat\n\nKézi szöveg.\n\n* 💡 régi\n\n## A projektről\n\nMarad.\n")
+    text = generate.root_index(repo)
+    assert markers.names(text) == ["subjects", "guide", "legend"]
+    assert "Kézi szöveg" not in text and text.endswith("<!-- /school-notes:generated -->\n\n## A projektről\n\nMarad.\n")
+    guide = markers.read(text, "guide")
+    assert guide.startswith('# <a id="hogyan-hasznald"></a>🧭 Hogyan használd\n\n* 📚 **Tantárgyoldal**')
+    assert "🎧" not in guide                       # no Podcast page in this repo
+    assert "<br" not in guide                      # an HTML line there would swallow the legend heading
+    assert markers.read(text, "legend").startswith("# 🔎 Jelmagyarázat\n\nA jelöletlen szöveg")
+    root.write_text(text)
+    assert generate.root_index(repo) == text       # idempotent
+    # without a hand-written section: right after the subjects block
+    fresh = generate.place_home_blocks("# T\n\n" + markers.wrap("subjects", "") + "\n## Vége\n")
+    assert fresh == ("# T\n\n" + markers.wrap("subjects", "") + "\n<br />\n\n" + markers.wrap("guide", "")
+                     + markers.wrap("legend", "") + "\n## Vége\n")
 
 
 def test_write_indexes_is_idempotent(repo):
@@ -61,56 +102,26 @@ def test_equal_undated_lessons_follow_the_notebook():
     assert not any(lesson.uncertain for lesson in found)    # one folder: the notebook order is known
 
 
-def test_catch_up_list_and_lesson_marks_are_neutral_and_stable(repo):
+def test_catch_up_is_retired_and_its_block_stays_empty(repo):
+    # T1 (owner 2026-10-15): no 📝 Pótolandó list and no 📝/✅ mark; the frontmatter key stays
     from school_notes2.wiki import frontmatter
     path = repo / "wiki/proba/2026-09-10-elso-jegyzet.md"
     path.write_text(frontmatter.set_keys(path.read_text(), {"catch_up": "open", "notebook": "classmate"}))
-    generate.write_indexes(repo)
     index = repo / "wiki/proba/index.md"
-    text = index.read_text()
-    # Fix-48: one sentence says what to do; each line gives the lesson dates and topics from
-    # the page's own `lessons` fields, exactly as the lessons table shows them.
-    assert markers.read(text, "catch-up") == (
-        "# 📝 Pótolandó\n\n"
-        "Ezeknek az óráknak az anyagát pótolnod kell: írd be a füzetedbe (vagy tanuld meg), és szólj, ha megvan.\n\n"
-        "* [Első óra](2026-09-10-elso-jegyzet.md) - Dátum: <span class=\"study-when\">szept. 3.</span>, <span class=\"study-when study-when-unsure\" title=\"Dátum nélküli óra: szept. 3–10.\">~szept. eleje</span>. "
-        "Témakörök: [Első](elso.md), [Második](masodik.md#resz).\n")
-    assert text.index("../index.md") < text.index("# 📝 Pótolandó") < text.index("# 📘")
-    assert markers.read(text, "lessons").startswith(
-        "A 📝 jel pótolandó órát mutat: az anyagát írd be a füzetedbe (vagy tanuld meg), és szólj, ha megvan.\n\n"
-        "| Dátum | Óra |")
-    assert "| 📝 <span class=\"study-when\">szept. 3.</span> |" in text and '| 📝 <span class="study-when study-when-unsure"' in text
-    # Neutral by rule (plan 7.13, the learner AGENTS.md): no illness icon, no absence statement.
-    assert "🤒" not in text and "classmate" not in text and "hiányoz" not in text
-    assert generate.write_indexes(repo) == []
-    path.write_text(frontmatter.set_keys(path.read_text(), {"catch_up": "done"}))
+    index.write_text(index.read_text().replace("<br />", markers.wrap("catch-up", "# 📝 Pótolandó\n\n* régi\n") + "\n<br />", 1))
     generate.write_indexes(repo)
     text = index.read_text()
     assert markers.read(text, "catch-up") == ""
-    assert markers.read(text, "lessons").startswith("A ✅ jel a már pótolt órát mutatja.\n\n| Dátum |")
-    assert "| ✅ <span class=\"study-when\">szept. 3.</span> |" in text and "# 📝 Pótolandó" not in text
+    assert "Pótolandó" not in text and "📝" not in text and "✅" not in text
+    assert "🤒" not in text and "classmate" not in text and "hiányoz" not in text
     assert generate.write_indexes(repo) == []
 
 
 def test_legacy_catch_up_list_replaced_without_touching_other_sections(repo):
-    from school_notes2.wiki import frontmatter
-    path = repo / "wiki/proba/2026-09-10-elso-jegyzet.md"
-    path.write_text(frontmatter.set_keys(path.read_text(), {"catch_up": "open"}))
     idx = repo / "wiki/proba/index.md"
     idx.write_text(idx.read_text().replace("<br />", "# 🤒 Pótolandó\n\n* old\n\n<br />", 1))
     first = generate.subject_index(repo, "proba")
-    assert "🤒" not in first and "* old" not in first
-    assert first.count("# 📝 Pótolandó") == 1
+    assert "🤒" not in first and "* old" not in first and "Pótolandó" not in first
+    assert "catch-up" in markers.names(first) and markers.read(first, "catch-up") == ""
     idx.write_text(first)
     assert generate.subject_index(repo, "proba") == first
-
-
-def test_catch_up_order_is_total_and_independent_of_input_order():
-    from school_notes2.wiki import catch_up
-    pages = [generate.SubjectPage(name, {"catch_up": "open", "title": name})
-             for name in ("2026-09-10-b.md", "2026-09-20-c.md", "2026-09-10-a.md")]
-    text = "# Tárgy\n\n[⬅️ Vissza](../index.md)\n\n# 📌 Házi feladat\n\nMarad.\n"
-    result = catch_up.update(text, generate.by_date_desc(pages))
-    assert result == catch_up.update(text, generate.by_date_desc(list(reversed(pages))))
-    assert result.index("2026-09-20-c") < result.index("2026-09-10-a") < result.index("2026-09-10-b")
-    assert result.endswith("# 📌 Házi feladat\n\nMarad.\n")

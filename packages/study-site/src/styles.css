@@ -164,3 +164,50 @@ starlight-theme-select select { width: auto; min-width: max-content; text-overfl
 .study-content section.footnotes { margin-top: 2.5rem; padding-top: .75rem; border-top: 1px solid var(--sl-color-hairline, #ccc); font-size: .875rem; }
 .study-content section.footnotes > h2 { margin-top: 0; font-size: 1rem; }
 
+
+/* Page structure (plan terv-oldalszerkezet, sn 0.4.5). */
+/* The type band under the title: what kind of page this is, in one quiet line. */
+.study-kind { margin: -.5rem 0 1.25rem; padding: .45rem .8rem; border-radius: .4rem; font-size: .875rem; line-height: 1.45; color: var(--sl-color-gray-2, #505c65); background: color-mix(in srgb, var(--sl-color-accent) 7%, transparent); }
+.study-kind strong { color: var(--sl-color-white, inherit); font-weight: 600; }
+.study-crumb { color: var(--sl-color-gray-3, #8b949c); }
+.study-tools .study-pdf { margin-inline-start: auto; }
+/* A list line's description: smaller and grey under its title. */
+.study-content .study-desc { display: block; font-size: .85rem; line-height: 1.4; color: var(--sl-color-gray-3, #6b747c); }
+.study-content li:has(> .study-desc) { margin-block: .55rem; }
+/* 🧭 Hol tartunk: the chapters in teaching order on one line (a vertical step list on a phone);
+   ✓ started before the current one, ◉ the current one. */
+.study-content ol.study-path { list-style: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem 0; padding: 0; margin: .6rem 0; }
+.study-content ol.study-path > li { margin: 0; padding: .1rem .2rem; }
+.study-content ol.study-path > li + li::before { content: "→"; margin-inline: .45rem; color: var(--sl-color-gray-3, #8b949c); }
+.study-content ol.study-path > li.study-path-done > a { color: inherit; }
+.study-content ol.study-path > li.study-path-now { font-weight: 650; }
+.study-content ol.study-path > li.study-path-now > a { text-decoration-thickness: 2px; }
+@media (max-width: 50rem) {
+  .study-content ol.study-path { flex-direction: column; gap: 0; border-inline-start: 2px solid color-mix(in srgb, var(--sl-color-accent) 45%, transparent); padding-inline-start: .75rem; }
+  .study-content ol.study-path > li { padding-block: .2rem; }
+  .study-content ol.study-path > li + li::before { content: none; }
+}
+/* The podcast, compact, under the ⚡ Röviden box. */
+.study-content div.study-podcast { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .9rem; margin: 1rem 0 1.5rem; padding: .5rem .8rem; border: 1px solid var(--sl-color-hairline-light, #ccd3d5); border-radius: .5rem; font-size: .9rem; max-width: 78ch; }
+.study-content div.study-podcast > p { margin: 0; }
+.study-content div.study-podcast > p:has(.study-audio) { flex: 1 1 18rem; }
+.study-content div.study-podcast .study-audio { margin: 0; }
+@media print { .study-content div.study-podcast { display: none; } }
+/* The ⚡ Röviden box says what it is for. */
+.study-content .study-brief-note { font-size: .85rem; font-weight: 400; color: var(--sl-color-gray-3, #6b747c); }
+/* A label's meaning: the native tooltip with a mouse, a bubble on tap (like a lesson date). */
+.study-content .study-label[title] { position: relative; cursor: help; }
+.study-content .study-label[title]:focus { outline: 1px dotted currentColor; outline-offset: 1px; }
+.study-content .study-label[tabindex]:focus::after { content: attr(title); position: absolute; inset-inline-start: 0; top: 1.5em; z-index: 20; width: max-content; max-width: min(18rem, 75vw); white-space: normal; padding: .2rem .45rem; border-radius: .3rem; font-size: .8rem; line-height: 1.35; color: var(--sl-color-white, #fff); background: var(--sl-color-gray-6, #23262f); box-shadow: 0 1px 4px rgb(0 0 0 / .3); }
+.study-content td .study-label[tabindex]:focus::after { position: static; display: block; width: auto; margin-top: .2rem; }
+@media (hover: hover) { .study-content .study-label[tabindex]:focus::after { display: none; } }
+/* A section's 🗓️ line equal to the page's top one. */
+.study-content .study-dup { display: none; }
+/* 🧠 Kérdezd ki magad: the one button beside the heading. */
+.study-content .study-answers { min-height: 44px; margin: -.5rem 0 1rem; cursor: pointer; background: transparent; border: 1px solid currentColor; color: inherit; border-radius: .35rem; padding: .3rem .75rem; font: inherit; font-size: .875rem; }
+/* The page foot: subject, chapter, home, top. */
+.study-foot { display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; padding-block: 1rem; border-top: 1px solid var(--sl-color-hairline-light); font-size: .9rem; }
+.study-foot a { min-height: 44px; display: inline-flex; align-items: center; }
+.study-pagination + .study-foot { border-top: none; padding-top: 0; }
+@media print { .study-kind, .study-foot, .study-answers, .study-downloads { display: none !important; } .study-content .study-dup { display: none; } }
+.study-pagination a[rel="next"] { margin-inline-start: auto; text-align: end; }

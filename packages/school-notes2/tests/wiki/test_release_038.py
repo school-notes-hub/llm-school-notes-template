@@ -40,6 +40,7 @@ def test_the_index_shows_short_dates_and_hides_every_range(tmp_path):
         for words in ("dátum nélkül", "után", "legkésőbb", "még tart", "↕"):
             assert words not in shown, (name, words, shown)
     now = markers.read(text, "now")
-    assert '[Pótolt óra](2026-10-04-b-jegyzet.md) <span class="study-when study-when-unsure" ' \
-           'title="Dátum nélküli óra: szept. 11. – okt. 4.; a helye a sorban nem biztos">~szept. közepe</span>' in now
+    assert '</a>Pótolt óra <span class="study-when study-when-unsure" ' \
+           'title="Dátum nélküli óra: szept. 11. – okt. 4.; a helye a sorban nem biztos">~szept. közepe</span>' \
+        in markers.read(text, "lessons")
     assert '<span class="study-when">szept. 22. óta</span>' in now

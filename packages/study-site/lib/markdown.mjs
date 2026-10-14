@@ -28,9 +28,13 @@ schema.attributes.code = [...(schema.attributes.code || []), ['className', /^lan
 schema.attributes.div = [...(schema.attributes.div || []), ['className', 'math', 'math-display']];
 // `study-when`: a lesson date as a quiet meta item (a small clock and grey text, the stylesheet);
 // `study-when-unsure` an uncertain one (`~`, its range in the global `title` tooltip, left out on paper).
-schema.attributes.span = [...(schema.attributes.span || []), ['className', 'math', 'math-inline', 'study-when', 'study-when-unsure']];
+schema.attributes.span = [...(schema.attributes.span || []), ['className', 'math', 'math-inline', 'study-when', 'study-when-unsure', 'study-desc']];
 schema.attributes.details = ['open'];
-schema.attributes.p = [...(schema.attributes.p || []), ['className', 'study-pending']];
+schema.attributes.p = [...(schema.attributes.p || []), ['className', 'study-pending', 'study-podcast']];
+// The subject page's 🧭 path (the tool's `now` block): the chapters in teaching order, the ones
+// started before the current one and the current one marked; the stylesheet draws the line.
+schema.attributes.ol = [...(schema.attributes.ol || []).filter(a => !(Array.isArray(a) && a[0] === 'className')), ['className', 'contains-task-list', 'study-path']];
+schema.attributes.li = [...(schema.attributes.li || []).filter(a => !(Array.isArray(a) && a[0] === 'className')), ['className', 'task-list-item', 'study-path-done', 'study-path-now']];
 // The input never supplies executable HTML, CSS, embeds or arbitrary IDs/classes.
 // Footnote IDs are prefixed by rehype-sanitize, including their references.
 
@@ -170,31 +174,87 @@ function fixFootnotes(tree) {
   }
 }
 
-function generatedNotices(tree) {
-  // Only the tool's Markdown markers designate export-excluded notices.
+const plain = n => n.value ?? (n.children || []).map(plain).join('');
+// A paragraph that is one link whose text starts with ⬅️ (`[⬅️ Vissza a tantárgyhoz](index.md)`):
+// the toolbar and the page foot give the same way back, so the renderer leaves it out.
+const isBackLink = n => {
+  if (n.type !== 'paragraph') return false;
+  const kids = n.children.filter(c => !(c.type === 'text' && !c.value.trim()));
+  return kids.length === 1 && kids[0].type === 'link' && plain(kids[0]).trim().startsWith('⬅️');
+};
+// The retired catch-up notice of a lesson log (`> 🤒 **Pótolandó anyag** - …`, owner 2026-10-15).
+const isCatchUpNotice = n => n.type === 'blockquote' && n.children[0]?.type === 'paragraph'
+  && /^🤒\s*Pótolandó anyag/u.test(plain(n.children[0]).trim());
+
+function generatedNotices(tree, kind = '') {
+  // Only the tool's Markdown markers designate export-excluded notices. The `podcast` block's
+  // paragraphs are marked (the renderer moves them under the ⚡ Röviden box, and they never count
+  // as body in front of the page title); a lesson log's `lesson-banner` (the main topic page's
+  // banner) is left out.
   visit(tree, node => {
     if (!node.children) return;
     const stack = [];
+    const kept = [];
     for (const child of node.children) {
       const open = child.type === 'html' && child.value.trim().match(/^<!-- school-notes:generated ([a-z0-9-]+) -->$/);
       if (open) stack.push(open[1]);
       else if (child.type === 'html' && child.value.trim() === '<!-- /school-notes:generated -->') stack.pop();
+      else if (kind === 'lesson-notes' && stack.includes('lesson-banner')) continue;
+      else if (isBackLink(child) || isCatchUpNotice(child)) continue;
       else if (child.type === 'paragraph' && stack.some(name => /^pending(?:$|-section-|-figure-)/.test(name))) {
         child.data = { ...child.data, hProperties: { ...child.data?.hProperties, className: ['study-pending'] } };
+      } else if (child.type === 'paragraph' && stack.includes('podcast')) {
+        child.data = { ...child.data, hProperties: { ...child.data?.hProperties, className: ['study-podcast'] } };
       }
+      kept.push(child);
     }
+    node.children = kept;
   });
+}
+
+// Headings with a fixed role keep the top level whatever Markdown level the page wrote them at.
+const FIXED_HEADING = /^(?:🧠 Kérdezd ki magad|❓? ?Nyitott kérdések|📖 Fogalmak|Mit tanultunk (?:ezen az órán|ezeken az órákon))$/u;
+// A label's meaning, as the home page's legend says it: a tooltip, and a bubble on tap.
+const LABEL_HELP = [
+  ['💡', 'Magyarázat: kifejti, amit az órai anyag csak röviden ír le. A 🤖 gépi szerzőséget mutat, nem hitelesítést.'],
+  ['➕', 'Kiegészítés: kitölt egy, a megértéshez fontos hiányt. A 🤖 gépi szerzőséget mutat, nem hitelesítést.'],
+  ['⚠️', 'Javítás: a helyes változat ott, ahol az órai jegyzetben hiba volt; ilyenkor javítsd a füzetedet is. A 🤖 gépi szerzőséget mutat, nem hitelesítést.'],
+  ['📗', 'A tankönyv alapján: a tankönyvből vett rész, amely az órai jegyzetben nem szerepelt.'],
+  ['🗓️', 'Óra: melyik órán tanultátok ezt a részt.'],
+  ['🔖', 'Tankönyv: a kapcsolódó lecke és oldal, vagy az, hogy a tankönyv ezt nem tárgyalja.'],
+  ['🤖', 'Gépi szerzőség, nem hitelesítés.'],
+];
+export const labelHelp = text => LABEL_HELP.find(([mark]) => text.startsWith(mark))?.[1] || '';
+
+// The 🗓️ part of a lesson line (`🗓️ Óra: … · 🔖 Tankönyv: …`): its text and link targets up to
+// the first ` · `, so a section line equal to the page's top line can be told apart.
+function dateKey(label) {
+  let text = '', done = false;
+  const walk = n => {
+    if (done) return;
+    if (n.type === 'text') {
+      const cut = n.value.indexOf(' · ');
+      text += cut >= 0 ? n.value.slice(0, cut) : n.value;
+      if (cut >= 0) done = true;
+      return;
+    }
+    if (isElement(n, 'a')) text += `[${n.properties.href}]`;
+    (n.children || []).forEach(walk);
+  };
+  label.children.forEach(walk);
+  return text.trim();
 }
 
 export async function renderMarkdown(source, { resolveUrl, mermaid, pageId = '', footnoteLabel = 'Források', publicView = false } = {}) {
   const split = splitMarkdown(source);
   const { metadata, body } = split;
+  const kind = String(metadata.type || '');
   const title = publicView ? withoutGrade(split.title) : split.title;
   const headings = [];
   const sanitizedIds = new Map();
   const audit = { title, formulas: [], mermaid: [], labels: [], links: [], images: [] };
   const processor = unified().use(remarkParse).use(remarkGfm).use(remarkMath)
-    .use(() => tree => { generatedNotices(tree); if (publicView) publicMarkdown(tree); })
+    .use(() => tree => { generatedNotices(tree, kind); if (publicView) publicMarkdown(tree); })
     // The footnote list gets a visible heading (no sr-only class), so it never reads as part of
     // the section above it.
     .use(remarkRehype, { allowDangerousHtml: true, footnoteLabel, footnoteLabelProperties: {} })
@@ -262,12 +322,25 @@ export async function renderMarkdown(source, { resolveUrl, mermaid, pageId = '',
       for (let i = 0; i < tree.children.length; i++) {
         const n = tree.children[i];
         if (!isElement(n)) continue;
-        // A leading banner does not make the following repeated page title body content.
+        // A leading banner or the podcast block does not make the following repeated page title
+        // body content (the podcast block stood in front of the banner on many pages).
         if (!seenBody && isElement(n, 'p') && n.children.some(c => isElement(c, 'img')) && !toText(n).trim()) continue;
+        if (!seenBody && isElement(n, 'p') && n.properties.className?.includes('study-podcast')) continue;
         if (/^h[1-6]$/.test(n.tagName) && !seenBody && toText(n) === title) {
           tree.children[i] = el('span', { id: slugger.slug(toText(n)), className: ['heading-alias'] });
         } else { seenBody = true; }
       }
+      // Heading levels (plan terv-oldalszerkezet 7): a fixed-role heading is always <h2>; the
+      // content headings start at <h2> whatever Markdown level the page used (`#` or `##`), and
+      // keep their steps below it, at most <h4>.
+      const levels = new Map();
+      const content = [];
+      visit(tree, 'element', node => {
+        if (!/^h[1-6]$/.test(node.tagName) || node.properties.id === 'user-content-footnote-label') return;
+        if (FIXED_HEADING.test(toText(node).trim())) levels.set(node, 2); else content.push(node);
+      });
+      const topLevel = Math.min(...content.map(n => Number(n.tagName[1])));
+      for (const n of content) levels.set(n, Math.min(4, 2 + Number(n.tagName[1]) - topLevel));
       const jobs = [];
       let imageCount = 0;
       visit(tree, 'element', (node, index, parent) => {
@@ -276,7 +349,7 @@ export async function renderMarkdown(source, { resolveUrl, mermaid, pageId = '',
           if (Array.isArray(node.properties[prop])) node.properties[prop] = node.properties[prop].map(id => sanitizedIds.get(id) || id);
         }
         if (/^h[1-6]$/.test(node.tagName) && node.properties.id !== 'user-content-footnote-label') {
-          const depth = Math.min(6, Number(node.tagName[1]) + 1);
+          const depth = levels.get(node) || Math.min(6, Number(node.tagName[1]) + 1);
           node.tagName = `h${depth}`;
           node.properties.id = slugger.slug(text);
           headings.push({ depth, slug: node.properties.id, text });
@@ -290,10 +363,25 @@ export async function renderMarkdown(source, { resolveUrl, mermaid, pageId = '',
             if (!toText(p).trim()) node.children.splice(node.children.indexOf(p), 1);
             node.tagName = 'aside';
             node.properties = { className: ['study-callout', `study-${match[1].toLowerCase()}`], 'aria-label': ({ TIP: 'Magyarázat', NOTE: 'Megjegyzés', WARNING: 'Figyelmeztetés', IMPORTANT: 'Fontos', CAUTION: 'Figyelem' })[match[1]] };
+            // The ⚡ Röviden box says what it is for (a fixed note, the renderer's own words).
+            const lead = node.children.find(n => isElement(n, 'p'));
+            if (match[1] === 'IMPORTANT' && lead && /^⚡\s*Röviden$/u.test(toText(lead).trim())) {
+              node.properties.className.push('study-brief');
+              lead.children.push({ type: 'text', value: ' ' }, el('span', { className: ['study-brief-note'] }, [{ type: 'text', value: '– dolgozat előtt ezt nézd át' }]));
+            }
           }
         }
         if (node.tagName === 'sub' && /^(?:💡|➕|⚠️|📗|🗓️|🔖|🤖)/u.test(text.trim())) {
           node.tagName = 'small'; node.properties.className = ['study-label']; audit.labels.push(text);
+          // its meaning as a tooltip; one without a link inside can be focused, so a tap shows it
+          // as a bubble (the stylesheet), like a lesson date
+          const help = labelHelp(text.trim());
+          if (help) {
+            node.properties.title = help;
+            let linked = false;
+            visit(node, 'element', inner => { if (inner.tagName === 'a') linked = true; });
+            if (!linked) node.properties.tabIndex = 0;
+          }
         }
         if (node.tagName === 'p' && node.children.every(n => (n.type === 'text' && !n.value.trim()) || isElement(n, 'br'))) {
           node.properties.className = ['study-spacer'];
@@ -356,6 +444,27 @@ export async function renderMarkdown(source, { resolveUrl, mermaid, pageId = '',
       });
       await Promise.all(jobs);
       tidyPrivateLinks(tree);
+      // The podcast block, compact, right under the ⚡ Röviden box (else under the banner).
+      const podcast = tree.children.filter(n => isElement(n, 'p') && n.properties.className?.includes('study-podcast'));
+      if (podcast.length) {
+        tree.children = tree.children.filter(n => !podcast.includes(n));
+        const brief = tree.children.findIndex(n => isElement(n, 'aside') && n.properties.className?.includes('study-brief'));
+        const banner = tree.children.findIndex(n => isElement(n, 'p') && n.children.some(c => isElement(c, 'img') && c.properties.className?.includes('study-banner')));
+        const at = brief >= 0 ? brief + 1 : banner >= 0 ? banner + 1 : 0;
+        tree.children.splice(at, 0, el('div', { className: ['study-podcast'] }, podcast.map(p => ({ ...p, properties: {} }))));
+      }
+      // A section's 🗓️ line that repeats the page's top 🗓️ line word for word is hidden (it
+      // stays in the source); one naming another lesson stays.
+      let topDate = null;
+      visit(tree, 'element', (node, index, parent) => {
+        if (!isElement(node, 'small') || !node.properties.className?.includes('study-label') || !toText(node).trim().startsWith('🗓️')) return;
+        const key = dateKey(node);
+        if (topDate === null) { topDate = key; return SKIP; }
+        if (key !== topDate) return SKIP;
+        const alone = isElement(parent, 'p') && parent.children.every(c => c === node || blank(c));
+        (alone ? parent : node).properties.className = [...((alone ? parent : node).properties.className || []), 'study-dup'];
+        return SKIP;
+      });
       const kept = new Set();
       visit(tree, 'element', node => { if (isHeading(node)) kept.add(node.properties.id); });
       headings.splice(0, headings.length, ...headings.filter(h => kept.has(h.slug)));

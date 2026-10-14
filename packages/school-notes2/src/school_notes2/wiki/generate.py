@@ -16,7 +16,6 @@ from .pages import md_files, read_page, read_text
 from .pages import subjects as subject_slugs
 
 ISO = re.compile(r"\d{4}-\d{2}-\d{2}")
-TABLE_HEAD = "| Dátum | Óra | Jegyzet | Témakörök |\n|---|---|---|---|\n"
 
 
 @dataclass
@@ -32,6 +31,7 @@ class Subject:
     index_title: str     # the index's first `# ` heading
     pages: list[SubjectPage] = field(default_factory=list)
     notebooks: set[str] = field(default_factory=set)   # source folders that hold one notebook
+    repo: Path | None = None
 
     def by_type(self, kind: str) -> list[SubjectPage]:
         return [p for p in self.pages if p.meta.get("type") == kind]
@@ -43,7 +43,7 @@ class Subject:
 def load_subject(repo: Path, slug: str) -> Subject:
     index = read_page(repo, f"wiki/{slug}/index.md")
     heading = next((ln[2:].strip() for ln in index.body.splitlines() if ln.startswith("# ")), slug)
-    subject = Subject(slug, index.meta, heading)
+    subject = Subject(slug, index.meta, heading, repo=repo)
     for rel in md_files(repo, f"wiki/{slug}/*.md"):
         name = rel.rsplit("/", 1)[1]
         if name != "index.md":
@@ -112,22 +112,90 @@ def _order(meta: dict) -> int:
     return order if isinstance(order, int) and not isinstance(order, bool) else 10**9
 
 
+def anchor_id(text: str) -> str:
+    """A jump-target id the renderer keeps as written (study-site `isJumpTarget`): lower-case
+    letters, digits and hyphens; anything else becomes a hyphen."""
+    return "".join(ch if ch.isdigit() or (ch.isalpha() and ch.islower()) or ch == "-" else "-"
+                   for ch in text.lower())
+
+
+def chapter_anchor(chapter_id: str) -> str:
+    """The jump target in front of a chapter heading (the 🧭 box and the page breadcrumbs)."""
+    return anchor_id(f"fejezet-{chapter_id}")
+
+
+SUMMARY_NOTE = "A fejezet röviden, ismétléshez és dolgozat előtt."
+HERE = "◀ itt tartunk"
+
+
+def desc(text: str) -> str:
+    """A list line's description: smaller and grey under the title (the stylesheet)."""
+    return f' <span class="study-desc">{text}</span>' if text else ""
+
+
 def list_line(page: SubjectPage) -> str:
-    bolt = "⚡ " if page.meta.get("type") == "chapter-summary" else ""
-    return f"* {bolt}[{page.meta.get('title', page.file)}]({page.file}) - {page.meta.get('description', '')}"
+    return f"* [{page.meta.get('title', page.file)}]({page.file}){desc(page.meta.get('description', ''))}"
+
+
+def topic_line(number: int, page: SubjectPage, here: bool) -> str:
+    """A worked lesson (topic page) in its chapter: 📄, its number in the teaching order, its
+    title and description; `◀ itt tartunk` when the latest lesson covered it."""
+    mark = f" {HERE}" if here else ""
+    return (f"* 📄 {number}. [{page.meta.get('title', page.file)}]({page.file}){mark}"
+            f"{desc(page.meta.get('description', ''))}")
+
+
+def summary_line(page: SubjectPage) -> str:
+    """The chapter summary, last in its chapter, with the fixed note of what it is for."""
+    return f"* ⚡ [{page.meta.get('title', page.file)}]({page.file}){desc(SUMMARY_NOTE)}"
+
+
+@dataclass
+class Progress:
+    """Where the class is (`teaching_order`): the chapter started last (`now`), the chapters
+    started before it (`done`), and the pages the latest lesson covered (`latest`)."""
+    now: str | None
+    done: set[str]
+    latest: list[str]
+    spans: dict[str, str]
+
+
+def progress(subject: Subject, found: list[teaching_order.Lesson] | None = None) -> Progress:
+    found = ordered_lessons(subject) if found is None else found
+    chapters_ = subject_chapters(subject, found)
+    started = teaching_order.by_start(chapters_)
+    latest = [str(t) for t in (found[-1].data.get("topics") or [])] if found else []
+    return Progress(started[-1].id if started else None, {c.id for c in started[:-1]}, latest,
+                    teaching_order.spans(chapters_, teaching_order.year_of(found)))
+
+
+def listed_chapters(subject: Subject) -> list[dict]:
+    listed = subject.index_meta.get("chapters")
+    return [c for c in listed if isinstance(c, dict) and "id" in c] if isinstance(listed, list) else []
+
+
+def chapter_mark(state: Progress, chapter_id: str) -> str:
+    return " ✓" if chapter_id in state.done else " ◉ most" if chapter_id == state.now else ""
 
 
 def chapters_block(subject: Subject) -> str:
     """The chapters in the `chapters` list order (the writer keeps it in the order the class
-    started them; `sn check` warns otherwise), each with when it was taught (🗓️)."""
-    found = ordered_lessons(subject)
-    spans = teaching_order.spans(subject_chapters(subject, found), teaching_order.year_of(found))
+    started them; `sn check` warns otherwise), numbered, each with a jump target, its ✓ (started
+    before the current one) or ◉ (the current one) mark and when it was taught (🗓️); inside, the
+    worked lessons numbered in teaching order (`order`), the summary last."""
+    state = progress(subject)
+    latest = {t.split("#", 1)[0] for t in state.latest}
     sections = []
-    listed = subject.index_meta.get("chapters") if isinstance(subject.index_meta.get("chapters"), list) else []
-    for chapter in listed:
-        lines = "\n".join(list_line(p) for p in chapter_pages(subject, chapter["id"]))
-        when = f"{spans[str(chapter['id'])]}\n\n" if str(chapter["id"]) in spans else ""
-        sections.append(f"# 📘 {chapter['title']}\n\n{when}{lines}\n" if lines else f"# 📘 {chapter['title']}\n")
+    for number, chapter in enumerate(listed_chapters(subject), 1):
+        cid = str(chapter["id"])
+        pages = [p for p in chapter_pages(subject, cid) if p.meta.get("type") != "lesson-notes"]
+        topics = [p for p in pages if p.meta.get("type") != "chapter-summary"]
+        lines = [topic_line(n, p, p.file in latest) for n, p in enumerate(topics, 1)]
+        lines += [summary_line(p) for p in pages if p.meta.get("type") == "chapter-summary"]
+        head = (f'# <a id="{chapter_anchor(cid)}"></a>📘 {number}. fejezet: '
+                f"{teaching_order.plain_title(str(chapter['title']))}{chapter_mark(state, cid)}\n")
+        when = f"\n{state.spans[cid]}\n" if cid in state.spans else ""
+        sections.append(head + when + ("\n" + "\n".join(lines) + "\n" if lines else ""))
     return "\n<br />\n\n".join(sections)
 
 
@@ -170,11 +238,6 @@ def topic_link(subject: Subject, topic: str) -> str:
     return f"[{title}]({topic})"
 
 
-def lesson_link(page: SubjectPage, lesson: dict) -> str:
-    """The lesson log of a lesson, at its section when it names an `anchor`."""
-    return f"{page.file}#{lesson['anchor']}" if lesson.get("anchor") else page.file
-
-
 PARTLY = re.compile(r"\d{4}-\d{2}-(?:\d\?|\?\d|\?\?)|\bvagy\b|részben olvasható")
 
 
@@ -192,68 +255,112 @@ def when(lesson: teaching_order.Lesson, year: int) -> str:
     return hu_dates.meta(hu_dates.approximate(lesson.lo, lesson.hi, year), title, unsure=True)
 
 
-def after(text: str, lesson: teaching_order.Lesson, year: int) -> str:
-    """The important information first, then the quiet date item."""
-    return f"{text} {when(lesson, year)}"
+LESSONS_HEAD = "# 🗓️ Órák – melyik órán mit vettünk"
+LESSONS_LEGEND = ("A legújabb óra van legfelül. A `~` bizonytalan dátumot jelöl; az időszakot az "
+                  "egér rávitelekor vagy koppintásra látod.")
+LEADING_MARK = re.compile(r"^(\d+)([.)])|^([#>+*-])")
+
+
+def plain_line(text: str) -> str:
+    """A lesson title as plain text at the start of a list line: a leading `1.`, `#`, `>`, `+`,
+    `*` or `-` would start Markdown structure, so it is escaped."""
+    return LEADING_MARK.sub(lambda m: f"{m[1]}\\{m[2]}" if m[1] else f"\\{m[3]}", text.strip())
+
+
+def lesson_rows(subject: Subject, found: list[teaching_order.Lesson] | None = None) -> list[tuple[teaching_order.Lesson, list[str]]]:
+    """Every lesson, newest first, with the jump targets of its row: `ora-<lesson log>` on the
+    newest row of each lesson log, `ora-<lesson log>-<anchor>` on a row whose lesson names an
+    `anchor` (the first such row when two name the same)."""
+    found = ordered_lessons(subject) if found is None else found
+    rows, seen = [], set()
+    for item in reversed(found):
+        stem = item.file[:-3] if item.file.endswith(".md") else item.file
+        ids = [anchor_id(f"ora-{stem}")]
+        if item.data.get("anchor"):
+            ids.append(anchor_id(f"ora-{stem}-{item.data['anchor']}"))
+        ids = [i for i in ids if i not in seen]
+        seen.update(ids)
+        rows.append((item, ids))
+    return rows
 
 
 def lessons_block(subject: Subject) -> str:
-    found = ordered_lessons(subject)
-    year = teaching_order.year_of(found)
-    rows, states = [], set()
-    for item in reversed(found):
-        page, lesson = subject.page(item.file), item.data
-        topics = ", ".join(topic_link(subject, t) for t in lesson.get("topics") or [])
-        states.add(page.meta.get("catch_up"))
-        rows.append(f"| {catch_up.mark(page.meta)}{when(item, year)} | "
-                    f"{lesson.get('title', '')} | [jegyzet]({lesson_link(page, lesson)}) | {topics} |")
-    key = catch_up.legend(states)
-    return (f"{key}\n\n" if key else "") + TABLE_HEAD + "".join(r + "\n" for r in rows)
-
-
-NOW_HEADING = "# 📍 Itt tartunk"
-RECENT = 5          # lessons listed before the latest one
-
-
-def now_block(subject: Subject) -> str:
-    """📍 Itt tartunk: the chapter the class started last, the latest lesson with its topics, the
-    chapters before, and the lessons before it, newest first (rules 1.22.6: the important
-    information first, then the quiet date item)."""
+    """🗓️ Órák: one line per lesson, newest first – the lesson's title, its quiet date, then
+    `→` its worked lessons (topic pages); never a link to the lesson log itself."""
     found = ordered_lessons(subject)
     if not found:
         return ""
     year = teaching_order.year_of(found)
-    chapters_ = subject_chapters(subject, found)
-    started, spans = teaching_order.by_start(chapters_), teaching_order.spans(chapters_, year)
-    latest = found[-1]
-    topics = ", ".join(topic_link(subject, t) for t in latest.data.get("topics") or [])
-    lines = [NOW_HEADING, ""]
-    if started:
-        now = started[-1]
-        lines.append(f"* **Most:** {teaching_order.plain_title(now.title)} {spans[now.id]}")
-    link = f"[{latest.data.get('title', '')}]({lesson_link(subject.page(latest.file), latest.data)})"
-    lines.append(f"* **Legutóbb:** {after(link, latest, year)}" + (f" · {topics}" if topics else ""))
-    if len(started) > 1:
-        lines.append("* **Előtte:** " + " → ".join(
-            f"{teaching_order.plain_title(c.title)} {spans[c.id]}" for c in started[:-1]))
-    before = list(reversed(found[:-1]))[:RECENT]
-    if before:
-        lines += ["", "Eddig ebben a sorrendben vettük, a legújabb elöl:", ""]
-        lines += ["* " + after(f"[{item.data.get('title', '')}]({lesson_link(subject.page(item.file), item.data)})",
-                               item, year) for item in before]
+    lines = [LESSONS_HEAD, "", LESSONS_LEGEND, ""]
+    for item, ids in lesson_rows(subject, found):
+        targets = "".join(f'<a id="{i}"></a>' for i in ids)
+        topics = " · ".join(topic_link(subject, t) for t in item.data.get("topics") or [])
+        lines.append(f"* {targets}{plain_line(str(item.data.get('title', '')))} {when(item, year)}"
+                     + (f"<br />→ {topics}" if topics else ""))
     return "\n".join(lines) + "\n"
 
 
-def catch_up_description(subject: Subject, page: SubjectPage) -> str:
-    """`Dátum: …. Témakörök: ….` from the page's `lessons`, as in the lessons table."""
-    lessons_ = [lesson for lesson in page.meta.get("lessons") or [] if isinstance(lesson, dict)]
+def lesson_links(subject: Subject) -> dict[str, dict[str, str]]:
+    """Where a link to a lesson log goes on the public site (it is not published there): for each
+    lesson log of the subject, fragment → the jump target of its row in the 🗓️ Órák list. `""`
+    (no or an unknown fragment) is the log's newest row; a lesson's `anchor` its own row; every
+    other jump target written on the same line as a lesson's anchor in the log that lesson's row."""
+    from .pages import read_text
+    rows: dict[str, dict[str, str]] = {}
+    for item, ids in reversed(lesson_rows(subject)):
+        stem = item.file[:-3]
+        page = rows.setdefault(item.file, {})
+        if anchor_id(f"ora-{stem}") in ids:
+            page[""] = anchor_id(f"ora-{stem}")
+        anchor = item.data.get("anchor")
+        own = anchor_id(f"ora-{stem}-{anchor}") if anchor else ""
+        if anchor and own in ids:
+            page[str(anchor)] = own
+    for file, page in rows.items():
+        try:
+            text = read_text(subject.repo, f"wiki/{subject.slug}/{file}") if subject.repo else ""
+        except OSError:
+            text = ""
+        for line in text.splitlines():
+            found_ids = JUMP_ID.findall(line)
+            owner = next((page[i] for i in found_ids if i in page and i), None)
+            for i in found_ids:
+                if owner and i not in page:
+                    page[i] = owner
+    return {file: dict(sorted(page.items())) for file, page in sorted(rows.items())}
+
+
+JUMP_ID = re.compile(r'<a id="([^"]+)"></a>')
+
+
+def now_block(subject: Subject) -> str:
+    """🧭 Hol tartunk, a box without a heading: the chapters in the `chapters` list order on one
+    line (✓ started before the current one, ◉ the current one, with when it was taught), the
+    worked lessons of the latest lesson, and the current chapter's summary for revision. Only
+    topic pages and summaries are linked, never a lesson log."""
     found = ordered_lessons(subject)
-    year = teaching_order.year_of(found)
-    dates = [when(item, year) for item in sorted((x for x in found if x.file == page.file), key=lambda x: x.index)]
-    topics = list(dict.fromkeys(t for lesson in lessons_ for t in lesson.get("topics") or []))
-    parts = ([f"Dátum: {', '.join(dates)}."] if dates else []) + \
-        ([f"Témakörök: {', '.join(topic_link(subject, t) for t in topics)}."] if topics else [])
-    return " ".join(parts)
+    if not found:
+        return ""
+    state = progress(subject, found)
+    steps = []
+    for chapter in listed_chapters(subject):
+        cid = str(chapter["id"])
+        kind = " class=\"study-path-done\"" if cid in state.done else \
+            " class=\"study-path-now\"" if cid == state.now else ""
+        mark = " ✓" if cid in state.done else " ◉" if cid == state.now else ""
+        when_ = f" {state.spans[cid]}" if cid in state.spans and kind else ""
+        steps.append(f'<li{kind}><a href="#{chapter_anchor(cid)}">'
+                     f"{teaching_order.plain_title(str(chapter['title']))}</a>{mark}{when_}</li>")
+    lines = ["> [!TIP]", "> 🧭 **Hol tartunk**", ">", '> <ol class="study-path">' + "".join(steps) + "</ol>"]
+    pages = [t for t in state.latest
+             if (subject.page(t.split("#", 1)[0]) or SubjectPage("", {})).meta.get("type") in ("topic", "chapter-summary")]
+    if pages:
+        lines += [">", "> **Most:** " + " · ".join("📄 " + topic_link(subject, t) for t in pages)]
+    summary = next((p for p in chapter_pages(subject, state.now)
+                    if p.meta.get("type") == "chapter-summary"), None) if state.now else None
+    if summary:
+        lines += [">", f"> **Ismétléshez:** ⚡ [{summary.meta.get('title', summary.file)}]({summary.file})"]
+    return "\n".join(lines) + "\n"
 
 
 def by_date_desc(pages: list[SubjectPage]) -> list[SubjectPage]:
@@ -270,10 +377,9 @@ def review_block(subject: Subject) -> str:
 
 
 def notes_block(subject: Subject) -> str:
-    pages = by_date_desc(subject.by_type("lesson-notes"))
-    if not pages:
-        return ""
-    return "# 📝 Jegyzetek\n\n" + "\n".join(list_line(p) for p in pages) + "\n"
+    """Empty: the lesson logs are the writer's tool and not on the public site; the 🗓️ Órák list
+    says which lesson covered what. The block stays, so its name keeps its place."""
+    return ""
 
 
 REQUIRED_SUBJECT_BLOCKS = ("chapters", "lessons", "review", "notes")
@@ -310,9 +416,25 @@ def subject_index(repo: Path, slug: str) -> str:
     for name in markers.names(text):
         if name in bodies:
             text = markers.replace(text, name, bodies[name])
-    text = catch_up.update(text, by_date_desc(subject.by_type("lesson-notes")),
-                           lambda page: catch_up_description(subject, page))
-    return place_now(text, now_block(subject))
+    text = catch_up.update(text)
+    return place_now(move_lessons_head(text), now_block(subject))
+
+
+HAND_LESSONS_HEAD = re.compile(r"^# 🗓️ Órák[ \t]*\n", re.M)
+
+
+def move_lessons_head(text: str) -> str:
+    """The one-time sweep of the hand-written `# 🗓️ Órák` heading and its sentence in front of
+    the lessons block (the block writes both now): from the heading to the block, when nothing
+    but text stands between them (no other heading, block or spacer); otherwise unchanged."""
+    head = HAND_LESSONS_HEAD.search(text)
+    if not head or any(start <= head.start() < end for start, end, _ in markers.spans(text)):
+        return text
+    block = text.find("<!-- school-notes:generated lessons -->", head.end())
+    between = text[head.end():block] if block >= 0 else ""
+    if block < 0 or re.search(r"^(?:#|<!--|<br)", between, re.M):
+        return text
+    return text[:head.start()] + text[block:]
 
 
 def subject_order(repo: Path) -> list[str]:
@@ -340,7 +462,12 @@ def subject_label(repo: Path, slug: str) -> str:
     return f"{entry['emoji']} {name}" if entry.get("emoji") else name
 
 
+TEMPLATE_SENTENCE = re.compile(r"^(?:A|Az) .+ tantárgy témakörei(?: és jegyzetei)?(?:, évfolyamonként)?\.$")
+
+
 def root_block(repo: Path) -> str:
+    """One line per subject: its name, its own description (not the template sentence a new
+    subject starts with) and, smaller, its chapters."""
     lines = []
     subjects = load_subjects_json(repo).get("subjects", {})
     for slug in subject_order(repo):
@@ -348,9 +475,88 @@ def root_block(repo: Path) -> str:
         name = entry.get("name", slug)
         emoji = f"{entry['emoji']} " if entry.get("emoji") else ""
         meta = read_page(repo, f"wiki/{slug}/index.md").meta
-        lines.append(f"* {emoji}[{name}]({slug}/index.md) - "
-                     f"{meta.get('description') or subject_sentence(name)}")
+        own = str(meta.get("description") or "").strip()
+        own = "" if TEMPLATE_SENTENCE.match(own) else own
+        chapters = [teaching_order.plain_title(str(c["title"])) for c in listed_chapters(
+            Subject(slug, meta, "")) if c.get("title")]
+        lines.append(f"* {emoji}[{name}]({slug}/index.md)" + (f" - {own}" if own else "")
+                     + (desc("Fejezetek: " + " · ".join(chapters)) if chapters else ""))
     return "".join(ln + "\n" for ln in lines)
+
+
+GUIDE_ANCHOR = "hogyan-hasznald"
+GUIDE = [
+    "* 📚 **Tantárgyoldal**: a tantárgy fejezetei a tanítás sorrendjében, bennük a kidolgozott "
+    "leckék. Felül a 🧭 **Hol tartunk** doboz: ✓ a már elkezdett, ◉ a mostani fejezet; alul az "
+    "🗓️ **Órák**: melyik órán mit vettünk.",
+    "* 📄 **Kidolgozott lecke** (témalap): a teljes tananyag: ⚡ Röviden, magyarázat, ábrák, "
+    "🧠 Kérdezd ki magad. Tanuláshoz, házihoz, dolgozatra készüléshez.",
+    "* ⚡ **Összefoglaló**: a fejezet rövid változata, a fejezet végén; ismétléshez és dolgozat "
+    "előtt. Minden pontja a kidolgozott leckére visz.",
+    "* 🗓️ **Órák**: a tantárgyoldal alján, a legújabb óra felül. A dátum kicsi; a `~` azt jelenti, "
+    "hogy nem biztos – koppints rá, vagy vidd rá az egeret, és látod az időszakot.",
+]
+GUIDE_PODCAST = ("* 🎧 **Podcast**: rövid beszélgetés egy-egy kidolgozott leckéről; a lecke ⚡ Röviden "
+                 "doboza alatt és a 🎧 Podcast oldalon hallgathatod.")
+LEGEND = [
+    "A jelöletlen szöveg az órán tanult anyag. Ami ehhez hozzá van téve, azt kis címke jelöli "
+    "közvetlenül a hozzá tartozó tartalom alatt; a címkére koppintva vagy az egeret rávive a "
+    "jelentését is látod. A 🤖 gépi szerzőséget mutat, nem hitelesítést.",
+    "",
+    "* 💡 **Magyarázat** (<sub>💡 🤖 gépi magyarázat</sub>): kifejti, amit az órai anyag csak röviden "
+    "ír le: miért van így, hogyan jutunk az eredményhez.",
+    "* ➕ **Kiegészítés** (<sub>➕ 🤖 gépi kiegészítés</sub>): kitölt egy, a megértéshez fontos hiányt.",
+    "* ⚠️ **Javítás** (<sub>⚠️ 🤖 gépi javítás</sub>): a helyes változat ott, ahol az órai jegyzetben "
+    "hiba volt; ilyenkor javítsd a füzetedet is.",
+    "* 📗 **A tankönyv alapján**: a tankönyvből vett rész, amely az órai jegyzetben nem szerepelt.",
+    "* 🗓️ **Óra**: melyik órán tanultátok az adott részt; ha nincs pontos dátum, `~` jelzi, az "
+    "időszakot az egér rávitelekor vagy koppintásra látod.",
+    "* 🔖 **Tankönyv**: a kapcsolódó lecke és oldal, vagy az, hogy a tankönyv ezt nem tárgyalja.",
+    "* ⚡ **Röviden**: a kidolgozott lecke elején a legfontosabb tudnivalók; ezt nézd át dolgozat "
+    "előtt. A fejezet ⚡ **Összefoglaló** oldala ezekből áll össze.",
+    "* 🧠 **Kérdezd ki magad**: kérdések a kidolgozott lecke végén; a választ lenyitva "
+    "ellenőrizheted magad.",
+]
+
+
+def guide_block(repo: Path) -> str:
+    """🧭 Hogyan használd: the page kinds and the parts of a subject page, the same text for every
+    learner (the 🎧 line while there is a Podcast page)."""
+    from . import podcast
+    lines = GUIDE + ([GUIDE_PODCAST] if safefs.is_file(repo, podcast.PAGE) else [])
+    # no closing `<br />`: a raw HTML line would swallow the legend block's heading after it
+    return f'# <a id="{GUIDE_ANCHOR}"></a>🧭 Hogyan használd\n\n' + "\n".join(lines) + "\n"
+
+
+def legend_block() -> str:
+    return "# 🔎 Jelmagyarázat\n\n" + "\n".join(LEGEND) + "\n"
+
+
+HAND_LEGEND = re.compile(r"^# 🔎 Jelmagyarázat[ \t]*\n", re.M)
+SECTION_END = re.compile(r"^(?:#{1,6} |<!-- school-notes:generated |<br\s*/?>)", re.M)
+
+
+def place_home_blocks(text: str) -> str:
+    """The guide and legend blocks' place on the home page, once: the hand-written
+    `# 🔎 Jelmagyarázat` section (to the next heading, block or spacer) becomes the two blocks;
+    without one they go right after the subjects block; a guide missing beside an existing
+    legend goes in front of it."""
+    names = markers.names(text)
+    if "guide" in names and "legend" in names:
+        return text
+    if "legend" in names:
+        start = next(s for s, _, n in markers.spans(text) if n == "legend")
+        return text[:start] + markers.wrap("guide", "") + text[start:]
+    old = HAND_LEGEND.search(text)
+    if old and not any(s <= old.start() < e for s, e, _ in markers.spans(text)):
+        end = SECTION_END.search(text, old.end())
+        stop = end.start() if end else len(text)
+        return text[:old.start()] + markers.wrap("guide", "") + markers.wrap("legend", "") + "\n" + text[stop:]
+    after = next((e for _, e, n in markers.spans(text) if n == "subjects"), None)
+    if after is None:
+        return text
+    return (text[:after].rstrip("\n") + "\n\n<br />\n\n" + markers.wrap("guide", "")
+            + markers.wrap("legend", "") + "\n" + text[after:].lstrip("\n"))
 
 
 def root_index(repo: Path) -> str:
@@ -359,6 +565,9 @@ def root_index(repo: Path) -> str:
         text = with_blocks(text, ("subjects",))
     if "subjects" in markers.names(text):
         text = markers.replace(text, "subjects", root_block(repo))
+        text = place_home_blocks(text)
+        text = markers.replace(text, "guide", guide_block(repo))
+        text = markers.replace(text, "legend", legend_block())
     return text
 
 

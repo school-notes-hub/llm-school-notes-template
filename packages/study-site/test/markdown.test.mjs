@@ -170,3 +170,87 @@ test('a lesson date is a quiet meta item; its range only as tooltip, reachable b
   assert.match(css, /@media print[\s\S]*\.study-content \.study-tilde, \.study-content \.study-sr, \.study-content \.study-when\[title\]:focus::after \{ display: none; \}/);
   assert.doesNotMatch(css, /study-when-unsure \{ display: none/);
 });
+
+// Plan terv-oldalszerkezet (sn 0.4.5): the renderer's part. Each test fails on 6894106.
+const TOPIC = (heading, extra = '') => [
+  '---', 'type: topic', 'title: Fajhő', '---',
+  '<!-- school-notes:generated podcast -->',
+  '🎧 **Képben vagy?** · *Fajhő* (5:55)', '',
+  '![Képben vagy? – Fajhő](../assets/t/podcast/fajho.mp3)', '',
+  '<sub>🤖 Gépi hang a jegyzetből · [Minden adás](../podcast.md)</sub>',
+  '<!-- /school-notes:generated -->', '',
+  '![Fejléc: Fajhő](../assets/banner/fajho-banner.webp)', '',
+  '# Fajhő', '',
+  '<sub>🗓️ Óra: [<span class="study-when">szept. 3.</span>](2026-09-29-x-jegyzet.md#pdf-15-oldal) · 🔖 Tankönyv: 31. oldal</sub>', '',
+  '> [!IMPORTANT]', '> ⚡ **Röviden**', '> * Egy pont.', '',
+  'Bevezető.<br /><sub>💡 🤖 gépi magyarázat</sub>', '',
+  `${heading} Első szakasz`, '',
+  '<sub>🗓️ Óra: [<span class="study-when">szept. 3.</span>](2026-09-29-x-jegyzet.md#pdf-15-oldal)</sub>', '',
+  `${heading}# Alszakasz`, '',
+  'Szöveg.', '',
+  `${heading} Második szakasz`, '',
+  '<sub>🗓️ Óra: [<span class="study-when">szept. 10.</span>](2026-09-29-x-jegyzet.md#pdf-17-oldal)</sub>', '',
+  '# 🧠 Kérdezd ki magad', '',
+  '<details><summary>1. Kérdés?</summary>', '', 'Válasz.', '', '</details>', '',
+  '[⬅️ Vissza a tantárgyhoz](index.md)', '', extra,
+].join('\n');
+
+test('the podcast block never repeats the page title and moves under the ⚡ Röviden box (T5, T9)', async () => {
+  const { renderMarkdown } = await import('../lib/markdown.mjs');
+  const resolveUrl = async h => h.replace('../assets/banner/', 'media/banner-').replace('../assets/', 'media/');
+  const out = await renderMarkdown(TOPIC('##'), { resolveUrl });
+  assert.doesNotMatch(out.html, /<h[2-4][^>]*>Fajhő<\/h/);
+  assert.match(out.html, /<span id="fajhő" class="heading-alias"><\/span>/);
+  assert.match(out.html, /<aside class="study-callout study-important study-brief"[^>]*>\n?<p>⚡ <strong>Röviden<\/strong> <span class="study-brief-note">– dolgozat előtt ezt nézd át<\/span><\/p>/);
+  // order: banner, top 🗓️ line, Röviden, podcast, body
+  const at = s => out.html.indexOf(s);
+  assert.ok(at('study-banner') < at('🗓️ Óra') && at('🗓️ Óra') < at('study-brief') && at('study-brief') < at('<div class="study-podcast">') && at('<div class="study-podcast">') < at('Bevezető'), out.html);
+  assert.equal((out.html.match(/class="study-podcast"/g) || []).length, 1);
+  assert.match(out.html, /<div class="study-podcast"><p>🎧 <strong>Képben vagy\?<\/strong>/);
+});
+
+test('heading levels: content sections start at h2 whatever the Markdown level, fixed roles are h2 (T6)', async () => {
+  const { renderMarkdown } = await import('../lib/markdown.mjs');
+  for (const level of ['#', '##']) {
+    const out = await renderMarkdown(TOPIC(level), { resolveUrl: async h => h });
+    assert.deepEqual(out.headings.map(h => [h.depth, h.text]), [[2, 'Első szakasz'], [3, 'Alszakasz'], [2, 'Második szakasz'], [2, '🧠 Kérdezd ki magad']], level);
+    assert.doesNotMatch(out.html, /<h1|<h5/);
+  }
+});
+
+test('a back link paragraph and the retired catch-up notice are left out; a lesson log banner too (T7, T1, T16)', async () => {
+  const { renderMarkdown } = await import('../lib/markdown.mjs');
+  const out = await renderMarkdown(TOPIC('#'), { resolveUrl: async h => h });
+  assert.doesNotMatch(out.html, /Vissza a tantárgyhoz/);
+  const log = ['---', 'type: lesson-notes', 'title: Óra', '---', '<!-- school-notes:generated lesson-banner -->',
+    '![Fejléc: Más lap](../assets/banner/mas.webp)', '<!-- /school-notes:generated -->', '', '# Óra', '',
+    '> 🤒 **Pótolandó anyag** - ez az oldal egy osztálytárs füzetéből készült.', '', 'Marad. [Vissza](index.md)', ''].join('\n');
+  const rendered = await renderMarkdown(log, { resolveUrl: async h => h });
+  assert.doesNotMatch(rendered.html, /Pótolandó|<img|Más lap/);
+  assert.match(rendered.html, /Marad\. <a href="index.md">Vissza<\/a>/);
+  // the banner block stays on any other page kind
+  assert.match((await renderMarkdown(log.replace('type: lesson-notes', 'type: topic'), { resolveUrl: async h => h })).html, /Más lap/);
+});
+
+test('a section 🗓️ line equal to the top line is hidden, a different one stays; labels explain themselves (T11, T10)', async () => {
+  const { renderMarkdown } = await import('../lib/markdown.mjs');
+  const out = await renderMarkdown(TOPIC('##'), { resolveUrl: async h => h });
+  const dates = [...out.html.matchAll(/<p( class="study-dup")?><small class="study-label"[^>]*>🗓️ Óra: <a href="[^"]+"><span class="study-when">([^<]+)<\/span>/g)].map(m => [Boolean(m[1]), m[2]]);
+  assert.deepEqual(dates, [[false, 'szept. 3.'], [true, 'szept. 3.'], [false, 'szept. 10.']]);
+  assert.match(out.html, /<small class="study-label" title="Magyarázat: kifejti, amit az órai anyag csak röviden ír le\.[^"]*" tabindex="0">💡 🤖 gépi magyarázat<\/small>/);
+  // a label with a link inside keeps only the tooltip: a focusable label inside would nest controls
+  assert.match(out.html, /<small class="study-label" title="Óra: melyik órán tanultátok ezt a részt\.">🗓️ Óra:/);
+  assert.equal((await renderMarkdown(TOPIC('##'), { resolveUrl: async h => h })).html, out.html);
+});
+
+test('the subject page path and descriptions survive the sanitizer, nothing else does (T2, T13)', async () => {
+  const { renderMarkdown } = await import('../lib/markdown.mjs');
+  const source = ['# Tárgy', '', '> [!TIP]', '> 🧭 **Hol tartunk**', '>',
+    '> <ol class="study-path evil"><li class="study-path-done"><a href="#fejezet-a">A</a> ✓</li><li class="study-path-now"><a href="#fejezet-b">B</a> ◉</li></ol>', '',
+    '# <a id="fejezet-a"></a>📘 1. fejezet: A ✓', '', '* 📄 1. [X](x.md) <span class="study-desc">Leírás.</span>', ''].join('\n');
+  const out = await renderMarkdown(source, { resolveUrl: async h => h });
+  assert.match(out.html, /<ol class="study-path"><li class="study-path-done"><a href="#fejezet-a">A<\/a> ✓<\/li><li class="study-path-now">/);
+  assert.match(out.html, /<h2 id="-1-fejezet-a-"><a id="fejezet-a"><\/a>📘 1\. fejezet: A ✓<\/h2>/);
+  assert.match(out.html, /<span class="study-desc">Leírás\.<\/span>/);
+  assert.deepEqual(out.headings.map(h => h.text), ['📘 1. fejezet: A ✓']);
+});

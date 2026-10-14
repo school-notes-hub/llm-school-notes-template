@@ -1,7 +1,8 @@
 """Hand-written lesson dates as the tool writes them (rules 1.22.8): a date span in a lesson line
 (`<sub>🗓️ Óra: …</sub>` on a topic page, a lesson log's own `🗓️ Órák: …` line) is rewritten to
 exactly what `generate.when()` gives for that lesson – its text and tooltip, nothing else on the
-line – and the lessons legend of every subject index becomes the one text `machine.LESSONS_LEGEND`.
+line – and the hand-written `# 🗓️ Órák` heading with its legend in front of a subject index's lessons
+block goes (the block writes both, `generate.LESSONS_HEAD`, `generate.LESSONS_LEGEND`).
 `sn close <t> --dates` applies it; `sn check` warns where a span differs.
 
 A span is matched to its lesson only when that is certain: a span that is the text of a link to
@@ -22,7 +23,6 @@ META_LINE = re.compile(r"^[ \t]*<sub>[ \t]*(?:🗓️ (?:Óra|Órák|Lesson|Less
 SPAN = re.compile(r'<span class="study-when(?P<unsure> study-when-unsure)?"(?: title="[^"]*")?>[^<]*</span>')
 LINK_AFTER = re.compile(r'\]\((?P<target><[^>\n]*>|[^)\s]*)\)')
 TITLE_AFTER = re.compile(r"[ \t]+-[ \t]+(?P<title>(?:(?!</sub>| · )[^\n])+?)[ \t]*(?: · |</sub>)")
-LESSONS_HEAD = re.compile(r"^# 🗓️ Órák[ \t]*\n", re.M)
 
 
 def _resolve(match, line: str, offset: int, page: str, found, own_undated: dict):
@@ -88,13 +88,10 @@ def page_changes(text: str, page: str, found) -> list[tuple[int, int, str, str]]
 
 
 def legend_change(text: str) -> str:
-    """A subject index with the one lessons legend between `# 🗓️ Órák` and the lessons table."""
-    from .machine import LESSONS_LEGEND
-    head = LESSONS_HEAD.search(text)
-    table = text.find("<!-- school-notes:generated lessons -->", head.end()) if head else -1
-    if table < 0:
-        return text
-    return text[:head.end()] + "\n" + LESSONS_LEGEND + "\n\n" + text[table:]
+    """A subject index without the hand-written `# 🗓️ Órák` heading and legend in front of the
+    lessons block (`generate.move_lessons_head`; the block writes both)."""
+    from .generate import move_lessons_head
+    return move_lessons_head(text)
 
 
 def subject_pages(repo: Path):

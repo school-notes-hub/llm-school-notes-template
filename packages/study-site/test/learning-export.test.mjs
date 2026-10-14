@@ -103,9 +103,9 @@ lessons:
       assert.match(print, /Nyilvános hivatkozás/);
       assert.match(print, /Melyik jelölést használjuk/);
       assert.doesNotMatch(print, /⏳/);
-      assert.match(payload.pages.find(p => p.path === 'wiki/tananyag/ora.md').html, /📎 Füzet: 2026\. 09\. 29\./);
-      assert.match(print, /A polisz \(prezentáció\)/);
-      assert.match(print, /🔖 Tankönyv: 2\. lecke/);
+      // a lesson log is not published (plan terv-oldalszerkezet T3): no page, no PDF chapter
+      assert.equal(payload.pages.find(p => p.path === 'wiki/tananyag/ora.md'), undefined);
+      assert.doesNotMatch(print, /A polisz \(prezentáció\)|🔖 Tankönyv: 2\. lecke/);
       assert.deepEqual(await fs.readdir(path.join(out, 'public')), ['media']);
       assert.equal(await fs.readFile(path.join(repo, 'wiki/tananyag/tema.md'), 'utf8'), body);
     } finally { await fs.rm(tmp, { recursive: true, force: true }); }

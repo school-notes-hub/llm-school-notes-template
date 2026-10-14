@@ -35,22 +35,42 @@ class PublicError(ValueError):
 
 def page_order(repo: Path) -> list[str]:
     """B7: root index → the Podcast page while there is one (its menu item right under the home
-    page, owner 2026-10-08) → per subject: index, chapter pages, lessons table, other lists →
-    info pages."""
+    page, owner 2026-10-08) → per subject: index, each chapter's topic pages in teaching order
+    with its summary last, the other lists → info pages. The lesson logs are not published (plan
+    terv-oldalszerkezet T3): a link to one goes to its row in the subject index's 🗓️ Órák list
+    (`lesson_links`)."""
     from . import podcast
     order: list[str] = ["wiki/index.md"] + ([podcast.PAGE] if is_file(repo, podcast.PAGE) else [])
+    logs: set[str] = set()
     for slug in generate.subject_order(repo):
         subject = generate.load_subject(repo, slug)
         seq = ["index.md"]
         for chapter in subject.index_meta.get("chapters") or []:
-            seq += [p.file for p in generate.chapter_pages(subject, chapter["id"])]
-        seq += [page.file for page, _ in generate.lessons(subject)]
+            pages = generate.chapter_pages(subject, chapter["id"])
+            seq += [p.file for p in pages if p.meta.get("type") != "chapter-summary"]
+            seq += [p.file for p in pages if p.meta.get("type") == "chapter-summary"]
         seq += [p.file for p in generate.by_date_desc(subject.by_type("review"))]
-        seq += [p.file for p in generate.by_date_desc(subject.by_type("lesson-notes"))]
         seq += [p.file for p in subject.pages]
-        order += [f"wiki/{slug}/{f}" for f in dict.fromkeys(seq)]
-    rest = [p for p in wiki_pages(repo) if p not in order]
+        logs |= {f"wiki/{slug}/{p.file}" for p in subject.by_type("lesson-notes")}
+        order += [f"wiki/{slug}/{f}" for f in dict.fromkeys(seq) if f"wiki/{slug}/{f}" not in logs]
+    rest = [p for p in wiki_pages(repo) if p not in order and p not in logs]
     return order + rest
+
+
+def lesson_links(repo: Path) -> dict[str, dict[str, str]]:
+    """Every lesson log → {fragment → `wiki/<subject>/index.md#<its row in the 🗓️ Órák list>`};
+    `""` is used for no or an unknown fragment (`generate.lesson_links`). A lesson log without a
+    lesson goes to the subject index."""
+    out: dict[str, dict[str, str]] = {}
+    for slug in generate.subject_order(repo):
+        subject = generate.load_subject(repo, slug)
+        index = f"wiki/{slug}/index.md"
+        rows = generate.lesson_links(subject)
+        for page in sorted(subject.by_type("lesson-notes"), key=lambda p: p.file):
+            targets = {k: f"{index}#{v}" for k, v in rows.get(page.file, {}).items()}
+            targets.setdefault("", index)
+            out[f"wiki/{slug}/{page.file}"] = dict(sorted(targets.items()))
+    return out
 
 
 def page_entry(repo: Path, rel: str) -> dict:
@@ -75,7 +95,8 @@ def collections(repo: Path) -> list[dict]:
         subject = generate.load_subject(repo, slug)
         everything = []
         for chapter in subject.index_meta.get("chapters") or []:
-            pages = generate.chapter_pages(subject, chapter["id"])
+            # a lesson log is not published (T3), so it is in no PDF either
+            pages = [p for p in generate.chapter_pages(subject, chapter["id"]) if p.meta.get("type") != "lesson-notes"]
             summary = next((p for p in pages if p.meta.get("type") == "chapter-summary"), None)
             for page in pages:
                 item = {"id": f"{slug}-{page.file[:-3]}", "title": page.meta.get("title", page.file),
@@ -147,6 +168,7 @@ def build(repo: Path, rights: RightsLookup, existing: dict | None = None) -> dic
     value["assets"] = list(assets.values())
     value["collections"] = collections(repo)
     value["citationOnlyLinks"] = sorted(citations)
+    value["lessonLinks"] = lesson_links(repo)
     return value
 
 

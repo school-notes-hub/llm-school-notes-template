@@ -75,6 +75,10 @@ def test_hand_written_date_spans_become_the_generated_ones(tmp_path):
     assert f"Szöveg {old} marad." in text                     # outside a lesson line: untouched
     assert ("wiki/proba/alap.md", 1) in changes
     index = (repo / "wiki/proba/index.md").read_text()
-    assert "# 🗓️ Órák\n\nA legújabb óra van legfelül. A `~` bizonytalan dátumot jelöl" in index
+    # the hand-written heading and legend went; the lessons block writes both (terv-oldalszerkezet T2)
+    assert "# 🗓️ Órák\n" not in index and "# 🗓️ Órák –" not in index
+    generate.write_indexes(repo)
+    lessons = markers.read((repo / "wiki/proba/index.md").read_text(), "lessons")
+    assert lessons.startswith("# 🗓️ Órák – melyik órán mit vettünk\n\nA legújabb óra van legfelül. A `~` bizonytalan dátumot jelöl")
     assert date_spans.apply(repo) == []                       # idempotent
     assert date_spans.warnings(repo, ["wiki/proba/alap.md"]) == []

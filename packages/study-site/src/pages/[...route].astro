@@ -1,11 +1,12 @@
 ---
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import { readFileSync } from 'node:fs';
+import { KINDS, neighbours, subjectOf } from '../../lib/kinds.mjs';
 export function getStaticPaths() {
   const payload = JSON.parse(readFileSync(process.env.STUDY_PAYLOAD!, 'utf8'));
-  return payload.pages.map((page, index) => ({
+  return payload.pages.map(page => ({
     params: { route: page.route || undefined },
-    props: { page, payload, previous: payload.pages[index - 1], next: payload.pages[index + 1] },
+    props: { page, payload, ...neighbours(payload.pages, page) },
   }));
 }
 const { page, payload, previous, next } = Astro.props;
@@ -13,37 +14,58 @@ const downloads = payload.collections.filter(c => c.pdf && (c.routes.includes(pa
 const downloadGroups = downloads.filter(c => !downloads.some(parent => parent.id === c.group)).map(c => ({ ...c, children: downloads.filter(child => child.group === c.id) }));
 const reportPage = payload.feedbackRepository ? `https://${payload.feedbackRepository.split('/')[0]}.github.io${page.url}` : undefined;
 const reportUrl = payload.feedbackRepository ? `https://github.com/${payload.feedbackRepository}/issues/new?${new URLSearchParams({ template: 'bejelentes.yml', page: reportPage! })}` : undefined;
-const subject = payload.pages.find(p => p.navigation === 'subject' && page.route.startsWith(p.route + '/'));
+const subject = subjectOf(payload.pages, page);
+const chapterUrl = subject && page.chapterId ? `${subject.url}#fejezet-${page.chapterId}` : undefined;
+const kind = KINDS[page.kind];
+// "Mi ez a lap?" points to the home page's guide only while the home page has it.
+const home = payload.pages.find(p => p.navigation === 'home');
+const guideUrl = home && home.html.includes('id="hogyan-hasznald"') ? `${home.url}#hogyan-hasznald` : undefined;
+const label = p => `${KINDS[p.kind]?.icon || ''} ${p.title}`.trim();
 ---
 <StarlightPage lang="hu" frontmatter={{ title: page.title, editUrl: false, lastUpdated: page.lastUpdated ? new Date(page.lastUpdated) : false, prev: false, next: false }} headings={page.headings}>
-  <nav class="study-tools" aria-label="Tanulási eszközök" data-pagefind-ignore>
+  <nav class="study-tools" aria-label="Hol vagy" data-pagefind-ignore>
     <a href={payload.base}>Kezdőlap</a>
+    {subject && <span class="study-crumb" aria-hidden="true">›</span>}
     {subject && <a href={subject.url}>{subject.title}</a>}
-    {downloads.length === 1 && <a href={`${payload.base}pdf/${downloads[0].pdf.filename}`} download>PDF letöltése</a>}
-    <button type="button" id="study-answers">Válaszok megnyitása</button>
+    {chapterUrl && <span class="study-crumb" aria-hidden="true">›</span>}
+    {chapterUrl && <a href={chapterUrl}>{page.chapterTitle}</a>}
+    {downloads.length === 1 && <a class="study-pdf" href={`${payload.base}pdf/${downloads[0].pdf.filename}`} download>PDF letöltése</a>}
   </nav>
-  {downloads.length > 1 && <details class="study-downloads" data-pagefind-ignore><summary>Nyomtatható témakörök (PDF)</summary><ul>{downloadGroups.map(c => <li><a href={`${payload.base}pdf/${c.pdf.filename}`} download>{c.children.length ? <strong>{c.title}</strong> : c.title}</a>{c.children.length > 0 && <ul>{c.children.map(child => <li><a href={`${payload.base}pdf/${child.pdf.filename}`} download>{child.title}</a></li>)}</ul>}</li>)}</ul></details>}
+  {kind && <p class="study-kind" data-pagefind-ignore>{kind.icon} <strong>{kind.name}</strong> – {kind.text}{guideUrl && <> <a href={guideUrl}>Mi ez a lap?</a></>}</p>}
   <div class="sl-markdown-content study-content" data-pagefind-body set:html={page.html} />
+  {downloads.length > 1 && <details class="study-downloads" data-pagefind-ignore><summary>Nyomtatható fejezetek (PDF)</summary><ul>{downloadGroups.map(c => <li><a href={`${payload.base}pdf/${c.pdf.filename}`} download>{c.children.length ? <strong>{c.title}</strong> : c.title}</a>{c.children.length > 0 && <ul>{c.children.map(child => <li><a href={`${payload.base}pdf/${child.pdf.filename}`} download>{child.title}</a></li>)}</ul>}</li>)}</ul></details>}
   {payload.sourceNote && <p class="study-source-note" data-pagefind-ignore>{payload.sourceNote}</p>}
   {reportUrl && <aside class="study-feedback" data-pagefind-ignore>
     <a href={reportUrl}>Hibát találtál? Jelezd!</a>
     <p>Tartalmi, megjelenítési vagy szerzői jogi kérdést is jelezhetsz. A GitHub-bejelentés nyilvános, és bejelentkezést igényel; személyes adatot vagy nem nyilvános tananyagot ne csatolj.</p>
   </aside>}
-  <nav class="study-pagination" aria-label="Tanulási sorrend" data-pagefind-ignore>
-    {previous && <a href={previous.url}><small>Előző</small>{previous.title}</a>}
-    {next && <a href={next.url}><small>Következő</small>{next.title}</a>}
+  {(previous || next) && <nav class="study-pagination" aria-label="Előző és következő lap a tantárgyban" data-pagefind-ignore>
+    {previous && <a href={previous.url} rel="prev"><small>Előző</small>{label(previous)}</a>}
+    {next && <a href={next.url} rel="next"><small>Következő</small>{label(next)}</a>}
+  </nav>}
+  <nav class="study-foot" aria-label="Lap alja" data-pagefind-ignore>
+    {subject && <a href={subject.url}>📚 {subject.title}</a>}
+    {chapterUrl && <a href={chapterUrl}>📘 {page.chapterTitle}</a>}
+    {page.navigation !== 'home' && <a href={payload.base}>🏠 Kezdőlap</a>}
+    <a href="#_top">⬆️ Lap teteje</a>
   </nav>
 </StarlightPage>
 <script>
-  const button = document.querySelector<HTMLButtonElement>('#study-answers');
-  const answers = [...document.querySelectorAll<HTMLDetailsElement>('.study-content details')];
-  if (button) {
-    button.hidden = answers.length === 0;
+  // The answers of 🧠 Kérdezd ki magad: one button beside the heading opens or closes them all.
+  const heading = [...document.querySelectorAll<HTMLElement>('.study-content h2')].find(h => h.textContent?.trim().startsWith('🧠'));
+  const answers: HTMLDetailsElement[] = [];
+  for (let n = heading?.nextElementSibling; n && n.tagName !== 'H2' && !n.matches('section.footnotes'); n = n.nextElementSibling) {
+    answers.push(...(n.matches('details') ? [n as HTMLDetailsElement] : [...n.querySelectorAll<HTMLDetailsElement>('details')]));
+  }
+  if (heading && answers.length) {
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'study-answers'; button.textContent = 'Minden választ mutat';
     button.addEventListener('click', () => {
       const open = answers.some(d => !d.open);
       answers.forEach(d => d.open = open);
-      button.textContent = open ? 'Válaszok becsukása' : 'Válaszok megnyitása';
+      button.textContent = open ? 'Minden választ elrejt' : 'Minden választ mutat';
     });
+    heading.after(button);
   }
   document.querySelectorAll<HTMLImageElement>('.study-content img').forEach(img => {
     if (img.closest('a')) return;

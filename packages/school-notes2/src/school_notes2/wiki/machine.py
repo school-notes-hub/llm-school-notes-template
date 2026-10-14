@@ -15,8 +15,7 @@ from . import frontmatter, generate, markers
 
 LESSON_KEYS = ("type", "grade", "sources", "source_file", "content_sha256", "original_sha256",
                "drive_folder", "generated")
-LESSONS_LEGEND = ("A legújabb óra van legfelül. A `~` bizonytalan dátumot jelöl; az időszakot az "
-                  "egér rávitelekor vagy koppintásra látod.")
+LESSONS_LEGEND = generate.LESSONS_LEGEND      # written inside the lessons block
 
 
 def machine_keys(meta: dict) -> tuple[str, ...]:
@@ -174,14 +173,14 @@ def add_subject(repo: Path, slug: str, name: str) -> bool:
 
 
 def subject_skeleton(name: str, banner_id: str) -> str:
-    """wiki/<subject>/index.md for a new subject: hand-written frame, empty generated blocks."""
+    """wiki/<subject>/index.md for a new subject: hand-written frame, empty generated blocks (the
+    lessons block writes its own `# 🗓️ Órák` heading and legend once there is a lesson)."""
     head = frontmatter.set_keys("", {"description": generate.subject_sentence(name),
                                      "chapters": []})
     return (head + f"\n# {name}\n\n<!-- image: {banner_id} -->\n\n"
             "[⬅️ Vissza a kezdőlapra](../index.md)\n\n<br />\n\n"
             + markers.wrap("chapters", "")
-            + "\n<br />\n\n# 🗓️ Órák\n\n" + LESSONS_LEGEND + "\n\n"
-            + markers.wrap("lessons", generate.TABLE_HEAD)
+            + "\n<br />\n\n" + markers.wrap("lessons", "")
             + "\n<br />\n\n" + markers.wrap("review", "") + markers.wrap("notes", ""))
 
 

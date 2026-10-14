@@ -1,6 +1,8 @@
 """sn 0.3.7 (rules 1.22.5): the fix round of the 0.3.6 review (Astra A1-A8, Opus O3-O11) on the
 teaching order. Each test fails on 1bbf485."""
 
+import re
+
 from school_notes2.wiki import generate, markers, teaching_order
 from tests.wiki.test_teaching_order import INDEX, lesson_log, topic
 from tests.wiki.conftest import write
@@ -24,7 +26,9 @@ def now(repo):
 
 
 def most(repo):
-    return next(line for line in now(repo).splitlines() if line.startswith("* **Most:**"))
+    """The current chapter of the 🧭 box's path, in the form the 📍 block used to give it."""
+    found = re.search(r'<li class="study-path-now"><a href="#[^"]+">([^<]+)</a> ◉ (.*?)</li>', now(repo))
+    return f"* **Most:** {found[1]} {found[2]}"
 
 
 def chapter_order(repo):
@@ -127,20 +131,22 @@ def test_the_upper_bound_warning_compares_only_the_lessons_own_folder(tmp_path):
     assert teaching_order.order_warnings(repo, ["wiki/proba/x-jegyzet.md"]) == []
 
 
-def test_the_now_block_stands_before_the_catch_up_list_on_every_index(tmp_path):
-    # O9: one fixed order; an index with the 📍 block after the catch-up list converges
+def test_the_now_block_stands_before_the_chapters_on_every_index(tmp_path):
+    # O9: one fixed order; an index with the now block after the (now always empty) catch-up block
+    # converges
     repo = base(tmp_path)
     lesson_log(repo, "x-jegyzet.md", "proba/x", ["{date: '2026-09-01', title: Kezd, topics: [ta.md]}"])
     from school_notes2.wiki import frontmatter
     path = repo / "wiki/proba/x-jegyzet.md"
     path.write_text(frontmatter.set_keys(path.read_text(), {"catch_up": "open"}))
     text = generate.subject_index(repo, "proba")
-    assert text.index("# 📍 Itt tartunk") < text.index("# 📝 Pótolandó") < text.index("# 📘")
-    # 0.3.6 put a catch-up list that appeared later above the 📍 block; such a page converges
+    assert text.index("🧭 **Hol tartunk**") < text.index("📘")
     old = markers.remove(text, {"now"})
-    end = old.index("<!-- /school-notes:generated -->", old.index("# 📝 Pótolandó")) + len("<!-- /school-notes:generated -->\n")
-    write(repo, "wiki/proba/index.md", old[:end] + "\n" + markers.wrap("now", "") + old[end:])
+    write(repo, "wiki/proba/index.md", old.replace("<!-- school-notes:generated chapters -->",
+                                                   markers.wrap("catch-up", "") + "\n" + markers.wrap("now", "")
+                                                   + "\n<!-- school-notes:generated chapters -->", 1))
     once = generate.subject_index(repo, "proba")
-    assert once.index("# 📍 Itt tartunk") < once.index("# 📝 Pótolandó") < once.index("# 📘")
+    assert once.index("../index.md)") < once.index("🧭 **Hol tartunk**") < once.index("<!-- school-notes:generated catch-up -->")
+    assert markers.read(once, "catch-up") == ""
     write(repo, "wiki/proba/index.md", once)
     assert generate.subject_index(repo, "proba") == once

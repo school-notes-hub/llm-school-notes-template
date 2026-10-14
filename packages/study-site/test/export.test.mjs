@@ -32,7 +32,7 @@ test('Markdown source remains untouched; metadata/comments do not reach the payl
     assert.equal(payload.pages[0].headings.filter(h => h.text === 'Azonos cím').length, 2);
     assert.ok(payload.pages[0].headings.some(h => h.slug === 'azonos-cím-1'));
     assert.match(payload.pages[0].html, /H<sub>2<\/sub>O/);
-    assert.match(payload.pages[0].html, /<small class="study-label">💡 Példa🤖 magyarázata<\/small>/);
+    assert.match(payload.pages[0].html, /<small class="study-label" title="Magyarázat: [^"]+" tabindex="0">💡 Példa🤖 magyarázata<\/small>/);
     assert.doesNotMatch(payload.pages[0].html, /\[!TIP\]|<h1/);
     assert.match(payload.pages[0].html, /<mjx-container/);
     assert.equal(receipt.pages[0].audit.formulas.length, 2);
@@ -288,5 +288,46 @@ test('a public mp3 without a rights class is refused', async () => {
     config.mode = 'public'; config.site = 'https://example.github.io';
     config.assets = [{ path: 'wiki/assets/proba/podcast/elso.mp3', sha256: 'a'.repeat(64) }];
     await assert.rejects(exportSite({ repo: fixture, config, output: path.join(tmp, 'build') }), /Asset rights class required/);
+  } finally { await fs.rm(tmp, { recursive: true, force: true }); }
+});
+
+// Plan terv-oldalszerkezet (sn 0.4.5): kinds, the breadcrumb's chapter, lesson-log links. Fails on 6894106.
+test('a page knows its kind and chapter; a link to an unpublished lesson log goes to its row on the subject page', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'study-kinds-'));
+  try {
+    const repo = path.join(tmp, 'repo');
+    const files = {
+      'wiki/index.md': '# Jegyzetek\n\n# <a id="hogyan-hasznald"></a>🧭 Hogyan használd\n',
+      'wiki/t/index.md': "---\nchapters:\n  - {id: c1, title: '9. évfolyam: Első'}\n---\n# Tárgy\n\n# <a id=\"fejezet-c1\"></a>📘 1. fejezet: Első\n\n* <a id=\"ora-x-jegyzet\"></a><a id=\"ora-x-jegyzet-pdf-1\"></a>Óra\n",
+      'wiki/t/a.md': '---\ntype: topic\ntitle: A\nchapter: c1\n---\n# A\n\n[óra](x-jegyzet.md#pdf-1) [lap](x-jegyzet.md) [más](x-jegyzet.md#ismeretlen) [oldal](x-jegyzet.md#pdf-2)\n',
+      'wiki/t/b.md': '---\ntype: chapter-summary\ntitle: Összefoglaló\nchapter: c1\n---\n# Összefoglaló\n',
+      'wiki/t/x-jegyzet.md': '---\ntype: lesson-notes\ntitle: X\n---\n# X\n',
+    };
+    for (const [file, text] of Object.entries(files)) { await fs.mkdir(path.dirname(path.join(repo, file)), { recursive: true }); await fs.writeFile(path.join(repo, file), text); }
+    const pages = await Promise.all(['wiki/index.md', 'wiki/t/index.md', 'wiki/t/a.md', 'wiki/t/b.md'].map(async p => ({ path: p, sha256: sha256(await fs.readFile(path.join(repo, p))) })));
+    const lessonLinks = { 'wiki/t/x-jegyzet.md': { '': 'wiki/t/index.md#ora-x-jegyzet', 'pdf-1': 'wiki/t/index.md#ora-x-jegyzet-pdf-1', 'pdf-2': 'wiki/t/index.md#ora-x-jegyzet-pdf-1' } };
+    const config = { title: 'Minta', mode: 'public', site: 'https://example.org', base: '/m/', pages, assets: [], collections: [], lessonLinks };
+    const { payload } = await exportSite({ repo, config, output: path.join(tmp, 'out') });
+    const byPath = Object.fromEntries(payload.pages.map(p => [p.path, p]));
+    assert.deepEqual(payload.pages.map(p => p.kind), ['home', 'subject', 'topic', 'chapter-summary']);
+    assert.equal(byPath['wiki/t/a.md'].chapterId, 'c1');
+    assert.equal(byPath['wiki/t/a.md'].chapterTitle, 'Első');
+    assert.equal(byPath['wiki/t/index.md'].chapterId, undefined);
+    const hrefs = [...byPath['wiki/t/a.md'].html.matchAll(/href="([^"]+)"/g)].map(m => m[1]);
+    assert.deepEqual(hrefs, ['/m/t/#ora-x-jegyzet-pdf-1', '/m/t/#ora-x-jegyzet', '/m/t/#ora-x-jegyzet', '/m/t/#ora-x-jegyzet-pdf-1']);
+    // not in the public mode, and never a map to a page that is published or a target that is not
+    await assert.rejects(exportSite({ repo, config: { ...config, lessonLinks: { 'wiki/t/a.md': { '': 'wiki/t/index.md' } } }, output: path.join(tmp, 'o2') }), /Invalid lesson link/);
+    await assert.rejects(exportSite({ repo, config: { ...config, lessonLinks: { 'wiki/t/x-jegyzet.md': { '': 'wiki/t/x-jegyzet.md#a' } } }, output: path.join(tmp, 'o3') }), /Invalid lesson link target/);
+    await assert.rejects(exportSite({ repo, config: { ...config, lessonLinks: { 'wiki/t/x-jegyzet.md': { '': 'wiki/t/index.md#Rossz Id' } } }, output: path.join(tmp, 'o4') }), /Invalid lesson link target/);
+    const { KINDS, neighbours } = await import('../lib/kinds.mjs');
+    assert.deepEqual(Object.keys(KINDS), ['subject', 'topic', 'chapter-summary', 'review', 'lesson-notes']);
+    const [home, subject, a, b] = payload.pages;
+    assert.deepEqual(neighbours(payload.pages, a), { previous: undefined, next: b });
+    assert.deepEqual(neighbours(payload.pages, b), { previous: a, next: undefined });
+    assert.deepEqual(neighbours(payload.pages, subject), {});
+    assert.deepEqual(neighbours(payload.pages, home), {});
+    // a page of another subject is never a neighbour
+    const other = { ...a, route: 'u/a', path: 'wiki/u/a.md' };
+    assert.deepEqual(neighbours([...payload.pages, { ...subject, route: 'u' }, other], b), { previous: a, next: undefined });
   } finally { await fs.rm(tmp, { recursive: true, force: true }); }
 });

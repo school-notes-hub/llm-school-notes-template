@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { sha256, readInside, relativeFile, routeFor, normalizeBase, urlFor } from './paths.mjs';
-import { renderMarkdown, printSection } from './markdown.mjs';
+import { renderMarkdown, printSection, splitMarkdown, withoutGrade } from './markdown.mjs';
 import { safeSvg, mermaidRenderer } from './assets.mjs';
 
 export async function exportSite({ repo, config, output, browserPath, printEngine, lastUpdated = {} }) {
@@ -40,6 +40,29 @@ export async function exportSite({ repo, config, output, browserPath, printEngin
     if (!/^[a-f0-9]{64}$/.test(a.sha256)) throw new Error(`Asset hash required: ${a.path}`);
     if (isPublic && !['authored', 'generated', 'licensed', 'public-domain', 'standard'].includes(a.rights)) throw new Error(`Asset rights class required: ${a.path}`);
     assets.set(a.path, a);
+  }
+  // A lesson log is not published (plan terv-oldalszerkezet T3): a link to one goes to its row in
+  // the subject index's 🗓️ Órák list. `lessonLinks`: log path → {fragment → "<page>#<jump target>"},
+  // "" for no or an unknown fragment.
+  const lessonLinks = new Map();
+  for (const [file, targets] of Object.entries(isPublic ? config.lessonLinks || {} : {})) {
+    relativeFile(file);
+    if (pageMap.has(file) || !targets || typeof targets !== 'object' || typeof targets[''] !== 'string') throw new Error(`Invalid lesson link: ${file}`);
+    for (const target of Object.values(targets)) {
+      const [page, fragment] = String(target).split('#', 2);
+      if (!pageMap.has(page) || (fragment !== undefined && !/^[\p{Ll}\p{Nd}][\p{Ll}\p{Nd}-]{0,200}$/u.test(fragment))) throw new Error(`Invalid lesson link target: ${file} → ${target}`);
+    }
+    lessonLinks.set(file, targets);
+  }
+  // The page kind (frontmatter `type`; the home and subject pages by their place) and, for a page
+  // in a chapter, the chapter's title and jump target on its subject index (the breadcrumb).
+  const chapterTitles = new Map();
+  for (const p of pageMap.values()) {
+    if (!/^wiki\/[^/]+\/index\.md$/.test(p.path)) continue;
+    const { metadata } = splitMarkdown((await readInside(root, p.path, p.sha256)).toString());
+    for (const c of Array.isArray(metadata.chapters) ? metadata.chapters : []) {
+      if (c && typeof c === 'object' && /^[a-z0-9-]+$/.test(String(c.id)) && c.title) chapterTitles.set(`${p.path}#${c.id}`, withoutGrade(String(c.title)));
+    }
   }
   const payload = { version: 1, mode: config.mode, title: config.title, base, ...(isPublic ? {site:config.site} : {}), pages: [], collections: [] };
   if (config.feedbackRepository !== undefined) {
@@ -91,6 +114,12 @@ export async function exportSite({ repo, config, output, browserPath, printEngin
         const file = path.posix.normalize(path.posix.join(path.posix.dirname(p.path), decodeURIComponent(pathname)));
         relativeFile(file);
         if (pageMap.has(file) && !image) return urlFor(base, pageMap.get(file).route) + (fragment ? '#' + fragment : '');
+        if (!image && isPublic && lessonLinks.has(file)) {
+          const targets = lessonLinks.get(file);
+          const key = fragment ? decodeURIComponent(fragment) : '';
+          const [page, jump] = (Object.hasOwn(targets, key) ? targets[key] : targets['']).split('#', 2);
+          return urlFor(base, pageMap.get(page).route) + (jump ? '#' + jump : '');
+        }
         if (assets.has(file)) {
           if (!cache.has(file)) {
             cache.set(file, (async () => {
@@ -124,10 +153,13 @@ export async function exportSite({ repo, config, output, browserPath, printEngin
         // A rendering error is tied to its page, so the caller can send the writer back to it.
         error.page = p.path; throw error;
       }
-      const { title, html, headings, audit } = rendered;
+      const { title, html, headings, audit, metadata } = rendered;
+      const kind = p.path === 'wiki/index.md' ? 'home' : /^wiki\/[^/]+\/index\.md$/.test(p.path) ? 'subject' : String(metadata.type || '');
+      const subjectIndex = p.path.replace(/^(wiki\/[^/]+)\/[^/]+$/, '$1/index.md');
+      const chapterId = metadata.chapter !== undefined && chapterTitles.has(`${subjectIndex}#${metadata.chapter}`) ? String(metadata.chapter) : undefined;
       const updated = lastUpdated[p.path];
       if (updated !== undefined && Number.isNaN(Date.parse(updated))) throw new Error(`Invalid last-updated date: ${p.path}`);
-      payload.pages.push({ route: p.route, path: p.path, title, navigationLabel: p.navigationLabel, html, headings, group: p.group || '', navigation: p.path === 'wiki/index.md' ? 'home' : /^wiki\/[^/]+\/index\.md$/.test(p.path) ? 'subject' : p.navigation === 'info' ? 'info' : null, url: urlFor(base, p.route), ...(updated ? { lastUpdated: updated } : {}) });
+      payload.pages.push({ route: p.route, path: p.path, title, navigationLabel: p.navigationLabel, html, headings, group: p.group || '', navigation: p.path === 'wiki/index.md' ? 'home' : /^wiki\/[^/]+\/index\.md$/.test(p.path) ? 'subject' : p.navigation === 'info' ? 'info' : null, url: urlFor(base, p.route), kind, ...(chapterId ? { chapterId, chapterTitle: chapterTitles.get(`${subjectIndex}#${chapterId}`) } : {}), ...(updated ? { lastUpdated: updated } : {}) });
       receipt.pages.push({ input: p.path, sourceSha256: p.sha256, route: p.route, audit });
     }
     const collectionMap = new Map((config.collections || []).map(c => [c.id, c]));

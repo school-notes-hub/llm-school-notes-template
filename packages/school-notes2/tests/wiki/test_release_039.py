@@ -98,13 +98,14 @@ def test_hungarian_range_and_approximate_day():
     assert hu_dates.approximate("", "2026-09-25", 2026) == "szept. vége"
 
 
-def test_the_catch_up_list_and_the_legends_use_the_quiet_form(tmp_path):
+def test_the_lessons_list_and_the_legends_use_the_quiet_form(tmp_path):
     from school_notes2.wiki import frontmatter
     repo = base(tmp_path)
     lesson_log(repo, "a-jegyzet.md", "proba/a", ["{date_note: '2026-09-01 után, legkésőbb 2026-09-09', title: A, topics: [alap.md]}"])
     path = repo / "wiki/proba/a-jegyzet.md"
     path.write_text(frontmatter.set_keys(path.read_text(), {"catch_up": "open"}))
-    block = markers.read(generate.subject_index(repo, "proba"), "catch-up")
-    assert ('Dátum: <span class="study-when study-when-unsure" title="Dátum nélküli óra: szept. 2–9.">~szept. eleje</span>.'
-            in block)
+    text = generate.subject_index(repo, "proba")
+    assert ('A <span class="study-when study-when-unsure" title="Dátum nélküli óra: szept. 2–9.">~szept. eleje</span>'
+            in markers.read(text, "lessons"))
+    assert "Pótolandó" not in text and "📝" not in markers.read(text, "lessons")    # T1: retired
     assert "?" not in machine.LESSONS_LEGEND and "`~`" in machine.LESSONS_LEGEND
