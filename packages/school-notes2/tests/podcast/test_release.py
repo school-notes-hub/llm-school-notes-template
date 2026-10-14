@@ -8,7 +8,7 @@ from school_notes2.podcast import openrouter
 from school_notes2.state import safefs
 from school_notes2.wiki import podcast as wiki_podcast
 from tests.local.conftest import git
-from tests.podcast.conftest import FOLDER_OUT, TOPIC, needs_ffmpeg, release
+from tests.podcast.conftest import FOLDER_OUT, SCRIPT, TOPIC, needs_ffmpeg, release
 
 pytestmark = needs_ffmpeg
 ASSET = "wiki/assets/proba/podcast/elso.mp3"
@@ -27,7 +27,9 @@ def test_release_writes_the_mp3_receipt_page_block_podcast_page_and_drive_copy(w
     data = safefs.read_bytes(repo, ASSET)
     info = json.loads(probe(repo / ASSET, "stream=channels,sample_rate,bit_rate:format=duration:format_tags"))
     assert info["streams"][0]["channels"] == 1 and info["streams"][0]["bit_rate"] == "64000"
-    assert info["format"]["tags"] == {"title": "Az első téma röviden", "album": "Képben vagy?"}
+    assert info["format"]["tags"] == {"title": "Az első téma röviden", "album": "School Notes – Próba",
+                                      "artist": "School Notes", "album_artist": "School Notes", "genre": "Podcast",
+                                      "comment": SCRIPT["summary"]}                    # no track on the site
     record = safefs.read_json(repo, RECORD)
     assert record["output_sha256"] == __import__("hashlib").sha256(data).hexdigest()
     assert record["rights"]["class"] == "generated" and "Suno" in record["rights"]["music"]
@@ -105,8 +107,8 @@ def test_retitled_episode_updates_the_same_drive_file(world):
     copy.write_bytes(drive.content[file["id"]])
     tags = json.loads(probe(copy, "format_tags"))["format"]["tags"]
     copy.unlink()
-    assert tags == {"title": "Első lépések", "album": "School Notes – Próba", "artist": "School Notes",
-                    "album_artist": "School Notes", "genre": "Podcast", "track": "1",
+    assert tags == {"title": "Új cím", "album": "School Notes – Próba", "artist": "School Notes",
+                    "album_artist": "School Notes", "genre": "Podcast", "track": "100",
                     "comment": SCRIPT["summary"]}
     assert any("(frissítve" in line for line in lines)
     assert safefs.read_json(repo, RECORD)["title"] == "Új cím"

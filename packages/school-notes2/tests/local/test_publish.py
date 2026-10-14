@@ -80,6 +80,24 @@ def test_reviewed_moves_claude_reviewed(world):
     assert ref(world["origin"], "refs/heads/claude-reviewed") == head(world["repo"])
 
 
+def test_a_problem_with_the_learners_files_comes_after_the_site_and_claude_reviewed(world, monkeypatch):
+    """sn 0.4.3: the Drive and video-kesz step runs last; its problem is exit 1, never an exception,
+    and the site and `claude-reviewed` are already out."""
+    from school_notes2.local import media_files
+    seen = []
+
+    def failing(local, out):
+        seen.append(ref(world["origin"], "refs/heads/claude-reviewed"))
+        out("  Drive: nincs Drive-token")
+        return 1
+
+    monkeypatch.setattr(media_files, "sync", failing)
+    lines = []
+    assert publish.run(world["local"], reviewed=True, out=lines.append) == 1
+    assert seen == [head(world["repo"])] and "  Drive: nincs Drive-token" in lines
+    assert world["local"].records[-1][1] == "files"
+
+
 def test_nothing_new_publishes_nothing(world):
     publish.run(world["local"], out=lambda *_: None)
     pages = ref(world["site"], "refs/heads/gh-pages")

@@ -45,17 +45,8 @@ class MediaOrderError(ValueError):
 
 def teaching_pages(repo: Path, slug: str) -> list[str]:
     """The subject's chapter pages (file stems) in the subject index's order."""
-    subject = generate.load_subject(repo, slug)
-    listed = subject.index_meta.get("chapters") if isinstance(subject.index_meta.get("chapters"), list) else []
-    out: list[str] = []
-    for chapter in listed:
-        if not isinstance(chapter, dict) or "id" not in chapter:
-            continue
-        for page in generate.chapter_pages(subject, chapter["id"]):
-            stem = page.file[:-3]
-            if stem not in out:
-                out.append(stem)
-    return out
+    return [page.file[:-3] for _, pages in generate.chapter_sections(generate.load_subject(repo, slug))
+            for page in pages]
 
 
 def _kept(order: list[str], stored: dict[str, int]) -> dict[str, int]:
@@ -174,8 +165,15 @@ def media_pages(repo: Path) -> dict[str, set[str]]:
 
 
 def video_page(video: str) -> str:
-    """`forgatonyomatek-1` → `forgatonyomatek` (a video is `<page>-<part>`)."""
-    return re.sub(r"-\d+$", "", video)
+    """`forgatonyomatek-1` → `forgatonyomatek`, `fejezet-2-10` → `fejezet-2`: a video is
+    `<page>-<part>`, the part is only the last `-<n>`."""
+    return video.rsplit("-", 1)[0] if re.search(r"-\d+$", video) else video
+
+
+def video_part(video: str) -> int:
+    """The part of `<page>-<part>` as a number (`-10` after `-2`); 0 without one."""
+    found = re.search(r"-(\d+)$", video)
+    return int(found[1]) if found else 0
 
 
 def update(repo: Path) -> tuple[bool, list[str]]:

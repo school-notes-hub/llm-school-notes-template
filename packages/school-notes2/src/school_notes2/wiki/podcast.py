@@ -104,14 +104,9 @@ def grouped(repo: Path, found: list[dict]) -> list[tuple[str, list[tuple[str, li
             continue
         sections, placed = [], set()
         if slug in known:
-            subject = generate.load_subject(repo, slug)
-            listed = subject.index_meta.get("chapters")
-            for chapter in listed if isinstance(listed, list) else []:
-                if not isinstance(chapter, dict) or "id" not in chapter:
-                    continue
-                files = [f"wiki/{slug}/{p.file}" for p in generate.chapter_pages(subject, chapter["id"])]
-                inside = sorted((r for r in episodes if r["page"] in files and r["page"] not in placed),
-                                key=lambda r: files.index(r["page"]))
+            for chapter, pages in generate.chapter_sections(generate.load_subject(repo, slug)):
+                files = [f"wiki/{slug}/{p.file}" for p in pages]
+                inside = sorted((r for r in episodes if r["page"] in files), key=lambda r: files.index(r["page"]))
                 placed |= {r["page"] for r in inside}
                 if inside:
                     sections.append((teaching_order.plain_title(str(chapter.get("title") or chapter["id"])),

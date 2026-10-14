@@ -46,7 +46,9 @@ def text_of(path, counts):
 
 
 ID3_TEXT = {0: 'latin-1', 1: 'utf-16', 2: 'utf-16-be', 3: 'utf-8'}
-ID3_ALLOWED = {'TIT2', 'TALB'}     # sn podcast writes the episode title and the show, nothing else
+# sn podcast writes the episode title, the album (School Notes – <subject>), the artist and album
+# artist (School Notes), the genre and the summary as a comment (sn 0.4.3); nothing else
+ID3_ALLOWED = {'TIT2', 'TALB', 'TPE1', 'TPE2', 'TCON', 'COMM'}
 
 
 def id3(data):
@@ -63,6 +65,10 @@ def id3(data):
             frames.append(name)
             if name.startswith('T') and body:
                 texts.append(body[1:].decode(ID3_TEXT.get(body[0], 'latin-1'), errors='replace').strip('\0'))
+            elif name == 'COMM' and len(body) > 4:
+                # encoding, language (3 bytes), short description, NUL, the text: all of it is public text
+                texts.append(body[4:].decode(ID3_TEXT.get(body[0], 'latin-1'), errors='replace')
+                             .replace('\0', ' ').strip())
             pos += 10 + length
     return '\n'.join(texts), frames, data[-128:-125] == b'TAG'
 

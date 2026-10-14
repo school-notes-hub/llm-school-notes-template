@@ -50,7 +50,7 @@ def test_episode_is_byte_identical_mono_64k_with_only_title_and_album(tmp_path, 
     gate = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(gate)
     text, frames, v1 = gate.id3(one[0])
-    assert frames == ["TIT2", "TALB"] and text == "Cím – ő\nKépben vagy?" and not v1
+    assert frames == ["TALB", "TIT2"] and text == "Képben vagy?\nCím – ő" and not v1      # key order
     assert b"Suno teszt" not in one[0]                                      # the music's own tags are dropped
 
 

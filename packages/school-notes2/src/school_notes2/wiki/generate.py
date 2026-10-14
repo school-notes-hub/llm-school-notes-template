@@ -90,6 +90,22 @@ def chapter_pages(subject: Subject, chapter_id: str) -> list[SubjectPage]:
     return sorted(inside, key=lambda p: (_order(p.meta), p.file))
 
 
+def chapter_sections(subject: Subject) -> list[tuple[dict, list[SubjectPage]]]:
+    """The teaching order of a subject's pages: the index's `chapters` list (the order the class
+    started them) with each chapter's pages (`chapter_pages`); a malformed entry is left out, a
+    page stands only under the first chapter that has it. The Podcast page, the media order
+    numbers and the video order all walk this."""
+    listed = subject.index_meta.get("chapters")
+    out, seen = [], set()
+    for chapter in listed if isinstance(listed, list) else []:
+        if not isinstance(chapter, dict) or "id" not in chapter:
+            continue
+        pages = [p for p in chapter_pages(subject, chapter["id"]) if p.file not in seen]
+        seen |= {p.file for p in pages}
+        out.append((chapter, pages))
+    return out
+
+
 def _order(meta: dict) -> int:
     """A missing or non-integer `order` sorts last; the check reports it on topic pages."""
     order = meta.get("order", 0)

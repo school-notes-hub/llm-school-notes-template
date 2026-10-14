@@ -34,7 +34,7 @@ class PrivacyTests(unittest.TestCase):
                     "docs/review/report.json", "sources/private.json", "marker.html", "metadata.json"})
 
 
-    def test_a_podcast_mp3_may_carry_only_title_and_album_and_no_private_text(self):
+    def test_a_podcast_mp3_may_carry_only_the_expected_tags_and_no_private_text(self):
         def frame(name, text):
             body = b"\x03" + text.encode()
             return name.encode() + len(body).to_bytes(4, "big") + b"\0\0" + body
@@ -47,7 +47,12 @@ class PrivacyTests(unittest.TestCase):
 
         cases = {
             "ok.mp3": (tag(frame("TIT2", "Az első téma"), frame("TALB", "Képben vagy?")), []),
-            "extra.mp3": (tag(frame("TIT2", "Cím"), frame("TPE1", "Valaki")), ["unexpected MP3 tag: TPE1"]),
+            # sn 0.4.3: artist, album artist, genre and the summary as a comment are expected too
+            "tags.mp3": (tag(frame("TIT2", "Cím"), frame("TALB", "School Notes – Próba"), frame("TPE1", "School Notes"),
+                             frame("TPE2", "School Notes"), frame("TCON", "Podcast"),
+                             frame("COMM", "hun\0Egy mondat a témáról.")), []),
+            "extra.mp3": (tag(frame("TIT2", "Cím"), frame("TRCK", "150")), ["unexpected MP3 tag: TRCK"]),
+            "comment.mp3": (tag(frame("COMM", "hun\0lásd sources/proba/p0001.jpg")), ["\\bsources/", "\\bp\\d{4}\\b"]),
             "path.mp3": (tag(frame("TIT2", "sources/proba/p0001.jpg")), ["\\bsources/", "\\bp\\d{4}\\b"]),
         }
         for name, (data, expected) in cases.items():

@@ -14,8 +14,9 @@ reports."""
 import hashlib
 import json
 import urllib.parse
+from collections.abc import Callable
 
-from ..state.errors import NeedsOwner, Transient
+from ..state.errors import NeedsOwner, SnError, Transient
 from .client import API, FIELDS, FOLDER, DriveClient
 from .inventory import nfc
 
@@ -46,6 +47,32 @@ def managed(client: DriveClient, folder_id: str, ident: str) -> list[dict]:
     return client.t.request("GET", f"{API}/files?" + urllib.parse.urlencode(params))[2].get("files", [])
 
 
+def _put(client: DriveClient, folder: str, files: list[dict], ident: str, name: str, data: bytes) -> tuple[dict, str]:
+    """The episode's one file (`files`: found by its app property) with this name and content:
+    created, or renamed and/or its content replaced; (its metadata, created|updated|unchanged)."""
+    if not files:
+        return _create(client, {"name": name, "mimeType": MIME, "parents": [folder],
+                                "appProperties": {APP_KEY: ident}}, data), "created"
+    meta, state = files[0], "unchanged"
+    if nfc(meta["name"]) != nfc(name):
+        meta = client.t.request("PATCH", f"{API}/files/{_id(meta['id'])}?" + urllib.parse.urlencode(
+            {"fields": FIELDS}), {"name": name})[2]
+        state = "updated"
+    if meta.get("md5Checksum") != hashlib.md5(data).hexdigest() or str(meta.get("size")) != str(len(data)):
+        _media(client, meta["id"], data)
+        state = "updated"
+    return meta, state
+
+
+def _verified(client: DriveClient, file_id: str, name: str, data: bytes, ident: str) -> dict:
+    final = client.get(file_id)
+    if final.get("md5Checksum") != hashlib.md5(data).hexdigest() or str(final.get("size")) != str(len(data)) or \
+            nfc(final.get("name", name)) != nfc(name):
+        raise Transient(f"a Drive-ra feltöltött adás ({ident}) neve, mérete vagy MD5-je nem egyezik",
+                        todo="futtasd újra ugyanazt a parancsot (ugyanazt a fájlt frissíti)")
+    return final
+
+
 def upload(client: DriveClient, root_id: str, ident: str, name: str, data: bytes) -> dict:
     """Create or update the episode's file; returns `{id, name, state, folder_created,
     same_name}` (`state`: created, updated or unchanged; `same_name`: other files in the folder
@@ -55,66 +82,39 @@ def upload(client: DriveClient, root_id: str, ident: str, name: str, data: bytes
     if len(files) > 1:
         raise NeedsOwner(f"a {PODCAST} mappában {len(files)} fájl tartozik ehhez az adáshoz: {ident}",
                          todo="töröld a fölösleget a Drive-on, azután futtasd újra")
-    md5 = hashlib.md5(data).hexdigest()
-    if files:
-        meta, state = files[0], "unchanged"
-        if nfc(meta["name"]) != nfc(name):
-            meta = client.t.request("PATCH", f"{API}/files/{_id(meta['id'])}?" + urllib.parse.urlencode(
-                {"fields": FIELDS}), {"name": name})[2]
-            state = "updated"
-        if meta.get("md5Checksum") != md5 or str(meta.get("size")) != str(len(data)):
-            _media(client, meta["id"], data)
-            state = "updated"
-    else:
-        meta = _create(client, {"name": name, "mimeType": MIME, "parents": [folder],
-                                 "appProperties": {APP_KEY: ident}}, data)
-        state = "created"
-    final = client.get(meta["id"])
-    if final.get("md5Checksum") != md5 or str(final.get("size")) != str(len(data)):
-        raise Transient("a Drive-ra feltöltött adás mérete vagy MD5-je nem egyezik",
-                        todo="futtasd újra ugyanazt a parancsot (ugyanazt a fájlt frissíti)")
+    meta, state = _put(client, folder, files, ident, name, data)
+    final = _verified(client, meta["id"], name, data, ident)
     others = [i for i in client.list_children(folder)
               if nfc(i["name"]) == nfc(name) and i["id"] != meta["id"]]
     return {"id": meta["id"], "name": final.get("name", name), "state": state, "folder_created": created,
             "same_name": len(others)}
 
 
-def sync(client: DriveClient, root_id: str, wanted: dict[str, tuple[str, bytes]]) -> list[tuple[str, str]]:
+def sync(client: DriveClient, root_id: str, wanted: dict[str, tuple[str, Callable[[], bytes]]]) -> list[tuple[str, str]]:
     """Every episode's Drive file with this name and these bytes (`sn publish`: the order number
     and the tags; owner, 2026-10-14). One folder lookup, then per episode its file by the app
-    property: renamed when the name differs, its content replaced when the MD5 differs, created
-    when missing; a changed file is verified by size and MD5. Returns [(ident, state)] in ident
-    order (`created`, `updated`, `unchanged`, or `two files: …` – that one is left for the owner)."""
+    property; its bytes are made only then (one MP3 in memory at a time). A changed file is
+    verified by size, MD5 and name. Returns [(ident, state)] in ident order: `created`,
+    `updated`, `unchanged`, or a problem for that episode (two files of one episode – the
+    owner's –, its bytes could not be made); a Drive error stops the whole sync."""
     if not wanted:
         return []
     folder, _ = podcast_folder(client, root_id)
     out = []
     for ident in sorted(wanted):
-        name, data = wanted[ident]
+        name, make = wanted[ident]
         files = managed(client, folder, ident)
         if len(files) > 1:
             out.append((ident, f"{len(files)} fájl tartozik hozzá a {PODCAST} mappában – a tulajdonosé"))
             continue
-        md5 = hashlib.md5(data).hexdigest()
-        if not files:
-            meta = _create(client, {"name": name, "mimeType": MIME, "parents": [folder],
-                                     "appProperties": {APP_KEY: ident}}, data)
-            state = "created"
-        else:
-            meta, state = files[0], "unchanged"
-            if nfc(meta["name"]) != nfc(name):
-                client.t.request("PATCH", f"{API}/files/{_id(meta['id'])}?" + urllib.parse.urlencode(
-                    {"fields": FIELDS}), {"name": name})
-                state = "updated"
-            if meta.get("md5Checksum") != md5 or str(meta.get("size")) != str(len(data)):
-                _media(client, meta["id"], data)
-                state = "updated"
+        try:
+            data = make()
+        except (SnError, OSError) as exc:
+            out.append((ident, f"hiba: {exc}"))
+            continue
+        meta, state = _put(client, folder, files, ident, name, data)
         if state != "unchanged":
-            final = client.get(meta["id"])
-            if final.get("md5Checksum") != md5 or str(final.get("size")) != str(len(data)) or \
-                    nfc(final.get("name", "")) != nfc(name):
-                raise Transient(f"a Drive-on a(z) {ident} adás neve, mérete vagy MD5-je nem egyezik",
-                                todo="futtasd újra az sn publish-t (ugyanazokat a fájlokat frissíti)")
+            _verified(client, meta["id"], name, data, ident)
         out.append((ident, state))
     return out
 

@@ -222,9 +222,9 @@ def test_videos_get_the_number_and_tags_in_video_kesz_and_a_rerun_changes_nothin
     assert sorted(p.name for p in folder.iterdir()) == ["00100_aa-mezopotamia-1.mp4", "00500_athen-1.mp4",
                                                         "00500_athen-2.mp4", "00500_athen-2.opus"]
     tags = probe_tags(folder / "00500_athen-2.mp4")
-    assert tags["title"] == "athen-2 cím (2. rész)" and tags["track"] == "3" and tags["genre"] == "Oktatóvideó"
+    assert tags["title"] == "Athén (2. rész)" and tags["track"] == "500" and tags["genre"] == "Oktatóvideó"
     assert tags["comment"] == "Athén második része." and tags["album"] == "School Notes – Történelem"
-    assert probe_tags(folder / "00100_aa-mezopotamia-1.mp4")["track"] == "1"
+    assert probe_tags(folder / "00100_aa-mezopotamia-1.mp4")["track"] == "100"     # the stored number
     before = {p.name: p.read_bytes() for p in folder.iterdir()}
     lines.clear()
     assert media_files.sync_videos(repo, "barna", lines.append, base) == []
@@ -240,7 +240,8 @@ def test_drive_sync_renames_and_replaces_by_the_app_property_and_then_is_quiet()
     old = fake.add("Történelem – Athén.mp3", folder, "audio/mpeg", b"old", props={"schoolNotesPodcast": "tori/athen"})
     foreign = fake.add("Saját.mp3", folder, "audio/mpeg", b"mine")
     client = DriveClient(fake)
-    wanted = {"tori/athen": ("Történelem – 00500_Athén.mp3", b"tagged"), "tori/kreta": ("Történelem – 00400_Kréta.mp3", b"k")}
+    wanted = {"tori/athen": ("Történelem – 00500_Athén.mp3", lambda: b"tagged"),
+              "tori/kreta": ("Történelem – 00400_Kréta.mp3", lambda: b"k")}
     assert upload.sync(client, "root", wanted) == [("tori/athen", "updated"), ("tori/kreta", "created")]
     assert fake.items[old]["name"] == "Történelem – 00500_Athén.mp3" and fake.content[old] == b"tagged"
     assert fake.items[foreign]["name"] == "Saját.mp3"
@@ -266,3 +267,89 @@ def test_the_store_is_the_tools_own_a_hand_edit_is_a_guard_finding(tmp_path):
 def _git(repo):
     from tests.local.conftest import FakeLocal
     return FakeLocal(repo, repo.parent / "root").git()
+
+
+# --- review round: re-render, interruption, errors, parts ---------------------------------------
+
+def video_repo(tmp_path, videos=("athen-1",)):
+    repo = make_repo(tmp_path)
+    media_order.update(repo)
+    for video in videos:
+        safefs.write_json(repo, f"docs/evidence/video/tori/{video}.json", {})
+    return repo
+
+
+@needs_ffmpeg
+def test_a_re_render_wins_over_the_numbered_copy_and_leaves_one_file(tmp_path, media):
+    repo = video_repo(tmp_path)
+    folder = tmp_path / "kesz" / "barna" / "tori"
+    folder.mkdir(parents=True)
+    shutil.copy(media / "v.mp4", folder / "00500_athen-1.mp4")        # the last publish's copy
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=32x24:rate=5:duration=1",
+                    "-c:v", "libx264", str(folder / "athen-1.mp4")], check=True)   # video.py's fresh render
+    fresh_streams = probe_streams(folder / "athen-1.mp4")
+    assert media_files.sync_videos(repo, "barna", lambda _: None, tmp_path / "kesz") == []
+    assert [p.name for p in folder.iterdir()] == ["00500_athen-1.mp4"]
+    assert probe_streams(folder / "00500_athen-1.mp4") == fresh_streams
+
+
+@needs_ffmpeg
+def test_an_interrupted_rename_is_finished_by_the_target_and_the_old_copy_goes(tmp_path, media):
+    repo = video_repo(tmp_path)
+    folder = tmp_path / "kesz" / "barna" / "tori"
+    folder.mkdir(parents=True)
+    shutil.copy(media / "v.mp4", folder / "00400_athen-1.mp4")        # the old number
+    shutil.copy(media / "v.mp4", folder / "00500_athen-1.mp4")        # already in place when it stopped
+    assert media_files.sync_videos(repo, "barna", lambda _: None, tmp_path / "kesz") == []
+    assert [p.name for p in folder.iterdir()] == ["00500_athen-1.mp4"]
+
+
+def probe_streams(path):
+    return subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_name,width,height", "-of", "csv=p=0",
+                           str(path)], capture_output=True, text=True, check=True).stdout
+
+
+class BrokenDriveLocal:
+    def __init__(self, repo):
+        self.repo, self.name = repo, "barna"
+        self.student = type("S", (), {"drive_root": "root"})()
+
+    def drive(self):
+        from school_notes2.state.errors import NeedsOwner
+        raise NeedsOwner("nincs Drive-token", todo="jelentkezz be")
+
+
+@needs_ffmpeg
+def test_publish_file_step_never_raises_a_drive_ffmpeg_or_file_error_is_a_line(tmp_path, monkeypatch):
+    repo = video_repo(tmp_path)
+    safefs.write_json(repo, "docs/evidence/podcast/tori/athen.json", {})
+    monkeypatch.setattr(media_files.wiki_podcast, "records", lambda repo: [record("tori", "athen", "2026-10-01", "Athén")])
+    folder = tmp_path / "kesz" / "barna" / "tori"
+    folder.mkdir(parents=True)
+    (folder / "athen-1.mp4").write_bytes(b"not a video")
+    lines = []
+    assert media_files.sync(BrokenDriveLocal(repo), lines.append, tmp_path / "kesz") == 1
+    assert "  Drive: nincs Drive-token" in lines
+    assert any(line.startswith("  tori/athen-1.mp4: hiba: ffmpeg: athen-1.mp4") for line in lines)
+    assert (folder / "athen-1.mp4").read_bytes() == b"not a video"            # nothing lost
+    assert [p.name for p in folder.iterdir()] == ["athen-1.mp4"]               # no temp file left
+
+
+def test_parts_sort_as_numbers_and_only_the_last_number_is_the_part(tmp_path):
+    assert media_order.video_page("fejezet-2-10") == "fejezet-2" and media_order.video_part("fejezet-2-10") == 10
+    assert media_order.video_page("athen") == "athen" and media_order.video_part("athen") == 0
+    repo = make_repo(tmp_path)
+    safefs.write_text(repo, "wiki/tori/fejezet-2.md", topic("Második fejezet", "hellasz", 30))
+    media_order.update(repo)
+    for video in ("fejezet-2-10", "fejezet-2-2", "fejezet-2-1"):
+        safefs.write_json(repo, f"docs/evidence/video/tori/{video}.json", {})
+    items = media_files.video_items(repo)
+    assert [i["video"] for i in items] == ["fejezet-2-1", "fejezet-2-2", "fejezet-2-10"]
+    assert {i["number"] for i in items} == {600} and items[2]["tags"]["title"] == "Második fejezet (10. rész)"
+
+
+def test_mp4_track_above_its_16_bit_field_is_left_out(tmp_path):
+    args = media_files.ffmpeg_args(tmp_path / "a.mp4", tmp_path / "b.mp4", {"title": "x", "track": "70000"})
+    assert "track=70000" not in args and "title=x" in args
+    args = media_files.ffmpeg_args(tmp_path / "a.mp3", tmp_path / "b.mp3", {"track": "70000"})
+    assert "track=70000" in args

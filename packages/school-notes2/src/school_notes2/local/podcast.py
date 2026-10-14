@@ -63,7 +63,7 @@ from ..state.errors import SnError
 from ..wiki import markers, media_order, public
 from ..wiki import podcast as wiki_podcast
 from ..wiki.pages import links, resolve, sha256, wiki_pages
-from . import guard, podcast_names, tool_writes
+from . import guard, media_files, podcast_names, tool_writes
 from .podcast_names import STOP, _client, names_lines, stop, timed, where  # noqa: F401 - one place
 from .common import Refused, today
 from .figure_close import REVIEWER
@@ -157,8 +157,10 @@ def release(local, ep, out, *, client=None, sleep=time.sleep) -> int:
     for line in warnings:
         out(f"figyelmeztetés: {line}")
     with tempfile.TemporaryDirectory(prefix="sn-podcast-") as tmp:
+        subject = wiki_podcast.subject_name(local.repo, ep.subject)
         data, starts, seconds = audio.episode(pcms, settings.music, Path(tmp), title=script["title"],
-                                              album=wiki_podcast.SHOW)
+                                              album=media_files.album(subject),
+                                              tags=media_files.site_tags(subject, script["title"], script["summary"]))
     record = build_record(local, ep, script, requests, data, seconds, pcms, starts, timed(checked, starts))
     write_repo(local, ep, record, data, out)
     summary(out, ep, record, data, cost)
@@ -289,17 +291,17 @@ def _public(repo: Path, out) -> None:
 
 
 def drive(local, ep, record: dict, data: bytes, cost: Decimal, out) -> int:
-    """The Drive copy: the MP3 with the tags (`media_files`: title, subject album, track in the
-    teaching order); the other episodes' names and tags follow at the next `sn publish`."""
-    from . import media_files
+    """The Drive copy: the MP3 with every tag (`media_files`: the track is the stored order
+    number); the other episodes' names and tags follow at the next `sn publish`."""
     try:
         item = next(i for i in media_files.podcast_items(local.repo) if i["ident"] == ep.ident)
         data = media_files.podcast_bytes(local.repo, item)
         result = drive_upload.upload(local.drive(), local.student.drive_root, ep.ident,
                                      record["drive"]["name"], data)
-    except SnError as exc:
-        out(f"Hiba: Drive: {exc}" + (f"\nTeendő: {exc.todo}" if exc.todo else ""))
-        local.record("podcast", "drive-failed", target=ep.ident, error_class=exc.kind, cost_usd=float(cost))
+    except (SnError, OSError) as exc:
+        todo = getattr(exc, "todo", "") or "futtasd újra ugyanazt a parancsot (a repó-rész kész)"
+        out(f"Hiba: Drive: {exc}\nTeendő: {todo}")
+        local.record("podcast", "drive-failed", target=ep.ident, error_class=getattr(exc, "kind", "transient"), cost_usd=float(cost))
         return 1
     state = {"created": "új fájl", "updated": "frissítve", "unchanged": "változatlan"}[result["state"]]
     out(f"Drive: {drive_upload.PODCAST}/{result['name']} ({state}"
@@ -338,7 +340,6 @@ def retire(local, ep, out=print) -> int:
     if not safefs.is_file(repo, ep.record):
         local.record("podcast", "stop", target=ep.ident)
         return stop(out, "STOP (nem írtam semmit):", [f"nincs kiadott adás: {ep.record}"])
-    record = safefs.read_json(repo, ep.record)
     pages = players(repo, ep.asset)
     before = _texts(repo, [*pages, wiki_podcast.PAGE])
     try:
@@ -357,7 +358,7 @@ def retire(local, ep, out=print) -> int:
     finally:
         tool_writes.record(repo, files=[ep.asset, ep.record])
         _record_pages(repo, git, before, out)
-    out(f"Drive: a {drive_upload.PODCAST}/{record['drive']['name']} fájl megmarad (az sn a Drive-ról nem töröl; "
+    out(f"Drive: a {drive_upload.PODCAST} mappában a(z) {ep.ident} adás fájlja megmarad (az sn a Drive-ról nem töröl; "
         "ha kell, a tulajdonos törli)")
     local.record("podcast", "retired", target=ep.ident, pages=len(pages))
     return 0

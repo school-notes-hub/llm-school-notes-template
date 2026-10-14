@@ -16,8 +16,10 @@
    then 64 kbit/s CBR MP3, 48 kHz. The speech is mono (the model gives 24 kHz mono, the mixer
    only copies it to both channels); only the music at the two ends is stereo. 64 kbit/s mono is
    0.48 MB a minute: a 3–4 minute episode with the 26 s of music is 1.6–2.2 MB. Bit-exact flags,
-   input metadata dropped, ID3v2.3 with only `title` (the episode) and `album` (the show):
-   the same input gives the same bytes. An ffmpeg failure is an `SnError` (`MixError`)."""
+   input metadata dropped, ID3v2.3 with `title` (the episode), `album` (`School Notes –
+   <Tantárgy>`), `artist`, `album_artist`, `genre` and `comment` (the summary; sn 0.4.3,
+   `local.media_files.site_tags` – no `track`, which follows the order and goes only into the
+   Drive copy): the same input gives the same bytes. An ffmpeg failure is an `SnError` (`MixError`)."""
 
 import json
 import re
@@ -121,11 +123,15 @@ def mix_graph(voice: Path) -> str:
     return MIX_GRAPH.replace("$OS", str(offset)).replace(LIMITER, MONO)
 
 
-def mix(voice: Path, music: Path, out: Path, *, title: str, album: str) -> None:
+def mix(voice: Path, music: Path, out: Path, *, title: str, album: str, tags: dict | None = None) -> None:
+    """`tags` (sn 0.4.3, `local.media_files.site_tags`) are written besides `title` and `album`,
+    in key order; empty values are left out."""
+    values = {k: v for k, v in {"title": title, "album": album, **(tags or {})}.items() if v}
+    metadata = [arg for key in sorted(values) for arg in ("-metadata", f"{key}={values[key]}")]
     _run(["-y", "-v", "error", "-i", str(music), "-i", str(voice), "-sseof", "-20", "-i", str(music),
           "-filter_complex", mix_graph(voice), "-map", "[a]",
           "-c:a", "libmp3lame", "-b:a", BITRATE, "-ac", CHANNELS, "-bitexact", *EXACT,
-          "-id3v2_version", "3", "-metadata", f"title={title}", "-metadata", f"album={album}", str(out)])
+          "-id3v2_version", "3", *metadata, str(out)])
 
 
 def speech_mp3(pcm: bytes) -> bytes:
@@ -149,12 +155,12 @@ def ffmpeg_version() -> str:
 
 
 def episode(scenes: list[bytes], music: Path, work: Path, *, title: str,
-            album: str) -> tuple[bytes, list[float], float]:
+            album: str, tags: dict | None = None) -> tuple[bytes, list[float], float]:
     """The published MP3's bytes, each scene's start in the final episode and its length (s)."""
     check_music(music)
     pcm, starts = voice_track(scenes)
     (work / "voice.pcm").write_bytes(pcm)
     normalized(work / "voice.pcm", work / "voice.wav")
-    mix(work / "voice.wav", music, work / "episode.mp3", title=title, album=album)
+    mix(work / "voice.wav", music, work / "episode.mp3", title=title, album=album, tags=tags)
     out = work / "episode.mp3"
     return out.read_bytes(), [round(VOICE_START + s, 3) for s in starts], round(duration(out), 1)
