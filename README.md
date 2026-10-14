@@ -23,6 +23,8 @@ Optional [curriculum references](references/curriculum/README.md) guide relevant
 
 Generated banners and infographics go through the `sn` command line (`sn gen`, see [the local pass](instructions/helyi-menet.md)). Ordinary notes and SVG diagrams work without paid image generation.
 
+Optional Manim teaching videos use the [video chain](packages/video/README.md): an agent writes the narration and the scene code, the chain does speech, timing, render and the machine gate, and runs from the same tagged release as `sn`.
+
 ## Getting started
 
 An optional [web and print preview](packages/study-site/README.md) renders the existing Markdown with Astro + Starlight, without changing the notes. It runs from this Git checkout; the initial preview release does not publish private material or install a background service.

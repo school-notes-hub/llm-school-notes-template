@@ -1,0 +1,29 @@
+[
+  {"id": "t01", "lepesek": [
+    {"text": "Számoljuk meg a tanulókat nulláról indulva."},
+    {"text": "Összesen tizenkét tanuló van."},
+    {"text": "Aki sportol, háromszöget kap."},
+    {"text": "Aki csak zenél, négyzetet kap."},
+    {"text": "Aki sportol és zenél is, keretes háromszöget kap."}
+  ]},
+  {"id": "t02", "lepesek": [
+    {"text": "Rendezzük el őket két halmazba."},
+    {"text": "A sportolók köré kör kerül: ez az A halmaz."},
+    {"text": "A zenélők köré is kör kerül: ez a B halmaz."},
+    {"text": "Az egész osztály az alaphalmaz, a jele U."},
+    {"text": "A két halmaz közös része a {metszet}.", "szunet": 1.0},
+    {"text": "Erre mutat a nyíl: a metszetben két tanuló van."},
+    {"text": "Csak sportol négy tanuló."},
+    {"text": "Csak zenél három tanuló."},
+    {"text": "A körökön kívül három tanuló van, ők egyiket sem csinálják."},
+    {"text": "A B komplementere az alaphalmaz B-n kívüli része."},
+    {"text": "Ha a két halmaz elemeit összeadjuk, a metszet kétszer számít."}
+  ]},
+  {"id": "t03", "lepesek": [
+    {"text": "Hány tanuló sportol vagy zenél?"},
+    {"text": "Az unió egyenlő: A plusz B, mínusz a metszet."},
+    {"text": "Hat plusz öt, mínusz kettő, az kilenc.", "szunet": 1.0},
+    {"text": "Ellenőrizzük: kilenc tanuló sportol vagy zenél."},
+    {"text": "Ha a metszetet nem vonnánk le, tizenegyet kapnánk, és ez hibás."}
+  ]}
+]

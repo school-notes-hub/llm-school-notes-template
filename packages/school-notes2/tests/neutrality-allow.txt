@@ -3,3 +3,5 @@
 # fixed learner count (`ket-tanulo`, `both-learners`). Add a line only after checking that
 # the text is about the subject or the deployment, not about a learner. A learner name that
 # is also a common word (`barna`, the colour) is listed here per file when used as the word.
+packages/video/lanc/teszt/test_lanc.py ket-tanulo  # a test case with two learner checkouts (any two), not the deployment's learner count
+packages/video/videotar-teszt/tesztjelenet/narracio.json ket-tanulo  # subject matter: two pupils in the intersection of a synthetic set example

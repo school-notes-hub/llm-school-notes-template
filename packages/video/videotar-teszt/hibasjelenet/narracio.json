@@ -1,0 +1,24 @@
+[
+  {"id": "h01", "lepesek": [
+    {"text": "Ez a pont túl korán, a {figyelj} szó előtt jelenik meg.", "szunet": 1.0},
+    {"text": "A körben három pont van."},
+    {"text": "A számot most négyre írjuk át."},
+    {"text": "Ez a szám a következő mondatban hangzik el."},
+    {"text": "Hét pont lenne a cél, de maradunk ennyinél."},
+    {"text": "A jel azt mutatja, hányszor számoltuk."},
+    {"text": "Egy szám áll itt a kör mellett."},
+    {"text": "Mivel kétszer számoltuk a közös részt, levonjuk a metszet elemszámát."},
+    {"text": "Ez a felirat kilóg a képből."},
+    {"text": "A nyíl áthúzza a feliratot."},
+    {"text": "Ez a szöveg túl kicsi."},
+    {"text": "Két kör csak színben különbözik."},
+    {"text": "A keret rajzolása közben a pont még mozog."},
+    {"text": "Ez a mondat a képen is ott áll."},
+    {"text": "Kilenc pont maradt a táblán.", "teszt_whisper": {"Kilenc": "Hat"}},
+    {"text": "Ez a kulcspont, de nincs idő megérteni.", "kulcspont": true},
+    {"text": "A kör mellé később címke kerül, de nem a szavára."},
+    {"text": "Itt a feliratok egymásra csúsznak."},
+    {"text": "Most a kép üres marad, pedig ez a mondat még sokáig tart, egészen a végéig."},
+    {"text": "Itt csak egy apró pont látszik a sötét képen, és semmi más nem kerül mellé."}
+  ]}
+]

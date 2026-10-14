@@ -1,0 +1,25 @@
+__pycache__/
+*.mp4
+*.wav
+*.log
+media/
+elonezet/
+hang/
+*/media/
+*/elonezet/
+*/hang/
+.pytest_cache/
+# a tesztjelenetek generált kimenete (videotar-teszt/render.sh újra előállítja, kb. 15 s)
+videotar-teszt/*/hangido.json
+videotar-teszt/*/szavak.json
+videotar-teszt/*/idoterv.json
+videotar-teszt/*/render_naplo.json
+# a kapu kimenete a tesztjeleneteken (kapu-teszt/kapu-teszt.sh újra előállítja)
+videotar-teszt/*/kapu.json
+videotar-teszt/*/tabla.txt
+videotar-teszt/*/szoveg.md
+videotar-teszt/*/lepeskulcs*.json
+videotar-teszt/*/kockak/
+videotar-teszt/*/lapok/
+videotar-teszt/*/lapok-valtozott/
+videotar-teszt/*/kivagat/

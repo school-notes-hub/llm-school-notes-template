@@ -12,6 +12,7 @@ import ast
 import json
 import os
 import re
+import subprocess
 import unicodedata
 from pathlib import Path
 
@@ -23,6 +24,7 @@ ALLOW = Path(__file__).with_name("neutrality-allow.txt")
 # History is not rewritten (G-21); tests use names only as keys (G-18).
 EXCLUDED = ("CHANGELOG.md",)
 SKIPPED_PARTS = ("tests", "__pycache__", "node_modules")
+VIDEO = "packages/video"
 
 
 def _norm(text: str) -> str:
@@ -31,11 +33,24 @@ def _norm(text: str) -> str:
                    if not unicodedata.combining(c))
 
 
+def video_files() -> set[str]:
+    """The video chain has no src/ layout: all its tracked files are scanned, tests and
+    fixtures included (they stay synthetic). The test renders write ignored output next to
+    the fixtures (sound, word timings, gate tables); that is generated, not written by us."""
+    listed = subprocess.run(["git", "-C", str(TEMPLATE), "ls-files", "-z", "--", VIDEO],
+                            capture_output=True, text=True)
+    if listed.returncode == 0 and listed.stdout:
+        return {f for f in listed.stdout.split("\0") if f}
+    return {p.relative_to(TEMPLATE).as_posix() for p in (TEMPLATE / VIDEO).rglob("*") if p.is_file()}
+
+
 def scope() -> list[str]:
-    """Shared files, the packages' sources and READMEs, and the shared card file."""
+    """Shared files, the packages' sources and READMEs, the whole video chain (`packages/video`,
+    tests included) and the shared card file."""
     files = set(json.loads((TEMPLATE / "shared-files.json").read_text())["files"])
     for pattern in ("packages/*/src/**/*", "packages/*/README.md"):
         files |= {p.relative_to(TEMPLATE).as_posix() for p in TEMPLATE.glob(pattern) if p.is_file()}
+    files |= video_files()
     files.add("subject-cards.json")
     return sorted(f for f in files
                   if not f.startswith(EXCLUDED) and f not in EXCLUDED

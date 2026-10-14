@@ -1,0 +1,34 @@
+{
+ "jelenet": "HibasJelenet",
+ "leiras": "A HibasJelenet 480p-s renderjére a kapu (2. lépés) pontosan ezeket a leleteket adja; az összevetés a (lepes, kod, sulyossag) hármasok listáján pontos egyezés, az obj és az eset tájékoztató. Sorrend: lépés-id, kód, objektumnév.",
+ "leletek": [
+  {"lepes": "h01-01", "kod": "K1", "sulyossag": "hiba", "obj": "h_pont1", "eset": "a {figyelj} horgony képe 0,9 s-mal a szó előtt (kezi.json eltolás −0,8 s; a megengedett 0–0,2 s)"},
+  {"lepes": "h01-01", "kod": "K13", "sulyossag": "hiba", "obj": null, "eset": "üres kép 0:00,0–0:05,7 (h01-01–h01-02), blackdetect; mellékes: a lépés más szabályt sért, a kép közben üres"},
+  {"lepes": "h01-03", "kod": "K2", "sulyossag": "hiba", "obj": "h_szam", "eset": "előbb látszik (a próba s11-03-ja): nyers Transform 3 → 4 a lépés elején, a „négyre” kb. 1,2 s-mal később; a naplónak a 4-et kell látnia"},
+  {"lepes": "h01-04", "kod": "K2", "sulyossag": "hiba", "obj": "h_het", "eset": "lépéshatár: a 7 csak az S+1 lépésben hangzik el"},
+  {"lepes": "h01-06", "kod": "K2", "sulyossag": "figy", "obj": "h_egyszer", "eset": "az „1×” csak -szor/-szer szóhoz párosodhat, ilyen sehol nincs"},
+  {"lepes": "h01-07", "kod": "K2", "sulyossag": "figy", "obj": "h_egy", "eset": "a kötetlen 1-es automatikusan az „Egy” szóhoz párosul, ami névelő is lehet"},
+  {"lepes": "h01-08", "kod": "K2b", "sulyossag": "figy", "obj": "h_tag", "eset": "kötetlen képlet (a próba s04-07-je): 2,1 s-mal a „levonjuk” előtt, utána még több mint 1 s beszéd van hátra"},
+  {"lepes": "h01-08", "kod": "K9", "sulyossag": "hiba", "obj": "h_tag", "eset": "a lépés elején túl (kb. +1,0 s) kötetlenül megjelenő tartalmi csoport"},
+  {"lepes": "h01-09", "kod": "K3", "sulyossag": "hiba", "obj": "h_kilogo", "eset": "a doboz jobb széle kb. 1974 px (> 1920 + 2)"},
+  {"lepes": "h01-10", "kod": "K4", "sulyossag": "figy", "obj": "h_felirat", "eset": "a saját kódú h_nyil vonala metszi a felirat dobozát"},
+  {"lepes": "h01-11", "kod": "K5", "sulyossag": "hiba", "obj": "h_apro", "eset": "hatásos betűméret 20 < 24"},
+  {"lepes": "h01-11", "kod": "K13", "sulyossag": "figy", "obj": null, "eset": "szinte üres kép 0:34,6–0:36,3 (h01-11–h01-12), blackdetect; mellékes: a lépés más szabályt sért, a kép közben üres"},
+  {"lepes": "h01-12", "kod": "K6b", "sulyossag": "figy", "obj": "h_kor_kek", "eset": "h_kor_kek és h_kor_piros: felirat nélküli keretek, csak a színük más"},
+  {"lepes": "h01-13", "kod": "K7", "sulyossag": "figy", "obj": "h_keret", "eset": "a keret (vonatkozik: h_pont2) megjelenése alatt a pont mozog (naplóalapú)"},
+  {"lepes": "h01-14", "kod": "K8", "sulyossag": "hiba", "obj": "h_mondat", "eset": "a narráció 5 egymást követő szava a képen (K8b)"},
+  {"lepes": "h01-15", "kod": "K10", "sulyossag": "hiba", "obj": null, "eset": "számeltérés: a narráció „Kilenc”, a hang „Hat” (szavak.json whisper mezője)"},
+  {"lepes": "h01-15", "kod": "K13", "sulyossag": "hiba", "obj": null, "eset": "üres kép 0:45,5–0:48,7 (h01-15–h01-16), blackdetect; mellékes: a lépés más szabályt sért, a kép közben üres"},
+  {"lepes": "h01-16", "kod": "K12", "sulyossag": "figy", "obj": null, "eset": "kulcspont (narracio.json kulcspont: true), álló idő kb. 0 s < 1,0 s"},
+  {"lepes": "h01-17", "kod": "K9", "sulyossag": "hiba", "obj": "h_cimke", "eset": "vonatkozik-os saját szöveg a lépés közepén (+0,6 s), kötetlenül: a vonatkozik csak kiemelést, keretet, nyilat ment fel"},
+  {"lepes": "h01-18", "kod": "K4", "sulyossag": "figy", "obj": "h_ra_a", "eset": "a ra= szöveg (h_ra_a) a h_ra_b feliratra csúszik: a ra csak a vonalmetszés alól ment fel"},
+  {"lepes": "h01-19", "kod": "K13", "sulyossag": "hiba", "obj": null, "eset": "szándékos: a kép kiürül, és a lépés végéig üres marad (0:58,4–1:04,4)"},
+  {"lepes": "h01-20", "kod": "K13", "sulyossag": "figy", "obj": null, "eset": "szándékos: csak egy 0,15 sugarú pont a fekete képen (99,9–99,95% sötét, 1:04,4–1:10,8)"}
+ ],
+ "renderen_kivul": [
+  {"kod": "K6a", "hol": "pytest: test_k6a_csak_szin (a Kategoriak létrehozáskor hibát dob, render nincs)"},
+  {"kod": "K7", "hol": "pytest: test_kore_rajzol_mozgasra_hibat_dob (futásidejű hiba, render nincs)"},
+  {"kod": "K8a", "hol": "2. lépés: ffprobe a --vegleges összefésült mp4-en (fejezet, feliratsáv, cím-metaadat)"},
+  {"kod": "K11", "hol": "2. lépés: szintetikus 8 perc fölötti idoterv/hangido a kapu tesztjében (8 perces render a próbához pazarló)"}
+ ]
+}

@@ -1,0 +1,118 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "videotar-naplo/1",
+ "title": "render_naplo.json – a Manim-oldal (videotar) és a kapu (video.py) egyetlen szerződése",
+ "description": "Dobozok és pontok 1920×1080-as pixelben (bal felső sarok = 0,0), a render felbontásától függetlenül; kockák a videó elejétől. Az 'allapot' kulcsai: 'vege' (a lépés vége) és '@<horgony>' (a horgonyos szakasz vége). A $defs alatt a Manim-oldal két bemenete (idoterv.json, szavak.json) is szerepel.",
+ "type": "object",
+ "required": ["sema", "jelenet", "videotar", "manim", "fps", "felbontas", "bemenet", "kepkockak", "hossz_mp", "lepesek"],
+ "additionalProperties": false,
+ "properties": {
+  "sema": {"enum": ["videotar-naplo/1"]},
+  "jelenet": {"type": "string"},
+  "videotar": {"type": "string"},
+  "manim": {"type": "string"},
+  "fps": {"type": "number"},
+  "felbontas": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2},
+  "bemenet": {"type": "object", "description": "fájlnév → sha256 (narracio.json, idoterv.json, a jelenetfájl, videotar)", "additionalProperties": {"type": "string"}},
+  "kepkockak": {"type": "integer", "minimum": 0},
+  "hossz_mp": {"type": "number"},
+  "lepesek": {"type": "array", "items": {"$ref": "#/$defs/lepes"}}
+ },
+ "$defs": {
+  "doboz": {"type": "array", "items": {"type": "integer"}, "minItems": 4, "maxItems": 4, "description": "[x0, y0, x1, y1] px"},
+  "pont": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2},
+  "lepes": {
+   "type": "object",
+   "required": ["id", "kezd_kocka", "veg_kocka", "elemek", "megjelenik", "eltunik", "mozog", "atalakul", "szinvaltas", "kapcsolok", "utolso_valtozas", "allapot"],
+   "additionalProperties": false,
+   "properties": {
+    "id": {"type": "string"},
+    "kezd_kocka": {"type": "integer"},
+    "veg_kocka": {"type": "integer"},
+    "elemek": {"type": "array", "items": {"$ref": "#/$defs/elem"}},
+    "megjelenik": {"type": "array", "items": {"$ref": "#/$defs/megjelenik"}},
+    "eltunik": {"type": "array", "items": {"$ref": "#/$defs/esemeny"}},
+    "mozog": {"type": "array", "items": {"$ref": "#/$defs/sav"}},
+    "atalakul": {"type": "array", "items": {"$ref": "#/$defs/sav"}},
+    "szinvaltas": {"type": "array", "items": {"$ref": "#/$defs/esemeny"}},
+    "kapcsolok": {"type": "array", "items": {"type": "object", "required": ["obj", "kapcsolo", "indok"], "additionalProperties": false,
+                  "properties": {"obj": {"type": "string"}, "kapcsolo": {"enum": ["ra", "kivul", "szamellenorzes"]}, "indok": {"type": "string", "minLength": 1}}}},
+    "utolso_valtozas": {"type": ["integer", "null"], "description": "az utolsó animáció (nem várakozás) végének kockája; az álló idő = veg_kocka − ez"},
+    "allapot": {"type": "object", "required": ["vege"], "additionalProperties": {"type": "array", "items": {"$ref": "#/$defs/objektum"}}}
+   }
+  },
+  "elem": {
+   "type": "object",
+   "description": "egy play vagy várakozás; 'horgony' / 'szora' a kötött elem első play-én (a kötés szava)",
+   "required": ["kezd_kocka", "veg_kocka", "tipus", "celok", "rovidites"],
+   "additionalProperties": false,
+   "properties": {
+    "kezd_kocka": {"type": "integer"}, "veg_kocka": {"type": "integer"}, "tipus": {"type": "string"},
+    "celok": {"type": "array", "items": {"type": "string"}}, "rovidites": {"type": "number"},
+    "horgony": {"type": "string"}, "szora": {"type": "string"}
+   }
+  },
+  "megjelenik": {
+   "type": "object",
+   "description": "ok: uj (új objektum), tartalom (más szöveg/szám ugyanazon a néven: atir, nyers Transform, számláló), atlatszosag (0-ról látható lett); kocka = a play kezdete, veg_kocka = a vége (számlálónál a K2 a végét méri)",
+   "required": ["obj", "kocka", "veg_kocka", "kat", "ok", "csoport", "kotes"],
+   "additionalProperties": false,
+   "properties": {
+    "obj": {"type": "string"}, "kocka": {"type": "integer"}, "veg_kocka": {"type": "integer"}, "kat": {"type": "string"},
+    "ok": {"enum": ["uj", "tartalom", "atlatszosag"]}, "csoport": {"type": "string"},
+    "kotes": {"enum": ["szora", "horgony", null]}, "kotes_szo": {"type": "string"},
+    "tartalom": {"type": "string"}, "szamok": {"type": "array", "items": {"type": "number"}},
+    "elozo_szamok": {"type": "array", "items": {"type": "number"}},
+    "szor": {"type": "array", "items": {"type": "number"}}, "szo": {"type": "string"}
+   }
+  },
+  "esemeny": {"type": "object", "required": ["obj", "kocka", "veg_kocka"], "additionalProperties": false,
+              "properties": {"obj": {"type": "string"}, "kocka": {"type": "integer"}, "veg_kocka": {"type": "integer"}}},
+  "sav": {"type": "object", "required": ["obj", "tol", "ig"], "additionalProperties": false,
+          "properties": {"obj": {"type": "string"}, "tol": {"type": "integer"}, "ig": {"type": "integer"}}},
+  "objektum": {
+   "type": "object",
+   "description": "egy látható, atomi objektum (szöveg, alak, vonal; a csoportok a 'csoport' mezőben). kat: szoveg, szam, keplet, szamlalo, eredmeny, szamolas, jelolo, kiemeles, keret, nyil, vonal, alak; forras: videotar vagy sajat",
+   "required": ["obj", "kat", "fajta", "csoport", "forras", "doboz", "atl"],
+   "additionalProperties": false,
+   "properties": {
+    "obj": {"type": "string"}, "kat": {"type": "string"}, "fajta": {"type": "string"}, "csoport": {"type": "string"},
+    "forras": {"enum": ["videotar", "sajat"]}, "doboz": {"$ref": "#/$defs/doboz"},
+    "font": {"type": "number", "description": "hatásos betűméret: az első látott font × mostani magasság / első magasság"},
+    "szin": {"type": "string"}, "atl": {"type": "number"},
+    "tartalom": {"type": "string"}, "szamok": {"type": "array", "items": {"type": "number"}},
+    "szor": {"type": "array", "items": {"type": "number"}},
+    "vonal": {"type": "object", "required": ["t"], "additionalProperties": false,
+              "properties": {"t": {"enum": ["kor", "szakasz", "torott"]}, "k": {"$ref": "#/$defs/pont"}, "r": {"type": "integer"},
+                             "p": {"type": "array"}}},
+    "alairas": {"type": "object", "required": ["osztaly", "csucs", "meret", "minta", "korvonal", "cimke"], "additionalProperties": false,
+                "properties": {"osztaly": {"type": "string"}, "csucs": {"type": ["integer", "null"]},
+                               "meret": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2},
+                               "minta": {"type": ["string", "null"]}, "korvonal": {"type": "number"}, "cimke": {"type": ["string", "null"]}}},
+    "szo": {"type": "string"}, "vonatkozik": {"type": "array", "items": {"type": "string"}}, "cimke": {"type": "string"},
+    "ra": {"type": "string", "minLength": 1}, "kivul": {"type": "string", "minLength": 1}, "szamellenorzes": {"type": "string", "minLength": 1}
+   }
+  },
+  "idoterv": {
+   "type": "object", "required": ["fps", "elore_s", "rate", "kocka_osszes", "lepesek"],
+   "properties": {
+    "fps": {"type": "number"}, "elore_s": {"type": "number"}, "rate": {"type": "integer"}, "kocka_osszes": {"type": "integer"},
+    "lepesek": {"type": "array", "items": {"type": "object",
+      "required": ["id", "kezd_kocka", "veg_kocka", "anim_kocka", "horgonyok"],
+      "properties": {"id": {"type": "string"}, "kezd_kocka": {"type": "integer"}, "veg_kocka": {"type": "integer"},
+                     "anim_kocka": {"type": "integer"}, "horgonyok": {"type": "object"},
+                     "szavak": {"type": "array", "items": {"type": "object", "required": ["szo", "ertek", "szo_s", "kocka", "forras"],
+                       "properties": {"szo": {"type": "string"}, "ertek": {"type": ["number", "null"]}, "szo_s": {"type": "number"},
+                                      "kocka": {"type": "integer", "description": "a szóra kötött elem kockája: szó kezdete − elore_s"},
+                                      "forras": {"enum": ["whisper", "becsult", "gyanus", "kezi"]}}}}}}}
+   }
+  },
+  "szavak": {
+   "type": "object", "description": "lépés-id → a lépés szavai a lépés hangjához mérve",
+   "additionalProperties": {"type": "array", "items": {"type": "object", "required": ["szo", "kezd_s", "veg_s", "ertek", "forras"],
+     "properties": {"szo": {"type": "string"}, "kezd_s": {"type": "number"}, "veg_s": {"type": "number"},
+                    "ertek": {"type": ["number", "null"]}, "forras": {"enum": ["whisper", "becsult", "gyanus", "kezi"]},
+                    "whisper": {"type": "string", "description": "amit a Whisper ehhez a szóhoz hallott (a K10-hez)"}}}}
+  }
+ }
+}

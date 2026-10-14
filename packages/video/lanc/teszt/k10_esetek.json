@@ -1,0 +1,639 @@
+[
+ {
+  "video": "ezres-pont",
+  "lepes": "s01-01",
+  "text": "A tömeg jele em, és most tizenötezer kilogramm.",
+  "words": [
+   {
+    "word": " A",
+    "start": 0.12,
+    "end": 0.27
+   },
+   {
+    "word": " tömegjele",
+    "start": 0.27,
+    "end": 0.82
+   },
+   {
+    "word": " M,",
+    "start": 0.82,
+    "end": 0.97
+   },
+   {
+    "word": " és",
+    "start": 0.97,
+    "end": 1.17
+   },
+   {
+    "word": " most",
+    "start": 1.17,
+    "end": 1.47
+   },
+   {
+    "word": " 15",
+    "start": 1.47,
+    "end": 1.67
+   },
+   {
+    "word": ".000",
+    "start": 1.67,
+    "end": 1.92
+   },
+   {
+    "word": " kg.",
+    "start": 1.92,
+    "end": 2.12
+   }
+  ]
+ },
+ {
+  "video": "ezer-szoval",
+  "lepes": "s01-02",
+  "text": "A tizenötezer kilogramm tömeget két méter per szekundumnégyzettel gyorsítjuk.",
+  "words": [
+   {
+    "word": "A",
+    "start": 0.12,
+    "end": 0.27
+   },
+   {
+    "word": "15",
+    "start": 0.27,
+    "end": 0.47
+   },
+   {
+    "word": "ezer",
+    "start": 0.47,
+    "end": 0.77
+   },
+   {
+    "word": "kilogramm",
+    "start": 0.77,
+    "end": 1.32
+   },
+   {
+    "word": "tömeget",
+    "start": 1.32,
+    "end": 1.77
+   },
+   {
+    "word": "2",
+    "start": 1.77,
+    "end": 1.92
+   },
+   {
+    "word": "méter",
+    "start": 1.92,
+    "end": 2.27
+   },
+   {
+    "word": "per",
+    "start": 2.27,
+    "end": 2.52
+   },
+   {
+    "word": "szekundum",
+    "start": 2.52,
+    "end": 3.07
+   },
+   {
+    "word": "négyzettel",
+    "start": 3.07,
+    "end": 3.67
+   },
+   {
+    "word": "gyorsítjuk.",
+    "start": 3.67,
+    "end": 4.27
+   }
+  ]
+ },
+ {
+  "video": "ezer-szoval",
+  "lepes": "s01-03",
+  "text": "Tizenötezer szor kettő, ez harmincezer.",
+  "words": [
+   {
+    "word": " 15",
+    "start": 0.12,
+    "end": 0.32
+   },
+   {
+    "word": " ezer",
+    "start": 0.32,
+    "end": 0.62
+   },
+   {
+    "word": " szor",
+    "start": 0.62,
+    "end": 0.92
+   },
+   {
+    "word": " 2,",
+    "start": 0.92,
+    "end": 1.07
+   },
+   {
+    "word": " ez",
+    "start": 1.07,
+    "end": 1.27
+   },
+   {
+    "word": " 30",
+    "start": 1.27,
+    "end": 1.47
+   },
+   {
+    "word": " ezer.",
+    "start": 1.47,
+    "end": 1.77
+   }
+  ]
+ },
+ {
+  "video": "ezer-szoval",
+  "lepes": "s01-04",
+  "text": "Mértékegysége kilogramm szor méter per szekundumnégyzet, vagyis newton: az erő harmincezer newton.",
+  "words": [
+   {
+    "word": " Mértékegysége",
+    "start": 0.12,
+    "end": 0.87
+   },
+   {
+    "word": " kilogramm",
+    "start": 0.87,
+    "end": 1.42
+   },
+   {
+    "word": " szor",
+    "start": 1.42,
+    "end": 1.72
+   },
+   {
+    "word": " méter",
+    "start": 1.72,
+    "end": 2.07
+   },
+   {
+    "word": " per",
+    "start": 2.07,
+    "end": 2.32
+   },
+   {
+    "word": " szekundum",
+    "start": 2.32,
+    "end": 2.87
+   },
+   {
+    "word": " négyzet,",
+    "start": 2.87,
+    "end": 3.32
+   },
+   {
+    "word": " vagyis",
+    "start": 3.32,
+    "end": 3.72
+   },
+   {
+    "word": " newton.",
+    "start": 3.72,
+    "end": 4.12
+   },
+   {
+    "word": " Az",
+    "start": 4.12,
+    "end": 4.32
+   },
+   {
+    "word": " erő",
+    "start": 4.32,
+    "end": 4.57
+   },
+   {
+    "word": " 30",
+    "start": 4.57,
+    "end": 4.77
+   },
+   {
+    "word": " ezer",
+    "start": 4.77,
+    "end": 5.07
+   },
+   {
+    "word": " newton.",
+    "start": 5.07,
+    "end": 5.47
+   }
+  ]
+ },
+ {
+  "video": "szokozos-ezres",
+  "lepes": "s01-05",
+  "text": "Harmincezer newton tehát harminc kilonewton, hiszen egy kilonewton ezer newton.",
+  "words": [
+   {
+    "word": " 30",
+    "start": 0.12,
+    "end": 0.32
+   },
+   {
+    "word": " 000",
+    "start": 0.32,
+    "end": 0.57
+   },
+   {
+    "word": " N",
+    "start": 0.57,
+    "end": 0.72
+   },
+   {
+    "word": " tehát",
+    "start": 0.72,
+    "end": 1.07
+   },
+   {
+    "word": " 30",
+    "start": 1.07,
+    "end": 1.27
+   },
+   {
+    "word": " kN,",
+    "start": 1.27,
+    "end": 1.47
+   },
+   {
+    "word": " hiszen",
+    "start": 1.47,
+    "end": 1.87
+   },
+   {
+    "word": " 1",
+    "start": 1.87,
+    "end": 2.02
+   },
+   {
+    "word": " kN",
+    "start": 2.02,
+    "end": 2.22
+   },
+   {
+    "word": " 1000",
+    "start": 2.22,
+    "end": 2.52
+   },
+   {
+    "word": " N.",
+    "start": 2.52,
+    "end": 2.67
+   }
+  ]
+ },
+ {
+  "video": "ezres-pont-toldalek",
+  "lepes": "s02-01",
+  "text": "Az egyik oldal száz centiméter, a másik is száz centiméterrel egyenlő, így egy négyzetméter tízezer négyzetcentiméterrel azonos.",
+  "words": [
+   {
+    "word": " Az",
+    "start": 0.12,
+    "end": 0.32
+   },
+   {
+    "word": " egyik",
+    "start": 0.32,
+    "end": 0.67
+   },
+   {
+    "word": " oldal",
+    "start": 0.67,
+    "end": 1.02
+   },
+   {
+    "word": " 100",
+    "start": 1.02,
+    "end": 1.27
+   },
+   {
+    "word": " cm,",
+    "start": 1.27,
+    "end": 1.47
+   },
+   {
+    "word": " a",
+    "start": 1.47,
+    "end": 1.62
+   },
+   {
+    "word": " másik",
+    "start": 1.62,
+    "end": 1.97
+   },
+   {
+    "word": " is",
+    "start": 1.97,
+    "end": 2.17
+   },
+   {
+    "word": " 100",
+    "start": 2.17,
+    "end": 2.42
+   },
+   {
+    "word": " cm",
+    "start": 2.42,
+    "end": 2.62
+   },
+   {
+    "word": "-rel.",
+    "start": 2.62,
+    "end": 2.92
+   },
+   {
+    "word": " egyenlő,",
+    "start": 2.92,
+    "end": 3.37
+   },
+   {
+    "word": " így",
+    "start": 3.37,
+    "end": 3.62
+   },
+   {
+    "word": " 1",
+    "start": 3.62,
+    "end": 3.77
+   },
+   {
+    "word": " négyzetméter",
+    "start": 3.77,
+    "end": 4.47
+   },
+   {
+    "word": " 10",
+    "start": 4.47,
+    "end": 4.67
+   },
+   {
+    "word": ".000",
+    "start": 4.67,
+    "end": 4.92
+   },
+   {
+    "word": " négyzetcentiméterrel",
+    "start": 4.92,
+    "end": 6.02
+   },
+   {
+    "word": " azonos.",
+    "start": 6.02,
+    "end": 6.42
+   }
+  ]
+ },
+ {
+  "video": "szokozos-csoport",
+  "lepes": "s02-02",
+  "text": "Tegyük fel, az erő nagysága százhuszonötezerkilencszáznyolcvan newton.",
+  "words": [
+   {
+    "word": " Tegyük",
+    "start": 0.12,
+    "end": 0.52
+   },
+   {
+    "word": " fel,",
+    "start": 0.52,
+    "end": 0.77
+   },
+   {
+    "word": " az",
+    "start": 0.77,
+    "end": 0.97
+   },
+   {
+    "word": " erőnagysága",
+    "start": 0.97,
+    "end": 1.62
+   },
+   {
+    "word": " 125",
+    "start": 1.62,
+    "end": 1.87
+   },
+   {
+    "word": " 980",
+    "start": 1.87,
+    "end": 2.12
+   },
+   {
+    "word": " newton.",
+    "start": 2.12,
+    "end": 2.52
+   }
+  ]
+ },
+ {
+  "video": "ezer-szoval",
+  "lepes": "s03-01",
+  "text": "Tizenegy tonna, vagyis tizenegyezer kilogramm.",
+  "words": [
+   {
+    "word": " 11",
+    "start": 0.12,
+    "end": 0.32
+   },
+   {
+    "word": " tonna,",
+    "start": 0.32,
+    "end": 0.67
+   },
+   {
+    "word": " vagyis",
+    "start": 0.67,
+    "end": 1.07
+   },
+   {
+    "word": " 11",
+    "start": 1.07,
+    "end": 1.27
+   },
+   {
+    "word": " ezer",
+    "start": 1.27,
+    "end": 1.57
+   },
+   {
+    "word": " kilogramm.",
+    "start": 1.57,
+    "end": 2.12
+   }
+  ]
+ },
+ {
+  "video": "ezres-pont",
+  "lepes": "s03-02",
+  "text": "Tizenegyezer kilogramm és kétszáznegyven kilogramm együtt tizenegyezerkétszáznegyven kilogramm.",
+  "words": [
+   {
+    "word": " 11",
+    "start": 0.12,
+    "end": 0.32
+   },
+   {
+    "word": ".000",
+    "start": 0.32,
+    "end": 0.57
+   },
+   {
+    "word": " kg",
+    "start": 0.57,
+    "end": 0.77
+   },
+   {
+    "word": " és",
+    "start": 0.77,
+    "end": 0.97
+   },
+   {
+    "word": " 240",
+    "start": 0.97,
+    "end": 1.22
+   },
+   {
+    "word": " kg,",
+    "start": 1.22,
+    "end": 1.42
+   },
+   {
+    "word": " együtt",
+    "start": 1.42,
+    "end": 1.82
+   },
+   {
+    "word": " 11",
+    "start": 1.82,
+    "end": 2.02
+   },
+   {
+    "word": ".240",
+    "start": 2.02,
+    "end": 2.27
+   },
+   {
+    "word": " kg.",
+    "start": 2.27,
+    "end": 2.47
+   }
+  ]
+ },
+ {
+  "video": "ezres-pont",
+  "lepes": "s03-03",
+  "text": "Kétszáznegyven kilogramm meg tizenegy tonna együtt tizenegyezerkétszáznegyven kilogramm.",
+  "words": [
+   {
+    "word": " 240",
+    "start": 0.12,
+    "end": 0.37
+   },
+   {
+    "word": " kilogram",
+    "start": 0.37,
+    "end": 0.87
+   },
+   {
+    "word": " meg",
+    "start": 0.87,
+    "end": 1.12
+   },
+   {
+    "word": " 11",
+    "start": 1.12,
+    "end": 1.32
+   },
+   {
+    "word": " tonna",
+    "start": 1.32,
+    "end": 1.67
+   },
+   {
+    "word": " együtt",
+    "start": 1.67,
+    "end": 2.07
+   },
+   {
+    "word": " 11",
+    "start": 2.07,
+    "end": 2.27
+   },
+   {
+    "word": ".240",
+    "start": 2.27,
+    "end": 2.52
+   },
+   {
+    "word": " kilogram.",
+    "start": 2.52,
+    "end": 3.02
+   }
+  ]
+ },
+ {
+  "video": "kimondott-tizedesvesszo",
+  "lepes": "s04-01",
+  "text": "A hat kilonewtonos teher a bal végtől egy vessző öt méterre hat.",
+  "words": [
+   {
+    "word": "A",
+    "start": 0.12,
+    "end": 0.27
+   },
+   {
+    "word": "6",
+    "start": 0.27,
+    "end": 0.42
+   },
+   {
+    "word": "kN-os",
+    "start": 0.42,
+    "end": 0.77
+   },
+   {
+    "word": "teher",
+    "start": 0.77,
+    "end": 1.12
+   },
+   {
+    "word": "a",
+    "start": 1.12,
+    "end": 1.27
+   },
+   {
+    "word": "bal",
+    "start": 1.27,
+    "end": 1.52
+   },
+   {
+    "word": "végtől",
+    "start": 1.52,
+    "end": 1.92
+   },
+   {
+    "word": "1,5",
+    "start": 1.92,
+    "end": 2.17
+   },
+   {
+    "word": "méterre",
+    "start": 2.17,
+    "end": 2.62
+   },
+   {
+    "word": "hat.",
+    "start": 2.62,
+    "end": 2.87
+   }
+  ]
+ }
+]
