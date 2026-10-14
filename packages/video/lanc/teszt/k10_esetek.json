@@ -2,7 +2,7 @@
  {
   "video": "ezres-pont",
   "lepes": "s01-01",
-  "text": "A tömeg jele em, és most tizenötezer kilogramm.",
+  "text": "A tömeg jele em, és most tizenhétezer kilogramm.",
   "words": [
    {
     "word": " A",
@@ -30,7 +30,7 @@
     "end": 1.47
    },
    {
-    "word": " 15",
+    "word": " 17",
     "start": 1.47,
     "end": 1.67
    },
@@ -49,7 +49,7 @@
  {
   "video": "ezer-szoval",
   "lepes": "s01-02",
-  "text": "A tizenötezer kilogramm tömeget két méter per szekundumnégyzettel gyorsítjuk.",
+  "text": "A tizenhétezer kilogramm tömeget két méter per szekundumnégyzettel gyorsítjuk.",
   "words": [
    {
     "word": "A",
@@ -57,7 +57,7 @@
     "end": 0.27
    },
    {
-    "word": "15",
+    "word": "17",
     "start": 0.27,
     "end": 0.47
    },
@@ -111,10 +111,10 @@
  {
   "video": "ezer-szoval",
   "lepes": "s01-03",
-  "text": "Tizenötezer szor kettő, ez harmincezer.",
+  "text": "Tizenhétezer szor kettő, ez harmincnégyezer.",
   "words": [
    {
-    "word": " 15",
+    "word": " 17",
     "start": 0.12,
     "end": 0.32
    },
@@ -139,7 +139,7 @@
     "end": 1.27
    },
    {
-    "word": " 30",
+    "word": " 34",
     "start": 1.27,
     "end": 1.47
    },
@@ -153,7 +153,7 @@
  {
   "video": "ezer-szoval",
   "lepes": "s01-04",
-  "text": "Mértékegysége kilogramm szor méter per szekundumnégyzet, vagyis newton: az erő harmincezer newton.",
+  "text": "Mértékegysége kilogramm szor méter per szekundumnégyzet, vagyis newton: az erő harmincnégyezer newton.",
   "words": [
    {
     "word": " Mértékegysége",
@@ -211,7 +211,7 @@
     "end": 4.57
    },
    {
-    "word": " 30",
+    "word": " 34",
     "start": 4.57,
     "end": 4.77
    },
@@ -230,10 +230,10 @@
  {
   "video": "szokozos-ezres",
   "lepes": "s01-05",
-  "text": "Harmincezer newton tehát harminc kilonewton, hiszen egy kilonewton ezer newton.",
+  "text": "Harmincnégyezer newton tehát harmincnégy kilonewton, hiszen egy kilonewton ezer newton.",
   "words": [
    {
-    "word": " 30",
+    "word": " 34",
     "start": 0.12,
     "end": 0.32
    },
@@ -253,7 +253,7 @@
     "end": 1.07
    },
    {
-    "word": " 30",
+    "word": " 34",
     "start": 1.07,
     "end": 1.27
    },
@@ -394,7 +394,7 @@
  {
   "video": "szokozos-csoport",
   "lepes": "s02-02",
-  "text": "Tegyük fel, az erő nagysága százhuszonötezerkilencszáznyolcvan newton.",
+  "text": "Tegyük fel, az erő nagysága százharmincnégyezerhétszázhatvan newton.",
   "words": [
    {
     "word": " Tegyük",
@@ -417,12 +417,12 @@
     "end": 1.62
    },
    {
-    "word": " 125",
+    "word": " 134",
     "start": 1.62,
     "end": 1.87
    },
    {
-    "word": " 980",
+    "word": " 760",
     "start": 1.87,
     "end": 2.12
    },
@@ -436,10 +436,10 @@
  {
   "video": "ezer-szoval",
   "lepes": "s03-01",
-  "text": "Tizenegy tonna, vagyis tizenegyezer kilogramm.",
+  "text": "Tizenhárom tonna, vagyis tizenháromezer kilogramm.",
   "words": [
    {
-    "word": " 11",
+    "word": " 13",
     "start": 0.12,
     "end": 0.32
    },
@@ -454,7 +454,7 @@
     "end": 1.07
    },
    {
-    "word": " 11",
+    "word": " 13",
     "start": 1.07,
     "end": 1.27
    },
@@ -473,10 +473,10 @@
  {
   "video": "ezres-pont",
   "lepes": "s03-02",
-  "text": "Tizenegyezer kilogramm és kétszáznegyven kilogramm együtt tizenegyezerkétszáznegyven kilogramm.",
+  "text": "Tizenháromezer kilogramm és háromszáznyolcvan kilogramm együtt tizenháromezerháromszáznyolcvan kilogramm.",
   "words": [
    {
-    "word": " 11",
+    "word": " 13",
     "start": 0.12,
     "end": 0.32
    },
@@ -496,7 +496,7 @@
     "end": 0.97
    },
    {
-    "word": " 240",
+    "word": " 380",
     "start": 0.97,
     "end": 1.22
    },
@@ -511,12 +511,12 @@
     "end": 1.82
    },
    {
-    "word": " 11",
+    "word": " 13",
     "start": 1.82,
     "end": 2.02
    },
    {
-    "word": ".240",
+    "word": ".380",
     "start": 2.02,
     "end": 2.27
    },
@@ -530,10 +530,10 @@
  {
   "video": "ezres-pont",
   "lepes": "s03-03",
-  "text": "Kétszáznegyven kilogramm meg tizenegy tonna együtt tizenegyezerkétszáznegyven kilogramm.",
+  "text": "Háromszáznyolcvan kilogramm meg tizenhárom tonna együtt tizenháromezerháromszáznyolcvan kilogramm.",
   "words": [
    {
-    "word": " 240",
+    "word": " 380",
     "start": 0.12,
     "end": 0.37
    },
@@ -548,7 +548,7 @@
     "end": 1.12
    },
    {
-    "word": " 11",
+    "word": " 13",
     "start": 1.12,
     "end": 1.32
    },
@@ -563,12 +563,12 @@
     "end": 2.07
    },
    {
-    "word": " 11",
+    "word": " 13",
     "start": 2.07,
     "end": 2.27
    },
    {
-    "word": ".240",
+    "word": ".380",
     "start": 2.27,
     "end": 2.52
    },
@@ -582,7 +582,7 @@
  {
   "video": "kimondott-tizedesvesszo",
   "lepes": "s04-01",
-  "text": "A hat kilonewtonos teher a bal végtől egy vessző öt méterre hat.",
+  "text": "A négy kilonewtonos teher a bal végtől kettő vessző öt méterre hat.",
   "words": [
    {
     "word": "A",
@@ -590,7 +590,7 @@
     "end": 0.27
    },
    {
-    "word": "6",
+    "word": "4",
     "start": 0.27,
     "end": 0.42
    },
@@ -620,7 +620,7 @@
     "end": 1.92
    },
    {
-    "word": "1,5",
+    "word": "2,5",
     "start": 1.92,
     "end": 2.17
    },

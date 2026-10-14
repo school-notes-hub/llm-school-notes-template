@@ -359,7 +359,7 @@ def szoidok(szolg, sid: str, pcm: bytes, kezd: int = 0) -> tuple[list, int]:
 
 def szam_hibak(szavak: list[dict]) -> list:
     """A kapu K10-szabálya (kapu.k10): a narráció száma, amelynek Whisper-értéke (`szavak.whisper_ertek`,
-    „3 2” = 3,2) más vagy hiányzik → [[szó, Whisper-szöveg], …]. A lánc, a kapu és a nyugta így ugyanazt
+    „4 7” = 4,7) más vagy hiányzik → [[szó, Whisper-szöveg], …]. A lánc, a kapu és a nyugta így ugyanazt
     tekinti számeltérésnek."""
     return [[w["szo"], w.get("whisper")] for w in szavak if w.get("ertek") is not None
             and not _egyezik(w["ertek"], sz.whisper_ertek(w.get("whisper") or ""))]

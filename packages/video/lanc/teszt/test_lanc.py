@@ -130,8 +130,8 @@ def test_szamolvaso_valodi_szamhiba_megmarad(text, szavak):
 
 
 def test_whisper_ertek_elojeles_egesz():
-    assert [sz.whisper_ertek(x) for x in ("Minusz 9", "mínusz 9", "-9", "9", "3 2", "Minusz 15 6", "-gyel 0 75", "3-at",
-                                          "-9 6", "-gyel 6")] == [-9, -9, -9, 9, 3.2, -15.6, 0.75, 3, -9.6, 6]
+    assert [sz.whisper_ertek(x) for x in ("Minusz 9", "mínusz 9", "-9", "9", "4 7", "Minusz 12 4", "-gyel 0 65", "3-at",
+                                          "-5 4", "-gyel 6")] == [-9, -9, -9, 9, 4.7, -12.4, 0.65, 3, -5.4, 6]
 
 
 def test_whisper_muvelet_es_osszevont_szo():
@@ -1121,18 +1121,18 @@ def test_leiras_a_kulcsban_csak_ha_van(tmp_path, monkeypatch):
 # --- azonos értékű számalakok (ezres tagolás, „szám + ezer”, kimondott tizedesvessző, kötőjeles számnév) ---------
 
 @pytest.mark.parametrize("szo,ertek", [
-    ("15.000", 15000), ("125.980", 125980), ("11.600", 11600), ("1.000.000", 1000000), ("15.000-et", 15000),
-    ("9,81", 9.81), ("1,5", 1.5), ("9.81", 9.81), ("1.2345", 1.2345), ("0.125", 0.125), ("0.500", 0.5),
-    ("hatezer-ötszázkilencven", 6590), ("százhuszonötezer-kilencszáznyolcvan", 125980),
-    ("kétezer-kétszázötven", 2250), ("tizenegyezer-kétszáznegyvenet", 11240),
+    ("17.000", 17000), ("134.760", 134760), ("12.600", 12600), ("1.000.000", 1000000), ("17.000-et", 17000),
+    ("9,81", 9.81), ("2,5", 2.5), ("9.81", 9.81), ("1.2345", 1.2345), ("0.125", 0.125), ("0.500", 0.5),
+    ("hétezer-háromszázhúsz", 7320), ("százharmincnégyezer-hétszázhatvan", 134760),
+    ("kétezer-négyszázötven", 2450), ("tizenháromezer-háromszáznyolcvanat", 13380),
 ])
 def test_szamalak_ezres_pont_es_kotojeles_szamnev(szo, ertek):
-    """A Whisper ezres tagoló pontja („15.000”) nem tizedes; a kötőjeles számnév (a helyes írásmód) olvasható."""
+    """A Whisper ezres tagoló pontja („17.000”) nem tizedes; a kötőjeles számnév (a helyes írásmód) olvasható."""
     assert sz.egy_szo(szo)[0] == ertek
 
 
 @pytest.mark.parametrize("szoveg,kanon", [
-    ("egy vessző öt méter", ["#1.5", "m"]), ("egy vessző harminchárom", ["#1.33"]),
+    ("kettő vessző öt méter", ["#2.5", "m"]), ("egy vessző harminchét", ["#1.37"]),
     ("nulla vessző nulla öt", ["#0.05"]), ("mínusz kettő vessző öt", ["#-2.5"]),
     ("nincs benne vessző", ["nincs", "benne", "vesszo"]), ("ez a vessző tizedesvessző", ["ez", "a", "vesszo",
                                                                                          "tizedesvesszo"]),
@@ -1142,13 +1142,13 @@ def test_kimondott_tizedesvesszo(szoveg, kanon):
 
 
 def test_whisper_szamjegy_folytatas_es_kotojeles_szam():
-    """A Whisper „1” „,5” és „15” „.000” elemei egy szám; a kötőjeles számnév nem bomlik két számra."""
-    szavak = [x["szo"] for x in sz.whisper_szavai([w("1", 0, 0.2), {"word": ",5", "start": 0.2, "end": 0.4},
-                                                   w("15", 0.5, 0.7), {"word": ".000", "start": 0.7, "end": 1.0},
-                                                   w("kg.", 1.0, 1.2), w("hatezer-ötszáz", 1.3, 2.0),
+    """A Whisper „2” „,5” és „17” „.000” elemei egy szám; a kötőjeles számnév nem bomlik két számra."""
+    szavak = [x["szo"] for x in sz.whisper_szavai([w("2", 0, 0.2), {"word": ",5", "start": 0.2, "end": 0.4},
+                                                   w("17", 0.5, 0.7), {"word": ".000", "start": 0.7, "end": 1.0},
+                                                   w("kg.", 1.0, 1.2), w("hétezer-háromszáz", 1.3, 2.0),
                                                    w("Z-elem", 2.1, 2.5)])]
-    assert szavak == ["1,5", "15.000", "kg", "hatezer-ötszáz", "Z", "elem"]
-    assert [sz.whisper_ertek(x) for x in ("15 000", "150 000", "11 240", "3 2")] == [15000, 150000, 11.24, 3.2]
+    assert szavak == ["2,5", "17.000", "kg", "hétezer-háromszáz", "Z", "elem"]
+    assert [sz.whisper_ertek(x) for x in ("17 000", "170 000", "13 380", "4 7")] == [17000, 170000, 13.38, 4.7]
 
 
 K10_ESETEK = json.loads((Path(__file__).parent / "k10_esetek.json").read_text(encoding="utf-8"))
@@ -1157,7 +1157,7 @@ K10_ESETEK = json.loads((Path(__file__).parent / "k10_esetek.json").read_text(en
 @pytest.mark.parametrize("eset", K10_ESETEK, ids=[f"{e['video']}-{e['lepes']}" for e in K10_ESETEK])
 def test_k10_azonos_ertek_mas_alakban_nem_hiba(eset):
     """Regresszió (szintetikus esetek a kész videók 11 felülbírált K10-lépésének szám- és szóbontási alakjával): a Whisper
-    az értéket más alakban írja („15.000”, „15 ezer”, „125 980”, „10.000”, „11 ezer”, „1,5”); a K10 ezekre
+    az értéket más alakban írja („17.000”, „17 ezer”, „134 760”, „10.000”, „13 ezer”, „2,5”); a K10 ezekre
     felülbírálás nélkül sem ad hibát, a számok sora egyezik, és a szám Whisper-időt kap (nem becsültet)."""
     import types
     import kapu
@@ -1170,30 +1170,30 @@ def test_k10_azonos_ertek_mas_alakban_nem_hiba(eset):
 
 
 @pytest.mark.parametrize("text,szavak", [
-    ("A rakomány tömege tizenötezer kilogramm.", ["A", "rakomány", "tömege", "16", ".000", "kg."]),       # más szám
-    ("A rakomány tömege tizenötezer kilogramm.", ["A", "rakomány", "tömege", "16", "ezer", "kg."]),       # más szám
-    ("A rakomány tömege tizenötezer kilogramm.", ["A", "rakomány", "tömege", "15", "kg."]),               # nincs ezer
-    ("Az összeg tizenegyezer-kétszáznegyven kilogramm.", ["Az", "összeg", "11", "ezer", "kg."]),   # hiányzó rész
-    ("Az erő százhuszonötezer-kilencszáznyolcvan newton.", ["Az", "erő", "125", "newton."]),       # hiányzó rész
-    ("Az erő százhuszonötezer-kilencszáznyolcvan newton.", ["Az", "erő", "125", "981", "newton."]),
-    ("A szélesség tizenöt méter.", ["A", "szélesség", "1", ",5", "méter."]),                       # 1,5 ↔ tizenöt
-    ("A tömeg ezerötszáz kilogramm.", ["A", "tömeg", "15", "000", "kg."]),                          # 15 000 ↔ 1500
-    ("A tömeg ezerötszáz kilogramm.", ["A", "tömeg", "15", ".000", "kg."]),
-    ("A szélesség egy vessző öt méter.", ["A", "szélesség", "15", "méter."]),                       # 1,5 ↔ 15
-    ("A szélesség egy vessző öt méter.", ["A", "szélesség", "1", ",6", "méter."]),
+    ("A rakomány tömege tizenhétezer kilogramm.", ["A", "rakomány", "tömege", "18", ".000", "kg."]),       # más szám
+    ("A rakomány tömege tizenhétezer kilogramm.", ["A", "rakomány", "tömege", "18", "ezer", "kg."]),       # más szám
+    ("A rakomány tömege tizenhétezer kilogramm.", ["A", "rakomány", "tömege", "17", "kg."]),               # nincs ezer
+    ("Az összeg tizenháromezer-háromszáznyolcvan kilogramm.", ["Az", "összeg", "13", "ezer", "kg."]),   # hiányzó rész
+    ("Az erő százharmincnégyezer-hétszázhatvan newton.", ["Az", "erő", "134", "newton."]),       # hiányzó rész
+    ("Az erő százharmincnégyezer-hétszázhatvan newton.", ["Az", "erő", "134", "761", "newton."]),
+    ("A szélesség huszonöt méter.", ["A", "szélesség", "2", ",5", "méter."]),                      # 2,5 ↔ huszonöt
+    ("A tömeg ezerhétszáz kilogramm.", ["A", "tömeg", "17", "000", "kg."]),                         # 17 000 ↔ 1700
+    ("A tömeg ezerhétszáz kilogramm.", ["A", "tömeg", "17", ".000", "kg."]),
+    ("A szélesség kettő vessző öt méter.", ["A", "szélesség", "25", "méter."]),                     # 2,5 ↔ 25
+    ("A szélesség kettő vessző öt méter.", ["A", "szélesség", "2", ",6", "méter."]),
     # a csonka összevonás nem fogadható el: a maradék számcsoport a hallott számhoz tartozik
-    ("A rakomány tömege tizenötezer kilogramm.", ["A", "rakomány", "tömege", "15", "ezer", "500", "kg."]),
-    ("A rakomány tömege tizenötezer kilogramm.", ["A", "rakomány", "tömege", "15", "000", "500", "kg."]),
-    ("A rakomány tömege tizenötezer kilogramm.", ["A", "rakomány", "tömege", "15", "000", "000", "kg."]),
-    ("A rakomány tömege tizenötezer kilogramm.", ["A", "rakomány", "tömege", "15", "ezer", "5", "kg."]),
-    ("Az összeg tizenegyezer kilogramm.", ["Az", "összeg", "11", "ezer", "240", "kg."]),
+    ("A rakomány tömege tizenhétezer kilogramm.", ["A", "rakomány", "tömege", "17", "ezer", "500", "kg."]),
+    ("A rakomány tömege tizenhétezer kilogramm.", ["A", "rakomány", "tömege", "17", "000", "500", "kg."]),
+    ("A rakomány tömege tizenhétezer kilogramm.", ["A", "rakomány", "tömege", "17", "000", "000", "kg."]),
+    ("A rakomány tömege tizenhétezer kilogramm.", ["A", "rakomány", "tömege", "17", "ezer", "5", "kg."]),
+    ("Az összeg tizenháromezer kilogramm.", ["Az", "összeg", "13", "ezer", "380", "kg."]),
     # a Whisper ezres alakja a narráció kisebb száma után (régi vakfolt: beszúrás)
-    ("A tömeg tizenöt kilogramm.", ["A", "tömeg", "15", "000", "kg."]),
-    ("A tömeg tizenöt kilogramm.", ["A", "tömeg", "15", "ezer", "kg."]),
+    ("A tömeg tizenhét kilogramm.", ["A", "tömeg", "17", "000", "kg."]),
+    ("A tömeg tizenhét kilogramm.", ["A", "tömeg", "17", "ezer", "kg."]),
 ])
 def test_k10_valodi_szamhiba_mas_alakban_is_hiba(text, szavak):
-    """Az összevonás csak az azonos értékű alakot fogadja el: más szám, hiányzó ezres rész, „1,5” ↔ „tizenöt”,
-    „15 000” ↔ „ezerötszáz” továbbra is számeltérés (a lánc újrapróbál, a kapu K10-hibát ad)."""
+    """Az összevonás csak az azonos értékű alakot fogadja el: más szám, hiányzó ezres rész, „2,5” ↔ „huszonöt”,
+    „17 000” ↔ „ezerhétszáz” továbbra is számeltérés (a lánc újrapróbál, a kapu K10-hibát ad)."""
     ws = [{"word": x if x[0] in ",." else " " + x, "start": i * 0.5, "end": i * 0.5 + 0.4} for i, x in enumerate(szavak)]
     r = sz.illeszt(text, ws, (0.0, len(szavak) * 0.5), [])
     assert hangok.szam_hibak(r["szavak"]) != [], r["szavak"]
@@ -1204,12 +1204,12 @@ def test_k10_valodi_szamhiba_mas_alakban_is_hiba(text, szavak):
                                                                   "négyzeten."]),
     ("A négyzetösszeg kétezer-négyszázötven newton a négyzeten.", ["A", "négyzetösszeg", "2", "450", "N", "a",
                                                                   "négyzeten."]),
-    ("Tizenegy, kétszáznegyven.", ["11", "240."]),             # két külön szám: nincs összevonás, nincs eltérés
-    ("Tizenegyezer, kétszáznegyven.", ["11", "ezer", "240."]),  # a 240 egyező pár: nem fűződik a 11 000-hez
+    ("Tizenhárom, háromszáznyolcvan.", ["13", "380."]),     # két külön szám: nincs összevonás, nincs eltérés
+    ("Tizenháromezer, háromszáznyolcvan.", ["13", "ezer", "380."]),  # a 380 egyező pár: nem fűződik a 13 000-hez
     ("Az érték nulla egész százhuszonöt méter.", ["Az", "érték", "0", ".125", "m."]),      # vezető 0: nem ezres
     ("Az érték nulla egész százhuszonöt méter.", ["Az", "érték", "0.125", "m."]),
-    ("Mínusz tizenötezer newton.", ["Minusz", "15", "ezer", "newton."]),
-    ("Az összeg tizenegyezer-kétszáznegyven kilogramm.", ["Az", "összeg", "11", "ezer", "240", "kg."]),
+    ("Mínusz tizenhétezer newton.", ["Minusz", "17", "ezer", "newton."]),
+    ("Az összeg tizenháromezer-háromszáznyolcvan kilogramm.", ["Az", "összeg", "13", "ezer", "380", "kg."]),
 ])
 def test_k10_kotojeles_szamnev_es_tagolas_rendben(text, szavak):
     ws = [{"word": x if x[0] in ",." else " " + x, "start": i * 0.5, "end": i * 0.5 + 0.4} for i, x in enumerate(szavak)]
@@ -1218,9 +1218,9 @@ def test_k10_kotojeles_szamnev_es_tagolas_rendben(text, szavak):
 
 
 @pytest.mark.parametrize("text,szavak", [
-    ("Tizenöt, két egész öt.", ["15,", "2", "5."]),
-    ("Hat, három egész kettő.", ["6", "3", "2."]),
-    ("Tizenöt, nulla egész hetvenöt.", ["15,", "0", "75."]),
+    ("Tizenhét, két egész öt.", ["17,", "2", "5."]),
+    ("Hat, négy egész hét.", ["6", "4", "7."]),
+    ("Tizenhét, nulla egész hatvanöt.", ["17,", "0", "65."]),
 ])
 def test_k10_tizedes_ket_whisper_egysegre_nem_maradek(text, szavak):
     """A Whisper „2 5” = 2,5 írásmódja a replace-blokk saját tizedese: nem fűződik az előző számhoz maradékként, a K10

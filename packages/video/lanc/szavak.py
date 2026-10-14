@@ -35,18 +35,18 @@ TOLDALEK = re.compile(r"^(|t|[aeoö]t|[aeoö]n|ten|ra|re|ba|be|ban|ben|ból|ből
                       r"hez|höz|ig|szor|szer|ször|[aeoö]s|val|vel|(.)\2?[ae]l|gyel|szal|szel|kor)$")
 SZOR = re.compile(r"(szor|szer|ször)$")
 TORT = {"tized": 10, "szazad": 100, "ezred": 1000}   # ékezet nélkül (sima)
-MUVELET = re.compile(r"(?<=\d)\s*([−–+-])\s*(?=\d)")   # a Whisper „15-2”-je: tizenöt mínusz kettő
+MUVELET = re.compile(r"(?<=\d)\s*([−–+-])\s*(?=\d)")   # a Whisper „17-4”-e: tizenhét mínusz négy
 BETUNEV = {"á": "a", "bé": "b", "cé": "c", "dé": "d", "é": "e", "ef": "f", "gé": "g", "há": "h", "í": "i",
            "jé": "j", "ká": "k", "el": "l", "em": "m", "en": "n", "ó": "o", "pé": "p", "er": "r", "es": "s",
            "té": "t", "ú": "u", "vé": "v", "iksz": "x", "ipszilon": "y", "zé": "z"}      # a betű neve a narrációban, a betű a Whisperben
 KOTOJEL = re.compile(r"(?<=[^\W\d_])-(?=[^\W\d_])")        # „Z-elem” → „Z elem” (betű és betű között)
 JEL_SZAMON = re.compile(r"([−-]?\d+(?:[.,]\d+)?)([^\d\s.,−-].*)")   # „30°”, „5kN”: szám + egységjel
 JEGY = re.compile(r"^([−-]?)([1-9]\d{0,2}(?:\.\d{3})+|\d+(?:[.,]\d+)?)(?:-?([a-záéíóöőúüű%]*))?$")
-# A magyar Whisper-írásban a pont ezres tagoló („15.000”, „125.980”), a vessző tizedesvessző („1,5”); a
-# szóidős listában a tagoló vagy a vessző a következő szó elejére kerül: „15” „.000”, „1” „,5”.
+# A magyar Whisper-írásban a pont ezres tagoló („17.000”, „134.760”), a vessző tizedesvessző („2,5”); a
+# szóidős listában a tagoló vagy a vessző a következő szó elejére kerül: „17” „.000”, „2” „,5”.
 EZRES_PONT = re.compile(r"[1-9]\d{0,2}(?:\.\d{3})+")    # vezető nulla soha nem ezres tagolás („0.125”)
 SZAMJEGY_FOLYTATAS = re.compile(r"^\s*(?:,\d+|\.\d{3}(?!\d))")
-# szóközzel tagolt ezres csoportok a Whisperben („125 980”, „15 000”): első csoport 1–3 jegy, a többi pontosan 3
+# szóközzel tagolt ezres csoportok a Whisperben („134 760”, „17 000”): első csoport 1–3 jegy, a többi pontosan 3
 ELSO_CSOPORT = re.compile(r"[−-]?(?:0|[1-9]\d{0,2})")
 EZRES_CSOPORT = re.compile(r"\d{3}")
 
@@ -207,7 +207,7 @@ def egy_szo(szo: str) -> tuple[float | None, bool]:
     for kettos, egyszeres in (("ggyel", "gygyel"), ("sszal", "szszal")):   # „eggyel”, „néggyel”, „hússzal”
         if s.endswith(kettos):
             s = s[:-len(kettos)] + egyszeres
-    e = s.replace("ezer-", "ezer")     # a helyes írásmód kötőjeles: „hatezer-ötszázkilencven”
+    e = s.replace("ezer-", "ezer")     # a helyes írásmód kötőjeles: „hétezer-háromszázhúsz”
     if not e or not e.isalpha():
         return None, False
     if e.startswith(("nulla", "nullá")):
@@ -228,19 +228,19 @@ def egy_szo(szo: str) -> tuple[float | None, bool]:
     return v, bool(SZOR.search(toldalek))
 
 
-# A Whisper szóidős listája a tizedesvesszőt elhagyja: a kimondott „három egész két tized” egy
-# számegységére „3 2” (toldalékkal „3 2 -del”) jut. Egy számegységre jutó két számjegycsoport ezért tizedes tört.
+# A Whisper szóidős listája a tizedesvesszőt elhagyja: a kimondott „négy egész hét tized” egy
+# számegységére „4 7” (toldalékkal „4 7 -tel”) jut. Egy számegységre jutó két számjegycsoport ezért tizedes tört.
 WHISPER_TIZEDES = re.compile(r"^\s*(?:-[^\W\d_]\w*\s+)?(m[ií]nusz\s+|[−-])?(\d+)(?:\s+(\d+))?(?:\s*-[^\W\d_]\w*)?\s*$",
-                             re.I)   # a toldalék betűvel kezdődik: a „-9 6” nem „-9” toldalék + 6
+                             re.I)   # a toldalék betűvel kezdődik: a „-5 4” nem „-5” toldalék + 4
 
 
 def whisper_ertek(s: str) -> float | int | None:
-    """Az egy narrációs számra jutó Whisper-szöveg értéke („3 2” = 3,2, „Minusz 15 6” = −15,6, „Minusz 9” = −9,
-    „-gyel 0 75” = 0,75: az előző szó toldaléka is ide csúszhat; „15 000” = 15 000: tizedesjegy nem „000”;
+    """Az egy narrációs számra jutó Whisper-szöveg értéke („4 7” = 4,7, „Minusz 12 4” = −12,4, „Minusz 9” = −9,
+    „-gyel 0 65” = 0,65: az előző szó toldaléka is ide csúszhat; „17 000” = 17 000: tizedesjegy nem „000”;
     különben az első szó értéke)."""
     m = WHISPER_TIZEDES.match(s or "")
     if m:
-        if m.group(3) == "000" and len(m.group(2)) <= 3:     # „15 000”: ezres tagolás (tizedesjegy nem „000”)
+        if m.group(3) == "000" and len(m.group(2)) <= 3:     # „17 000”: ezres tagolás (tizedesjegy nem „000”)
             v = int(m.group(2) + m.group(3))
         else:
             v = float(f"{m.group(2)}.{m.group(3)}") if m.group(3) else int(m.group(2))
@@ -250,7 +250,7 @@ def whisper_ertek(s: str) -> float | int | None:
 
 def egysegek(szavak: list[str], jelek: list[str] | None = None) -> list[dict]:
     """A szavak egységekre: {kanon, idx: [szóindexek], ertek, szor}. Többszavas szám: tizedes
-    („nulla egész öt”, „két egész öt tized”, „egy vessző öt”), „X és fél”, negatív („mínusz három”, „mínusz tizenöt egész hat
+    („nulla egész öt”, „két egész öt tized”, „kettő vessző öt”), „X és fél”, negatív („mínusz három”, „mínusz hét egész négy
     tized”, ha előtte nem szám áll, vagy a szám után mondathatár vagy kettőspont van).
     `jelek`: a szavak utáni írásjel (`narracio_szavai`, `whisper_szavai`); nélküle a szám utáni „mínusz” kivonás
     („hat mínusz három”), „hat: mínusz kilenc” és „hat. Mínusz kilenc” viszont −9. A vessző nem határ: a
@@ -281,7 +281,7 @@ def egysegek(szavak: list[str], jelek: list[str] | None = None) -> list[dict]:
         return None
 
     def vesszos(v, i: int) -> tuple[float, list[int]] | None:
-        """Kimondott tizedesvessző: „egy vessző öt” = 1,5, „egy vessző nulla öt” = 1,05. A vessző után a
+        """Kimondott tizedesvessző: „kettő vessző öt” = 2,5, „egy vessző nulla hét” = 1,07. A vessző után a
         tizedesjegyek egy számnévként állnak, előttük a nullák külön szóként."""
         j, nullak = i + 2, 0
         while j < len(szavak) and sima(szavak[j]) == "nulla":
@@ -356,7 +356,7 @@ def narracio_szavai_jellel(text: str) -> tuple[list[str], list[str], dict[int, s
 
 def whisper_szavai(words: list[dict]) -> list[dict]:
     """A Whisper-válasz szavai {szo, kezd, veg}; több szót tartó elem betűarányosan szétosztva. A számjegy után
-    a tizedesvesszővel („,5”) vagy ezres tagoló ponttal („.000”) kezdődő elem az előző szám része („1,5”, „15.000”)."""
+    a tizedesvesszővel („,5”) vagy ezres tagoló ponttal („.000”) kezdődő elem az előző szám része („2,5”, „17.000”)."""
     ki = []
     for w in _szamjegy_folytatas(words):
         szoveg = MUVELET.sub(lambda m: " plusz " if m.group(1) == "+" else " mínusz ", str(w.get("word", "")))
@@ -374,7 +374,7 @@ def whisper_szavai(words: list[dict]) -> list[dict]:
 
 
 def _szamjegy_folytatas(words: list[dict]) -> list[dict]:
-    """A Whisper a „1,5”-öt „1” „,5”, a „15.000”-et „15” „.000” elemekre bontja: az ilyen elemet az előző,
+    """A Whisper a „2,5”-öt „2” „,5”, a „17.000”-et „17” „.000” elemekre bontja: az ilyen elemet az előző,
     számjegyre végződő elemhez fűzi (az idő az előző kezdetétől e vége). A vezető nullás „0.125” nem ezres tagolás:
     az `egy_szo` tizedesnek olvassa."""
     ki: list[dict] = []
@@ -391,7 +391,7 @@ def _szamjegy_folytatas(words: list[dict]) -> list[dict]:
 
 def _whisper_tag(t: str) -> list[str]:
     """Egy Whisper-szó részei: a számhoz tapadt egység külön szó („30°-os” → „30”, „°-os”), a jel és a
-    kötőjeles toldaléka együtt marad („kN-t”), a kötőjeles számnév is („hatezer-ötszáz”); máskor a betűk közti
+    kötőjeles toldaléka együtt marad („kN-t”), a kötőjeles számnév is („hétezer-háromszáz”); máskor a betűk közti
     kötőjel szóhatár („Z-elem” → „Z elem”)."""
     m = JEL_SZAMON.fullmatch(t)
     if m and mertekegyseg(m.group(2)):
@@ -578,7 +578,7 @@ def whisper_egysegek(wszo: list[str], narracio_kanon: list[str]) -> list[dict]:
     lépésben lehet kivonás és előjel is). Kiindulás a kivonásos olvasat; a „mínusz”-okon sorban végigmenve egy
     előfordulás akkor lesz előjel, ha attól a Whisper-egységsor jobban illeszkedik a narrációéhoz (egyenlőségnél
     kivonás marad). A valódi számhibát ez nem nyeli el: a más szám más egység marad.
-    Utána az ezres összevonás (`_ezres_osszevon`): „125 980”, „15 ezer” egy szám, ha a narráció ezt az értéket mondja."""
+    Utána az ezres összevonás (`_ezres_osszevon`): „134 760”, „17 ezer” egy szám, ha a narráció ezt az értéket mondja."""
     def arany(egys):
         return difflib.SequenceMatcher(None, narracio_kanon, [u["kanon"] for u in egys], autojunk=False).ratio()
     jelek = [""] * len(wszo)
@@ -595,8 +595,8 @@ def whisper_egysegek(wszo: list[str], narracio_kanon: list[str]) -> list[dict]:
 
 def _ezres_valtozatok(egys: list[dict], wszo: list[str], i: int) -> list[tuple[int, int, bool]]:
     """Az i. egységtől kezdődő, egy számot adó Whisper-alakok: (érték, egységszám, -szor). Szóközzel tagolt ezres
-    csoportok („125 980”, „1 000 000”: első csoport 1–3 jegy, a többi pontosan 3) és szám + „ezer” („15 ezer” =
-    15 000, „11 ezer 240” = 11 240). Az első tag egész számjegyes szó (előjeles egységben is: „Minusz 15 ezer”)."""
+    csoportok („134 760”, „1 000 000”: első csoport 1–3 jegy, a többi pontosan 3) és szám + „ezer” („17 ezer” =
+    17 000, „13 ezer 380” = 13 380). Az első tag egész számjegyes szó (előjeles egységben is: „Minusz 17 ezer”)."""
     u = egys[i]
     if not isinstance(u["ertek"], int) or u["szor"] or not ELSO_CSOPORT.fullmatch(wszo[u["idx"][-1]]):
         return []
@@ -625,9 +625,9 @@ def _ezres_valtozatok(egys: list[dict], wszo: list[str], i: int) -> list[tuple[i
 
 
 def _ezres_osszevon(egys: list[dict], wszo: list[str], narracio_kanon: list[str], arany) -> list[dict]:
-    """A Whisper szóközzel tagolt vagy „ezer”-es számalakja („125 980”, „15 ezer”) egy egység, ha az összevont
+    """A Whisper szóközzel tagolt vagy „ezer”-es számalakja („134 760”, „17 ezer”) egy egység, ha az összevont
     érték a narráció egyik száma, és az egységsor attól jobban illeszkedik a narrációéhoz (egyenlőségnél külön
-    marad). Más értékű alak nem vonódik össze, így a valódi számhiba („15 000” ↔ „ezerötszáz”) megmarad.
+    marad). Más értékű alak nem vonódik össze, így a valódi számhiba („17 000” ↔ „ezerhétszáz”) megmarad.
     Balról jobbra, változatonként a rövidebb előbb: determinisztikus."""
     ertekek = set()
     for k in narracio_kanon:
@@ -671,7 +671,7 @@ def illeszt(text: str, words: list[dict], beszed: tuple[float, float], szunetek:
                 _kioszt(nszo, nu[i1 + k]["idx"], wsz, wu[j1 + k]["idx"], ido, "whisper", wu[j1 + k]["ertek"])
                 par[j1 + k] = i1 + k
         elif op == "replace":
-            if any(u["ertek"] is not None for u in nu[i1:i2]):   # „3 2” = 3,2: a blokk saját száma kapja
+            if any(u["ertek"] is not None for u in nu[i1:i2]):   # „4 7” = 4,7: a blokk saját száma kapja
                 sajat.update(range(j1, j2))
             idx = [x for u in nu[i1:i2] for x in u["idx"]]
             # eltérő szóhatár elírással („körbe zárt” – „körbezár”, „metszet elemeit” – „meccetelemeit”): a sáv
@@ -701,10 +701,10 @@ def illeszt(text: str, words: list[dict], beszed: tuple[float, float], szunetek:
 
 def _szammaradek(nu, wu, wsz, par, sajat, ido) -> None:
     """A párosított Whisper-szám után közvetlenül álló, párosítatlan Whisper-szám (beszúrás vagy egy replace
-    illesztetlen maradéka: „15 ezer” = 15 000 után az „500”, „tizenöt” ↔ „15” után a „000”) a narrációs szám
-    hallott szövegéhez fűződik, a Whisper saját szavaival („15 ezer 500”). A K10 így a teljes hallott számot méri, és
-    ez nem a narráció száma; a maradék nem vész el beszúrásként. Párosított szám (a „tizenegyezer, kétszáznegyven”
-    240-e) nem fűződik, és az sem, amely egy számot tartalmazó, nem 1:1-es replace-blokkban áll (`sajat`: a „15, 2 5”
+    illesztetlen maradéka: „17 ezer” = 17 000 után az „500”, „tizenhét” ↔ „17” után a „000”) a narrációs szám
+    hallott szövegéhez fűződik, a Whisper saját szavaival („17 ezer 500”). A K10 így a teljes hallott számot méri, és
+    ez nem a narráció száma; a maradék nem vész el beszúrásként. Párosított szám (a „tizenháromezer, háromszáznyolcvan”
+    380-a) nem fűződik, és az sem, amely egy számot tartalmazó, nem 1:1-es replace-blokkban áll (`sajat`: a „17, 2 5”
     „2 5”-je a blokk saját 2,5-éé, azt a replace-ág már kiosztotta); ez a horgonyt is lezárja."""
     alap: dict[int, list[int]] = {}
     plusz: dict[int, list[int]] = {}

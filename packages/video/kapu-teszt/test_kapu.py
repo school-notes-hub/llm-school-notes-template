@@ -136,7 +136,7 @@ def test_k10_karakteres_arany():
         ids = ["x-01", "x-02", "x-03"]
         szavak_json = {
             "x-01": [{"szo": "Zé", "ertek": None, "whisper": "Z"}, {"szo": "elemszáma", "ertek": None, "whisper": "elemszáma"},
-                     {"szo": "tehát", "ertek": None, "whisper": "tehát"}, {"szo": "tizenöt", "ertek": 15, "whisper": "15"}],
+                     {"szo": "most", "ertek": None, "whisper": "most"}, {"szo": "tizenhét", "ertek": 17, "whisper": "17"}],
             "x-02": [{"szo": "min", "ertek": None, "whisper": "miniátszanak"},
                      {"szo": "játszanak", "ertek": None, "whisper": "miniátszanak"},
                      {"szo": "aszerint", "ertek": None, "whisper": "az szerint"}],
@@ -275,9 +275,9 @@ def test_szamnev():
 
 def test_whisper_tizedes_es_iksz():
     from lanc.szavak import betu, whisper_ertek
-    assert whisper_ertek("3 2") == 3.2 and whisper_ertek("3 2 -del") == 3.2 and whisper_ertek("2 85") == 2.85
+    assert whisper_ertek("4 7") == 4.7 and whisper_ertek("4 7 -tel") == 4.7 and whisper_ertek("2 85") == 2.85
     assert whisper_ertek("320") == 320 and whisper_ertek("") is None
-    assert whisper_ertek("Minusz 15 6") == -15.6 and whisper_ertek("-gyel 0 75") == 0.75 and whisper_ertek("-9 6") == -9.6
+    assert whisper_ertek("Minusz 12 4") == -12.4 and whisper_ertek("-gyel 0 65") == 0.65 and whisper_ertek("-5 4") == -5.4
     assert betu("iksz") == betu("x") == "x"
 
 
