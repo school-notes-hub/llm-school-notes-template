@@ -19,7 +19,9 @@ looked at):
 * a new raster image link outside a generated block, or changed bytes of a committed raster
   image: a raster image goes in only through a commission and the reviewer's accept;
 * a podcast MP3 under `wiki/` or a podcast receipt under `docs/evidence/podcast/` (new, changed
-  or deleted) that is not `sn podcast`'s last write (`tool_writes` files).
+  or deleted) that is not `sn podcast`'s last write (`tool_writes` files);
+* the media order numbers `docs/evidence/media-order.json` (new, changed or deleted) that are not
+  the last write of `sn close` or `sn podcast` (`tool_writes` files).
 
 With `subjects` the `wiki/` part looks only at those subjects; the `sources/` part stays global.
 Each finding is one line: `<path>: <what>`, in path order."""
@@ -40,6 +42,7 @@ from . import tool_writes
 
 RASTER = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".heic", ".heif", ".avif")
 PODCAST_RECEIPTS = "docs/evidence/podcast/"
+MEDIA_ORDER = "docs/evidence/media-order.json"   # wiki.media_order.STORE
 INTERRUPTED = " (if an earlier `sn close` was interrupted, run it again: it records its own writes)"
 
 
@@ -92,6 +95,9 @@ def violations(repo: Path, git, subjects=None) -> list[str]:
     for rel in sorted({*tracked, *untracked}):
         if rel.startswith(PODCAST_RECEIPTS) and not _tool_file(record, repo, rel):
             out.append(f"{rel}: a podcast receipt only `sn podcast` writes ({tracked.get(rel, 'A')})")
+        elif rel == MEDIA_ORDER and not _tool_file(record, repo, rel):
+            out.append(f"{rel}: the media order numbers only `sn close` and `sn podcast` write "
+                       f"({tracked.get(rel, 'A')})")
     deleted = sorted(r for r, s in tracked.items() if s == "D" and r.startswith("wiki/") and r.endswith(".md"))
     present = sorted(r for r in {*(r for r, s in tracked.items() if s != "D"), *untracked} if r.startswith("wiki/"))
     renamed = _pairs(repo, deleted, [r for r in present if r in added and r.endswith(".md")], base)

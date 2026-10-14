@@ -12,8 +12,11 @@ In order, stopping at the first failure:
    here, **before** anything goes to gh-pages;
 5. the gh-pages push (only the changed files; a parent commit, never forced);
 6. the live check (the site's `publish.json` names HEAD; a timeout is only a warning);
-7. with `--reviewed`: `claude-reviewed` moves forward to HEAD (fast-forward only);
-8. the temporary build is removed; one line goes into the JSONL log.
+7. the learner's own files (`media_files.sync`, sn 0.4.3): every episode's Drive copy and every
+   finished video in `~/jegyzet/video-kesz` gets the order number in its name and the tags
+   (renamed and retagged when the order changed); a problem there is exit 1 after the site;
+8. with `--reviewed`: `claude-reviewed` moves forward to HEAD (fast-forward only);
+9. the temporary build is removed; one line goes into the JSONL log.
 
 `--build-only DIR` checks the preconditions and builds HEAD into DIR (kept), without any push:
 for comparing a build with the live site."""
@@ -130,10 +133,17 @@ def run(local, reviewed: bool = False, build_only: Path | None = None, out=print
         out(f"gh-pages: {commit or 'nem változott'}; élő: {'igen' if live else 'még nem' if url else '–'}")
     else:
         out(f"gh-pages: nincs teendő ({why})")
+    from . import media_files
+    files = media_files.sync(local, out)
     if reviewed:
         net.run("push", "--porcelain", "origin", "HEAD:refs/heads/claude-reviewed",
                 timeout=local.cfg.timeouts.push_s)
         out(f"claude-reviewed → {head[:12]}")
+    if files:
+        out("figyelmeztetés: a Drive- és videófájlok nevét vagy címkéit nem mind sikerült rendbe tenni (fent); "
+            "a honlap kiadása ettől kész")
+        local.record("publish", "files", target=head, site_commit=commit, live=live, reviewed=reviewed, reason=why)
+        return 1
     local.record("publish", "ok", target=head, site_commit=commit, live=live, reviewed=reviewed,
                  reason=why)
     return 0

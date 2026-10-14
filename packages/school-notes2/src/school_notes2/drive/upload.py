@@ -1,6 +1,7 @@
 """The podcast's Drive copy (owner, 2026-10-08: "jegyzetoldalon, és drive-on is"; "nem kell
 tantárgyanként a drive-on hanem könnyen elérhető legyen"): every episode directly in one
-`Podcast/` folder under the learner's Drive root, named `<Tantárgy> – <lapcím>.mp3`.
+`Podcast/` folder under the learner's Drive root, named `<Tantárgy> – 00100_<lapcím>.mp3` (the
+subject's order number in the teaching order, `wiki.media_order`).
 
 The tool's existing full `drive` scope is used as it is; nothing here changes a permission or
 a share (the owner shares the folder). The folder is created when it is missing. An episode's
@@ -76,6 +77,46 @@ def upload(client: DriveClient, root_id: str, ident: str, name: str, data: bytes
               if nfc(i["name"]) == nfc(name) and i["id"] != meta["id"]]
     return {"id": meta["id"], "name": final.get("name", name), "state": state, "folder_created": created,
             "same_name": len(others)}
+
+
+def sync(client: DriveClient, root_id: str, wanted: dict[str, tuple[str, bytes]]) -> list[tuple[str, str]]:
+    """Every episode's Drive file with this name and these bytes (`sn publish`: the order number
+    and the tags; owner, 2026-10-14). One folder lookup, then per episode its file by the app
+    property: renamed when the name differs, its content replaced when the MD5 differs, created
+    when missing; a changed file is verified by size and MD5. Returns [(ident, state)] in ident
+    order (`created`, `updated`, `unchanged`, or `two files: …` – that one is left for the owner)."""
+    if not wanted:
+        return []
+    folder, _ = podcast_folder(client, root_id)
+    out = []
+    for ident in sorted(wanted):
+        name, data = wanted[ident]
+        files = managed(client, folder, ident)
+        if len(files) > 1:
+            out.append((ident, f"{len(files)} fájl tartozik hozzá a {PODCAST} mappában – a tulajdonosé"))
+            continue
+        md5 = hashlib.md5(data).hexdigest()
+        if not files:
+            meta = _create(client, {"name": name, "mimeType": MIME, "parents": [folder],
+                                     "appProperties": {APP_KEY: ident}}, data)
+            state = "created"
+        else:
+            meta, state = files[0], "unchanged"
+            if nfc(meta["name"]) != nfc(name):
+                client.t.request("PATCH", f"{API}/files/{_id(meta['id'])}?" + urllib.parse.urlencode(
+                    {"fields": FIELDS}), {"name": name})
+                state = "updated"
+            if meta.get("md5Checksum") != md5 or str(meta.get("size")) != str(len(data)):
+                _media(client, meta["id"], data)
+                state = "updated"
+        if state != "unchanged":
+            final = client.get(meta["id"])
+            if final.get("md5Checksum") != md5 or str(final.get("size")) != str(len(data)) or \
+                    nfc(final.get("name", "")) != nfc(name):
+                raise Transient(f"a Drive-on a(z) {ident} adás neve, mérete vagy MD5-je nem egyezik",
+                                todo="futtasd újra az sn publish-t (ugyanazokat a fájlokat frissíti)")
+        out.append((ident, state))
+    return out
 
 
 def _create(client: DriveClient, meta: dict, data: bytes) -> dict:

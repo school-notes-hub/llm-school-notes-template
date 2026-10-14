@@ -76,7 +76,7 @@ def test_a_drive_failure_comes_after_the_repo_part_and_a_rerun_finishes_it(world
     paid = len(world["router"].calls)
     world["local"]._drive = DriveClient(world["drive"])
     code, lines = release(world)
-    assert code == 0 and any("Drive: Podcast/Próba – Első.mp3 (új fájl" in line for line in lines)
+    assert code == 0 and any("Drive: Podcast/Próba – 00100_Első.mp3 (új fájl" in line for line in lines)
     assert all(u.startswith("https://openrouter.ai/api/v1/generation") for _, u, _ in world["router"].calls[paid:])
 
 

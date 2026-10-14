@@ -75,7 +75,7 @@ from ..figures import insert
 from ..figures.context import rekey as fctx_rekey
 from ..sources import manifest
 from ..state import safefs
-from ..wiki import decisions, generate, public
+from ..wiki import decisions, generate, media_order, public
 from .. import VERSION
 from . import done, figure_close as figs, guard, machine_data, tool_writes, wiki_log
 from .common import Refused, now_iso, today
@@ -157,6 +157,12 @@ def close(local, repo: Path, subjects: list[str] | None, out=print, state: dict 
                         [f"{r['file']}#{r['id']}" for r in stale])
         machine_data.reader_bookkeeping(repo)
         generate.write_indexes(repo)
+        try:
+            for line in media_order.update(repo)[1]:
+                out(line)
+        except media_order.MediaOrderError as exc:
+            # never blocks the notes; `sn podcast` and `sn publish` stop on it
+            warnings.append(f"sorszám: {exc}")
         figs._write_if_changed(repo, decisions.OVERVIEW, decisions.overview(repo, skip=skipped), changed)
         public.write(repo, public.either(public.render_rights(repo), public.media_receipt_rights(repo),
                                          public.writer_svg_rights(repo)))
@@ -169,6 +175,7 @@ def close(local, repo: Path, subjects: list[str] | None, out=print, state: dict 
         tool_writes.record(repo, parts=[p for p in safefs.walk_files(repo, "wiki")
                                         if p.endswith(".md") and (not subjects or guard.in_subjects(p, subjects))])
         tool_writes.record(repo, parts=_written_outside(repo, git, subjects, outside, warnings))
+        tool_writes.record(repo, files=[media_order.STORE])
     for line in warnings:
         out(f"figyelmeztetés: {line}")
     code = done.report(repo, out)

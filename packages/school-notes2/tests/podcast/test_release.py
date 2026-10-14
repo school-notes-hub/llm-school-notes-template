@@ -31,7 +31,7 @@ def test_release_writes_the_mp3_receipt_page_block_podcast_page_and_drive_copy(w
     record = safefs.read_json(repo, RECORD)
     assert record["output_sha256"] == __import__("hashlib").sha256(data).hexdigest()
     assert record["rights"]["class"] == "generated" and "Suno" in record["rights"]["music"]
-    assert record["drive"] == {"folder": "Podcast", "name": "Próba – Első.mp3"}
+    assert record["drive"] == {"folder": "Podcast", "name": "Próba – 00100_Első.mp3"}
     assert record["verdict"]["verdict"] == "accept" and record["reviewer"].startswith("claude-opus")
     assert [s["id"] for s in record["speech"]["scenes"]] == ["J1", "J2"]
     page = safefs.read_text(repo, TOPIC)
@@ -42,7 +42,8 @@ def test_release_writes_the_mp3_receipt_page_block_podcast_page_and_drive_copy(w
     podcast_page = safefs.read_text(repo, "wiki/podcast.md")
     assert "**Képben vagy?**" in podcast_page and "Dani, a műsorvezető" in podcast_page
     assert "Vendégek: Zsófi (próba)." in podcast_page
-    assert "## Az első téma röviden" in podcast_page and "[Első](proba/elso.md)" in podcast_page
+    assert "## 🧪 Próba\n\n### 📘 Alapok\n\n#### 1. Az első téma röviden" in podcast_page
+    assert "[Első](proba/elso.md)" in podcast_page
     assert "Dani és Zsófi az első témát beszéli át" in podcast_page
     assert "](assets/proba/podcast/elso.mp3)" in podcast_page
     public = safefs.read_json(repo, "publication/public.json")
@@ -54,8 +55,10 @@ def test_release_writes_the_mp3_receipt_page_block_podcast_page_and_drive_copy(w
     folder = next(i for i in drive.items.values() if i["name"] == "Podcast")
     assert folder["parents"] == ["root-id"]
     [file] = drive.files_in(folder["id"])
-    assert file["name"] == "Próba – Első.mp3" and drive.content[file["id"]] == data
-    assert any("Drive: Podcast/Próba – Első.mp3 (új fájl" in line for line in lines)
+    assert file["name"] == "Próba – 00100_Első.mp3"
+    assert drive.content[file["id"]] != data and len(drive.content[file["id"]]) > len(data)   # + the tags
+    assert any("Drive: Podcast/Próba – 00100_Első.mp3 (új fájl" in line for line in lines)
+    assert safefs.read_json(repo, "docs/evidence/media-order.json")["subjects"] == {"proba": {"elso": 100}}
     # the tool's own writes: the content check and the writer guard are clean
     assert done.problems(repo, world["local"].git()) == [(n, []) for n, _ in done.problems(repo, world["local"].git())]
 
@@ -96,8 +99,15 @@ def test_retitled_episode_updates_the_same_drive_file(world):
     assert code == 0, lines
     drive = world["drive"]
     [file] = [i for i in drive.items.values() if i["mimeType"] == "audio/mpeg"]
-    assert file["name"] == "Próba – Első lépések.mp3"
-    assert drive.content[file["id"]] == safefs.read_bytes(repo, ASSET)
+    assert file["name"] == "Próba – 00100_Első lépések.mp3"
+    # the Drive copy is the site's MP3 with the tags (media_files), the same audio
+    copy = repo / "drive-copy.mp3"
+    copy.write_bytes(drive.content[file["id"]])
+    tags = json.loads(probe(copy, "format_tags"))["format"]["tags"]
+    copy.unlink()
+    assert tags == {"title": "Első lépések", "album": "School Notes – Próba", "artist": "School Notes",
+                    "album_artist": "School Notes", "genre": "Podcast", "track": "1",
+                    "comment": SCRIPT["summary"]}
     assert any("(frissítve" in line for line in lines)
     assert safefs.read_json(repo, RECORD)["title"] == "Új cím"
 
@@ -140,6 +150,8 @@ def test_podcast_hand_over_is_not_a_subject_hand_over_for_sn_close(world):
 
 
 def test_drive_names_are_told_apart_by_first_release():
-    names = wiki_podcast.drive_names({"b/x": ("Próba", "Cím", "2026-10-09"), "a/y": ("Próba", "Cím", "2026-10-08"),
-                                      "c/z": ("Próba", "Cím/2", "2026-10-08")})
-    assert names == {"a/y": "Próba – Cím.mp3", "b/x": "Próba – Cím (2).mp3", "c/z": "Próba – Cím-2.mp3"}
+    names = wiki_podcast.drive_names({"b/x": ("Próba", "Cím", "2026-10-09", 200),
+                                      "a/y": ("Próba", "Cím", "2026-10-08", 200),
+                                      "c/z": ("Próba", "Cím/2", "2026-10-08", 150)})
+    assert names == {"a/y": "Próba – 00200_Cím.mp3", "b/x": "Próba – 00200_Cím (2).mp3",
+                     "c/z": "Próba – 00150_Cím-2.mp3"}

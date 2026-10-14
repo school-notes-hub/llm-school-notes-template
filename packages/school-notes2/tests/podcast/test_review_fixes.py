@@ -66,7 +66,7 @@ def test_renamed_topic_page_is_retired_by_the_tool_and_done_is_clean(world):
     assert "lejátszó levéve: wiki/proba/masodik-lap.md" in lines
     assert not safefs.is_file(repo, ASSET) and not safefs.is_file(repo, RECORD)
     assert not safefs.is_file(repo, "wiki/podcast.md")                 # no episode: no menu item
-    assert any("Próba – Első.mp3 fájl megmarad" in line for line in lines)
+    assert any("Próba – 00100_Első.mp3 fájl megmarad" in line for line in lines)
     assert "podcast" not in markers.names(safefs.read_text(repo, "wiki/proba/masodik-lap.md"))
     # what stays is the rename's own (the subject index link, `sn close` regenerates it), nothing of the podcast
     assert open_problems(repo, local) == {"lapellenőrzési hiba": [

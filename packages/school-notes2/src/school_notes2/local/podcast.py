@@ -29,7 +29,8 @@ moved aside to `verdict-<old key>.json`: an old accept never counts for a new ve
    the moment it is heard), the topic page's `podcast` block, the Podcast page `wiki/podcast.md`,
    `publication/public.json`, the tool-writes record (a page only when it was the tool's before or
    every machine part it differs from the HEAD in is one this command wrote: `guard.tool_written`);
-4. Drive: `Podcast/<Tantárgy> – <lapcím>.mp3` under the learner's Drive root, the same file on a
+4. Drive: `Podcast/<Tantárgy> – 00100_<lapcím>.mp3` (the order number, `wiki.media_order`; the copy
+   carries the tags, `media_files`) under the learner's Drive root, the same file on a
    re-release (`drive/upload.py`); a Drive failure is exit 1 after the repo part – run it again.
 
 **`--retire`** (an episode whose topic page was renamed, deleted or must lose its episode; podcast
@@ -59,7 +60,7 @@ from ..podcast.ledger import Cache, Ledger, request_sha, speech_reserve
 from ..schemas import validate
 from ..state import safefs
 from ..state.errors import SnError
-from ..wiki import markers, public
+from ..wiki import markers, media_order, public
 from ..wiki import podcast as wiki_podcast
 from ..wiki.pages import links, resolve, sha256, wiki_pages
 from . import guard, podcast_names, tool_writes
@@ -123,7 +124,24 @@ def stops(local, ep) -> tuple[dict | None, list[str]]:
         if parts:
             problems.append(f"{rel}: kézzel írt gépi rész ({', '.join(parts)}) – az sn podcast nem írja felül és nem "
                             "rögzíti; előbb állítsd vissza (vagy egy megszakadt sn close után futtasd újra azt)")
+    problems += order_problems(local, ep, record)
     return script, problems
+
+
+def order_problems(local, ep, record: dict | None = None) -> list[str]:
+    """The Drive name needs the page's order number (`media_order`): the store must be the
+    tool's, the page must stand in a listed chapter, and the subject must fit the width."""
+    repo = local.repo
+    if guard.hand_edited_file(repo, local.git(), media_order.STORE, record):
+        return [f"{media_order.STORE}: kézzel módosítva – csak az sn írja; állítsd vissza"]
+    try:
+        numbers, _ = media_order.compute(repo)
+    except media_order.MediaOrderError as exc:
+        return [f"sorszám: {exc}"]
+    if media_order.number(repo, ep.subject, ep.page.rsplit("/", 1)[1][:-3], numbers) is None:
+        return [f"{ep.page}: nincs sorszáma – a lap nem áll a tantárgyi index egyik fejezetében sem "
+                "(`chapter` és az index `chapters` listája)"]
+    return []
 
 
 def release(local, ep, out, *, client=None, sleep=time.sleep) -> int:
@@ -183,10 +201,16 @@ def build_record(local, ep, script: dict, requests: list[dict], data: bytes, sec
     same = bool(old) and old.get("output_sha256") == sha
     day = today()
     first = old["first_released"] if old else day
-    wanted = {r["subject"] + "/" + r["page"].rsplit("/", 1)[1][:-3]:
-              (wiki_podcast.subject_name(repo, r["subject"]), wiki_podcast.page_title(repo, r["page"]),
-               r["first_released"]) for r in wiki_podcast.records(repo)}
-    wanted[ep.ident] = (wiki_podcast.subject_name(repo, ep.subject), wiki_podcast.page_title(repo, ep.page), first)
+    numbers, _ = media_order.compute(repo)
+    wanted = {}
+    for r in wiki_podcast.records(repo):
+        ident = r["subject"] + "/" + r["page"].rsplit("/", 1)[1][:-3]
+        number = media_order.number(repo, r["subject"], ident.split("/", 1)[1], numbers)
+        if number is not None:
+            wanted[ident] = (wiki_podcast.subject_name(repo, r["subject"]), wiki_podcast.page_title(repo, r["page"]),
+                             r["first_released"], number)
+    wanted[ep.ident] = (wiki_podcast.subject_name(repo, ep.subject), wiki_podcast.page_title(repo, ep.page), first,
+                        media_order.number(repo, ep.subject, ep.ident.split("/", 1)[1], numbers))
     ffmpeg = old.get("mix", {}).get("ffmpeg") if same else None
     record = {
         "show": wiki_podcast.SHOW, "subject": ep.subject, "page": ep.page, "title": script["title"],
@@ -222,10 +246,12 @@ def write_repo(local, ep, record: dict, data: bytes, out) -> None:
         _write_if_changed(repo, ep.record, wiki_podcast.dumps(record))
         _write_if_changed(repo, ep.page, wiki_podcast.with_block(safefs.read_text(repo, ep.page), record))
         wiki_podcast.write_page(repo)
+        for line in media_order.update(repo)[1]:
+            out(line)
         _public(repo, out)
     finally:
         # also after an interruption: the guard knows the tool's own writes (a re-run finishes)
-        tool_writes.record(repo, files=[ep.asset, ep.record])
+        tool_writes.record(repo, files=[ep.asset, ep.record, media_order.STORE])
         _record_pages(repo, git, before, out)
 
 
@@ -263,7 +289,12 @@ def _public(repo: Path, out) -> None:
 
 
 def drive(local, ep, record: dict, data: bytes, cost: Decimal, out) -> int:
+    """The Drive copy: the MP3 with the tags (`media_files`: title, subject album, track in the
+    teaching order); the other episodes' names and tags follow at the next `sn publish`."""
+    from . import media_files
     try:
+        item = next(i for i in media_files.podcast_items(local.repo) if i["ident"] == ep.ident)
+        data = media_files.podcast_bytes(local.repo, item)
         result = drive_upload.upload(local.drive(), local.student.drive_root, ep.ident,
                                      record["drive"]["name"], data)
     except SnError as exc:
