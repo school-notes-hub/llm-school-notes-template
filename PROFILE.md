@@ -44,19 +44,16 @@ Every reader-facing string the rules prescribe lives here, in the wiki language 
 | subjects (root index) | `# 📚 Subjects` | `# 📚 Tantárgyak` |
 | legend (root index) | `# 🔎 Legend` | `# 🔎 Jelmagyarázat` |
 | lesson-line legend (root index) | `* 🗓️ **Lesson**: which lesson taught the part; without an exact date `~` marks it, and pointing at it shows the period.` | `* 🗓️ **Óra**: melyik órán tanultátok az adott részt; ha nincs pontos dátum, `~` jelzi, az időszakot az egér rávitelekor látod.` |
-| catch-up | `# 📝 To catch up` | `# 📝 Pótolandó` |
 | homework | `# 📌 Homework` - columns `Deadline \| Task \| Status`, values `open` / `✅ done` | `# 📌 Házi feladat` - oszlopok `Határidő \| Feladat \| Állapot`, értékek `nyitott` / `✅ kész` |
-| chapter | `# 📘 Grade <grade>: <chapter>` | `# 📘 <grade>. évfolyam: <chapter>` |
-| lessons | `# 🗓️ Lessons` | `# 🗓️ Órák` |
+| chapter | `# 📘 Chapter <n>: <chapter>` | `# 📘 <n>. fejezet: <fejezet>` |
+| lessons | `# 🗓️ Lessons – which lesson covered what` | `# 🗓️ Órák – melyik órán mit vettünk` |
 | review | `# 🔁 Review` | `# 🔁 Ismétlés` |
-| notes | `# 📝 Notes` | `# 📝 Jegyzetek` |
 | undated lesson | `~late Sept` (the range in the tooltip, `Undated lesson: Sept 23 – Oct 4`) | `~szept. vége` (az időszak a súgóban: `Dátum nélküli óra: szept. 23. – okt. 4.`; részben olvasható dátumnál `Bizonytalan dátum: …`) |
 | uncertain date | `~` before the approximate day (the part of the month when both bounds fall in it, else the month, else the part of the month of the lower bound); its range and reason only in the tooltip (hover; a tap on a phone): `Undated lesson: Sept 23 – Oct 4`, a partly legible date `Uncertain date: Sept 10–19`; never visible text; paper prints the approximate day without `~` and range | `~` a közelítő nap előtt (a hónaprész, ha mindkét határ abba esik, különben a hónap, különben az alsó határ hónaprésze); az időszak és az ok csak a súgóban (egérrel rámutatva, telefonon koppintva): `Dátum nélküli óra: szept. 23. – okt. 4.`, részben olvasható dátumnál `Bizonytalan dátum: szept. 10–19.`; sosem látható szövegként; papíron a közelítő nap `~` és időszak nélkül |
-| where we are | `# 📍 Where we are` | `# 📍 Itt tartunk` |
-| current chapter | `**Now:** <chapter> <date item>` | `**Most:** <fejezet> <dátum>` |
-| latest lesson | `**Latest:** <lesson> <date item> · <topics>` | `**Legutóbb:** <óra> <dátum> · <témakörök>` |
-| earlier chapters | `**Before:** <chapter> <date item> → …` | `**Előtte:** <fejezet> <dátum> → …` |
-| lesson order | `So far, in this order, newest first:` | `Eddig ebben a sorrendben vettük, a legújabb elöl:` |
+| where we are | `🧭 **Where we are**` (a box, no heading) | `🧭 **Hol tartunk**` (doboz, címsor nélkül) |
+| current chapter | `◉` on the chapter path; on its heading `◉ now` | `◉` a fejezetek vonalán; a címsorában `◉ most` |
+| latest lesson | `**Now:** 📄 <topic page> · …`; on the chapter list `◀ we are here` | `**Most:** 📄 <témalap> · …`; a fejezetlistában `◀ itt tartunk` |
+| earlier chapters | `✓` on the chapter path and on their headings | `✓` a fejezetek vonalán és a címsorukban |
 | lesson date | a quiet date item after the important information (small clock, small grey text): `Oct 4`, outside the school year `2025 Oct 4`, an undated lesson `~late Sept` | csendes dátum a fontos információ után (kis óra, kis szürke szöveg): `okt. 4.`, a tanéven kívül `2025. okt. 4.`, dátum nélküli óra `~szept. vége`; ISO dátum soha, teljes dátum `2026. 10. 04.` |
 | chapter span | `early Sept – early Oct`, one or two dated lessons `Sept 3–10`; the current chapter `since late Sept` | `szept. eleje – okt. eleje`, egy-két datált óránál `szept. 3–10.`, egy hónapon belül `szept. eleje–közepe`; a mostani fejezet `szept. vége óta` (eleje 1-10., közepe 11-20., vége 21-) |
 | textbook line | `🔖 Textbook: <lesson>, pages <pages>` | `🔖 Tankönyv: <lecke>, <oldalak>. oldal` |
@@ -80,7 +77,6 @@ Every reader-facing string the rules prescribe lives here, in the wiki language 
 | correction label | `⚠️ 🤖 machine correction` | `⚠️ 🤖 gépi javítás` |
 | unknown-author label | `<role icon> 🤖 machine <role>` | `<szerepikon> 🤖 gépi <szerep>` |
 | machine-authorship legend | `🤖 marks a machine-authored explanation, addition or correction. It is not a verification mark.` | `A 🤖 gépi magyarázatot, kiegészítést vagy javítást jelöl. Nem hitelesítési jel.` |
-| catch-up notice | `**Catch-up material** - copy this into your notebook too (or learn it), and say when you are done.` | `**Pótolandó anyag** - írd be ezt a füzetedbe is (vagy tanuld meg), és szólj, ha megvan.` |
 | synthesis notice | `*This page was put together by the LLM (not from the notebook).*` | `*Ezt az oldalt az LLM állította össze (nem a füzetből).*` |
 | in words | `in words:` | `szövegesen:` |
 | conventional headings | `# Open questions`, `# Examples`, `# Schema`, `# Computation` | `# Nyitott kérdések`, `# Példák`, `# Séma`, `# Számítás` |
