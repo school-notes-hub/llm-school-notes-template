@@ -82,7 +82,8 @@ def kepek(fo_mp4: Path, media: Path, minoseg: str, targy: str, cim: str, log_ut:
     return {**ki, "nyito_s": _hossz(ki["nyito"]), "zaro_s": _hossz(ki["zaro"])}
 
 
-def osszefesul(nz: dict, fo_mp4: Path, wav: Path, cel: Path, log_ut: Path, *, threads: int | None = None) -> None:
+def osszefesul(nz: dict, fo_mp4: Path, wav: Path, cel: Path, log_ut: Path, *, threads: int | None = None,
+               kodolas: tuple[str, ...] = ("-preset", "medium", "-crf", "20"), hang_bitrata: str = "160k") -> None:
     """Nyitókép + fő videó + zárókép egy videósávba (újrakódolva: egyenletes kulcskocka 2 s-onként, 1:1 képpont, bt709,
     mert a másolt összefűzés lejátszóban akadhat), alá intró + narráció + outró
     egy hangsávba; felirat-, fejezet- és metaadat-sáv nélkül (K8a)."""
@@ -100,9 +101,9 @@ def osszefesul(nz: dict, fo_mp4: Path, wav: Path, cel: Path, log_ut: Path, *, th
         with open(log_ut, "a", encoding="utf-8") as log:
             subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(lista),
                             "-i", str(INTRO), "-i", str(wav), "-i", str(OUTRO), "-filter_complex", szuro,
-                            "-map", "0:v:0", "-map", "[a]", "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+                            "-map", "0:v:0", "-map", "[a]", "-c:v", "libx264", *kodolas,
                             "-pix_fmt", "yuv420p", "-g", "60", "-keyint_min", "60", "-sc_threshold", "0", "-vf", "setsar=1",
-                            "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv", "-c:a", "aac", "-b:a", "160k",
+                            "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv", "-c:a", "aac", "-b:a", hang_bitrata,
                             "-map_metadata", "-1", "-map_chapters", "-1", "-sn", "-dn", "-movflags", "+faststart",
                             *(["-threads", str(threads)] if threads else []),
                             str(cel)], check=True, stdout=log, stderr=subprocess.STDOUT)

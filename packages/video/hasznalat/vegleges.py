@@ -13,6 +13,11 @@ from .elonezet import surface_payload
 from .gyartas import accepted
 
 
+# A képernyővideó 8 perce CRF 20-szal ~100 MB lenne (H7: 40 MB a határ); CRF 33, slow, stillimage mellett a
+# szöveg éles marad és ~30 MB (mérés: Benedek, 2026-10-15).
+KODOLAS = ("-preset", "slow", "-crf", "33", "-tune", "stillimage")
+
+
 def final_preflight(out):
     if not accepted(out):
         raise ValueError("nincs érvényes accept")
@@ -111,5 +116,7 @@ def final_cards(out):
         out / "hasznalat.mp4",
         out / "video.log",
         threads=4,
+        kodolas=KODOLAS,
+        hang_bitrata="96k",
     )
     return cards
