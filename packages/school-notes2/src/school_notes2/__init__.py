@@ -1,3 +1,3 @@
 """School Notes v2: the host-side tool. See README.md for the map."""
 
-VERSION = "0.4.14"
+VERSION = "0.4.15"
