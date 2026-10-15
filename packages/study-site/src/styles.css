@@ -58,7 +58,8 @@
 .print-answers { border-top: 2px solid #365b56; margin-top: 3rem; padding-top: 2rem; }
 .study-video { display: block; }
 .study-video-player { display: block; max-width: 100%; height: auto; }
-.study-video-poster { display: none; }
+/* The poster stands in for the video on paper only: on screen it must beat `.study-content img` (line 35). */
+.study-video-poster, .study-content img.study-video-poster { display: none; }
 .study-audio { display: block; margin-block: .25rem .5rem; }
 .study-audio-player { display: block; width: 100%; max-width: 32rem; }
 @media print { .study-audio { display: none; } }

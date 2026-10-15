@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { renderMarkdown, printSection } from '../lib/markdown.mjs';
+import { readFileSync } from 'node:fs';
 
 test('an empty jump-target anchor keeps its plain id for links from other pages', async () => {
   const { renderMarkdown } = await import('../lib/markdown.mjs');
@@ -296,4 +297,10 @@ test('open questions form an aside through the next h2, with a fixed subtitle an
   assert.match(last.html, /<\/aside>\s*<section data-footnotes/);
   const ordinary = await renderMarkdown('# T\n\n# Példák\n\nNincs nyitott kérdés.', { resolveUrl: async h => h });
   assert.doesNotMatch(ordinary.html, /study-open-questions/);
+});
+
+test('the video poster is hidden on screen by a rule at least as specific as the content image rule', () => {
+  const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  const screen = css.split('@media print')[0];
+  assert.match(screen, /\.study-content img\.study-video-poster[^{]*\{\s*display:\s*none/);
 });
