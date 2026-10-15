@@ -16,7 +16,10 @@ from .gyartas import accepted
 def final_preflight(out):
     if not accepted(out):
         raise ValueError("nincs érvényes accept")
-    if not read(out / "kapu.json").get("kep_zold"):
+    report = read(out / "kapu.json")
+    if (out / "kapu-kivetel.json").exists():
+        report = exceptions(report, read(out / "kapu-kivetel.json"), review_key(out))
+    if not report.get("kep_zold"):
         raise ValueError("piros gyártási kapu")
     for name, digest in read(out / "gyartas.json")["files"].items():
         if sha((out / name).read_bytes()) != digest:

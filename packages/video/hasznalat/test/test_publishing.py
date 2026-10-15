@@ -209,3 +209,26 @@ def test_paid_provider_uses_the_selected_local_configuration(monkeypatch):
         "fixture", "hasznalat", local=SimpleNamespace(podcast_settings=lambda: settings)
     )
     assert provider.settings is settings and provider.client is client
+
+
+def test_final_preflight_applies_the_owner_exception_before_the_red_gate_check(
+    tmp_path, monkeypatch
+):
+    from hasznalat import vegleges
+
+    monkeypatch.setattr(vegleges, "accepted", lambda out: True)
+    monkeypatch.setattr(vegleges, "review_key", lambda out: "current")
+    finding = {"kod": "H4", "lepes": "4-23", "szereplo": "elozo"}
+    write(tmp_path / "kapu.json", {"leletek": [dict(finding)], "kep_zold": False, "nem_mert": []})
+    write(tmp_path / "gyartas.json", {"files": {}})
+    with pytest.raises(ValueError, match="piros gyártási kapu"):
+        vegleges.final_preflight(tmp_path)
+    record = {"key": "current", "kivetelek": [dict(finding, indok="a tulajdonos megnézte")]}
+    write(tmp_path / "kapu-kivetel.json", record)
+    vegleges.final_preflight(tmp_path)
+    write(tmp_path / "kapu-kivetel.json", dict(record, key="stale"))
+    with pytest.raises(ValueError, match="elavult"):
+        vegleges.final_preflight(tmp_path)
+    write(tmp_path / "kapu-kivetel.json", {"key": "current", "kivetelek": [dict(finding, indok=" ")]})
+    with pytest.raises(ValueError):
+        vegleges.final_preflight(tmp_path)
