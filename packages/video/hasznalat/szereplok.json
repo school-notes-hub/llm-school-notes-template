@@ -1,7 +1,9 @@
 {
   "oldalsav": {
-    "fajta": "css",
-    "selector": "#starlight__sidebar"
+    "fajta": "unio",
+    "tagok": [
+      "oldalsav-linkek"
+    ]
   },
   "kereses": {
     "fajta": "css",
@@ -125,9 +127,14 @@
     "n": 0
   },
   "cimke-elso": {
-    "fajta": "szoveg",
-    "selector": "small.study-label",
-    "text": "🤖",
+    "fajta": "css",
+    "selector": ".study-content .study-label",
+    "szovegek": [
+      "A tankönyv alapján",
+      "gépi magyarázat",
+      "gépi javítás",
+      "gépi kiegészítés"
+    ],
     "n": 0
   },
   "kerdes-elso": {
@@ -189,10 +196,10 @@
     "n": 0
   },
   "itt-tartunk": {
-    "fajta": "szoveg",
-    "selector": ".study-content li",
-    "text": "◀ itt tartunk",
-    "n": 0
+    "fajta": "unio",
+    "tagok": [
+      "itt-tartunk-elemek"
+    ]
   },
   "osszefoglalo-sor-1": {
     "fajta": "szoveg",
@@ -234,26 +241,30 @@
   "cimke-tankonyv": {
     "fajta": "szoveg",
     "selector": ".study-label",
-    "text": "📗",
-    "n": 0
+    "text": "A tankönyv alapján",
+    "n": 0,
+    "sorozat": "cimke-elso"
   },
   "cimke-javitas": {
     "fajta": "szoveg",
     "selector": ".study-label",
     "text": "⚠️",
-    "n": 0
+    "n": 0,
+    "sorozat": "cimke-elso"
   },
   "cimke-kieg": {
     "fajta": "szoveg",
     "selector": ".study-label",
     "text": "➕",
-    "n": 0
+    "n": 0,
+    "sorozat": "cimke-elso"
   },
   "cimke-magyarazat": {
     "fajta": "szoveg",
     "selector": ".study-label",
     "text": "💡",
-    "n": 0
+    "n": 0,
+    "sorozat": "cimke-elso"
   },
   "tantargyak": {
     "fajta": "szakasz",
@@ -370,9 +381,23 @@
   },
   "robot-jel": {
     "fajta": "szoveg",
-    "selector": ".study-label",
-    "text": "➕",
+    "selector": ".study-content .study-label",
+    "text": "🤖",
     "n": 0,
-    "reszlet": "🤖"
+    "reszlet": "🤖",
+    "szovegek": [
+      "gépi magyarázat",
+      "gépi javítás",
+      "gépi kiegészítés"
+    ]
+  },
+  "oldalsav-linkek": {
+    "fajta": "css",
+    "selector": "#starlight__sidebar a"
+  },
+  "itt-tartunk-elemek": {
+    "fajta": "szoveg",
+    "selector": ".study-content li",
+    "text": "◀ itt tartunk"
   }
 }

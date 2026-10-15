@@ -126,6 +126,7 @@ def test_highlight_clipping_does_not_draw_a_fake_bottom_border(tmp_path):
         "nezet": "asztal",
         "box": [200, 100, 400, 1000],
         "kiemel": "large",
+        "magas": True,
         "alpha": 1,
     }
     picture = frame(tmp_path, spec)
@@ -308,6 +309,17 @@ def test_label_camera_keeps_preceding_paragraph_and_label_in_lower_half():
     assert 400 > view[1] + view[3] / 2
 
 
+def test_ordered_title_then_label_does_not_move_camera_back_up():
+    step, m = steps(filled())[0], measured()[0]
+    step.update(kamera='elem', dom_sorrend=True)
+    m['layout'] = {'top': 88, 'content': [300, 100, 660, 1800]}
+    m['roles']['roviden'].update(box=[300, 400, 660, 24], context=[300, 400, 660, 24])
+    title = crop(step, m)
+    m['roles']['roviden'].update(box=[300, 500, 200, 24], context=[300, 450, 660, 74], label_context=True)
+    label = crop(step, m)
+    assert title[1] <= label[1]
+
+
 def test_review_narration_uses_filled_lesson_and_visible_guide_name():
     script, _ = fill(read(ROOT / 'forgatokonyv.json'), candidates(fixture())[0][0])
     by_id = {s['id']: s for s in steps(script)}
@@ -315,7 +327,7 @@ def test_review_narration_uses_filled_lesson_and_visible_guide_name():
     assert by_id['3-03']['kiemel'][0]['horgony'] == 'Minta'
     assert by_id['1-05']['kiemel'][0]['kell'] == 'Hogyan használd'
     assert 'szerkezet' not in by_id['1-05']['kiemel'][0]
-    assert by_id['4-15']['kiemel'][0]['szerkezet'] == 'cimke-nelkuli'
+    assert by_id['4-10']['kiemel'][0]['szerkezet'] == 'cimke-nelkuli'
 
 
 def test_gate_rejects_label_detached_from_its_preceding_prose():
@@ -376,9 +388,9 @@ def test_second_review_script_order_actions_and_labels():
     for id in ('2-03', '6-04'):
         assert 'Hogyan használd részéhez visz, ahol a lapok leírása áll' in rows[id]['text']
     assert rows['4-06']['gorget'] == rows['4-05']['gorget']
-    assert rows['4-08']['kiemel'][0]['szereplo'] == 'podcast'
-    assert rows['4-09']['kiemel'][0]['szereplo'] == 'cimke-elso'
-    assert rows['4-13']['kiemel'][0]['szereplo'] == 'robot-jel'
+    assert rows['4-14']['kiemel'][0]['szereplo'] == 'podcast'
+    assert rows['4-07']['kiemel'][0]['szereplo'] == 'cimke-elso'
+    assert rows['4-08']['kiemel'][0]['szereplo'] == 'robot-jel'
     assert rows['6-02']['kiemel'][0]['horgony'] == 'Most'
     assert rows['6-03']['text'].endswith('nyisd meg.')
     assert actors['cimke-nelkuli']['forras_szovegek'] == ['Órai bekezdés.']

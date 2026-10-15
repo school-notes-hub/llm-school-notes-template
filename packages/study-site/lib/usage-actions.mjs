@@ -81,7 +81,9 @@ export async function scroll(ctx, step, boxes) {
   if (step.kamera !== 'teljes' && step.nezet !== 'telefon' && content) {
     const height = (content[2] + 32) * 9 / 16;
     const tall = step.kiemel?.some((c) => c.magas) && box[3] > page.viewportSize().height - top;
-    target = tall ? top : item.label_context
+    const footer = item.label_context || step.dom_sorrend ||
+      item.structures?.some(kind => ['cimke', 'datum-link'].includes(kind));
+    target = tall ? top : footer
       ? top + height - box[3] - 40
       : top + Math.min(80, height * 0.2);
   }

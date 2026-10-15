@@ -97,6 +97,9 @@ def column_crop(step, measurement, box, column):
     contexts = [i.get("context") or i["box"] for i in items if i.get("box")]
     context = combined(contexts) if contexts else box
     label = any(i.get("label_context") for i in items)
+    footer = label or step.get("dom_sorrend") or any(
+        set(i.get("structures", [])) & {"cimke", "datum-link"} for i in items
+    )
     tall = bool(tall_cues(step, measurement))
     top = measurement.get("layout", {}).get("top", 0)
     if tall and top - 1 <= box[1] < top:
@@ -111,7 +114,7 @@ def column_crop(step, measurement, box, column):
         width = min(viewport["width"] - left, column[2] + padding * 2)
         height = width * 9 / 16
         margin = 12 if box[3] > height * 0.4 else 24
-        preferred = top if tall else (box[1] + box[3] + 32 - height if label else context[1] - height * 0.2)
+        preferred = top if tall else (box[1] + box[3] + 32 - height if footer else context[1] - height * 0.2)
         fallback = fallback or [left, min(max(top, preferred), viewport["height"] - height), width, height]
         candidates = [preferred, top, viewport["height"] - height]
         for word in words:

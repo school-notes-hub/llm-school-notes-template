@@ -7,7 +7,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 from .adatok import steps
-from .kamera import SIZE, PHONE, PHONE_VIEW, crop
+from .kamera import SIZE, PHONE, PHONE_VIEW, crop, tall_cues
 from .mozgas import cursor_frames, transition_frames
 from .keret import outline
 
@@ -44,6 +44,7 @@ def still_frames(step, measurement, timing):
                 "crop": crop(step, measurement),
                 "nezet": step["nezet"],
                 "kiemel": cue["szereplo"] if cue else None,
+                "magas": cue in tall_cues(step, measurement) if cue else False,
                 "box": measurement["roles"].get(cue["szereplo"], {}).get("box")
                 if cue
                 else None,

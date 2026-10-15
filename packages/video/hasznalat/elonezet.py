@@ -91,6 +91,7 @@ def preview(local, build, out, subject, lesson, script_path=ROOT / "forgatokonyv
         cwd=out,
     )
     measurements = read(out / "dobozok.json")
+    script = read(out / "forgatokonyv-kitoltott.json")
     report = gate(
         script,
         measurements,

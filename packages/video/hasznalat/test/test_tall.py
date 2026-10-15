@@ -80,6 +80,7 @@ def test_tall_border_is_open_in_the_actual_frame(tmp_path):
         "nezet": "asztal",
         "box": measurement["roles"]["diagram"]["box"],
         "kiemel": "diagram",
+        "magas": True,
     }
     picture = osszerak.frame(tmp_path, spec)
     assert keret.clipped_sides(spec) == ["also"]
@@ -115,6 +116,35 @@ def test_tall_column_camera_has_no_sidebar_and_preserves_the_open_bottom():
     assert view[0] >= 256 and view[0] + view[2] <= 1024
     assert view[1] == 88
     assert not findings(step, measurement)
+
     assert keret.clipped_sides({'nezet': 'asztal', 'box': measurement['roles']['diagram']['box'], 'crop': view}) == ['also']
     measurement['roles']['diagram']['box'][1] = 87.984
     assert not findings(step, measurement)
+
+
+def test_ordinary_edge_highlight_has_four_inset_sides_and_gate_checks_pixels(monkeypatch):
+    step, measurement = scene()
+    step.update(kamera='teljes', kiemel=[{'szereplo': 'diagram'}])
+    measurement['roles']['diagram'].update(box=[0, 72, 256, 648], uncovered=[True] * 5)
+    spec = {'nezet': 'asztal', 'box': [0, 72, 256, 648], 'crop': [0, 0, 1280, 720]}
+    assert keret.bounds(spec) == (4, 100, 392, 1075)
+    assert keret.closed_border(spec)
+    assert not findings(step, measurement)
+
+    def broken(image, spec, color):
+        left, top, right, bottom = keret.bounds(spec)
+        ImageDraw.Draw(image).line([(left, top), (right, top), (right, bottom)], fill=color, width=4)
+
+    monkeypatch.setattr(keret, 'outline', broken)
+    assert 'nem zárt' in findings(step, measurement)[0][-1]
+
+
+def test_offscreen_ordinary_highlight_remains_a_gate_error_not_a_render_crash():
+    step, measurement = scene()
+    step.update(kamera='teljes', kiemel=[{'szereplo': 'diagram'}])
+    box = [-200, 100, 100, 100]
+    measurement['roles']['diagram'].update(box=box, uncovered=[False] * 5)
+    keret.outline(Image.new('RGB', keret.SIZE), {
+        'nezet': 'asztal', 'box': box, 'crop': [0, 0, 1280, 720],
+    }, 'orange')
+    assert 'nincs teljesen a kamerában' in findings(step, measurement)[0][-1]

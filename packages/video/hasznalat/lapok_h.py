@@ -9,7 +9,7 @@ from lapok import lapok_ir
 
 from .adatok import sha, read, write
 from .osszerak import frame, source
-from .kamera import crop, phone_in_camera
+from .kamera import crop, phone_in_camera, tall_cues
 
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
@@ -21,6 +21,7 @@ def contact_cell(out, step, measurement, cue):
         "crop": crop(step, measurement),
         "nezet": step["nezet"],
         "kiemel": role,
+        "magas": cue in tall_cues(step, measurement) if cue else False,
         "box": measurement["roles"].get(role, {}).get("box"),
         "alpha": 1,
     }

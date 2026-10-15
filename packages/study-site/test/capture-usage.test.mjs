@@ -92,6 +92,12 @@ test("usage surface contract tracks the current template, including touch restri
     contract.interakciok.map((r) => r.lepes),
     ["4-06", "5-05"],
   );
+  const template = JSON.parse(await fs.readFile(new URL('../../video/hasznalat/forgatokonyv.json', import.meta.url)));
+  for (const rule of contract.interakciok) {
+    const step = template.jelenetek.flatMap(s => s.lepesek).find(s => s.id === rule.lepes);
+    assert.ok(step && !step.dom_sorrend, 'external interaction IDs must stay outside reordered groups');
+    assert.ok([...step.kiemel, ...(step.allapot || [])].some(c => c.szereplo === rule.szereplo));
+  }
 });
 
 test("every production role resolves on the neutral surface fixture", async () => {
@@ -286,6 +292,10 @@ test("usage context keeps inline and separate labels with their prose, and escap
     assert.ok(measured.separate.context[1] < measured.separate.box[1]);
     assert.equal(measured.plain.text, 'A plain teaching paragraph.');
     const ctx = {page, motion: [], shot: async () => 'fixture.png'};
+    await scroll(ctx, {nezet:'asztal', kamera:'elem', dom_sorrend:true,
+      gorget:{szereplo:'plain', igazit:'felso'}}, measured);
+    measured = await get();
+    assert.ok(measured.plain.box[1] > 300, 'ordered plain text shares label framing');
     await scroll(ctx, {nezet:'asztal', kamera:'elem', gorget:{szereplo:'inline', igazit:'felso'}}, measured);
     measured = await get();
     assert.ok(measured.inline.context[1] >= 88);
@@ -316,6 +326,9 @@ test('review roles bind the same date, classroom prose and exact text ranges', a
       <p><small class="study-label">🗓️ Óra: <a href="/subject/#ora-first">szept. 29.</a> · Tankönyv</small></p>
       <p>Unreferenced introduction.</p><p>Book material.</p><p>Classroom material.</p>
       <p>Explanation.<br><small class="study-label">💡 🤖 gépi magyarázat</small></p>
+      <p>More explanation.<br><small class="study-label">💡 🤖 gépi magyarázat</small></p>
+      <p>Correction.<br><small class="study-label">⚠️ 🤖 gépi javítás</small></p>
+      <p>Book.<br><small class="study-label">📗 A tankönyv alapján</small></p>
       <p>Extra.<br><small class="study-label">➕ 🤖 gépi kiegészítés</small></p>
       <small class="study-label">🗓️ Óra: <a href="/subject/#ora-later"><span class="study-when">~ősz</span></a></small>
       <ul><li><a id="ora-first"></a>Lesson title · date<br>→ <a href="/one/">First</a> · <a href="/two/">Second</a></li></ul>
@@ -331,6 +344,7 @@ test('review roles bind the same date, classroom prose and exact text ranges', a
     assert.equal(m['cimke-elso'].text, '💡 🤖 gépi magyarázat');
     assert.equal(m['cimke-nelkuli'].text, 'Classroom material.');
     assert.equal(m['robot-jel'].text, '🤖');
+    assert.equal(m['robot-jel'].dom_order, m['cimke-elso'].dom_order);
     assert.ok(m['robot-jel'].box[2] < m['cimke-kieg'].box[2] / 3);
     assert.equal(m['ora-nyil'].text, '→ First · Second');
     assert.ok(m['ora-nyil'].box[1] > m['ora-elso'].box[1]);
@@ -338,4 +352,84 @@ test('review roles bind the same date, classroom prose and exact text ranges', a
     const missing = await page.evaluate(actors => globalThis.__usageMeasure({actors, requested:['cimke-nelkuli']}), actors);
     assert.equal(missing['cimke-nelkuli'].count, 0);
   } finally { await session.close(); }
+});
+
+test('tour targets follow DOM order, skip used labels and union all current lessons', async () => {
+  const { openBrowser } = await import('../lib/usage-record.mjs');
+  const session = await openBrowser(browserPath);
+  try {
+    const page = await session.browser.newPage();
+    const actors = JSON.parse(await fs.readFile(new URL('../../video/hasznalat/szereplok.json', import.meta.url), 'utf8'));
+    await page.setContent(`<nav id="starlight__sidebar" style="height:700px">
+      <a>Home</a><a>Subject</a><a>About</a></nav><main class="study-content">
+      <small class="study-label">🗓️ Óra</small>
+      <small class="study-label" id="first">📗 A tankönyv alapján</small>
+      <small class="study-label" id="robot">⚠️ 🤖 gépi javítás</small>
+      <small class="study-label">➕ 🤖 gépi kiegészítés</small>
+      <p><small class="study-label">🤖 Gépi hang</small></p>
+      <p><small class="study-label">💡 🤖 gépi magyarázat</small></p>
+      <p><small class="study-label">⚠️ 🤖 gépi javítás</small></p>
+      <p><small class="study-label">📗 A tankönyv alapján</small></p>
+      <p><small class="study-label">➕ 🤖 gépi kiegészítés</small></p>
+      <ul><li>Earlier</li><li id="current1">One ◀ itt tartunk</li><li id="current2">Two ◀ itt tartunk</li></ul>
+    </main>`);
+    await page.evaluate(domSource);
+    const { orderTargets } = await import('../lib/usage-order.mjs');
+    const ordered = ['cimke-elso', 'cimke-javitas', 'cimke-kieg', 'cimke-magyarazat', 'cimke-tankonyv'];
+    await orderTargets(page, actors, ordered);
+    const m = await page.evaluate(({actors, requested}) => globalThis.__usageMeasure({actors, requested}),
+      {actors, requested: [...ordered, 'robot-jel', 'oldalsav', 'itt-tartunk']});
+    assert.equal(m['cimke-elso'].text, '📗 A tankönyv alapján');
+    assert.ok(ordered.slice(1).every((role, i) => m[role].dom_order > m[ordered[i]].dom_order));
+    assert.ok(m.oldalsav.box[3] < 100);
+    assert.equal(m['itt-tartunk'].count, 1);
+    assert.equal(m['itt-tartunk'].text, 'One ◀ itt tartunk Two ◀ itt tartunk');
+    const rects = await page.locator('#current1, #current2').evaluateAll(nodes => nodes.map(n => {
+      const r = n.getBoundingClientRect(); return [r.y, r.bottom];
+    }));
+    assert.equal(m['itt-tartunk'].box[1], rects[0][0]);
+    assert.equal(m['itt-tartunk'].box[1] + m['itt-tartunk'].box[3], rects[1][1]);
+    await page.locator('[data-usage-cimke-magyarazat]').evaluate(n => n.remove());
+    const missing = await page.evaluate(actors => globalThis.__usageMeasure({actors, requested:['cimke-tankonyv']}), actors);
+    assert.equal(missing['cimke-tankonyv'].count, 0); // Never fall back upwards.
+  } finally { await session.close(); }
+});
+
+test('tour planning follows different label layouts and persists positional IDs', async () => {
+  const { openBrowser } = await import('../lib/usage-record.mjs');
+  const { orderTour } = await import('../lib/usage-order.mjs');
+  const { serveSite } = await import('../lib/server.mjs');
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'usage-order-'));
+  const session = await openBrowser(browserPath);
+  const {server, origin} = await serveSite(root, '/');
+  const labels = {book:'📗 A tankönyv alapján', explanation:'💡 🤖 gépi magyarázat',
+    correction:'⚠️ 🤖 gépi javítás', addition:'➕ 🤖 gépi kiegészítés'};
+  try {
+    for (const layout of [
+      ['book', 'correction', 'addition', 'explanation', 'book'],
+      ['explanation', 'explanation', 'correction', 'book', 'addition'],
+    ]) {
+      await fs.writeFile(path.join(root, 'index.html'), '<main class="study-content">' +
+        layout.map(label => `<p>Prose<small class="study-label">${labels[label]}</small></p>`).join('') + '</main>');
+      const actors = JSON.parse(await fs.readFile(new URL('../../video/hasznalat/szereplok.json', import.meta.url), 'utf8'));
+      const requested = ['cimke-elso', 'robot-jel', 'cimke-magyarazat', 'cimke-javitas', 'cimke-tankonyv', 'cimke-kieg'];
+      const script = {jelenetek:[{id:'1', nezet:'asztal', lepesek:requested.map((role, i) => ({
+        id:`1-0${i+1}`, url:'/', dom_sorrend:true, kiemel:[{szereplo:role}], gorget:{szereplo:role}, text:role,
+      }))}]};
+      await orderTour(session.browser, origin, script, actors);
+      const steps = script.jelenetek[0].lepesek;
+      assert.deepEqual(steps.map(s => s.id), requested.map((_, i) => `1-0${i+1}`));
+      const roleNames = {book:'cimke-tankonyv', explanation:'cimke-magyarazat', correction:'cimke-javitas', addition:'cimke-kieg'};
+      assert.deepEqual(steps.filter(s => s.text !== 'robot-jel').map(s => s.text),
+        ['cimke-elso', ...layout.slice(1).map(label => roleNames[label])]);
+      assert.ok(steps.every(s => s.text === s.kiemel[0].szereplo && s.gorget.szereplo === s.text));
+      const once = JSON.stringify({script,actors});
+      await orderTour(session.browser, origin, script, actors);
+      assert.equal(JSON.stringify({script,actors}), once);
+    }
+  } finally {
+    await session.close();
+    await new Promise(resolve => server.close(resolve));
+    await fs.rm(root, {recursive:true, force:true});
+  }
 });

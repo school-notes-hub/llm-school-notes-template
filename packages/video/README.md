@@ -71,6 +71,17 @@ A szövegrész-szerepek DOM Range alapján mérik a nyilat követő sort és a r
 a dátumlink pedig az előzőleg bemutatott órasor leszármazottja.
 A szóhoz kötött lenyitások előtti állapot külön kontaktképet is kap.
 
+Az oldalsáv kerete a menülinkek listáját, az „itt tartunk” kerete az összes
+megjelölt leckesor egyesített dobozát fogja. A nem magas kiemelések mind a négy
+oldala a képszélen belül fut; a H2 a kirajzolt keret zártságát is ellenőrzi.
+A `dom_sorrend` jelű, egyoldalas, interakció nélküli lépéscsoportot a felvevő
+a DOM olvasási sorrendjébe rendezi, és helyük szerint újraszámozza a lépéseket.
+A feloldott forgatókönyvet és szerepeket menti; a kapu, kontaktlap, hang és
+videó egyaránt ebből dolgozik. Külső lépésazonosítós interakció nem mutathat
+ilyen csoportba. A `sorozat` címkeszerepek a kezdő címke után az első megfelelő,
+még nem használt elemet választják, mindig az előző cél után; a típusok sorrendje
+is a DOM-ból következik. A robotjel a legelső gépi tartalomcímke 🤖 részlete.
+
 Teszt: `uv run --project ../school-notes2 python -m pytest -q hasznalat/test`; a böngészős
 és felület-szerződés tesztek a study-site `npm test` és a school-notes2 `pytest` részei is.
 Minden fixture szintetikus, minden hang a meglévő csonkból jön; a teszt nem fizet.

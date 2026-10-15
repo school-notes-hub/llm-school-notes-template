@@ -278,6 +278,9 @@
                       }
                     ]
                   }
+                },
+                "dom_sorrend": {
+                  "type": "boolean"
                 }
               },
               "additionalProperties": false

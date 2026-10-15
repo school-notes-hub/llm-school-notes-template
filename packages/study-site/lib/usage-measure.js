@@ -63,6 +63,13 @@
       );
     if (actor.szoveg)
       nodes = nodes.filter((n) => text(n).includes(actor.szoveg));
+    if (actor.szovegek)
+      nodes = nodes.filter((n) => actor.szovegek.some(value => text(n).includes(value)));
+    if (actor.utana || actor.sorozat) {
+      const previous = resolve(actor.utana || actor.sorozat, actors, [...stack, name]).at(-1);
+      nodes = previous ? nodes.filter(n => n !== previous &&
+        Boolean(previous.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING)) : [];
+    }
     if (actor.cimke_nelkul) nodes = nodes.filter(unlabelled);
     if (actor.ora_forras) nodes = nodes.filter(n =>
       (actor.forras_szovegek || []).includes(text(n).replace(/\s+/g, ' ').trim()));
@@ -240,6 +247,7 @@
     nodes.forEach((n) => n.setAttribute(`data-usage-${name}`, ""));
     return {
       count,
+      dom_order: nodes.length ? [...document.querySelectorAll('*')].indexOf(nodes[0]) : null,
       reason:
         name === "abra" && !nodes.length
           ? "Nincs nem fejléc img.study-figure ábra a leckén."

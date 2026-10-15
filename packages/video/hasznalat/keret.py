@@ -1,6 +1,6 @@
-"""True element borders: clipping never closes a side at the camera edge."""
+"""Closed ordinary borders; explicitly tall elements keep their true edges."""
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageChops
 
 from .kamera import SIZE, camera_box
 
@@ -8,19 +8,36 @@ from .kamera import SIZE, camera_box
 def bounds(spec):
     x, y, width, height = camera_box(spec, spec["box"])
     left, top, w, h = spec["crop"]
-    return (
+    edges = (
         (x - left) * SIZE[0] / w - 8,
         (y - top) * SIZE[1] / h - 8,
         (x + width - left) * SIZE[0] / w + 8,
         (y + height - top) * SIZE[1] / h + 8,
     )
+    if spec.get("magas"):
+        return edges
+    # Padding must not push an otherwise visible element's border off screen.
+    return tuple(min(SIZE[i % 2] - 5, max(4, edge)) for i, edge in enumerate(edges))
 
 
 def outline(image, spec, color):
-    # Keep real coordinates beyond the canvas; never clamp them to the viewport.
     ImageDraw.Draw(image).rounded_rectangle(
         bounds(spec), radius=10, outline=color, width=4
     )
+
+
+def closed_border(spec):
+    """Check all four rendered sides and their corners form one closed contour."""
+    mask = Image.new("L", SIZE)
+    outline(mask, spec, 255)
+    if mask.getbbox() is None or any(mask.crop(edge).getbbox() for edge in (
+        (0, 0, SIZE[0], 3), (0, SIZE[1] - 3, SIZE[0], SIZE[1]),
+        (0, 0, 3, SIZE[1]), (SIZE[0] - 3, 0, SIZE[0], SIZE[1]),
+    )):
+        return False
+    expected = Image.new("L", SIZE)
+    ImageDraw.Draw(expected).rounded_rectangle(bounds(spec), radius=10, outline=255, width=1)
+    return ImageChops.subtract(expected, mask).getbbox() is None
 
 
 def clipped_sides(spec):

@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { serveSite } from "./lib/server.mjs";
+import { orderTour } from "./lib/usage-order.mjs";
 import {
   digest,
   read,
@@ -25,6 +26,7 @@ async function recorderCode() {
     "./lib/usage-record.mjs",
     "./lib/usage-actions.mjs",
     "./lib/usage-measure.js",
+    "./lib/usage-order.mjs",
     "../video/hasznalat/szereplok.json",
   ];
   return Promise.all(
@@ -59,6 +61,10 @@ async function replay(recorder, browser, script) {
 
 async function captureWithBrowser(args, browser, origin) {
   const { build, out, script, actors, commit } = args;
+  await orderTour(browser, origin, script, actors);
+  await save(path.join(out, "forgatokonyv-kitoltott.json"), script);
+  await save(path.join(out, "szereplok.json"), actors);
+  await save(path.join(out, "felvetel.json"), args);
   const tree = await treeHashes(build),
     version = browser.version();
   const input = digest(

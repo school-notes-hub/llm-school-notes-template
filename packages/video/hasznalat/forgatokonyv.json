@@ -364,7 +364,7 @@
         },
         {
           "id": "2-11",
-          "text": "Minden lecke mellett egy {rövid leírás} mondja el, miről szól.",
+          "text": "Minden lecke címe alatt egy {rövid leírás} mondja el, miről szól.",
           "szunet": 0.6,
           "lap": "tantargy",
           "kamera": "elem",
@@ -761,42 +761,6 @@
         },
         {
           "id": "4-07",
-          "text": "A {Röviden} doboz a lecke legfontosabb pontjait gyűjti össze; dolgozat előtt ezt nézd át.",
-          "szunet": 0.6,
-          "lap": "lecke",
-          "kamera": "tartalom",
-          "kiemel": [
-            {
-              "szereplo": "roviden-cim",
-              "horgony": "Röviden",
-              "kell": "Röviden"
-            }
-          ],
-          "gorget": {
-            "szereplo": "roviden-cim",
-            "igazit": "felso"
-          }
-        },
-        {
-          "id": "4-08",
-          "text": "A Röviden alatt a {Képben vagy?} podcast egy rövid beszélgetés erről a leckéről; itt meg is hallgathatod.",
-          "szunet": 0.6,
-          "lap": "lecke",
-          "kamera": "elem",
-          "kiemel": [
-            {
-              "szereplo": "podcast",
-              "horgony": "Képben vagy?",
-              "kell": "Képben vagy?"
-            }
-          ],
-          "gorget": {
-            "szereplo": "podcast",
-            "igazit": "felso"
-          }
-        },
-        {
-          "id": "4-09",
           "text": "A szöveg alatti kis {címkék} megmutatják, honnan való az adott rész.",
           "szunet": 0.6,
           "lap": "lecke",
@@ -811,64 +775,11 @@
           "gorget": {
             "szereplo": "cimke-elso",
             "igazit": "felso"
-          }
+          },
+          "dom_sorrend": true
         },
         {
-          "id": "4-10",
-          "text": "A zöld könyv azt jelzi, hogy a rész {a tankönyv alapján} készült.",
-          "szunet": 0.6,
-          "lap": "lecke",
-          "kamera": "elem",
-          "kiemel": [
-            {
-              "szereplo": "cimke-tankonyv",
-              "horgony": "a tankönyv alapján",
-              "kell": "A tankönyv alapján"
-            }
-          ],
-          "gorget": {
-            "szereplo": "cimke-tankonyv",
-            "igazit": "felso"
-          }
-        },
-        {
-          "id": "4-11",
-          "text": "A {gépi javítás} ott áll, ahol az órai jegyzetben hiba volt; ilyenkor a füzetedet is javítsd.",
-          "szunet": 0.6,
-          "lap": "lecke",
-          "kamera": "elem",
-          "kiemel": [
-            {
-              "szereplo": "cimke-javitas",
-              "horgony": "gépi javítás",
-              "kell": "gépi javítás"
-            }
-          ],
-          "gorget": {
-            "szereplo": "cimke-javitas",
-            "igazit": "felso"
-          }
-        },
-        {
-          "id": "4-12",
-          "text": "A {gépi kiegészítés} egy hiányzó, de a megértéshez fontos részt pótol.",
-          "szunet": 0.6,
-          "lap": "lecke",
-          "kamera": "elem",
-          "kiemel": [
-            {
-              "szereplo": "cimke-kieg",
-              "horgony": "gépi kiegészítés",
-              "kell": "gépi kiegészítés"
-            }
-          ],
-          "gorget": {
-            "szereplo": "cimke-kieg",
-            "igazit": "felso"
-          }
-        },
-        {
-          "id": "4-13",
+          "id": "4-08",
           "text": "A {robot} jel azt mutatja, hogy azt a részt gép írta.",
           "szunet": 0.6,
           "lap": "lecke",
@@ -881,12 +792,13 @@
             }
           ],
           "gorget": {
-            "szereplo": "cimke-kieg",
+            "szereplo": "robot-jel",
             "igazit": "felso"
-          }
+          },
+          "dom_sorrend": true
         },
         {
-          "id": "4-14",
+          "id": "4-09",
           "text": "A {gépi magyarázat} kifejti, amit az órai anyag csak röviden ír le.",
           "szunet": 0.6,
           "lap": "lecke",
@@ -901,10 +813,11 @@
           "gorget": {
             "szereplo": "cimke-magyarazat",
             "igazit": "felso"
-          }
+          },
+          "dom_sorrend": true
         },
         {
-          "id": "4-15",
+          "id": "4-10",
           "text": "A {címke nélküli szöveg} az órán tanult anyag.",
           "szunet": 0.6,
           "lap": "lecke",
@@ -919,7 +832,103 @@
           "gorget": {
             "szereplo": "cimke-nelkuli",
             "igazit": "felso"
-          }
+          },
+          "dom_sorrend": true
+        },
+        {
+          "id": "4-11",
+          "text": "A {Röviden} doboz a lecke legfontosabb pontjait gyűjti össze; dolgozat előtt ezt nézd át.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "tartalom",
+          "kiemel": [
+            {
+              "szereplo": "roviden-cim",
+              "horgony": "Röviden",
+              "kell": "Röviden"
+            }
+          ],
+          "gorget": {
+            "szereplo": "roviden-cim",
+            "igazit": "felso"
+          },
+          "dom_sorrend": true
+        },
+        {
+          "id": "4-12",
+          "text": "A {gépi javítás} ott áll, ahol az órai jegyzetben hiba volt; ilyenkor a füzetedet is javítsd.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "cimke-javitas",
+              "horgony": "gépi javítás",
+              "kell": "gépi javítás"
+            }
+          ],
+          "gorget": {
+            "szereplo": "cimke-javitas",
+            "igazit": "felso"
+          },
+          "dom_sorrend": true
+        },
+        {
+          "id": "4-13",
+          "text": "Az {A tankönyv alapján} címke azt jelzi, hogy a rész a tankönyvből való, és az órai jegyzetben nem szerepelt.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "cimke-tankonyv",
+              "horgony": "A tankönyv alapján",
+              "kell": "A tankönyv alapján"
+            }
+          ],
+          "gorget": {
+            "szereplo": "cimke-tankonyv",
+            "igazit": "felso"
+          },
+          "dom_sorrend": true
+        },
+        {
+          "id": "4-14",
+          "text": "A Röviden alatt a {Képben vagy?} podcast egy rövid beszélgetés erről a leckéről; itt meg is hallgathatod.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "podcast",
+              "horgony": "Képben vagy?",
+              "kell": "Képben vagy?"
+            }
+          ],
+          "gorget": {
+            "szereplo": "podcast",
+            "igazit": "felso"
+          },
+          "dom_sorrend": true
+        },
+        {
+          "id": "4-15",
+          "text": "A {gépi kiegészítés} egy hiányzó, de a megértéshez fontos részt pótol.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "cimke-kieg",
+              "horgony": "gépi kiegészítés",
+              "kell": "gépi kiegészítés"
+            }
+          ],
+          "gorget": {
+            "szereplo": "cimke-kieg",
+            "igazit": "felso"
+          },
+          "dom_sorrend": true
         },
         {
           "id": "4-16",
