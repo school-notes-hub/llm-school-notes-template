@@ -42,8 +42,9 @@ export async function exportSite({ repo, config, output, browserPath, printEngin
     assets.set(a.path, a);
   }
   // A lesson log is not published (plan terv-oldalszerkezet T3): a link to one goes to its row in
-  // the subject index's 🗓️ Órák list. `lessonLinks`: log path → {fragment → "<page>#<jump target>"},
-  // "" for no or an unknown fragment.
+  // the subject index's 🗓️ Órák list. Each log maps fragments and date/topic keys to
+  // "<page>#<jump target>". Fragmentless links try @date|topic, unique @date, |topic, then "";
+  // topic keys apply only within the same folder. Unknown explicit fragments fall back to "".
   const lessonLinks = new Map();
   for (const [file, targets] of Object.entries(isPublic ? config.lessonLinks || {} : {})) {
     relativeFile(file);
@@ -103,7 +104,7 @@ export async function exportSite({ repo, config, output, browserPath, printEngin
     }
     for (const p of pageMap.values()) {
       const raw = await readInside(root, p.path, p.sha256);
-      const resolveUrl = async (url, image) => {
+      const resolveUrl = async (url, image, linkText = '') => {
         if (url.startsWith('#')) return url;
         if (/^https?:\/\//.test(url)) {
           if (image) throw new Error(`External image needs a reviewed local asset: ${url}`);
@@ -116,8 +117,13 @@ export async function exportSite({ repo, config, output, browserPath, printEngin
         if (pageMap.has(file) && !image) return urlFor(base, pageMap.get(file).route) + (fragment ? '#' + fragment : '');
         if (!image && isPublic && lessonLinks.has(file)) {
           const targets = lessonLinks.get(file);
-          const key = fragment ? decodeURIComponent(fragment) : '';
-          const [page, jump] = (Object.hasOwn(targets, key) ? targets[key] : targets['']).split('#', 2);
+          const topic = path.posix.basename(p.path);
+          const sameFolder = path.posix.dirname(file) === path.posix.dirname(p.path);
+          const keys = fragment ? [decodeURIComponent(fragment), '']
+            : sameFolder ? [`@${linkText}|${topic}`, '@' + linkText, `|${topic}`, '']
+              : ['@' + linkText, ''];
+          const key = keys.find(k => Object.hasOwn(targets, k));
+          const [page, jump] = targets[key].split('#', 2);
           return urlFor(base, pageMap.get(page).route) + (jump ? '#' + jump : '');
         }
         if (assets.has(file)) {

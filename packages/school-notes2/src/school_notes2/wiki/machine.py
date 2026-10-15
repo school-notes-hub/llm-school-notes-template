@@ -15,7 +15,6 @@ from . import frontmatter, generate, markers
 
 LESSON_KEYS = ("type", "grade", "sources", "source_file", "content_sha256", "original_sha256",
                "drive_folder", "generated")
-LESSONS_LEGEND = generate.LESSONS_LEGEND      # written inside the lessons block
 
 
 def machine_keys(meta: dict) -> tuple[str, ...]:

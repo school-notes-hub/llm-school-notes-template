@@ -59,8 +59,9 @@ def page_order(repo: Path) -> list[str]:
 
 def lesson_links(repo: Path) -> dict[str, dict[str, str]]:
     """Every lesson log → {fragment → `wiki/<subject>/index.md#<its row in the 🗓️ Órák list>`};
-    `""` is used for no or an unknown fragment (`generate.lesson_links`). A lesson log without a
-    lesson goes to the subject index."""
+    Without a fragment the keys prefer `@date|topic`, then unique `@date`, then `|topic`, then
+    `""`; topic keys apply only within the same folder (`subject_page.lesson_links`). A lesson
+    log without a lesson goes to the subject index."""
     out: dict[str, dict[str, str]] = {}
     for slug in generate.subject_order(repo):
         subject = generate.load_subject(repo, slug)

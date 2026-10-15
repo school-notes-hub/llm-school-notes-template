@@ -112,7 +112,7 @@ def run(local, reviewed: bool = False, build_only: Path | None = None, out=print
     needed, why = site_publish.publish_needed(git, site, head, VERSION)
     commit, live = None, None
     if needed:
-        changed = site_publish.changed_since_publish(git, site, head)
+        changed = site_publish.changed_since_publish(git, site, head, VERSION)
         with tempfile.TemporaryDirectory(prefix=f"sn-publish-{local.name}-") as tmp:
             try:
                 record = site_build.build(git, head, Path(tmp), renderer(local), changed=changed, log=local.steps,

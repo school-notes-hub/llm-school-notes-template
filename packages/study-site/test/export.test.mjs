@@ -298,14 +298,14 @@ test('a page knows its kind and chapter; a link to an unpublished lesson log goe
     const repo = path.join(tmp, 'repo');
     const files = {
       'wiki/index.md': '# Jegyzetek\n\n# <a id="hogyan-hasznald"></a>🧭 Hogyan használd\n',
-      'wiki/t/index.md': "---\nchapters:\n  - {id: c1, title: '9. évfolyam: Első'}\n---\n# Tárgy\n\n# <a id=\"fejezet-c1\"></a>📘 1. fejezet: Első\n\n* <a id=\"ora-x-jegyzet\"></a><a id=\"ora-x-jegyzet-pdf-1\"></a>Óra\n",
-      'wiki/t/a.md': '---\ntype: topic\ntitle: A\nchapter: c1\n---\n# A\n\n[óra](x-jegyzet.md#pdf-1) [lap](x-jegyzet.md) [más](x-jegyzet.md#ismeretlen) [oldal](x-jegyzet.md#pdf-2)\n',
+      'wiki/t/index.md': "---\nchapters:\n  - {id: c1, title: '9. évfolyam: Első'}\n---\n# Tárgy\n\n# <a id=\"fejezet-c1\"></a>📘 1. fejezet: Első\n\n* <a id=\"ora-x-jegyzet-1\"></a>Korábbi óra\n* <a id=\"ora-x-jegyzet-2\"></a><a id=\"ora-x-jegyzet\"></a><a id=\"ora-x-jegyzet-pdf-1\"></a>Óra\n",
+      'wiki/t/a.md': '---\ntype: topic\ntitle: A\nchapter: c1\n---\n# A\n\n[óra](x-jegyzet.md#pdf-1) [lap](x-jegyzet.md) [más](x-jegyzet.md#ismeretlen) [oldal](x-jegyzet.md#pdf-2) [szept. 3.](x-jegyzet.md) [<span class="study-when study-when-unsure" title="Időszak">~szept. eleje</span>](x-jegyzet.md) [szept. 3.](x-jegyzet.md#pdf-1)\n',
       'wiki/t/b.md': '---\ntype: chapter-summary\ntitle: Összefoglaló\nchapter: c1\n---\n# Összefoglaló\n',
       'wiki/t/x-jegyzet.md': '---\ntype: lesson-notes\ntitle: X\n---\n# X\n',
     };
     for (const [file, text] of Object.entries(files)) { await fs.mkdir(path.dirname(path.join(repo, file)), { recursive: true }); await fs.writeFile(path.join(repo, file), text); }
     const pages = await Promise.all(['wiki/index.md', 'wiki/t/index.md', 'wiki/t/a.md', 'wiki/t/b.md'].map(async p => ({ path: p, sha256: sha256(await fs.readFile(path.join(repo, p))) })));
-    const lessonLinks = { 'wiki/t/x-jegyzet.md': { '': 'wiki/t/index.md#ora-x-jegyzet', 'pdf-1': 'wiki/t/index.md#ora-x-jegyzet-pdf-1', 'pdf-2': 'wiki/t/index.md#ora-x-jegyzet-pdf-1' } };
+    const lessonLinks = { 'wiki/t/x-jegyzet.md': { '': 'wiki/t/index.md#ora-x-jegyzet', 'pdf-1': 'wiki/t/index.md#ora-x-jegyzet-pdf-1', 'pdf-2': 'wiki/t/index.md#ora-x-jegyzet-pdf-1', '@szept. 3.': 'wiki/t/index.md#ora-x-jegyzet-1', '@~szept. eleje': 'wiki/t/index.md#ora-x-jegyzet-2' } };
     const config = { title: 'Minta', mode: 'public', site: 'https://example.org', base: '/m/', pages, assets: [], collections: [], lessonLinks };
     const { payload } = await exportSite({ repo, config, output: path.join(tmp, 'out') });
     const byPath = Object.fromEntries(payload.pages.map(p => [p.path, p]));
@@ -314,7 +314,7 @@ test('a page knows its kind and chapter; a link to an unpublished lesson log goe
     assert.equal(byPath['wiki/t/a.md'].chapterTitle, 'Első');
     assert.equal(byPath['wiki/t/index.md'].chapterId, undefined);
     const hrefs = [...byPath['wiki/t/a.md'].html.matchAll(/href="([^"]+)"/g)].map(m => m[1]);
-    assert.deepEqual(hrefs, ['/m/t/#ora-x-jegyzet-pdf-1', '/m/t/#ora-x-jegyzet', '/m/t/#ora-x-jegyzet', '/m/t/#ora-x-jegyzet-pdf-1']);
+    assert.deepEqual(hrefs, ['/m/t/#ora-x-jegyzet-pdf-1', '/m/t/#ora-x-jegyzet', '/m/t/#ora-x-jegyzet', '/m/t/#ora-x-jegyzet-pdf-1', '/m/t/#ora-x-jegyzet-1', '/m/t/#ora-x-jegyzet-2', '/m/t/#ora-x-jegyzet-pdf-1']);
     // not in the public mode, and never a map to a page that is published or a target that is not
     await assert.rejects(exportSite({ repo, config: { ...config, lessonLinks: { 'wiki/t/a.md': { '': 'wiki/t/index.md' } } }, output: path.join(tmp, 'o2') }), /Invalid lesson link/);
     await assert.rejects(exportSite({ repo, config: { ...config, lessonLinks: { 'wiki/t/x-jegyzet.md': { '': 'wiki/t/x-jegyzet.md#a' } } }, output: path.join(tmp, 'o3') }), /Invalid lesson link target/);
@@ -329,5 +329,34 @@ test('a page knows its kind and chapter; a link to an unpublished lesson log goe
     // a page of another subject is never a neighbour
     const other = { ...a, route: 'u/a', path: 'wiki/u/a.md' };
     assert.deepEqual(neighbours([...payload.pages, { ...subject, route: 'u' }, other], b), { previous: a, next: undefined });
+  } finally { await fs.rm(tmp, { recursive: true, force: true }); }
+});
+
+for (const crossSubject of [false, true]) test(`lesson links preserve unique dates and limit topic keys to their folder (cross-subject: ${crossSubject})`, async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'study-topic-links-'));
+  try {
+    const repo = path.join(tmp, 'repo');
+    const source = '# A\n\n[~okt.](ora.md) [szept. 3–4.](ora.md) [<span class="study-when study-when-unsure" title="Dátum nélküli óra: szept. 29. – okt. 6.">~szept. vége</span>](ora.md) [~okt.](ora.md#explicit) [~okt.](ora.md#unknown)\n';
+    const files = {
+      'wiki/t/index.md': '# T\n\n* <a id="older"></a>Régebbi\n* <a id="dated"></a>Dátumos\n* <a id="latest"></a>Legújabb\n',
+      [crossSubject ? 'wiki/u/a.md' : 'wiki/t/a.md']: crossSubject ? source.replaceAll('(ora.md', '(../t/ora.md') : source,
+      'wiki/t/b.md': '# B\n\n[~okt.](ora.md) [szept. 3–4.](ora.md)\n',
+    };
+    for (const [file, text] of Object.entries(files)) {
+      await fs.mkdir(path.dirname(path.join(repo, file)), { recursive: true });
+      await fs.writeFile(path.join(repo, file), text);
+    }
+    const target = id => `wiki/t/index.md#${id}`;
+    const config = { title: 'T', mode: 'public', site: 'https://example.org', base: '/', assets: [], collections: [],
+      pages: Object.entries(files).map(([file, text]) => ({ path: file, sha256: sha256(Buffer.from(text)) })),
+      lessonLinks: { 'wiki/t/ora.md': { '': target('latest'), explicit: target('latest'),
+        '@~okt.': target('latest'), '@~szept. vége': target('latest'),
+        '|a.md': target('older'), '@~okt.|a.md': target('dated') } } };
+    const { payload } = await exportSite({ repo, config, output: path.join(tmp, 'out') });
+    const hrefs = file => [...payload.pages.find(p => p.path === file).html.matchAll(/href="([^"]+)"/g)].map(m => m[1]);
+    assert.deepEqual(hrefs(crossSubject ? 'wiki/u/a.md' : 'wiki/t/a.md'), crossSubject
+      ? ['/t/#latest', '/t/#latest', '/t/#latest', '/t/#latest', '/t/#latest']
+      : ['/t/#dated', '/t/#older', '/t/#latest', '/t/#latest', '/t/#latest']);
+    assert.deepEqual(hrefs('wiki/t/b.md'), ['/t/#latest', '/t/#latest']);
   } finally { await fs.rm(tmp, { recursive: true, force: true }); }
 });

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.request import urlopen
 
+from .. import VERSION
 from ..git import repos
 from ..git.run import Git, with_retries
 from ..log import Log
@@ -176,10 +177,12 @@ def publish_needed(private: Git, site: Git, main: str, tool_version: str) -> tup
     return (True, f"{len(changed)} published file(s) changed") if changed else (False, "no published change")
 
 
-def changed_since_publish(private: Git, site: Git, main: str) -> list[str] | None:
+def changed_since_publish(private: Git, site: Git, main: str, tool_version: str = VERSION) -> list[str] | None:
     """Wiki paths changed since the last publish (for the browser check); None = all."""
     record = published_record(site)
-    last = (record or {}).get("source_commit")
+    if not record or record.get("tool") != f"school-notes2 {tool_version}":
+        return None
+    last = record.get("source_commit")
     if not last or not private.ok("cat-file", "-e", f"{last}^{{commit}}"):
         return None
     # --no-renames: a renamed page lists its old path too (gone → every page is checked).

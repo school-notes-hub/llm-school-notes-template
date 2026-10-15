@@ -74,6 +74,12 @@ def test_a_link_to_a_lesson_log_goes_to_its_row_in_the_lessons_list(repo):
     links = public.build(repo, public.render_rights(repo))["lessonLinks"]
     assert links == {"wiki/proba/2026-09-10-elso-jegyzet.md": {
         "": "wiki/proba/index.md#ora-2026-09-10-elso-jegyzet",
+        "@szept. 3.": "wiki/proba/index.md#ora-2026-09-10-elso-jegyzet-1",
+        "@szept. 3.|elso.md": "wiki/proba/index.md#ora-2026-09-10-elso-jegyzet-1",
+        "|elso.md": "wiki/proba/index.md#ora-2026-09-10-elso-jegyzet-1",
+        "@~szept. eleje": "wiki/proba/index.md#ora-2026-09-10-elso-jegyzet-2",
+        "@~szept. eleje|masodik.md": "wiki/proba/index.md#ora-2026-09-10-elso-jegyzet-2",
+        "|masodik.md": "wiki/proba/index.md#ora-2026-09-10-elso-jegyzet-2",
         "pdf-1-oldal": "wiki/proba/index.md#ora-2026-09-10-elso-jegyzet-pdf-1-oldal",
         "pdf-2-oldal": "wiki/proba/index.md#ora-2026-09-10-elso-jegyzet-pdf-1-oldal",
         "pdf-3-oldal": "wiki/proba/index.md#ora-2026-09-10-elso-jegyzet-pdf-3-oldal"}}
@@ -81,4 +87,4 @@ def test_a_link_to_a_lesson_log_goes_to_its_row_in_the_lessons_list(repo):
     for target in {t.split("#", 1)[1] for t in links["wiki/proba/2026-09-10-elso-jegyzet.md"].values()}:
         assert lessons.count(f'<a id="{target}"></a>') == 1     # every target exists, once
     # the newest row carries the log's own target too
-    assert '* <a id="ora-2026-09-10-elso-jegyzet"></a><a id="ora-2026-09-10-elso-jegyzet-pdf-3-oldal"></a>Folytatás' in lessons
+    assert '* <a id="ora-2026-09-10-elso-jegyzet-2"></a><a id="ora-2026-09-10-elso-jegyzet"></a><a id="ora-2026-09-10-elso-jegyzet-pdf-3-oldal"></a>Folytatás' in lessons

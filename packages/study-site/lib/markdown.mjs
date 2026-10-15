@@ -30,7 +30,7 @@ schema.attributes.div = [...(schema.attributes.div || []), ['className', 'math',
 // `study-when-unsure` an uncertain one (`~`, its range in the global `title` tooltip, left out on paper).
 schema.attributes.span = [...(schema.attributes.span || []), ['className', 'math', 'math-inline', 'study-when', 'study-when-unsure', 'study-desc']];
 schema.attributes.details = ['open'];
-schema.attributes.p = [...(schema.attributes.p || []), ['className', 'study-pending', 'study-podcast']];
+schema.attributes.p = [...(schema.attributes.p || []), ['className', 'study-pending', 'study-podcast', 'study-figure-block']];
 // The subject page's 🧭 path (the tool's `now` block): the chapters in teaching order, the ones
 // started before the current one and the current one marked; the stylesheet draws the line.
 schema.attributes.ol = [...(schema.attributes.ol || []).filter(a => !(Array.isArray(a) && a[0] === 'className')), ['className', 'contains-task-list', 'study-path']];
@@ -206,6 +206,9 @@ function generatedNotices(tree, kind = '') {
       } else if (child.type === 'paragraph' && stack.includes('podcast')) {
         child.data = { ...child.data, hProperties: { ...child.data?.hProperties, className: ['study-podcast'] } };
       }
+      if (child.type === 'paragraph' && stack.some(name => name.startsWith('figure-'))) {
+        child.data = { ...child.data, hProperties: { ...child.data?.hProperties, className: ['study-figure-block'] } };
+      }
       kept.push(child);
     }
     node.children = kept;
@@ -243,6 +246,43 @@ function dateKey(label) {
   };
   label.children.forEach(walk);
   return text.trim();
+}
+
+// Split the date prefix from the rest of a combined label, preserving inline markup on
+// both sides. The separator belongs to the hidden prefix, not to the surviving textbook text.
+function splitDateLabel(children) {
+  const before = [], after = [];
+  let cut = false;
+  for (const child of children) {
+    if (cut) { after.push(child); continue; }
+    if (child.type === 'text' && child.value.includes(' · ')) {
+      const at = child.value.indexOf(' · ') + 3;
+      before.push({ ...child, value: child.value.slice(0, at) });
+      after.push({ ...child, value: child.value.slice(at) });
+      cut = true;
+    } else if (child.children) {
+      const parts = splitDateLabel(child.children);
+      if (parts.cut) {
+        if (parts.before.length) before.push({ ...child, children: parts.before });
+        if (parts.after.length) after.push({ ...child, children: parts.after });
+        cut = true;
+      } else before.push(child);
+    } else before.push(child);
+  }
+  return { before, after, cut };
+}
+
+function openQuestions(tree) {
+  for (let i = 0; i < tree.children.length; i++) {
+    const heading = tree.children[i];
+    if (!isElement(heading, 'h2') || !/^(?:❓ ?)?Nyitott kérdések$/u.test(toText(heading).trim())) continue;
+    let end = i + 1;
+    while (end < tree.children.length && !isElement(tree.children[end], 'h2') && !isFootnotes(tree.children[end])) end++;
+    const note = el('p', { className: ['study-open-questions-note'] }, [{ type: 'text',
+      value: 'Neked szól: javítás a füzetedhez, vagy kérdés, amire te tudod a választ' }]);
+    tree.children.splice(i, end - i, el('aside', { className: ['study-callout', 'study-open-questions'], ariaLabel: 'Nyitott kérdések' },
+      [heading, note, ...tree.children.slice(i + 1, end)]));
+  }
 }
 
 export async function renderMarkdown(source, { resolveUrl, mermaid, pageId = '', footnoteLabel = 'Források', publicView = false } = {}) {
@@ -285,29 +325,6 @@ export async function renderMarkdown(source, { resolveUrl, mermaid, pageId = '',
     })
     .use(rehypeSanitize, schema)
     .use(() => tree => {
-      // A lesson date item (`study-when`, sn 0.3.9): one with a tooltip can be focused, so a tap
-      // shows the tooltip as a small bubble (the stylesheet); the leading `~` of an uncertain one
-      // is its own span, which paper leaves out with the range (the month part stays printed).
-      // A date inside a link stays hover-only: a focusable element inside a link would be a nested
-      // interactive element, and a tap follows the link anyway (sn 0.3.10).
-      const linked = new Set();
-      visit(tree, 'element', node => {
-        if (node.tagName === 'a') visit(node, 'element', inner => { linked.add(inner); });
-      });
-      visit(tree, 'element', node => {
-        const cls = node.tagName === 'span' ? node.properties.className || [] : [];
-        if (!cls.includes('study-when')) return;
-        if (node.properties.title && !linked.has(node)) node.properties.tabIndex = 0;
-        const first = node.children[0];
-        if (cls.includes('study-when-unsure') && first?.type === 'text' && first.value.startsWith('~')) {
-          // the `~` is seen, "körülbelül" is heard (visually hidden); paper prints neither
-          node.children.splice(0, 1, el('span', { className: ['study-tilde'], ariaHidden: 'true' }, [{ type: 'text', value: '~' }]),
-            el('span', { className: ['study-sr'] }, [{ type: 'text', value: 'körülbelül ' }]),
-            { type: 'text', value: first.value.slice(1) });
-        }
-      });
-    })
-    .use(() => tree => {
       // An empty `<a id="pdf-13-oldal"></a>` is a jump target that other pages link to
       // (`page#pdf-13-oldal`); it keeps its plain id so those links resolve.
       visit(tree, 'element', node => {
@@ -324,6 +341,8 @@ export async function renderMarkdown(source, { resolveUrl, mermaid, pageId = '',
         if (!isElement(n)) continue;
         // A leading banner or the podcast block does not make the following repeated page title
         // body content (the podcast block stood in front of the banner on many pages).
+        if (!seenBody && (blank(n) || (isElement(n, 'p') && n.children.every(blank)))) continue;
+        if (!seenBody && isElement(n, 'p') && n.properties.className?.includes('study-figure-block')) continue;
         if (!seenBody && isElement(n, 'p') && n.children.some(c => isElement(c, 'img')) && !toText(n).trim()) continue;
         if (!seenBody && isElement(n, 'p') && n.properties.className?.includes('study-podcast')) continue;
         if (/^h[1-6]$/.test(n.tagName) && !seenBody && toText(n) === title) {
@@ -357,12 +376,12 @@ export async function renderMarkdown(source, { resolveUrl, mermaid, pageId = '',
         if (node.tagName === 'blockquote') {
           const p = node.children.find(n => isElement(n, 'p'));
           const first = p?.children[0];
-          const match = first?.type === 'text' && first.value.match(/^\[!(TIP|NOTE|WARNING|IMPORTANT|CAUTION)\](?:\s|$)/);
+          const match = first?.type === 'text' && first.value.match(/^\[!(TIP|NOTE|WARNING|IMPORTANT|CAUTION|PROGRESS)\](?:\s|$)/);
           if (match) {
             first.value = first.value.slice(match[0].length);
             if (!toText(p).trim()) node.children.splice(node.children.indexOf(p), 1);
             node.tagName = 'aside';
-            node.properties = { className: ['study-callout', `study-${match[1].toLowerCase()}`], 'aria-label': ({ TIP: 'Magyarázat', NOTE: 'Megjegyzés', WARNING: 'Figyelmeztetés', IMPORTANT: 'Fontos', CAUTION: 'Figyelem' })[match[1]] };
+            node.properties = { className: ['study-callout', `study-${match[1].toLowerCase()}`], 'aria-label': ({ PROGRESS: 'Hol tartunk', TIP: 'Magyarázat', NOTE: 'Megjegyzés', WARNING: 'Figyelmeztetés', IMPORTANT: 'Fontos', CAUTION: 'Figyelem' })[match[1]] };
             // The ⚡ Röviden box says what it is for (a fixed note, the renderer's own words).
             const lead = node.children.find(n => isElement(n, 'p'));
             if (match[1] === 'IMPORTANT' && lead && /^⚡\s*Röviden$/u.test(toText(lead).trim())) {
@@ -391,7 +410,7 @@ export async function renderMarkdown(source, { resolveUrl, mermaid, pageId = '',
           jobs.push((async () => {
             let href = String(node.properties.href);
             if (href.startsWith('#') && sanitizedIds.has(href.slice(1))) href = '#' + sanitizedIds.get(href.slice(1));
-            const resolved = await resolveUrl(href, false);
+            const resolved = await resolveUrl(href, false, toText(node));
             if (resolved.citationOnly) { node.tagName = 'span'; node.properties = { dataPrivateLink: '' }; return; }
             node.properties.href = typeof resolved === 'string' ? resolved : resolved.url;
             if (resolved.private) { node.children.push({ type: 'text', value: ' (privát forrás)' }); }
@@ -461,13 +480,44 @@ export async function renderMarkdown(source, { resolveUrl, mermaid, pageId = '',
         const key = dateKey(node);
         if (topDate === null) { topDate = key; return SKIP; }
         if (key !== topDate) return SKIP;
+        const parts = splitDateLabel(node.children);
+        if (parts.cut) {
+          node.children = [el('span', { className: ['study-dup'] }, parts.before), ...parts.after];
+          const help = labelHelp(toText({ type: 'root', children: parts.after }).trim());
+          if (help) node.properties.title = help; else delete node.properties.title;
+          return SKIP;
+        }
         const alone = isElement(parent, 'p') && parent.children.every(c => c === node || blank(c));
         (alone ? parent : node).properties.className = [...((alone ? parent : node).properties.className || []), 'study-dup'];
         return SKIP;
       });
+      openQuestions(tree);
       const kept = new Set();
       visit(tree, 'element', node => { if (isHeading(node)) kept.add(node.properties.id); });
       headings.splice(0, headings.length, ...headings.filter(h => kept.has(h.slug)));
+    })
+    .use(() => tree => {
+      // A lesson date item (`study-when`, sn 0.3.9): one with a tooltip can be focused, so a tap
+      // shows the tooltip as a small bubble (the stylesheet); the leading `~` of an uncertain one
+      // is its own span, which paper leaves out with the range (the month part stays printed).
+      // A date inside a link stays hover-only: a focusable element inside a link would be a nested
+      // interactive element, and a tap follows the link anyway (sn 0.3.10).
+      const linked = new Set();
+      visit(tree, 'element', node => {
+        if (node.tagName === 'a') visit(node, 'element', inner => { linked.add(inner); });
+      });
+      visit(tree, 'element', node => {
+        const cls = node.tagName === 'span' ? node.properties.className || [] : [];
+        if (!cls.includes('study-when')) return;
+        if (node.properties.title && !linked.has(node)) node.properties.tabIndex = 0;
+        const first = node.children[0];
+        if (cls.includes('study-when-unsure') && first?.type === 'text' && first.value.startsWith('~')) {
+          // the `~` is seen, "körülbelül" is heard (visually hidden); paper prints neither
+          node.children.splice(0, 1, el('span', { className: ['study-tilde'], ariaHidden: 'true' }, [{ type: 'text', value: '~' }]),
+            el('span', { className: ['study-sr'] }, [{ type: 'text', value: 'körülbelül ' }]),
+            { type: 'text', value: first.value.slice(1) });
+        }
+      });
     })
     .use(() => tree => {
       audit.formulas=[];

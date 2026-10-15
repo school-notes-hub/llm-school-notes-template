@@ -1,13 +1,17 @@
 """Hand-written lesson dates as the tool writes them (rules 1.22.8): a date span in a lesson line
 (`<sub>🗓️ Óra: …</sub>` on a topic page, a lesson log's own `🗓️ Órák: …` line) is rewritten to
-exactly what `generate.when()` gives for that lesson – its text and tooltip, nothing else on the
+exactly what `subject_page.when()` gives for that lesson – its text and tooltip, nothing else on the
 line – and the hand-written `# 🗓️ Órák` heading with its legend in front of a subject index's lessons
-block goes (the block writes both, `generate.LESSONS_HEAD`, `generate.LESSONS_LEGEND`).
+block goes (the block writes both, `subject_page.LESSONS_HEAD`, `subject_page.LESSONS_LEGEND`).
 `sn close <t> --dates` applies it; `sn check` warns where a span differs.
 
 A span is matched to its lesson only when that is certain: a span that is the text of a link to
-a lesson log (`[<span …>](<log>.md#<anchor>)`) – by the anchor, or the log's only lesson, or its
-only lesson of the same kind (dated / undated), or lessons that all give the same span; on a
+a lesson log (`[<span …>](<log>.md#<anchor>)`) – by the anchor, then by a unique byte-identical
+`when()` span, then by a unique visible date label (shared `subject_page.when_label`, as in
+the lesson-link keys), so stale tooltips can be refreshed without changing the visible date.
+Only then is it narrowed to lessons covering the linking page when any do;
+then its only lesson, its only lesson of the same kind
+(dated / undated), or lessons that all give the same span; on a
 lesson log's own line its undated spans in order to its undated lessons; a span followed by
 ` - <lesson title>` by that title. Any other span is left as it is. Lesson and textbook lines
 are not part of a figure's verdict key, so none of this sends a figure to a recheck."""
@@ -16,6 +20,8 @@ import re
 from pathlib import Path
 
 from . import markers
+from .subject import covering_lessons
+from .subject_page import when_label
 
 # A complete, closed lesson or textbook line (shared with the figure verdict key).
 META_LINE = re.compile(r"^[ \t]*<sub>[ \t]*(?:🗓️ (?:Óra|Órák|Lesson|Lessons):|🔖 (?:Tankönyv|Textbook):)"
@@ -39,11 +45,19 @@ def _resolve(match, line: str, offset: int, page: str, found, own_undated: dict)
         lessons = sorted(by_file.get(file, []), key=lambda x: x.index) if "/" not in file else []
         if anchor:
             lessons = [x for x in lessons if x.data.get("anchor") == anchor]
+        year = generate.teaching_order.year_of(found)
+        exact = [x for x in lessons if generate.when(x, year) == match[0]]
+        if len(exact) == 1:
+            return exact[0]
+        label = when_label(match[0])
+        same_label = [x for x in lessons if when_label(generate.when(x, year)) == label]
+        if len(same_label) == 1:
+            return same_label[0]
+        lessons = covering_lessons(lessons, page) or lessons
         if len(lessons) > 1:
             same = [x for x in lessons if x.dated != bool(match["unsure"])]
             lessons = same if same else lessons
         if len(lessons) > 1:
-            year = generate.teaching_order.year_of(found)
             if len({generate.when(x, year) for x in lessons}) == 1:
                 lessons = lessons[:1]
         return lessons[0] if len(lessons) == 1 else None

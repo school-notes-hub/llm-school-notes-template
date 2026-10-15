@@ -111,7 +111,7 @@ def test_the_now_block_shows_the_chapter_path_and_the_latest_lesson(tmp_path):
     # before, ◉ the current one), the latest lesson's worked lessons; no lesson log link, no
     # earlier lessons (the 🗓️ Órák list has them)
     assert markers.read(text, "now") == (
-        "> [!TIP]\n> 🧭 **Hol tartunk**\n>\n"
+        "> [!PROGRESS]\n> 🧭 **Hol tartunk**\n>\n"
         '> <ol class="study-path"><li class="study-path-done"><a href="#fejezet-elso">Első fejezet</a> ✓ '
         '<span class="study-when study-when-unsure" title="Nem biztos: a vége dátum nélküli óra (szept. 11. – okt. 4.)">'
         "~szept. eleje – okt. eleje</span></li>"

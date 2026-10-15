@@ -5,6 +5,7 @@ form; the approximate day; the legend texts. Each test fails on 3c0b811."""
 import json
 
 from school_notes2.wiki import generate, hu_dates, machine, markers, teaching_order
+from school_notes2.wiki.subject_page import LESSONS_LEGEND
 from tests.wiki.test_teaching_order import INDEX, lesson_log, topic
 from tests.wiki.conftest import write
 
@@ -108,4 +109,4 @@ def test_the_lessons_list_and_the_legends_use_the_quiet_form(tmp_path):
     assert ('A <span class="study-when study-when-unsure" title="Dátum nélküli óra: szept. 2–9.">~szept. eleje</span>'
             in markers.read(text, "lessons"))
     assert "Pótolandó" not in text and "📝" not in markers.read(text, "lessons")    # T1: retired
-    assert "?" not in machine.LESSONS_LEGEND and "`~`" in machine.LESSONS_LEGEND
+    assert "?" not in LESSONS_LEGEND and "`~`" in LESSONS_LEGEND

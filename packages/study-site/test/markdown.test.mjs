@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { renderMarkdown, printSection } from '../lib/markdown.mjs';
 
 test('an empty jump-target anchor keeps its plain id for links from other pages', async () => {
   const { renderMarkdown } = await import('../lib/markdown.mjs');
@@ -253,4 +254,46 @@ test('the subject page path and descriptions survive the sanitizer, nothing else
   assert.match(out.html, /<h2 id="-1-fejezet-a-"><a id="fejezet-a"><\/a>📘 1\. fejezet: A ✓<\/h2>/);
   assert.match(out.html, /<span class="study-desc">Leírás\.<\/span>/);
   assert.deepEqual(out.headings.map(h => h.text), ['📘 1. fejezet: A ✓']);
+});
+
+for (const spacer of ['<br />', '<p><br /></p>', '<p> \n<br /> \n</p>']) {
+  test(`a title after a banner and ${JSON.stringify(spacer)} is removed (M2)`, async () => {
+    const out = await renderMarkdown(`---\ntitle: T\n---\n![Fejléc](banner.png)\n\n${spacer}\n\n# T\n\n# Rész\n\nSzöveg.`, { resolveUrl: async h => h });
+    assert.deepEqual(out.headings.map(h => h.text), ['Rész']);
+    assert.match(out.html, /class="heading-alias"/);
+  });
+}
+
+test('a leading generated figure caption is kept without blocking title removal (M2)', async () => {
+  const source = '---\ntitle: T\n---\n<!-- school-notes:generated figure-header -->\n![Fejléc](banner.png)\n\nSzemléltető kép.\n\n<!-- /school-notes:generated -->\n\n# T\n\nBevezető.\n\n# T\n\nMarad.';
+  const out = await renderMarkdown(source, { resolveUrl: async h => h });
+  assert.equal(out.headings.filter(h => h.text === 'T').length, 1);
+  assert.match(out.html, /Szemléltető kép\./);
+  assert.match(out.html, /class="heading-alias"/);
+});
+
+test('hiding a repeated lesson date preserves the textbook part and its link (m4)', async () => {
+  const out = await renderMarkdown('# T\n\n<sub>🗓️ Óra: [szept. 3.](ora.md)</sub>\n\n# Rész\n\n<sub>🗓️ Óra: [szept. 3.](ora.md) · 🔖 Tankönyv: [Lecke](konyv.md), 12. oldal</sub>', { resolveUrl: async h => h });
+  assert.match(out.html, /<span class="study-dup">🗓️ Óra: .*?<\/span>🔖 Tankönyv: <a href="konyv.md">Lecke<\/a>, 12\. oldal/);
+  assert.doesNotMatch(out.html, /<(?:p|small)[^>]*class="[^"]*study-dup/);
+});
+
+test('progress has its own accessible label, distinct from explanation (m6)', async () => {
+  const out = await renderMarkdown('# T\n\n> [!PROGRESS]\n> 🧭 **Hol tartunk**\n\n> [!TIP]\n> Magyarázat.', { resolveUrl: async h => h });
+  assert.match(out.html, /<aside class="study-callout study-progress" aria-label="Hol tartunk">/);
+  assert.match(out.html, /aria-label="Magyarázat"/);
+});
+
+test('open questions form an aside through the next h2, with a fixed subtitle and intact anchors (T15)', async () => {
+  const out = await renderMarkdown('# T\n\n# Anyag\n\nSzöveg.\n\n## Nyitott kérdések\n\n1. Javítsd a füzetedben is.\n\n## Részlet\n\nKiegészítés.\n\n# Következő\n\nTovább.[^web]\n\n[^web]: [Forrás](https://example.org)', { resolveUrl: async h => h });
+  assert.match(out.html, /<aside class="study-callout study-open-questions" aria-label="Nyitott kérdések"><h2 id="nyitott-kérdések">Nyitott kérdések<\/h2><p class="study-open-questions-note">Neked szól: javítás a füzetedhez, vagy kérdés, amire te tudod a választ<\/p>/);
+  assert.match(out.html, /<h3 id="részlet">[\s\S]*Kiegészítés\.[\s\S]*<\/aside>\s*<h2 id="következő">/);
+  assert.ok(out.headings.some(h => h.slug === 'nyitott-kérdések'));
+  const printed = await printSection(out.html, 'p-');
+  assert.match(printed.html, /id="p-nyitott-kérdések"/);
+  assert.match(printed.html, /study-open-questions-note/);
+  const last = await renderMarkdown('# T\n\n# Nyitott kérdések\n\n1. Javítás.[^web]\n\n[^web]: [Forrás](https://example.org)', { resolveUrl: async h => h });
+  assert.match(last.html, /<\/aside>\s*<section data-footnotes/);
+  const ordinary = await renderMarkdown('# T\n\n# Példák\n\nNincs nyitott kérdés.', { resolveUrl: async h => h });
+  assert.doesNotMatch(ordinary.html, /study-open-questions/);
 });

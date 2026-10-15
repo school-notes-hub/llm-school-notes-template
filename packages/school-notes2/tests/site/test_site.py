@@ -313,11 +313,11 @@ def test_publish_needed(env):
     env.push({"docs/review/2026-10-03-review.md": "# Review\n"})
     assert site_publish.publish_needed(env.bare, env.site, env.main(), "2.0.0") == (False, "no published change")
     assert site_publish.publish_needed(env.bare, env.site, env.main(), "2.0.1")[0]
-    assert site_publish.changed_since_publish(env.bare, env.site, env.main()) == []
+    assert site_publish.changed_since_publish(env.bare, env.site, env.main(), "2.0.0") == []
     env.push({"wiki/gazd/tema.md": "# Téma\n\nÚj.\n"})
     needed, reason = site_publish.publish_needed(env.bare, env.site, env.main(), "2.0.0")
     assert needed and reason == "1 published file(s) changed"
-    assert site_publish.changed_since_publish(env.bare, env.site, env.main()) == ["wiki/gazd/tema.md"]
+    assert site_publish.changed_since_publish(env.bare, env.site, env.main(), "2.0.0") == ["wiki/gazd/tema.md"]
 
 
 def test_wait_until_live_is_only_a_warning(env):
@@ -349,5 +349,18 @@ def test_a_renamed_page_lists_its_old_path_too(env):
     subprocess.run(["git", "-C", str(clone), "mv", "wiki/gazd/tema.md", "wiki/gazd/uj-tema.md"], check=True, env=ENV)
     subprocess.run(["git", "-C", str(clone), "commit", "-qm", "rename"], check=True, env=ENV)
     subprocess.run(["git", "-C", str(clone), "push", "-q", "origin", "main"], check=True, env=ENV)
-    assert site_publish.changed_since_publish(env.bare, env.site, env.main()) == [
+    assert site_publish.changed_since_publish(env.bare, env.site, env.main(), "2.0.0") == [
         "wiki/gazd/tema.md", "wiki/gazd/uj-tema.md"]
+
+
+def test_tool_change_requires_full_browser_check(monkeypatch):
+    from school_notes2 import VERSION
+    class Private:
+        def ok(self, *args):
+            return True
+        def out(self, *args):
+            return "wiki/t/index.md\n"
+    monkeypatch.setattr(site_publish, "published_record", lambda _: {"source_commit": "abc", "tool": "school-notes2 older"})
+    assert site_publish.changed_since_publish(Private(), None, "def") is None
+    monkeypatch.setattr(site_publish, "published_record", lambda _: {"source_commit": "abc", "tool": f"school-notes2 {VERSION}"})
+    assert site_publish.changed_since_publish(Private(), None, "def") == ["wiki/t/index.md"]

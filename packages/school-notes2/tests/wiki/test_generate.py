@@ -19,9 +19,9 @@ def test_subject_blocks(repo):
     assert markers.read(text, "lessons") == (
         "# 🗓️ Órák – melyik órán mit vettünk\n\n"
         "A legújabb óra van legfelül. A `~` bizonytalan dátumot jelöl; az időszakot az egér rávitelekor vagy koppintásra látod.\n\n"
-        '* <a id="ora-2026-09-10-elso-jegyzet"></a>Folytatás <span class="study-when study-when-unsure" title="Dátum nélküli óra: szept. 3–10.">~szept. eleje</span>'
+        '* <a id="ora-2026-09-10-elso-jegyzet-2"></a><a id="ora-2026-09-10-elso-jegyzet"></a>Folytatás <span class="study-when study-when-unsure" title="Dátum nélküli óra: szept. 3–10.">~szept. eleje</span>'
         "<br />→ [Első](elso.md) · [Második](masodik.md#resz)\n"
-        '* Bevezetés <span class="study-when">szept. 3.</span><br />→ [Első](elso.md)\n')
+        '* <a id="ora-2026-09-10-elso-jegyzet-1"></a>Bevezetés <span class="study-when">szept. 3.</span><br />→ [Első](elso.md)\n')
     assert markers.read(text, "review").startswith("# 🔁 Ismétlés\n\n* [Dolgozatra]")
     assert markers.read(text, "notes") == ""
     # the hand-written heading and legend moved into the block (one-time sweep)
