@@ -387,7 +387,7 @@ wheels = [
 
 [[package]]
 name = "school-notes2"
-version = "0.4.11"
+version = "0.4.12"
 source = { editable = "." }
 dependencies = [
     { name = "jsonschema" },
