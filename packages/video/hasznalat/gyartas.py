@@ -9,6 +9,7 @@ from .kapu_h import gate
 from .lapok_h import contacts, review_key
 from .osszerak import plan, render
 from .elonezet import surface_payload
+from .idozites import timed_script
 
 
 def accepted(out):
@@ -48,6 +49,7 @@ def production_preflight(local, out):
 
 def sound(local, out, script):
     # The existing sound helper numbers steps per scene; preserve stable IDs around it.
+    script = timed_script(script, read(out / "dobozok.json"))
     narration = [{"id": s["id"], "lepesek": [s]} for s in steps(script)]
     provider = (
         Csonk(narration)
@@ -57,8 +59,10 @@ def sound(local, out, script):
     with (out / "video.log").open("a") as log:
         audio = hang_es_szavak(out, narration, provider, log)
     timing = idoterv_szavakkal(out, 30)
-    for step in timing["lepesek"]:
+    for step, source in zip(timing["lepesek"], steps(script)):
         step["id"] = step["id"].removesuffix("-01")
+        step["atmenet_s"] = source.get("atmenet_s", 0)
+        step["szunet"] = source.get("szunet", 0)
     write(out / "idoterv.json", timing)
     audio = {"k10": audio["k10"], "hossz_s": audio["hossz_s"]}
     write(out / "hang-ellenorzes.json", audio)

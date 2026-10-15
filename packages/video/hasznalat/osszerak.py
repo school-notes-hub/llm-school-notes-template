@@ -31,6 +31,8 @@ def still_frames(step, measurement, timing):
         else timing["kezd_kocka"]
     )
     result = []
+    view = crop(step, measurement)
+    tall = tall_cues(step, measurement)
     for number in range(timing["kezd_kocka"], timing["veg_kocka"]):
         active = [(at, cue) for at, cue in cues if at <= number]
         at, cue = active[-1] if active else (number, None)
@@ -41,10 +43,10 @@ def still_frames(step, measurement, timing):
             {
                 "lepes": step["id"],
                 "image": image or measurement["image"],
-                "crop": crop(step, measurement),
+                "crop": view,
                 "nezet": step["nezet"],
                 "kiemel": cue["szereplo"] if cue else None,
-                "magas": cue in tall_cues(step, measurement) if cue else False,
+                "magas": cue in tall if cue else False,
                 "box": measurement["roles"].get(cue["szereplo"], {}).get("box")
                 if cue
                 else None,
@@ -59,7 +61,12 @@ def plan(script, measurements, timing):
     by_id = {m["id"]: m for m in measurements}
     times = {t["id"]: t for t in timing["lepesek"]}
     frames = []
-    ordered = steps(script)
+    # Pauses/transitions are derived after capture has resolved the tour order.
+    # Never write these changes back into the reviewed narration.
+    ordered = [
+        {**s, **{k: times[s["id"]][k] for k in ("szunet", "atmenet_s") if k in times[s["id"]]}}
+        for s in steps(script)
+    ]
     for index, step in enumerate(ordered):
         measurement, time = by_id[step["id"]], times[step["id"]]
         if len(frames) != time["kezd_kocka"]:

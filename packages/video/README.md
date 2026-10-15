@@ -74,6 +74,11 @@ A szövegrész-szerepek DOM Range alapján mérik a nyilat követő sort és a r
 a dátumlink pedig az előzőleg bemutatott órasor leszármazottja.
 A szóhoz kötött lenyitások előtti állapot külön kontaktképet is kap.
 
+A gyártás a feloldott lépéssorrendből és a felvett mozgásból újraszámolja az
+átmenetek időigényét. Ha kell, meghosszabbítja az előző mondat utáni csendet
+(a kurzor és a kattintás idejével együtt), majd ebből készíti a hangot és az
+időtervet. A narráció, a kontaktlapok és a meglévő review-kulcs változatlan marad.
+
 Az oldalsáv kerete a menülinkek listáját, az „itt tartunk” kerete az összes
 megjelölt leckesor egyesített dobozát fogja. A nem magas kiemelések mind a négy
 oldala a képszélen belül fut; a H2 a kirajzolt keret zártságát is ellenőrzi.
