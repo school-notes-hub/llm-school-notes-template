@@ -69,3 +69,18 @@ def open_border(spec):
         "also": (cx, SIZE[1] - 4, cx + 1, SIZE[1]),
     }
     return all(not mask.crop(probes[side]).getbbox() for side in clipped_sides(spec))
+
+
+def closed_top(spec):
+    """The rendered upper edge and both rounded corners must be on the canvas."""
+    left, top, right, bottom = bounds(spec)
+    if left < 4 or top < 4 or right > SIZE[0] - 5 or top + 14 >= SIZE[1]:
+        return False
+    mask = Image.new("L", SIZE)
+    outline(mask, spec, 255)
+    expected = Image.new("L", SIZE)
+    ImageDraw.Draw(expected).rounded_rectangle(
+        (left, top, right, bottom), radius=10, outline=255, width=4
+    )
+    upper = (0, 0, SIZE[0], int(top) + 15)
+    return ImageChops.subtract(expected, mask).crop(upper).getbbox() is None

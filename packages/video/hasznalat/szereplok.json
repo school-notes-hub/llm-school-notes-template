@@ -399,5 +399,9 @@
     "fajta": "szoveg",
     "selector": ".study-content li",
     "text": "◀ itt tartunk"
+  },
+  "temavalaszto": {
+    "fajta": "css",
+    "selector": "header starlight-theme-select select"
   }
 }

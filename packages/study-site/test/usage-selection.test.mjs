@@ -53,7 +53,8 @@ test("figure role skips banners but keeps the first tall image; candidate measur
       path.join(root, "payload.json"),
       JSON.stringify({
         base: "/fixture/",
-        pages: [{ kind: "topic", route: "minta", url: "/fixture/" }],
+        pages: [{ kind: "topic", route: "minta", url: "/fixture/" },
+          {navigation: 'home', route: '', url: '/fixture/'}],
       }),
     );
     const figures = await measureCandidates({
@@ -66,6 +67,9 @@ test("figure role skips banners but keeps the first tall image; candidate measur
       [false, true],
     );
     assert.equal(figures.minta[0].available, 632);
+    const measured = JSON.parse(await fs.readFile(path.join(root, 'abra-meres.json')));
+    assert.equal(measured.surface.temavalaszto.text, 'Világos');
+    assert.deepEqual(measured.surface.temavalaszto.options, ['Sötét', 'Világos', 'Auto']);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

@@ -5,7 +5,9 @@
       ".study-content h1,.study-content h2,.study-content h3",
     ),
   ];
-  const text = (node) => node.innerText || "";
+  const text = (node) => node.tagName === 'SELECT'
+    ? [...node.selectedOptions].map(option => option.label).join(' ')
+    : node.innerText || "";
   const matchingHeadings = (label) =>
     headings().filter((node) => text(node).includes(label));
 
@@ -261,6 +263,7 @@
       visible_uncovered: uncovered(nodes, visibleRects(rects)),
       hrefs,
       text: (actor.reszlet ? fragments.map(f => f?.text || '') : nodes.map(text)).join(" ").replace(/\s+/g, " ").trim(),
+      options: nodes.flatMap(n => n.tagName === 'SELECT' ? [...n.options].map(o => o.label) : []),
       tooltip: nodes.some(tooltip),
       structures: structures(nodes, actor),
     };

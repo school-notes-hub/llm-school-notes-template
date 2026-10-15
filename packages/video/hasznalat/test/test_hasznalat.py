@@ -97,7 +97,7 @@ def filled():
 
 def test_full_schema_and_current_contract():
     validate(read(ROOT / "forgatokonyv.json"), read(ROOT / "szereplok.json"))
-    assert len(steps(read(ROOT / "forgatokonyv.json"))) == 69
+    assert len(steps(read(ROOT / "forgatokonyv.json"))) == 70
     assert contract() == []
     bad = read(ROOT / "forgatokonyv.json")
     bad["jelenetek"][0]["lepesek"][1]["kiemel"][0]["horgony"] = "más"
@@ -264,3 +264,35 @@ def test_h4_short_highlight_fails():
         contract={"szovegek": []},
     )
     assert "H4" in [f["kod"] for f in g["leletek"]]
+
+
+@pytest.mark.parametrize('label', ['Auto', 'Világos', 'Sötét'])
+def test_theme_step_uses_visible_selected_label_and_sequential_ids(label):
+    choice = candidates(fixture())[0][0]
+    choice['kezdolap']['usageThemeLabel'] = label
+    script, actors = fill(read(ROOT / 'forgatokonyv.json'), choice)
+    first = script['jelenetek'][0]['lepesek']
+    assert [s['id'] for s in first] == [f'1-{i:02}' for i in range(1, 12)]
+    theme = first[8]
+    prefix = 'az' if label == 'Auto' else 'a'
+    assert theme['text'] == f'Jobbra fent {prefix} {{{label}}} gombbal világos vagy sötét megjelenést választhatsz.'
+    assert theme['kiemel'] == [{'szereplo': 'temavalaszto', 'horgony': label, 'kell': label}]
+
+
+def test_theme_surface_contract_rejects_missing_or_changed_options():
+    from hasznalat.kapu_h import h10_interactions
+    script, _ = fill(read(ROOT / 'forgatokonyv.json'), candidates(fixture())[0][0])
+    definition = {'valasztok': read(ROOT / 'felulet.json')['valasztok']}
+    item = {'text': 'Auto', 'options': ['Sötét', 'Világos', 'Auto']}
+    measurements = {'1-09': {'roles': {'temavalaszto': item}}}
+    findings = []
+    h10_interactions(script, measurements, definition, lambda *f: findings.append(f))
+    assert not findings
+    item['options'].remove('Sötét')
+    h10_interactions(script, measurements, definition, lambda *f: findings.append(f))
+    assert findings[0][:3] == ('H10', '1-09', 'temavalaszto')
+    item['options'].append('Sötét')
+    item['text'] = 'Auto Auto'
+    findings.clear()
+    h10_interactions(script, measurements, definition, lambda *f: findings.append(f))
+    assert findings

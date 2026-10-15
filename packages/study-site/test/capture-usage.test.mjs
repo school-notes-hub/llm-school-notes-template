@@ -93,7 +93,7 @@ test("usage surface contract tracks the current template, including touch restri
     ["4-06", "5-05"],
   );
   const template = JSON.parse(await fs.readFile(new URL('../../video/hasznalat/forgatokonyv.json', import.meta.url)));
-  for (const rule of contract.interakciok) {
+  for (const rule of [...contract.interakciok, ...contract.valasztok]) {
     const step = template.jelenetek.flatMap(s => s.lepesek).find(s => s.id === rule.lepes);
     assert.ok(step && !step.dom_sorrend, 'external interaction IDs must stay outside reordered groups');
     assert.ok([...step.kiemel, ...(step.allapot || [])].some(c => c.szereplo === rule.szereplo));
@@ -146,6 +146,12 @@ test("every production role resolves on the neutral surface fixture", async () =
       assert.ok(role.count > 0, name);
     assert.ok(result["mobil-toc"].visible);
     assert.equal(result.morzsa.text, "Kezdőlap");
+    assert.equal(result.temavalaszto.text, 'Auto');
+    assert.deepEqual(result.temavalaszto.options, ['Sötét', 'Világos', 'Auto']);
+    assert.equal(result.temavalaszto.count, 1);
+    await page.locator('header starlight-theme-select select').selectOption({label: 'Világos'});
+    const changedTheme = await page.evaluate(measure, {actors, requested: ['temavalaszto']});
+    assert.equal(changedTheme.temavalaszto.text, 'Világos');
     assert.equal(result["jelmagyarazat-cimkek"].text, "Magyarázat Kiegészítés Javítás A tankönyv alapján");
     assert.ok(result["cimke-nelkuli"].structures.includes("cimke-nelkuli"));
   } finally {
@@ -205,6 +211,11 @@ test("usage recording preserves action frames, visible text and disposable brows
       commit: "fixture",
     });
     assert.equal(result[0].roles.sidebar.text, "Menü");
+    assert.deepEqual(result[0].focus_visible, []);
+    const typed = result[0].motion.find(m => m.image.includes('-gepel-kesz'));
+    assert.notDeepEqual(await fs.readFile(path.join(root, 'out', typed.image)),
+      await fs.readFile(path.join(root, 'out', result[0].image)),
+      'typing frames keep focus, but the final highlight frame loses it');
     const pixels = await Promise.all(
       result[0].motion
         .slice(0, 4)

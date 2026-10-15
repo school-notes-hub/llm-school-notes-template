@@ -150,6 +150,13 @@ def h10_text(payload, contract, add):
 
 def h10_interactions(script, measurements, contract, add):
     by_id = {step["id"]: step for step in steps(script)}
+    for rule in contract.get("valasztok", []):
+        sid, role = rule["lepes"], rule["szereplo"]
+        item = measurements.get(sid, {}).get("roles", {}).get(role, {})
+        if (sid not in by_id or role not in roles(by_id[sid])
+                or set(item.get("options", [])) != set(rule["opciok"])
+                or item.get("text") not in rule["opciok"]):
+            add("H10", sid, role, "a témaválasztó felirata vagy választékai megváltoztak")
     subject = next((s["url"] for s in by_id.values() if s["lap"] == "tantargy"), None)
     for rule in contract.get("interakciok", []):
         sid, role = rule["lepes"], rule.get("szereplo", "")

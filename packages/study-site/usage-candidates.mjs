@@ -15,6 +15,15 @@ import {
 async function inspect(browser, origin, payload, sources) {
   const state = await newState(browser, "asztal", origin);
   const result = {}, classroom = {};
+  const home = payload.pages.find(p => p.navigation === 'home');
+  let surface = {};
+  if (home) {
+    await openPage(state, home.url, origin);
+    const actors = await read(new URL('../video/hasznalat/szereplok.json', import.meta.url));
+    surface = await state.page.evaluate(actors => globalThis.__usageMeasure({
+      actors, requested: ['temavalaszto'],
+    }), actors);
+  }
   for (const page of payload.pages.filter((p) => p.kind === "topic")) {
     await openPage(state, page.url, origin);
     result[page.route] = await state.page.evaluate(() =>
@@ -32,7 +41,7 @@ async function inspect(browser, origin, payload, sources) {
       return [...document.querySelectorAll('[data-usage-source]')].map(n => n.innerText.replace(/\s+/g, ' ').trim());
     }, sources[page.route] || []);
   }
-  return {figures: result, classroom};
+  return {figures: result, classroom, surface};
 }
 
 export async function measureCandidates({ build, out, browserPath, repo }) {
@@ -82,7 +91,7 @@ if (
 }
 
 async function measurementKey(build, version) {
-  const files = ["./usage-candidates.mjs", "./lib/usage-record.mjs", "./lib/usage-provenance.mjs", "./lib/markdown.mjs"];
+  const files = ["./usage-candidates.mjs", "./lib/usage-record.mjs", "./lib/usage-provenance.mjs", "./lib/markdown.mjs", "../video/hasznalat/szereplok.json"];
   const code = await Promise.all(
     files.map((f) => fs.readFile(new URL(f, import.meta.url), "utf8")),
   );

@@ -366,7 +366,7 @@ def test_filled_titles_have_one_article_and_keep_their_anchor(title, expected):
     script, _ = fill(read(ROOT / 'forgatokonyv.json'), choice)
     rows = {s['id']: s for s in steps(script)}
     anchored = expected.replace(title, '{' + title + '}')
-    assert 'ott van ' + anchored + ' lecke.' in rows['1-09']['text']
+    assert 'ott van ' + anchored + ' lecke.' in rows['1-10']['text']
     assert rows['3-01']['text'] == f'Ez {expected} fejezet összefoglalója.'
     assert 'ez ' + anchored + ' lecke része.' in rows['3-03']['text']
     assert rows['3-06']['text'] == f'Most nyissuk meg részletesen {expected} leckét.'

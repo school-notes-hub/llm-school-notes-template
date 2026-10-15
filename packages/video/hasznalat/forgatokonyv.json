@@ -132,6 +132,20 @@
         },
         {
           "id": "1-09",
+          "text": "Jobbra fent a {[[temavalaszto]]} gombbal világos vagy sötét megjelenést választhatsz.",
+          "szunet": 0.6,
+          "lap": "kezdolap",
+          "kamera": "teljes",
+          "kiemel": [
+            {
+              "szereplo": "temavalaszto",
+              "horgony": "[[temavalaszto]]",
+              "kell": "[[temavalaszto]]"
+            }
+          ]
+        },
+        {
+          "id": "1-10",
           "text": "Ha beírod, hogy [[keresoszo]], a találatok között ott van a {[[lecke]]} lecke.",
           "szunet": 0.6,
           "lap": "kezdolap",
@@ -160,7 +174,7 @@
           }
         },
         {
-          "id": "1-10",
+          "id": "1-11",
           "text": "Most nyissuk meg [[a_tantargy]] tantárgyat.",
           "szunet": 0.6,
           "lap": "kezdolap",

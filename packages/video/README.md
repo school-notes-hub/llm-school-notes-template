@@ -48,7 +48,7 @@ A tanuló saját `sn publish --build-only` buildjéből dolgozik; `--jeloltek` t
 ./hasznalat.sh TANULO --vegleges --out OUT
 ```
 
-A 69 lépéses sablon felvevője a `study-site/capture-usage.mjs` és a `lib/usage-*` modulok; a H1–H10 kapu külön jelöli az előnézetben
+A 70 lépéses sablon felvevője a `study-site/capture-usage.mjs` és a `lib/usage-*` modulok; a H1–H10 kapu külön jelöli az előnézetben
 még nem mért hangot és végleges videót. Hibamentes előnézetnél `zold: true`, de
 `kiadhato: false`; a `nem_mert` felsorolja a hiányzó H4/H6/H7 mérést. Piros kép vagy elavult accept után fizetős gyártás nem indul.
 A kész videót az `sn hasznalat` illeszti a kezdőlapra. A részletes kézikönyv az ops-repó
@@ -58,7 +58,10 @@ Az asztali részletkamera a fő szöveghasábot és a kis cél teljes sorát/sá
 A címkék fölötti bekezdés is a kép része; magas blokknál az utolsó sorok és a címke
 maradnak láthatók. A H2 kapu a böngészőben mért szótéglalapokkal ellenőrzi a
 kivágás széleit, a címke szövegkörnyezetét és a kiemelés nélküli kép fókuszkeretét.
-A magas ábra továbbra is a tetejétől látszik, alul nyitott kiemelőkerettel.
+A magas ábra teteje fölött 24 CSS px hely marad a kivágásban; a keret felső
+éle és sarkai zártak, csak alul nyitott. A H2 a kirajzolt felső élt is ellenőrzi.
+A keresőmező gépelés után elveszíti a fókuszt. A kezdőlap új témaválasztó
+lépése a gomb aktuális látható feliratát használja narrációként és horgonyként.
 A lecke jogosultságához tankönyves Óra-sor kell; bizonytalan dátum nem feltétel.
 Az E2 feltételhez címke nélküli törzsbekezdés is kell, amelynek lábjegyzete
 órai forrásra mutat. A jelöltvizsgálat a build privát nyugtájának forráshashével

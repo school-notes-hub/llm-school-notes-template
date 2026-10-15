@@ -3,6 +3,7 @@
 SIZE = (1920, 1080)
 PHONE = (729, 40, 462, 1000)
 PHONE_VIEW = (390, 844)
+TALL_MARGIN = 24  # 16 CSS px of context plus room for the 8 px border padding.
 
 
 def combined(boxes):
@@ -102,8 +103,8 @@ def column_crop(step, measurement, box, column):
     )
     tall = bool(tall_cues(step, measurement))
     top = measurement.get("layout", {}).get("top", 0)
-    if tall and top - 1 <= box[1] < top:
-        top = box[1]  # Fractional browser scroll coordinates are not clipping.
+    if tall and top - 1 <= box[1] - TALL_MARGIN < top:
+        top = box[1] - TALL_MARGIN  # Allow fractional browser scroll coordinates.
     words = measurement.get("text_rects", [])
     valid = []
     fallback = None
@@ -125,7 +126,7 @@ def column_crop(step, measurement, box, column):
                 continue
             if not tall and (y > box[1] - margin or y + height < box[1] + box[3] + margin):
                 continue
-            if tall and y > box[1]:
+            if tall and y > box[1] - TALL_MARGIN:
                 continue
             if label and box[1] < y + height / 2:
                 continue

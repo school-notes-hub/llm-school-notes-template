@@ -6,7 +6,8 @@
       "route": "",
       "url": "/fixture/",
       "title": "Jegyzetoldal",
-      "html": "<a href='/fixture/proba/'>Próba</a><a href='/fixture/a-projektrol/'>A projektről</a>"
+      "html": "<a href='/fixture/proba/'>Próba</a><a href='/fixture/a-projektrol/'>A projektről</a>",
+      "usageThemeLabel": "Auto"
     },
     {
       "navigation": "subject",

@@ -51,6 +51,7 @@ def values_for(selection):
         k: clean(selection[k]["title"]) for k in ("tantargy", "lecke", "osszefoglalo")
     }
     values["fejezet"] = selection["lecke"].get("chapterTitle", "")
+    values["temavalaszto"] = selection["kezdolap"].get("usageThemeLabel", "")
     values["projekt"] = selection.get("projekt", {}).get("navigationLabel") or selection.get("projekt", {}).get("title", "")
     for key in ("tantargy", "fejezet"):
         values["a_" + key] = (article(values[key]) + " " + values[key]).strip()

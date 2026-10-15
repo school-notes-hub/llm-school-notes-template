@@ -4,6 +4,7 @@ import copy
 import sys
 from pathlib import Path
 
+import pytest
 from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -28,7 +29,7 @@ def scene():
         "layout": {"top": 88},
         "roles": {
             "diagram": {
-                "box": [280, 88, 720, 1080],
+                "box": [280, 112, 720, 1080],
                 "uncovered": [True, True, False, False, False],
                 "visible_uncovered": [True] * 5,
             }
@@ -70,8 +71,11 @@ def test_gate_checks_the_rendered_open_border(monkeypatch):
     assert "nem nyitott" in findings(step, measurement)[0][-1]
 
 
-def test_tall_border_is_open_in_the_actual_frame(tmp_path):
+@pytest.mark.parametrize('column', [False, True])
+def test_tall_border_is_open_in_the_actual_frame(tmp_path, column):
     step, measurement = scene()
+    if column:
+        measurement['layout']['content'] = [280, -800, 720, 3000]
     image = Image.new("RGB", (3840, 2160), "white")
     image.save(tmp_path / "page.png")
     spec = {
@@ -115,12 +119,36 @@ def test_tall_column_camera_has_no_sidebar_and_preserves_the_open_bottom():
     view = crop(step, measurement)
     assert view[0] >= 256 and view[0] + view[2] <= 1024
     assert view[1] == 88
+    assert measurement['roles']['diagram']['box'][1] - view[1] >= 24
     assert not findings(step, measurement)
-
     assert keret.clipped_sides({'nezet': 'asztal', 'box': measurement['roles']['diagram']['box'], 'crop': view}) == ['also']
-    measurement['roles']['diagram']['box'][1] = 87.984
+    measurement['roles']['diagram']['box'][1] = 111.984
     assert not findings(step, measurement)
 
+
+@pytest.mark.parametrize('offset', [0, 4, 15])
+def test_gate_rejects_tall_crop_without_upper_border_room(monkeypatch, offset):
+    step, measurement = scene()
+    box = measurement['roles']['diagram']['box']
+    monkeypatch.setattr('hasznalat.kapu_lathatosag.crop',
+                        lambda *_: [264, box[1] - offset, 752, 423])
+    assert 'felső éle' in findings(step, measurement)[0][-1]
+
+
+@pytest.mark.parametrize('missing', ['edge', 'left-corner', 'right-corner'])
+def test_gate_rejects_missing_rendered_upper_edge_or_corner(monkeypatch, missing):
+    step, measurement = scene()
+    measurement['layout']['content'] = [280, -800, 720, 3000]
+    original = keret.outline
+
+    def broken(image, spec, color):
+        original(image, spec, color)
+        left, top, right, _ = keret.bounds(spec)
+        x = (left + right) / 2 if missing == 'edge' else left if missing == 'left-corner' else right - 12
+        ImageDraw.Draw(image).rectangle((x, top, x + 12, top + 12), fill=0)
+
+    monkeypatch.setattr(keret, 'outline', broken)
+    assert 'felső éle' in findings(step, measurement)[0][-1]
 
 def test_ordinary_edge_highlight_has_four_inset_sides_and_gate_checks_pixels(monkeypatch):
     step, measurement = scene()

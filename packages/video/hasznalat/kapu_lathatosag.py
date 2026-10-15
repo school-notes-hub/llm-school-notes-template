@@ -1,7 +1,7 @@
 """H2: ordinary elements fit; explicitly permitted tall elements remain honest."""
 
-from .kamera import crop, camera_box, cuts_text
-from .keret import clipped_sides, open_border, closed_border
+from .kamera import crop, camera_box, cuts_text, TALL_MARGIN
+from .keret import clipped_sides, open_border, closed_border, closed_top
 
 
 def inside(box, view):
@@ -30,14 +30,17 @@ def tall_error(step, measurement, item, camera):
     ratio = visible[2] * visible[3] / area if area else 0
     spec = {"box": box, "crop": camera, "nezet": step["nezet"], "magas": True}
     upper = camera_box(step, [box[0], box[1], box[2], 0])
-    if not top - 1 <= box[1] <= top + 2 or not inside(upper, camera):
+    if not top - 1 <= box[1] <= top + TALL_MARGIN + 2 or not inside(upper, camera):
         return "a magas elem teteje nem közvetlenül a fejléc alatt látszik"
     if ratio < 0.6:
         return f"a magas elem képfedése {ratio:.1%}, legalább 60% szükséges"
     if not item.get("visible_uncovered") or not all(item["visible_uncovered"]):
         return "a magas elem látható része takart"
-    if not clipped_sides(spec) or not open_border(spec):
+    if clipped_sides(spec) != ["also"] or not open_border(spec):
         return "a magas elem kerete a vágott oldalon nem nyitott"
+    margin = camera_box(step, [0, 0, 0, 16])[3]
+    if upper[1] - camera[1] < margin or not closed_top(spec):
+        return "a magas elem keretének felső éle és sarkai nincsenek zártan a képen"
     return None
 
 

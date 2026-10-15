@@ -104,5 +104,16 @@
       "szereplo": "cimke-javitas",
       "feltetel": "buborek"
     }
+  ],
+  "valasztok": [
+    {
+      "lepes": "1-09",
+      "szereplo": "temavalaszto",
+      "opciok": [
+        "Sötét",
+        "Világos",
+        "Auto"
+      ]
+    }
   ]
 }

@@ -133,9 +133,12 @@ def candidate_files(local, build, out):
         ],
         check=True,
     )
-    figures = read(out / "abra-meres.json")["figures"]
+    measured = read(out / "abra-meres.json")
+    figures = measured["figures"]
     payload = read(build / "payload.json")
     classroom = read(out / "ora-forrasok.json")
     for page in payload["pages"]:
         page["usageClassroomParagraphs"] = classroom.get(page["route"], [])
+        if page.get("navigation") == "home":
+            page["usageThemeLabel"] = measured["surface"].get("temavalaszto", {}).get("text", "")
     return candidates(payload, figures)

@@ -83,7 +83,7 @@ export async function scroll(ctx, step, boxes) {
     const tall = step.kiemel?.some((c) => c.magas) && box[3] > page.viewportSize().height - top;
     const footer = item.label_context || step.dom_sorrend ||
       item.structures?.some(kind => ['cimke', 'datum-link'].includes(kind));
-    target = tall ? top : footer
+    target = tall ? top + 24 : footer // 16 CSS px context plus border padding.
       ? top + height - box[3] - 40
       : top + Math.min(80, height * 0.2);
   }
@@ -142,4 +142,5 @@ async function typeText({ page, shot, motion }, loc, text, cursor) {
   }
   await page.waitForTimeout(500); // Pagefind debounce.
   motion.push({ image: await shot("-gepel-kesz"), seconds: 0.5, cursor });
+  await loc.blur(); // Recorded typing keeps focus; the following highlight does not.
 }
