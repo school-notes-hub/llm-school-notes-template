@@ -1,0 +1,108 @@
+{
+  "szovegek": [
+    {
+      "file": "packages/school-notes2/src/school_notes2/wiki/home_page.py",
+      "text": "A jelöletlen szöveg az órán tanult anyag.",
+      "html": true
+    },
+    {
+      "file": "packages/school-notes2/src/school_notes2/wiki/home_page.py",
+      "text": "(link nélküli címkén koppintásra is).",
+      "html": true
+    },
+    {
+      "file": "packages/school-notes2/src/school_notes2/wiki/home_page.py",
+      "text": "(link nélküli dátumon koppintásra is).",
+      "html": true
+    },
+    {
+      "file": "packages/school-notes2/src/school_notes2/wiki/home_page.py",
+      "text": "Hol tartunk",
+      "html": true
+    },
+    {
+      "file": "packages/school-notes2/src/school_notes2/wiki/home_page.py",
+      "text": "Hogyan használd",
+      "html": true
+    },
+    {
+      "file": "packages/school-notes2/src/school_notes2/wiki/home_page.py",
+      "text": "Jelmagyarázat",
+      "html": true
+    },
+    {
+      "file": "packages/study-site/src/pages/[...route].astro",
+      "text": "Minden választ mutat",
+      "html": true
+    },
+    {
+      "file": "packages/study-site/src/pages/[...route].astro",
+      "text": "Nyomtatható fejezetek",
+      "html": true
+    },
+    {
+      "file": "packages/study-site/src/pages/[...route].astro",
+      "text": "Mi ez a lap?",
+      "html": true
+    },
+    {
+      "file": "packages/study-site/src/pages/[...route].astro",
+      "text": "PDF letöltése",
+      "html": true
+    },
+    {
+      "file": "packages/study-site/src/pages/[...route].astro",
+      "text": "Előző",
+      "html": true
+    },
+    {
+      "file": "packages/study-site/src/pages/[...route].astro",
+      "text": "Következő",
+      "html": true
+    },
+    {
+      "file": "packages/study-site/lib/markdown.mjs",
+      "text": "Nyitott kérdések",
+      "html": true
+    },
+    {
+      "file": "packages/study-site/lib/kinds.mjs",
+      "text": "a teljes tananyag: Röviden, magyarázat, ábrák, kérdések.",
+      "html": true
+    },
+    {
+      "file": "packages/study-site/lib/kinds.mjs",
+      "text": "a fejezet rövid változata ismétléshez; a részletek a témalapokon.",
+      "html": true
+    }
+  ],
+  "build_szovegek": [
+    "Hol tartunk",
+    "Most:",
+    "Ismétléshez:",
+    "◀ itt tartunk",
+    "Minden választ mutat",
+    "Nyomtatható fejezetek",
+    "Ezen az oldalon",
+    "Mi ez a lap?",
+    "PDF letöltése",
+    "Nyitott kérdések",
+    "Források",
+    "Előző",
+    "Következő"
+  ],
+  "interakciok": [
+    {
+      "lepes": "4-06",
+      "ok": "A dátumlink nem a tantárgyoldal megfelelő Órák sorára mutat.",
+      "szereplo": "datum-link",
+      "feltetel": "ora-link"
+    },
+    {
+      "lepes": "5-05",
+      "ok": "Koppintásos buborék csak link nélküli címkén működik.",
+      "szereplo": "cimke-javitas",
+      "feltetel": "buborek"
+    }
+  ]
+}

@@ -1,0 +1,1268 @@
+{
+  "sema": "hasznalati-forgatokonyv/1",
+  "jelenetek": [
+    {
+      "id": "1",
+      "nezet": "asztal",
+      "lepesek": [
+        {
+          "id": "1-01",
+          "text": "Ez a jegyzetoldal kezdőlapja.",
+          "szunet": 0.6,
+          "lap": "kezdolap",
+          "kamera": "teljes"
+        },
+        {
+          "id": "1-02",
+          "text": "Bal oldalt, a {menüben} találod a tantárgyakat, és innen bármikor visszajutsz a kezdőlapra.",
+          "szunet": 0.6,
+          "lap": "kezdolap",
+          "kamera": "teljes",
+          "kiemel": [
+            {
+              "szereplo": "oldalsav",
+              "horgony": "menüben",
+              "kell": "[[tantargy]]"
+            }
+          ]
+        },
+        {
+          "id": "1-03",
+          "text": "A menüben a {Podcast} lap az összes adást egy helyen gyűjti, {A projektről} szóló lap pedig elmondja, hogyan készül a jegyzet.",
+          "szunet": 0.6,
+          "lap": "kezdolap",
+          "kamera": "teljes",
+          "kiemel": [
+            {
+              "szereplo": "menu-podcast",
+              "horgony": "Podcast",
+              "kell": "Podcast"
+            },
+            {
+              "szereplo": "menu-projekt",
+              "horgony": "A projektről",
+              "kell": "A projektről"
+            }
+          ]
+        },
+        {
+          "id": "1-04",
+          "text": "Középen a {Tantárgyak} lista áll; a tantárgyak neve alatt a fejezeteik is ott vannak.",
+          "szunet": 0.6,
+          "lap": "kezdolap",
+          "kamera": "tartalom",
+          "kiemel": [
+            {
+              "szereplo": "tantargyak-cim",
+              "horgony": "Tantárgyak",
+              "kell": "Tantárgyak"
+            }
+          ],
+          "gorget": {
+            "szereplo": "tantargyak-cim",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "1-05",
+          "text": "Alatta a {Hogyan használd} rész leírja, milyen lapokat találsz az oldalon.",
+          "szunet": 0.6,
+          "lap": "kezdolap",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "hogyan-hasznald",
+              "horgony": "Hogyan használd",
+              "szerkezet": "utmutato"
+            }
+          ],
+          "gorget": {
+            "szereplo": "hogyan-hasznald",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "1-06",
+          "text": "A {Jelmagyarázat} a szöveg alatti kis címkék jelentését sorolja fel.",
+          "szunet": 0.6,
+          "lap": "kezdolap",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "jelmagyarazat-cim",
+              "horgony": "Jelmagyarázat",
+              "kell": "Jelmagyarázat"
+            }
+          ],
+          "gorget": {
+            "szereplo": "jelmagyarazat-cim",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "1-07",
+          "text": "Ezeket a címkéket egy leckében mindjárt látni fogod.",
+          "szunet": 0.6,
+          "lap": "kezdolap",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "jelmagyarazat-elso",
+              "kell": "Magyarázat"
+            }
+          ],
+          "gorget": {
+            "szereplo": "jelmagyarazat-elso",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "1-08",
+          "text": "Fent, a {Keresés} mezővel bármelyik leckét gyorsan megtalálod.",
+          "szunet": 0.6,
+          "lap": "kezdolap",
+          "kamera": "teljes",
+          "kiemel": [
+            {
+              "szereplo": "kereses",
+              "horgony": "Keresés",
+              "kell": "Keresés"
+            }
+          ]
+        },
+        {
+          "id": "1-09",
+          "text": "Ha beírod, hogy [[keresoszo]], a találatok között ott a {[[lecke]]} lecke.",
+          "szunet": 0.6,
+          "lap": "kezdolap",
+          "kamera": "teljes",
+          "kiemel": [
+            {
+              "szereplo": "kereses-talalat",
+              "horgony": "[[lecke]]",
+              "kell": "[[lecke]]"
+            }
+          ],
+          "allapot": [
+            {
+              "szereplo": "kereses",
+              "muvelet": "nyit"
+            },
+            {
+              "szereplo": "kereses-mezo",
+              "muvelet": "gepel",
+              "text": "[[keresoszo]]"
+            }
+          ],
+          "kurzor": {
+            "szereplo": "kereses-mezo",
+            "kattint": false
+          }
+        },
+        {
+          "id": "1-10",
+          "text": "Most nyissuk meg [[a_tantargy]] tantárgyat.",
+          "szunet": 0.6,
+          "lap": "kezdolap",
+          "kamera": "teljes",
+          "allapot": [
+            {
+              "szereplo": "kereses",
+              "muvelet": "esc"
+            }
+          ],
+          "kurzor": {
+            "szereplo": "menu-tantargy",
+            "kattint": true
+          },
+          "kovetkezo_lap": "tantargy",
+          "gorget": {
+            "szereplo": "menu-tantargy",
+            "igazit": "kozep"
+          }
+        }
+      ],
+      "cim": "Kezdőlap"
+    },
+    {
+      "id": "2",
+      "nezet": "asztal",
+      "lepesek": [
+        {
+          "id": "2-01",
+          "text": "Ez [[a_tantargy]] tantárgyoldala.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "teljes"
+        },
+        {
+          "id": "2-02",
+          "text": "A cím alatti {sáv} megmondja, milyen lapon vagy, és mire való ez a lap.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "tipussav",
+              "horgony": "sáv",
+              "kell": "Tantárgyoldal"
+            }
+          ],
+          "gorget": {
+            "szereplo": "tipussav",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "2-03",
+          "text": "A {Mi ez a lap?} link a kezdőlap leírásához visz.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "mi-ez-a-lap",
+              "horgony": "Mi ez a lap?",
+              "kell": "Mi ez a lap?"
+            }
+          ],
+          "gorget": {
+            "szereplo": "mi-ez-a-lap",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "2-04",
+          "text": "A {Hol tartunk} doboz megmutatja, merre jártok a tantárgyban.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "tartalom",
+          "kiemel": [
+            {
+              "szereplo": "hol-tartunk",
+              "horgony": "Hol tartunk",
+              "kell": "Hol tartunk"
+            }
+          ],
+          "gorget": {
+            "szereplo": "hol-tartunk",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "2-05",
+          "text": "Az első sorában a {fejezetek} állnak, abban a sorrendben, ahogy elkezdtétek őket.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "fejezetvonal",
+              "horgony": "fejezetek",
+              "kell": "◉"
+            }
+          ],
+          "gorget": {
+            "szereplo": "fejezetvonal",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "2-06",
+          "text": "A {pipa} egy korábbi fejezetet jelöl, a {karikás pont} a mostanit.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "fejezet-kesz",
+              "horgony": "pipa",
+              "kell": "✓"
+            },
+            {
+              "szereplo": "fejezet-most",
+              "horgony": "karikás pont",
+              "kell": "◉"
+            }
+          ],
+          "gorget": {
+            "szereplo": "fejezet-kesz",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "2-07",
+          "text": "A {Most} sorban a legutóbbi órán vett kidolgozott leckék vannak.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "most-sor",
+              "horgony": "Most",
+              "kell": "Most"
+            }
+          ],
+          "gorget": {
+            "szereplo": "most-sor",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "2-08",
+          "text": "Az {Ismétléshez} sor a mostani fejezet összefoglalójára visz.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "ismetles-sor",
+              "horgony": "Ismétléshez",
+              "kell": "Ismétléshez"
+            }
+          ],
+          "gorget": {
+            "szereplo": "ismetles-sor",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "2-09",
+          "text": "Lejjebb sorban jönnek a {fejezetek}.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "fejezetcim-1",
+              "horgony": "fejezetek",
+              "kell": "fejezet"
+            }
+          ],
+          "gorget": {
+            "szereplo": "fejezetcim-1",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "2-10",
+          "text": "Minden számozott sor egy {kidolgozott lecke}, a tanítás sorrendjében.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "leckek-1",
+              "horgony": "kidolgozott lecke",
+              "kell": "📄"
+            }
+          ],
+          "gorget": {
+            "szereplo": "leckek-1",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "2-11",
+          "text": "Minden lecke mellett egy {rövid leírás} mondja el, miről szól.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "leiras-1",
+              "horgony": "rövid leírás",
+              "szerkezet": "leiras"
+            }
+          ],
+          "gorget": {
+            "szereplo": "leiras-1",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "2-12",
+          "text": "A fejezet végén áll az {Összefoglaló}: a fejezet rövid változata, ismétléshez.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "osszefoglalo-sor-1",
+              "horgony": "Összefoglaló",
+              "kell": "Összefoglaló"
+            }
+          ],
+          "gorget": {
+            "szereplo": "osszefoglalo-sor-1",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "2-13",
+          "text": "A mostani fejezetben a legutóbbi órán vett leckék mellett ez áll: {itt tartunk}.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "itt-tartunk",
+              "horgony": "itt tartunk",
+              "kell": "itt tartunk"
+            }
+          ],
+          "gorget": {
+            "szereplo": "itt-tartunk",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "2-14",
+          "text": "A lap alján az {Órák} lista mutatja, melyik órán mit vettetek.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "orak-cim",
+              "horgony": "Órák",
+              "kell": "Órák"
+            }
+          ],
+          "gorget": {
+            "szereplo": "orak-cim",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "2-15",
+          "text": "A {legújabb} óra van legfelül.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "ora-elso",
+              "horgony": "legújabb",
+              "szerkezet": "ora-sor"
+            }
+          ],
+          "gorget": {
+            "szereplo": "ora-elso",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "2-16",
+          "text": "A sor végén kicsi, szürke a dátum; a {hullámvonal} azt jelzi, hogy a dátum nem biztos.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "ora-bizonytalan",
+              "horgony": "hullámvonal",
+              "kell": "~"
+            }
+          ],
+          "gorget": {
+            "szereplo": "ora-bizonytalan",
+            "igazit": "felso"
+          },
+          "csak_ha": "ora-bizonytalan"
+        },
+        {
+          "id": "2-17",
+          "text": "A {nyíl} után azok a kidolgozott leckék állnak, ahol az óra anyaga részletesen megvan.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "ora-nyil",
+              "horgony": "nyíl",
+              "kell": "→"
+            }
+          ],
+          "gorget": {
+            "szereplo": "ora-nyil",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "2-18",
+          "text": "A {Nyomtatható fejezetek} részből egy egész fejezetet letölthetsz PDF-ben.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "pdf-fejezetek",
+              "horgony": "Nyomtatható fejezetek",
+              "kell": "Nyomtatható fejezetek"
+            }
+          ],
+          "gorget": {
+            "szereplo": "pdf-fejezetek",
+            "igazit": "felso"
+          },
+          "allapot": [
+            {
+              "szereplo": "pdf-fejezetek",
+              "muvelet": "nyit"
+            }
+          ]
+        },
+        {
+          "id": "2-19",
+          "text": "Jobb oldalt az {Ezen az oldalon} lista a lap egyes részeihez ugrik.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "teljes",
+          "kiemel": [
+            {
+              "szereplo": "toc",
+              "horgony": "Ezen az oldalon",
+              "kell": "Ezen az oldalon"
+            }
+          ]
+        },
+        {
+          "id": "2-20",
+          "text": "Nyissuk meg a mostani fejezet összefoglalóját.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "teljes",
+          "kurzor": {
+            "szereplo": "osszefoglalo-sor-most-link",
+            "kattint": true
+          },
+          "kovetkezo_lap": "osszefoglalo",
+          "gorget": {
+            "szereplo": "osszefoglalo-sor-most-link",
+            "igazit": "kozep"
+          }
+        }
+      ],
+      "cim": "Tantárgyoldal"
+    },
+    {
+      "id": "3",
+      "nezet": "asztal",
+      "lepesek": [
+        {
+          "id": "3-01",
+          "text": "Ez [[a_fejezet]] fejezet összefoglalója.",
+          "szunet": 0.6,
+          "lap": "osszefoglalo",
+          "kamera": "teljes"
+        },
+        {
+          "id": "3-02",
+          "text": "A {sáv} szerint ez a fejezet rövid változata, ismétléshez.",
+          "szunet": 0.6,
+          "lap": "osszefoglalo",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "tipussav",
+              "horgony": "sáv",
+              "kell": "Összefoglaló"
+            }
+          ],
+          "gorget": {
+            "szereplo": "tipussav",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "3-03",
+          "text": "Itt a fejezet leckéinek {legfontosabb pontjai} állnak, leckénként egy részben.",
+          "szunet": 0.6,
+          "lap": "osszefoglalo",
+          "kamera": "tartalom",
+          "kiemel": [
+            {
+              "szereplo": "osszefoglalo-resz-cim",
+              "horgony": "legfontosabb pontjai",
+              "kell": "[[lecke]]"
+            }
+          ],
+          "gorget": {
+            "szereplo": "osszefoglalo-resz-cim",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "3-04",
+          "text": "A {Részletesen} link a teljes leckébe visz.",
+          "szunet": 0.6,
+          "lap": "osszefoglalo",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "reszletesen",
+              "horgony": "Részletesen",
+              "kell": "Részletesen"
+            }
+          ],
+          "gorget": {
+            "szereplo": "reszletesen",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "3-05",
+          "text": "A lap végén a {Fogalmak} táblázat a fejezet fontos fogalmait magyarázza meg röviden.",
+          "szunet": 0.6,
+          "lap": "osszefoglalo",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "fogalmak-cim",
+              "horgony": "Fogalmak",
+              "kell": "Fogalmak"
+            }
+          ],
+          "gorget": {
+            "szereplo": "fogalmak-cim",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "3-06",
+          "text": "Most nyissuk meg részletesen a [[lecke]] leckét.",
+          "szunet": 0.6,
+          "lap": "osszefoglalo",
+          "kamera": "teljes",
+          "kurzor": {
+            "szereplo": "lecke-reszletesen",
+            "kattint": true
+          },
+          "kovetkezo_lap": "lecke",
+          "gorget": {
+            "szereplo": "lecke-reszletesen",
+            "igazit": "kozep"
+          }
+        }
+      ],
+      "cim": "Összefoglaló"
+    },
+    {
+      "id": "4",
+      "nezet": "asztal",
+      "lepesek": [
+        {
+          "id": "4-01",
+          "text": "Ez egy kidolgozott lecke: itt van a teljes tananyag.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "teljes"
+        },
+        {
+          "id": "4-02",
+          "text": "Ezt a cím alatti {sáv} is kiírja.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "tipussav",
+              "horgony": "sáv",
+              "kell": "Kidolgozott lecke"
+            }
+          ],
+          "gorget": {
+            "szereplo": "tipussav",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "4-03",
+          "text": "Fölötte a {sor} mutatja, hol vagy: kezdőlap, tantárgy, fejezet; bármelyikre visszaléphetsz.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "morzsa",
+              "horgony": "sor",
+              "kell": "Kezdőlap"
+            }
+          ],
+          "gorget": {
+            "szereplo": "morzsa",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "4-04",
+          "text": "Jobbra a {PDF letöltése} linkkel a leckét nyomtatható formában is letöltheted.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "pdf-lecke",
+              "horgony": "PDF letöltése",
+              "kell": "PDF letöltése"
+            }
+          ],
+          "gorget": {
+            "szereplo": "pdf-lecke",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "4-05",
+          "text": "Ez a {sor} megmondja, melyik órán vettétek, és melyik tankönyvi részhez tartozik.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "ora-sor",
+              "horgony": "sor",
+              "kell": "Tankönyv"
+            }
+          ],
+          "gorget": {
+            "szereplo": "ora-sor",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "4-06",
+          "text": "A {dátumra} kattintva a tantárgyoldal Órák listájához jutsz.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "datum-link",
+              "horgony": "dátumra",
+              "szerkezet": "datum-link"
+            }
+          ],
+          "gorget": {
+            "szereplo": "datum-link",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "4-07",
+          "text": "A {Röviden} doboz a lecke legfontosabb pontjait gyűjti össze; dolgozat előtt ezt nézd át.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "tartalom",
+          "kiemel": [
+            {
+              "szereplo": "roviden-cim",
+              "horgony": "Röviden",
+              "kell": "Röviden"
+            }
+          ],
+          "gorget": {
+            "szereplo": "roviden-cim",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "4-08",
+          "text": "A szöveg alatti kis {címkék} megmutatják, honnan való az adott rész.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "cimke-elso",
+              "horgony": "címkék",
+              "szerkezet": "cimke"
+            }
+          ],
+          "gorget": {
+            "szereplo": "cimke-elso",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "4-09",
+          "text": "A zöld könyv azt jelzi, hogy a rész {a tankönyv alapján} készült.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "cimke-tankonyv",
+              "horgony": "a tankönyv alapján",
+              "kell": "A tankönyv alapján"
+            }
+          ],
+          "gorget": {
+            "szereplo": "cimke-tankonyv",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "4-10",
+          "text": "A {gépi javítás} ott áll, ahol az órai jegyzetben hiba volt; ilyenkor a füzetedet is javítsd.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "cimke-javitas",
+              "horgony": "gépi javítás",
+              "kell": "gépi javítás"
+            }
+          ],
+          "gorget": {
+            "szereplo": "cimke-javitas",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "4-11",
+          "text": "A {gépi kiegészítés} egy hiányzó, de a megértéshez fontos részt pótol.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "cimke-kieg",
+              "horgony": "gépi kiegészítés",
+              "kell": "gépi kiegészítés"
+            }
+          ],
+          "gorget": {
+            "szereplo": "cimke-kieg",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "4-12",
+          "text": "A {robot} jel azt mutatja, hogy azt a részt gép írta.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "cimke-kieg",
+              "horgony": "robot",
+              "kell": "🤖"
+            }
+          ],
+          "gorget": {
+            "szereplo": "cimke-kieg",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "4-13",
+          "text": "A Röviden alatt a {Képben vagy?} podcast egy rövid beszélgetés erről a leckéről; itt meg is hallgathatod.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "podcast",
+              "horgony": "Képben vagy?",
+              "kell": "Képben vagy?"
+            }
+          ],
+          "gorget": {
+            "szereplo": "podcast",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "4-14",
+          "text": "A {gépi magyarázat} kifejti, amit az órai anyag csak röviden ír le.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "cimke-magyarazat",
+              "horgony": "gépi magyarázat",
+              "kell": "gépi magyarázat"
+            }
+          ],
+          "gorget": {
+            "szereplo": "cimke-magyarazat",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "4-15",
+          "text": "A címke nélküli szöveg az órán tanult anyag.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "teljes"
+        },
+        {
+          "id": "4-16",
+          "text": "A lecke részeit címek tagolják; az {Ezen az oldalon} lista ezekre ugrik.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "teljes",
+          "kiemel": [
+            {
+              "szereplo": "toc",
+              "horgony": "Ezen az oldalon",
+              "kell": "Ezen az oldalon"
+            }
+          ]
+        },
+        {
+          "id": "4-17",
+          "text": "Az {ábra} szemlélteti, amiről a szöveg szól.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "abra",
+              "horgony": "ábra",
+              "szerkezet": "abra",
+              "magas": true
+            }
+          ],
+          "gorget": {
+            "szereplo": "abra",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "4-18",
+          "text": "A lecke végén a {Kérdezd ki magad} kérdéseivel ellenőrizheted magad.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "kerdezd-cim",
+              "horgony": "Kérdezd ki magad",
+              "kell": "Kérdezd ki magad"
+            }
+          ],
+          "gorget": {
+            "szereplo": "kerdezd-cim",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "4-19",
+          "text": "Előbb próbáld fejből megválaszolni, aztán {nyisd le} a választ.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "kerdes-elso",
+              "horgony": "nyisd le",
+              "szerkezet": "kerdes"
+            }
+          ],
+          "gorget": {
+            "szereplo": "kerdes-elso",
+            "igazit": "felso"
+          },
+          "allapot": [
+            {
+              "szereplo": "kerdes-elso",
+              "muvelet": "nyit",
+              "horgony": "nyisd le"
+            }
+          ],
+          "kurzor": {
+            "szereplo": "kerdes-elso",
+            "horgony": "nyisd le",
+            "kattint": false
+          }
+        },
+        {
+          "id": "4-20",
+          "text": "A {Minden választ mutat} gomb egyszerre lenyitja az összes választ.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "valaszok-gomb",
+              "horgony": "Minden választ mutat",
+              "kell": "Minden választ mutat"
+            }
+          ],
+          "gorget": {
+            "szereplo": "valaszok-gomb",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "4-21",
+          "text": "A {Nyitott kérdések} neked szólnak: itt áll, mit javíts a füzetedben, vagy mire tudsz te válaszolni.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "nyitott",
+              "horgony": "Nyitott kérdések",
+              "kell": "Nyitott kérdések"
+            }
+          ],
+          "gorget": {
+            "szereplo": "nyitott",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "4-22",
+          "text": "A {Források} a lecke webes forrásait sorolják fel.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "forrasok",
+              "horgony": "Források",
+              "kell": "Források"
+            }
+          ],
+          "gorget": {
+            "szereplo": "forrasok",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "4-23",
+          "text": "Az {Előző} és a {Következő} link ugyanennek a tantárgynak az előző és a következő lapjára visz.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "elozo",
+              "horgony": "Előző",
+              "kell": "Előző"
+            },
+            {
+              "szereplo": "kovetkezo",
+              "horgony": "Következő",
+              "kell": "Következő"
+            }
+          ],
+          "gorget": {
+            "szereplo": "elozo",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "4-24",
+          "text": "Az utolsó sorból visszajutsz a {tantárgyhoz}, a fejezethez vagy a kezdőlapra.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "lap-alja",
+              "horgony": "tantárgyhoz",
+              "kell": "[[tantargy]]"
+            }
+          ],
+          "gorget": {
+            "szereplo": "lap-alja",
+            "igazit": "felso"
+          }
+        }
+      ],
+      "cim": "Lecke"
+    },
+    {
+      "id": "5",
+      "nezet": "telefon",
+      "lepesek": [
+        {
+          "id": "5-01",
+          "text": "Telefonon ugyanez a lecke így néz ki.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "teljes"
+        },
+        {
+          "id": "5-02",
+          "text": "A tantárgyakat a jobb felső {menügomb} nyitja meg.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "teljes",
+          "kiemel": [
+            {
+              "szereplo": "menugomb",
+              "horgony": "menügomb",
+              "kell": "Menü"
+            }
+          ]
+        },
+        {
+          "id": "5-03",
+          "text": "Itt is ott van a {kezdőlap} és minden tantárgy.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "teljes",
+          "kiemel": [
+            {
+              "szereplo": "mobil-menu",
+              "horgony": "kezdőlap",
+              "kell": "Kezdőlap"
+            }
+          ],
+          "allapot": [
+            {
+              "szereplo": "menugomb",
+              "muvelet": "nyit"
+            }
+          ]
+        },
+        {
+          "id": "5-04",
+          "text": "Az {Ezen az oldalon} gomb a lecke részeit sorolja fel.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "teljes",
+          "kiemel": [
+            {
+              "szereplo": "mobil-toc",
+              "horgony": "Ezen az oldalon",
+              "kell": "Ezen az oldalon"
+            }
+          ],
+          "allapot": [
+            {
+              "szereplo": "menugomb",
+              "muvelet": "zar"
+            },
+            {
+              "szereplo": "mobil-toc",
+              "muvelet": "nyit"
+            }
+          ]
+        },
+        {
+          "id": "5-05",
+          "text": "Ha egy link nélküli {címkére} koppintasz, egy kis buborék kiírja, mit jelent.",
+          "szunet": 0.6,
+          "lap": "lecke",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "cimke-javitas",
+              "horgony": "címkére",
+              "kell": "gépi javítás"
+            }
+          ],
+          "gorget": {
+            "szereplo": "cimke-javitas",
+            "igazit": "felso"
+          },
+          "allapot": [
+            {
+              "szereplo": "mobil-toc",
+              "muvelet": "zar"
+            },
+            {
+              "szereplo": "cimke-javitas",
+              "muvelet": "koppint",
+              "horgony": "címkére"
+            }
+          ],
+          "kurzor": {
+            "szereplo": "cimke-javitas",
+            "horgony": "címkére",
+            "kattint": false
+          }
+        }
+      ],
+      "cim": "Telefonon"
+    },
+    {
+      "id": "6",
+      "nezet": "asztal",
+      "lepesek": [
+        {
+          "id": "6-01",
+          "text": "Röviden: hogy hol tartotok, azt a tantárgyoldal {Hol tartunk} doboza mutatja.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "tartalom",
+          "kiemel": [
+            {
+              "szereplo": "hol-tartunk",
+              "horgony": "Hol tartunk",
+              "kell": "Hol tartunk"
+            }
+          ],
+          "gorget": {
+            "szereplo": "hol-tartunk",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "6-02",
+          "text": "Tanuláshoz a {kidolgozott leckét} nyisd meg.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "most-sor",
+              "horgony": "kidolgozott leckét",
+              "kell": "Most"
+            }
+          ],
+          "gorget": {
+            "szereplo": "most-sor",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "6-03",
+          "text": "Ismétléshez a fejezet {összefoglalóját}.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "ismetles-sor",
+              "horgony": "összefoglalóját",
+              "kell": "Ismétléshez"
+            }
+          ],
+          "gorget": {
+            "szereplo": "ismetles-sor",
+            "igazit": "felso"
+          }
+        },
+        {
+          "id": "6-04",
+          "text": "Ha valamit elfelejtenél, a {Mi ez a lap?} link a kezdőlap leírásához visz.",
+          "szunet": 0.6,
+          "lap": "tantargy",
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "mi-ez-a-lap",
+              "horgony": "Mi ez a lap?",
+              "kell": "Mi ez a lap?"
+            }
+          ],
+          "gorget": {
+            "szereplo": "mi-ez-a-lap",
+            "igazit": "felso"
+          }
+        }
+      ],
+      "cim": "Röviden"
+    }
+  ]
+}

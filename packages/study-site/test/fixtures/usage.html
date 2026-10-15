@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="hu" data-theme="light">
+  <meta charset="utf-8" /><title>Próba</title>
+  <style>
+    body {
+      margin: 0;
+      font: 20px sans-serif;
+      background: white;
+      color: black;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      height: 60px;
+      background: #eee;
+      z-index: 5;
+    }
+    .study-content {
+      padding: 20px;
+    }
+    #spacer {
+      height: 900px;
+    }
+    small {
+      position: relative;
+      display: inline-block;
+      padding: 8px;
+      background: #ddd;
+    }
+    @media (hover: none) {
+      small:focus::after {
+        content: attr(title);
+        position: absolute;
+        left: 0;
+        top: 100%;
+        box-sizing: border-box;
+        width: 220px;
+        display: block;
+        background: white;
+        border: 1px solid black;
+        padding: 12px;
+      }
+    }
+  </style>
+  <header>Menü</header>
+  <main class="study-content">
+    <h1>Próba</h1>
+    <p>A bevezetés.</p>
+    <div id="spacer"></div>
+    <h2 id="target">Minta</h2>
+    <small class="study-label" title="A címke jelentése" tabindex="0"
+      >Címke</small
+    >
+    <p>Az ellenőrzés szövege.</p>
+    <div style="height: 900px"></div>
+  </main>
+</html>

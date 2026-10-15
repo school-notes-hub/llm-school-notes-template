@@ -1,0 +1,292 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "sema",
+    "jelenetek"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "sema": {
+      "const": "hasznalati-forgatokonyv/1"
+    },
+    "jelenetek": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "nezet",
+          "lepesek"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "nezet": {
+            "enum": [
+              "asztal",
+              "telefon"
+            ]
+          },
+          "lepesek": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "text"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[0-9]+-[0-9]{2}$"
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "lap": {
+                  "enum": [
+                    "kezdolap",
+                    "tantargy",
+                    "osszefoglalo",
+                    "lecke"
+                  ]
+                },
+                "kamera": {
+                  "enum": [
+                    "teljes",
+                    "tartalom",
+                    "elem"
+                  ]
+                },
+                "szunet": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "csak_ha": {
+                  "type": "string"
+                },
+                "kovetkezo_lap": {
+                  "type": "string"
+                },
+                "gorget": {
+                  "type": "object",
+                  "required": [
+                    "szereplo"
+                  ],
+                  "properties": {
+                    "szereplo": {
+                      "type": "string"
+                    },
+                    "horgony": {
+                      "type": "string"
+                    },
+                    "kell": {
+                      "type": "string"
+                    },
+                    "igazit": {
+                      "enum": [
+                        "felso",
+                        "kozep",
+                        "teteje"
+                      ]
+                    },
+                    "muvelet": {
+                      "enum": [
+                        "nyit",
+                        "zar",
+                        "koppint",
+                        "gepel",
+                        "esc"
+                      ]
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "kattint": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "kurzor": {
+                  "type": "object",
+                  "required": [
+                    "szereplo"
+                  ],
+                  "properties": {
+                    "szereplo": {
+                      "type": "string"
+                    },
+                    "horgony": {
+                      "type": "string"
+                    },
+                    "kell": {
+                      "type": "string"
+                    },
+                    "igazit": {
+                      "enum": [
+                        "felso",
+                        "kozep",
+                        "teteje"
+                      ]
+                    },
+                    "muvelet": {
+                      "enum": [
+                        "nyit",
+                        "zar",
+                        "koppint",
+                        "gepel",
+                        "esc"
+                      ]
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "kattint": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "kiemel": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "szereplo"
+                    ],
+                    "properties": {
+                      "szereplo": {
+                        "type": "string"
+                      },
+                      "horgony": {
+                        "type": "string"
+                      },
+                      "kell": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "igazit": {
+                        "enum": [
+                          "felso",
+                          "kozep",
+                          "teteje"
+                        ]
+                      },
+                      "muvelet": {
+                        "enum": [
+                          "nyit",
+                          "zar",
+                          "koppint",
+                          "gepel",
+                          "esc"
+                        ]
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "kattint": {
+                        "type": "boolean"
+                      },
+                      "szerkezet": {
+                        "enum": [
+                          "leiras",
+                          "ora-sor",
+                          "datum-link",
+                          "cimke",
+                          "kerdes",
+                          "abra",
+                          "utmutato"
+                        ]
+                      },
+                      "magas": {
+                        "type": "boolean"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "allapot": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "szereplo"
+                    ],
+                    "properties": {
+                      "szereplo": {
+                        "type": "string"
+                      },
+                      "horgony": {
+                        "type": "string"
+                      },
+                      "kell": {
+                        "type": "string"
+                      },
+                      "igazit": {
+                        "enum": [
+                          "felso",
+                          "kozep",
+                          "teteje"
+                        ]
+                      },
+                      "muvelet": {
+                        "enum": [
+                          "nyit",
+                          "zar",
+                          "koppint",
+                          "gepel",
+                          "esc"
+                        ]
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "kattint": {
+                        "type": "boolean"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "allOf": [
+                      {
+                        "if": {
+                          "properties": {
+                            "muvelet": {
+                              "const": "koppint"
+                            }
+                          },
+                          "required": [
+                            "muvelet"
+                          ]
+                        },
+                        "then": {
+                          "required": [
+                            "horgony"
+                          ],
+                          "properties": {
+                            "horgony": {
+                              "minLength": 1
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "cim": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

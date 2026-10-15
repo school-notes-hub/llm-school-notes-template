@@ -37,7 +37,7 @@ def video_files() -> set[str]:
     """The video chain has no src/ layout: all its tracked files are scanned, tests and
     fixtures included (they stay synthetic). The test renders write ignored output next to
     the fixtures (sound, word timings, gate tables); that is generated, not written by us."""
-    listed = subprocess.run(["git", "-C", str(TEMPLATE), "ls-files", "-z", "--", VIDEO],
+    listed = subprocess.run(["git", "-C", str(TEMPLATE), "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", VIDEO],
                             capture_output=True, text=True)
     if listed.returncode == 0 and listed.stdout:
         return {f for f in listed.stdout.split("\0") if f}
@@ -48,7 +48,9 @@ def scope() -> list[str]:
     """Shared files, the packages' sources and READMEs, the whole video chain (`packages/video`,
     tests included) and the shared card file."""
     files = set(json.loads((TEMPLATE / "shared-files.json").read_text())["files"])
-    for pattern in ("packages/*/src/**/*", "packages/*/README.md"):
+    for pattern in ("packages/*/src/**/*", "packages/*/README.md",
+                    "packages/study-site/capture-usage.mjs", "packages/study-site/usage-candidates.mjs", "packages/study-site/lib/usage-*",
+                    "packages/study-site/test/capture-usage.test.mjs", "packages/study-site/test/usage-*.test.mjs", "packages/study-site/test/fixtures/usage*.html"):
         files |= {p.relative_to(TEMPLATE).as_posix() for p in TEMPLATE.glob(pattern) if p.is_file()}
     files |= video_files()
     files.add("subject-cards.json")
@@ -265,3 +267,13 @@ def test_template_profile_has_no_concrete_date():
 def test_shared_card_file_is_part_of_the_shared_set():
     files = json.loads((TEMPLATE / "shared-files.json").read_text())["files"]
     assert "subject-cards.json" in files and "examples/subject-card.json" not in files
+
+
+def test_usage_capture_and_fixtures_are_in_neutrality_scope():
+    files = scope()
+    for name in (
+        "capture-usage.mjs", "lib/usage-measure.js",
+        "test/fixtures/usage.html", "test/fixtures/usage-roles.html",
+    ):
+        assert "packages/study-site/" + name in files
+    assert "packages/video/hasznalat/forgatokonyv.json" in files

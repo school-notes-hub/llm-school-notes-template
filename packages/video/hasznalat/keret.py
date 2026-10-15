@@ -1,0 +1,54 @@
+"""True element borders: clipping never closes a side at the camera edge."""
+
+from PIL import Image, ImageDraw
+
+from .kamera import SIZE, camera_box
+
+
+def bounds(spec):
+    x, y, width, height = camera_box(spec, spec["box"])
+    left, top, w, h = spec["crop"]
+    return (
+        (x - left) * SIZE[0] / w - 8,
+        (y - top) * SIZE[1] / h - 8,
+        (x + width - left) * SIZE[0] / w + 8,
+        (y + height - top) * SIZE[1] / h + 8,
+    )
+
+
+def outline(image, spec, color):
+    # Keep real coordinates beyond the canvas; never clamp them to the viewport.
+    ImageDraw.Draw(image).rounded_rectangle(
+        bounds(spec), radius=10, outline=color, width=4
+    )
+
+
+def clipped_sides(spec):
+    x, y, w, h = camera_box(spec, spec["box"])
+    left, top, width, height = spec["crop"]
+    return [
+        name
+        for name, clipped in (
+            ("bal", x < left),
+            ("felso", y < top),
+            ("jobb", x + w > left + width),
+            ("also", y + h > top + height),
+        )
+        if clipped
+    ]
+
+
+def open_border(spec):
+    """Probe the actual renderer at the middle of each clipped canvas edge."""
+    mask = Image.new("L", SIZE)
+    outline(mask, spec, 255)
+    x, y, right, bottom = bounds(spec)
+    cx = round((max(0, x) + min(SIZE[0] - 1, right)) / 2)
+    cy = round((max(0, y) + min(SIZE[1] - 1, bottom)) / 2)
+    probes = {
+        "bal": (0, cy, 4, cy + 1),
+        "felso": (cx, 0, cx + 1, 4),
+        "jobb": (SIZE[0] - 4, cy, SIZE[0], cy + 1),
+        "also": (cx, SIZE[1] - 4, cx + 1, SIZE[1]),
+    }
+    return all(not mask.crop(probes[side]).getbbox() for side in clipped_sides(spec))

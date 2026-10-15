@@ -284,8 +284,7 @@ def _write_if_changed(repo: Path, rel: str, text: str) -> None:
 
 def _public(repo: Path, out) -> None:
     try:
-        public.write(repo, public.either(public.render_rights(repo), public.media_receipt_rights(repo),
-                                         public.writer_svg_rights(repo)))
+        public.write(repo, public.default_rights(repo))
     except public.PublicError as exc:
         out(f"figyelmeztetés: a public.json nem frissült ({exc}); az sn close írja, a kiadás előtt kell")
 

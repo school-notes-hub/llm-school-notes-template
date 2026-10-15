@@ -32,3 +32,28 @@ kapu-teszt/kapu-teszt.sh [--render]                                  # gate acce
 `VIDEO_CSONK=1` with `--mappa <folder>` replaces TTS and Whisper with the synthetic stub of
 `videotar-teszt/szintetikus.py`. Every fixture is synthetic: no learner, page, narration or source
 text (the neutrality test of `packages/school-notes2` scans this whole folder).
+
+## Használati videó (képernyőképekből)
+
+A `hasznalat.sh` és a `hasznalat/` a jegyzetoldal általános bemutatójának gépi lánca.
+A tanuló saját `sn publish --build-only` buildjéből dolgozik; `--jeloltek` teljes jelöltlistát,
+`--elonezet` hang és videó nélkül kontaktlapokat, kaput és review-kulcsot készít. A narráció
+és a szerepek JSON-fájljai közösek; tanulói adat csak a munkamappában keletkezik.
+
+```sh
+./hasznalat.sh TANULO --jeloltek BUILD --out OUT
+./hasznalat.sh TANULO --elonezet BUILD --tantargy TANTARGY --lecke LECKE --out OUT
+# Külön gyártási engedély és érvényes review után:
+./hasznalat.sh TANULO BUILD --tantargy TANTARGY --lecke LECKE --out OUT
+./hasznalat.sh TANULO --vegleges --out OUT
+```
+
+A 69 lépéses sablon felvevője a `study-site/capture-usage.mjs` és a `lib/usage-*` modulok; a H1–H10 kapu külön jelöli az előnézetben
+még nem mért hangot és végleges videót. Hibamentes előnézetnél `zold: true`, de
+`kiadhato: false`; a `nem_mert` felsorolja a hiányzó H4/H6/H7 mérést. Piros kép vagy elavult accept után fizetős gyártás nem indul.
+A kész videót az `sn hasznalat` illeszti a kezdőlapra. A részletes kézikönyv az ops-repó
+`docs/helyi/README.md` 3.9 és 5.10 fejezete.
+
+Teszt: `uv run --project ../school-notes2 python -m pytest -q hasznalat/test`; a böngészős
+és felület-szerződés tesztek a study-site `npm test` és a school-notes2 `pytest` részei is.
+Minden fixture szintetikus, minden hang a meglévő csonkból jön; a teszt nem fizet.

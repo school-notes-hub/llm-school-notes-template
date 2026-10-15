@@ -164,8 +164,7 @@ def close(local, repo: Path, subjects: list[str] | None, out=print, state: dict 
             # never blocks the notes; `sn podcast` and `sn publish` stop on it
             warnings.append(f"sorszám: {exc}")
         figs._write_if_changed(repo, decisions.OVERVIEW, decisions.overview(repo, skip=skipped), changed)
-        public.write(repo, public.either(public.render_rights(repo), public.media_receipt_rights(repo),
-                                         public.writer_svg_rights(repo)))
+        public.write(repo, public.default_rights(repo))
     finally:
         # Every page as the tool left it, also after an interruption: the guard then knows the
         # tool's own writes (step 0 has made sure no hand edit was among them). With --subject also

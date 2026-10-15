@@ -103,11 +103,11 @@ class Valodi:
 
     csonk = False
 
-    def __init__(self, tanulo: str, epizod: str):
+    def __init__(self, tanulo: str, epizod: str, *, local=None):
         from school_notes2.local import common
         from school_notes2.local.podcast_names import _client
         self.tanulo, self.epizod = tanulo, epizod
-        self.settings = common.load(tanulo).podcast_settings()
+        self.settings = (local or common.load(tanulo)).podcast_settings()
         self.client = _client(self.settings, time.sleep)
         self.paid, self.szam, self.futas_keret = None, Szamlalo(), KERET_TOVABBI
         self._szalak_init()

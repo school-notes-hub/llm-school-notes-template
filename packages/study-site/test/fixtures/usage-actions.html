@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="hu">
+  <meta charset="utf-8" /><title>Próba</title>
+  <style>
+    body {
+      margin: 0;
+      font: 20px sans-serif;
+      background: white;
+    }
+    header {
+      height: 60px;
+      background: #eee;
+    }
+    .study-content {
+      padding: 20px;
+    }
+    details {
+      margin: 20px;
+    }
+    input {
+      width: 300px;
+      height: 40px;
+    }
+  </style>
+  <header>Fejléc</header>
+  <nav id="menu">
+    Menü
+    <script>
+      globalThis.marker = "SCRIPT_MUST_NOT_BE_VISIBLE";
+    </script>
+  </nav>
+  <main class="study-content">
+    <h1>Próba</h1>
+    <button popovertarget="panel">Menünyitás</button>
+    <aside id="panel" popover="manual">Menütartalom</aside>
+    <details>
+      <summary>Lista</summary>
+      <p>Tartalom</p>
+    </details>
+    <input aria-label="Keresés" />
+    <p>Szintetikus szöveg.</p>
+  </main>
+</html>

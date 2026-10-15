@@ -1,0 +1,50 @@
+{
+  "base": "/fixture/",
+  "pages": [
+    {
+      "navigation": "home",
+      "route": "",
+      "url": "/fixture/",
+      "title": "Jegyzetoldal",
+      "html": "<a href='/fixture/proba/'>Próba</a>"
+    },
+    {
+      "navigation": "subject",
+      "kind": "subject",
+      "route": "proba",
+      "url": "/fixture/proba/",
+      "title": "Próba",
+      "html": "<ol class='study-path'><li class='study-path-done'>✓</li><li class='study-path-now'><a href='#fejezet-masodik'>◉</a></li></ol><ul><li>📄 <a href='/fixture/proba/minta/'>Minta</a></li></ul><span class='study-when-unsure'>~</span>"
+    },
+    {
+      "kind": "chapter-summary",
+      "chapterId": "masodik",
+      "route": "proba/osszefoglalo",
+      "url": "/fixture/proba/osszefoglalo/",
+      "title": "Összefoglaló",
+      "html": "<h2>Minta</h2><p>Részletesen: <a href='/fixture/proba/minta/'>Minta</a></p>"
+    },
+    {
+      "kind": "topic",
+      "chapterId": "masodik",
+      "chapterTitle": "Második",
+      "route": "proba/minta",
+      "url": "/fixture/proba/minta/",
+      "title": "Minta",
+      "html": "<aside class='study-brief'>Röviden</aside><small class='study-label'>📗 A tankönyv alapján</small><small class='study-label'>⚠️ gépi javítás</small><small class='study-label'>➕ gépi kiegészítés</small><small class='study-label'>💡 gépi magyarázat</small><small class='study-label'>🗓️ Óra <span class='study-when-unsure'>~ősz</span> 🔖 Tankönyv</small><div class='study-podcast'>Hang</div><img class='study-figure'><h2>Kérdezd ki magad</h2><details>Kérdés</details><aside class='study-open-questions'>Nyitott kérdések</aside><section data-footnotes>Források</section>",
+      "usageFigures": [
+        {
+          "src": "figure.png",
+          "box": [
+            0,
+            0,
+            600,
+            300
+          ],
+          "available": 632,
+          "fits": true
+        }
+      ]
+    }
+  ]
+}

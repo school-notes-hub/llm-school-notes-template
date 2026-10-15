@@ -11,6 +11,7 @@ commands; each lives in `school_notes2/local/<command>.py`:
   sn close <t> --subject a --snapshot [--only id,…]   keys.json + diff.patch for the reviewer
   sn close <t> --rekey                       renew figure verdict keys recorded by sn 0.3.8 (only that)
   sn close <t> --dates                       hand-written date spans and lessons legends as generated
+  sn hasznalat <t>                           insert an accepted, finalized usage video (no paid call)
   sn done <t>                                content finished? exit 0/1
   sn publish <t> [--reviewed] [--build-only DIR]   push main, build, gate, gh-pages, live
   sn podcast <t> <subject> <page> --snapshot  the podcast script's checks + keys.json for the reviewer
@@ -102,6 +103,8 @@ def _parser() -> argparse.ArgumentParser:
                               help="count a released episode's name check again from the cache; nothing is paid")
     podcast.add_argument("--fill-missing", action="store_true",
                          help="with --names-only: send the calls missing from the cache (paid, within the podcast budget)")
+    usage = sub.add_parser("hasznalat", help="release an accepted usage video")
+    usage.add_argument("learner")
     return p
 
 
@@ -137,6 +140,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _dispatch(local, args) -> int:
+    if args.command == "hasznalat":
+        from .local import usage_video
+        return usage_video.run(local)
     if args.command == "fetch":
         from .local import fetch
         return fetch.run(local, args.apply)

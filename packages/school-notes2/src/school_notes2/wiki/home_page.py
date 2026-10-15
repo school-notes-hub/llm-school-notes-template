@@ -47,7 +47,8 @@ def guide_block(repo: Path) -> str:
     from . import podcast
     lines = GUIDE + ([GUIDE_PODCAST] if safefs.is_file(repo, podcast.PAGE) else [])
     # no closing `<br />`: a raw HTML line would swallow the legend block's heading after it
-    return f'# <a id="{GUIDE_ANCHOR}"></a>🧭 Hogyan használd\n\n' + "\n".join(lines) + "\n"
+    return (f'# <a id="{GUIDE_ANCHOR}"></a>🧭 Hogyan használd\n\n'
+            + usage_video(repo) + "\n".join(lines) + "\n")
 
 
 def legend_block() -> str:
@@ -82,3 +83,27 @@ def place_home_blocks(text: str) -> str:
         return text
     return (text[:after].rstrip("\n") + "\n\n<br />\n\n" + markers.wrap("guide", "")
             + markers.wrap("legend", "") + "\n" + text[after:].lstrip("\n"))
+
+
+def usage_video(repo: Path) -> str:
+    """Only the currently published receipt, never hand-over files."""
+    rel = "wiki/assets/hasznalat/render.json"
+    if not safefs.is_file(repo, rel):
+        return ""
+    record = safefs.read_json(repo, rel)
+    source = record.get("source", "")
+    if not source.startswith("docs/evidence/hasznalati-video/"):
+        return ""
+    receipt = safefs.read_json(repo, source)
+    names = [n for n in record["outputs"] if n.endswith(".mp4")]
+    if len(names) != 1:
+        return ""
+    minutes = max(1, round(receipt["hossz_s"] / 60))
+    chapters = " · ".join(
+        f"{int(c['masodperc']) // 60}:{int(c['masodperc']) % 60:02d} {c['jelenet']}"
+        for c in receipt["fejezetek"]
+    )
+    return (
+        f"![Hogyan használd a jegyzetoldalt – videó ({minutes} perc)]"
+        f"(assets/hasznalat/{names[0]})\n\n{chapters}\n\n"
+    )

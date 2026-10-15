@@ -1,0 +1,339 @@
+{
+  "oldalsav": {
+    "fajta": "css",
+    "selector": "#starlight__sidebar"
+  },
+  "kereses": {
+    "fajta": "css",
+    "selector": "site-search > button[data-open-modal]"
+  },
+  "kereses-mezo": {
+    "fajta": "css",
+    "selector": ".pagefind-ui__search-input"
+  },
+  "tipussav": {
+    "fajta": "css",
+    "selector": ".study-kind"
+  },
+  "mi-ez-a-lap": {
+    "fajta": "css",
+    "selector": ".study-kind a"
+  },
+  "hol-tartunk": {
+    "fajta": "css",
+    "selector": ".study-progress"
+  },
+  "fejezetvonal": {
+    "fajta": "css",
+    "selector": ".study-path"
+  },
+  "fejezet-most": {
+    "fajta": "css",
+    "selector": ".study-path-now"
+  },
+  "pdf-fejezetek": {
+    "fajta": "css",
+    "selector": ".study-downloads"
+  },
+  "toc": {
+    "fajta": "css",
+    "selector": "starlight-toc"
+  },
+  "morzsa": {
+    "fajta": "css",
+    "selector": ".study-tools"
+  },
+  "pdf-lecke": {
+    "fajta": "css",
+    "selector": ".study-pdf"
+  },
+  "roviden": {
+    "fajta": "css",
+    "selector": ".study-brief"
+  },
+  "podcast": {
+    "fajta": "css",
+    "selector": ".study-podcast"
+  },
+  "nyitott": {
+    "fajta": "css",
+    "selector": ".study-open-questions"
+  },
+  "forrasok": {
+    "fajta": "css",
+    "selector": "section[data-footnotes]"
+  },
+  "elozo": {
+    "fajta": "css",
+    "selector": ".study-pagination a[rel=\"prev\"]"
+  },
+  "kovetkezo": {
+    "fajta": "css",
+    "selector": ".study-pagination a[rel=\"next\"]"
+  },
+  "lap-alja": {
+    "fajta": "css",
+    "selector": ".study-foot"
+  },
+  "menugomb": {
+    "fajta": "css",
+    "selector": "button.sl-menu-button"
+  },
+  "mobil-menu": {
+    "fajta": "css",
+    "selector": "#starlight__sidebar"
+  },
+  "mobil-toc": {
+    "fajta": "css",
+    "selector": "mobile-starlight-toc nav"
+  },
+  "valaszok-gomb": {
+    "fajta": "css",
+    "selector": ".study-answers"
+  },
+  "fejezet-kesz": {
+    "fajta": "css",
+    "selector": ".study-path-done",
+    "n": 0
+  },
+  "leiras-1": {
+    "fajta": "css",
+    "selector": ".study-content .study-desc",
+    "n": 0
+  },
+  "ora-bizonytalan": {
+    "fajta": "css",
+    "selector": ".study-content li:has(> a[id^=\"ora-\"]) .study-when-unsure",
+    "n": 0
+  },
+  "datum-bizonytalan": {
+    "fajta": "css",
+    "selector": ".study-label .study-when-unsure",
+    "n": 0
+  },
+  "datum-link": {
+    "fajta": "css",
+    "selector": ".study-label a:has(.study-when)",
+    "n": 0
+  },
+  "abra": {
+    "fajta": "css",
+    "selector": "img.study-figure:not(.study-banner):not(.study-video-poster)",
+    "n": 0
+  },
+  "cimke-elso": {
+    "fajta": "css",
+    "selector": ".study-label:not(:has(.study-when))",
+    "n": 0
+  },
+  "kerdes-elso": {
+    "fajta": "szakasz",
+    "text": "Kérdezd ki magad",
+    "selector": "details",
+    "n": 0
+  },
+  "fejezetcim-1": {
+    "fajta": "css",
+    "selector": ".study-content h2:has(a[id^=\"fejezet-\"])",
+    "n": 0
+  },
+  "leckek-1": {
+    "fajta": "unio",
+    "tagok": [
+      "leckek-1-elemek"
+    ]
+  },
+  "ora-elso": {
+    "fajta": "css",
+    "selector": ".study-content li:has(> a[id^=\"ora-\"])",
+    "n": 0
+  },
+  "menu-tantargy": {
+    "fajta": "szoveg",
+    "selector": "#starlight__sidebar a",
+    "text": "[[tantargy]]",
+    "n": 0
+  },
+  "menu-podcast": {
+    "fajta": "szoveg",
+    "selector": "#starlight__sidebar a",
+    "text": "Podcast",
+    "n": 0
+  },
+  "menu-projekt": {
+    "fajta": "szoveg",
+    "selector": "#starlight__sidebar a",
+    "text": "A projektről",
+    "n": 0
+  },
+  "kereses-talalat": {
+    "fajta": "szoveg",
+    "selector": ".pagefind-ui__result-link",
+    "text": "[[lecke]]",
+    "n": 0
+  },
+  "most-sor": {
+    "fajta": "szoveg",
+    "selector": ".study-progress p",
+    "text": "Most:",
+    "n": 0
+  },
+  "ismetles-sor": {
+    "fajta": "szoveg",
+    "selector": ".study-progress p",
+    "text": "Ismétléshez:",
+    "n": 0
+  },
+  "itt-tartunk": {
+    "fajta": "szoveg",
+    "selector": ".study-content li",
+    "text": "◀ itt tartunk",
+    "n": 0
+  },
+  "osszefoglalo-sor-1": {
+    "fajta": "szoveg",
+    "selector": ".study-content li",
+    "text": "⚡ Összefoglaló",
+    "n": 0
+  },
+  "osszefoglalo-sor-most": {
+    "fajta": "szoveg",
+    "selector": ".study-content li",
+    "text": "[[osszefoglalo]]",
+    "n": 0
+  },
+  "osszefoglalo-sor-most-link": {
+    "fajta": "szoveg",
+    "selector": ".study-content a",
+    "text": "[[osszefoglalo]]",
+    "n": 0
+  },
+  "reszletesen": {
+    "fajta": "szakasz",
+    "text": "[[lecke]]",
+    "selector": "p",
+    "szoveg": "Részletesen",
+    "n": 0
+  },
+  "lecke-reszletesen": {
+    "fajta": "szoveg",
+    "selector": ".study-content a",
+    "text": "[[lecke]]",
+    "n": 0
+  },
+  "ora-sor": {
+    "fajta": "szoveg",
+    "selector": ".study-label",
+    "text": "🗓️",
+    "n": 0
+  },
+  "cimke-tankonyv": {
+    "fajta": "szoveg",
+    "selector": ".study-label",
+    "text": "📗",
+    "n": 0
+  },
+  "cimke-javitas": {
+    "fajta": "szoveg",
+    "selector": ".study-label",
+    "text": "⚠️",
+    "n": 0
+  },
+  "cimke-kieg": {
+    "fajta": "szoveg",
+    "selector": ".study-label",
+    "text": "➕",
+    "n": 0
+  },
+  "cimke-magyarazat": {
+    "fajta": "szoveg",
+    "selector": ".study-label",
+    "text": "💡",
+    "n": 0
+  },
+  "tantargyak": {
+    "fajta": "szakasz",
+    "text": "Tantárgyak"
+  },
+  "hogyan-hasznald": {
+    "fajta": "szakasz",
+    "text": "Hogyan használd",
+    "selector": "ul",
+    "n": 0
+  },
+  "jelmagyarazat": {
+    "fajta": "szakasz",
+    "text": "Jelmagyarázat"
+  },
+  "orak": {
+    "fajta": "szakasz",
+    "text": "Órák"
+  },
+  "osszefoglalo-resz": {
+    "fajta": "szakasz",
+    "text": "[[lecke]]"
+  },
+  "fogalmak": {
+    "fajta": "szakasz",
+    "text": "Fogalmak"
+  },
+  "kerdezd": {
+    "fajta": "szakasz",
+    "text": "Kérdezd ki magad"
+  },
+  "ora-nyil": {
+    "fajta": "css",
+    "selector": ".study-content li:has(> a[id^=\"ora-\"])",
+    "n": 0
+  },
+  "leckek-1-elemek": {
+    "fajta": "szoveg",
+    "selector": ".study-content > ul:first-of-type > li",
+    "text": "📄",
+    "kezdet": true
+  },
+  "ora-nyil-linkek": {
+    "fajta": "css",
+    "selector": ".study-content li:has(> a[id^=\"ora-\"]):first-child > a[href]"
+  },
+  "orak-cim": {
+    "fajta": "szoveg",
+    "selector": ".study-content h2",
+    "text": "Órák"
+  },
+  "kerdezd-cim": {
+    "fajta": "szoveg",
+    "selector": ".study-content h2",
+    "text": "Kérdezd ki magad"
+  },
+  "fogalmak-cim": {
+    "fajta": "szoveg",
+    "selector": ".study-content h2",
+    "text": "Fogalmak"
+  },
+  "jelmagyarazat-cim": {
+    "fajta": "szoveg",
+    "selector": ".study-content h2",
+    "text": "Jelmagyarázat"
+  },
+  "osszefoglalo-resz-cim": {
+    "fajta": "szoveg",
+    "selector": ".study-content h2",
+    "text": "[[lecke]]"
+  },
+  "roviden-cim": {
+    "fajta": "css",
+    "selector": ".study-brief > p:first-child"
+  },
+  "tantargyak-cim": {
+    "fajta": "szoveg",
+    "selector": ".study-content h2",
+    "text": "Tantárgyak"
+  },
+  "jelmagyarazat-elso": {
+    "fajta": "szakasz",
+    "text": "Jelmagyarázat",
+    "selector": "li",
+    "n": 0
+  }
+}

@@ -184,6 +184,11 @@ def dumps(value: dict) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2) + "\n"
 
 
+def default_rights(repo: Path) -> RightsLookup:
+    """Rights supplied by the shared renderers, media receipts and authored SVGs."""
+    return either(render_rights(repo), media_receipt_rights(repo), writer_svg_rights(repo))
+
+
 def write(repo: Path, rights: RightsLookup) -> bool:
     """Write public.json; True if it changed."""
     rel = "publication/public.json"
