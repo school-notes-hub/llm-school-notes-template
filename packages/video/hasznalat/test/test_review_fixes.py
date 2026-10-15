@@ -340,3 +340,75 @@ def test_mobile_tooltip_is_not_subject_to_desktop_label_composition():
     measurements[0]['viewport'] = {'width': 390, 'height': 844}
     measurements[0]['roles']['roviden'].update(label_context=True, context=[20, 80, 300, 70])
     assert not any(f['kod'] == 'H2' for f in checked(script, measurements)['leletek'])
+
+
+@pytest.mark.parametrize('title, expected', [
+    ('A város', 'A város'), ('Az élet', 'Az élet'),
+    ('a város', 'a város'), ('az élet', 'az élet'),
+    ('Város', 'a Város'), ('Élet', 'az Élet'),
+])
+def test_filled_titles_have_one_article_and_keep_their_anchor(title, expected):
+    choice = candidates(fixture())[0][0]
+    choice['lecke']['title'] = title
+    choice['lecke']['chapterTitle'] = title
+    script, _ = fill(read(ROOT / 'forgatokonyv.json'), choice)
+    rows = {s['id']: s for s in steps(script)}
+    anchored = expected.replace(title, '{' + title + '}')
+    assert 'ott van ' + anchored + ' lecke.' in rows['1-09']['text']
+    assert rows['3-01']['text'] == f'Ez {expected} fejezet összefoglalója.'
+    assert 'ez ' + anchored + ' lecke része.' in rows['3-03']['text']
+    assert rows['3-06']['text'] == f'Most nyissuk meg részletesen {expected} leckét.'
+    assert rows['3-03']['kiemel'][0]['horgony'] == title
+
+
+def test_e2_requires_a_source_backed_body_paragraph():
+    payload = fixture()
+    payload['pages'][-1]['usageClassroomParagraphs'] = []
+    accepted, rejected = candidates(payload)
+    assert not accepted
+    assert any('E2:' in reason for reason in rejected[0]['hiany'])
+
+
+def test_second_review_script_order_actions_and_labels():
+    script, actors = fill(read(ROOT / 'forgatokonyv.json'), candidates(fixture())[0][0])
+    rows = {s['id']: s for s in steps(script)}
+    assert '{A projektről és a felhasználásról}' in rows['1-03']['text']
+    for id in ('2-03', '6-04'):
+        assert 'Hogyan használd részéhez visz, ahol a lapok leírása áll' in rows[id]['text']
+    assert rows['4-06']['gorget'] == rows['4-05']['gorget']
+    assert rows['4-08']['kiemel'][0]['szereplo'] == 'podcast'
+    assert rows['4-09']['kiemel'][0]['szereplo'] == 'cimke-elso'
+    assert rows['4-13']['kiemel'][0]['szereplo'] == 'robot-jel'
+    assert rows['6-02']['kiemel'][0]['horgony'] == 'Most'
+    assert rows['6-03']['text'].endswith('nyisd meg.')
+    assert actors['cimke-nelkuli']['forras_szovegek'] == ['Órai bekezdés.']
+    pdf = rows['2-18']
+    assert pdf['allapot'][0]['muvelet'] == 'zar'
+    assert pdf['allapot'][1]['horgony'] == pdf['kurzor']['horgony'] == 'lenyitva'
+    validate(read(ROOT / 'forgatokonyv.json'), actors)
+
+
+def test_pdf_opens_at_the_spoken_word_with_cursor_click():
+    from hasznalat.osszerak import still_frames
+    from hasznalat.mozgas import cursor_frames
+    script, _ = fill(read(ROOT / 'forgatokonyv.json'), candidates(fixture())[0][0])
+    step = next(s for s in steps(script) if s['id'] == '2-18')
+    measurement = measured()[0]
+    measurement.update(before_image='closed.png', image='open.png', anchor_cursor=[300, 200])
+    measurement['roles']['pdf-fejezetek-cim'] = measurement['roles'].pop('roviden')
+    time = {'kezd_kocka':0, 'veg_kocka':60, 'horgonyok': {
+        'Nyomtatható fejezetek': {'kocka':10}, 'lenyitva': {'kocka':30}}}
+    frames = still_frames(step, measurement, time)
+    cursor_frames(frames, step, measurement, time, {})
+    assert all(f['image'] == 'closed.png' for f in frames[:30])
+    assert all(f['image'] == 'open.png' for f in frames[30:])
+    assert frames[29].get('kurzor') and not frames[29].get('gyuru')
+    assert frames[30]['gyuru'] and frames[30]['kurzor'] == [300, 200]
+
+
+def test_project_title_comes_from_the_info_link_on_home_not_the_first_info_page():
+    payload = fixture()
+    payload['pages'].insert(1, {'navigation':'info', 'url':'/fixture/audio/',
+        'route':'audio', 'title':'Audio', 'html':''})
+    choice = candidates(payload)[0][0]
+    assert choice['projekt']['title'] == 'A projektről és a felhasználásról'

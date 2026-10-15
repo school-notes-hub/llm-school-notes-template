@@ -9,6 +9,8 @@ from .adatok import ROOT, TEMPLATE, read, roles, steps
 
 
 def article(text):
+    if re.match(r"(?i)^az?\s", text):
+        return ""
     return "az" if text[:1].casefold() in "aáeéiíoóöőuúüű" else "a"
 
 
@@ -49,8 +51,9 @@ def values_for(selection):
         k: clean(selection[k]["title"]) for k in ("tantargy", "lecke", "osszefoglalo")
     }
     values["fejezet"] = selection["lecke"].get("chapterTitle", "")
+    values["projekt"] = selection.get("projekt", {}).get("navigationLabel") or selection.get("projekt", {}).get("title", "")
     for key in ("tantargy", "fejezet"):
-        values["a_" + key] = article(values[key]) + " " + values[key]
+        values["a_" + key] = (article(values[key]) + " " + values[key]).strip()
         values["A_" + key] = values["a_" + key][:1].upper() + values["a_" + key][1:]
     words = re.findall(r"\w+", values["lecke"])
     values["keresoszo"] = next((w.casefold() for w in words if len(w) > 3), "")
@@ -61,6 +64,13 @@ def values_for(selection):
 
 def substitute(value, values):
     if isinstance(value, str):
+        # Only template articles immediately before a filled title; anchors stay intact.
+        value = re.sub(
+            r"\b([Aa]z?) (\{?)(\[\[(\w+)\]\])",
+            lambda m: ((article(values[m[4]]).capitalize() if m[1][0].isupper()
+                        else article(values[m[4]])) + " " if article(values[m[4]]) else "")
+            + m[2] + m[3], value,
+        )
         return re.sub(r"\[\[(\w+)\]\]", lambda m: values[m[1]], value)
     if isinstance(value, list):
         return [substitute(v, values) for v in value]
@@ -112,7 +122,9 @@ def fill(script, selection, available=None):
         for step in scene["lepesek"]:
             prepare_step(step, scene, selection, previous)
             previous = step
-    return out, substitute(read(ROOT / "szereplok.json"), values)
+    actors = substitute(read(ROOT / "szereplok.json"), values)
+    actors["cimke-nelkuli"]["forras_szovegek"] = selection["lecke"].get("usageClassroomParagraphs", [])
+    return out, actors
 
 
 def contract(root=TEMPLATE, contract=None):

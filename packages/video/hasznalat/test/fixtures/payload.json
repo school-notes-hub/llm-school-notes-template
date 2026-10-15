@@ -6,7 +6,7 @@
       "route": "",
       "url": "/fixture/",
       "title": "Jegyzetoldal",
-      "html": "<a href='/fixture/proba/'>Próba</a>"
+      "html": "<a href='/fixture/proba/'>Próba</a><a href='/fixture/a-projektrol/'>A projektről</a>"
     },
     {
       "navigation": "subject",
@@ -23,6 +23,13 @@
       "url": "/fixture/proba/osszefoglalo/",
       "title": "Összefoglaló",
       "html": "<h2>Minta</h2><p>Részletesen: <a href='/fixture/proba/minta/'>Minta</a></p>"
+    },
+    {
+      "navigation": "info",
+      "title": "A projektről és a felhasználásról",
+      "route": "a-projektrol",
+      "url": "/fixture/a-projektrol/",
+      "html": ""
     },
     {
       "kind": "topic",
@@ -44,6 +51,9 @@
           "available": 632,
           "fits": true
         }
+      ],
+      "usageClassroomParagraphs": [
+        "Órai bekezdés."
       ]
     }
   ]

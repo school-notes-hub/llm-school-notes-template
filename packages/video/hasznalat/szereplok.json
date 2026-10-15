@@ -114,8 +114,9 @@
     "n": 0
   },
   "datum-link": {
-    "fajta": "css",
-    "selector": ".study-label a:has(.study-when)",
+    "fajta": "leszarmazott",
+    "szulo": "ora-sor",
+    "selector": "a[href*=\"#ora-\"]",
     "n": 0
   },
   "abra": {
@@ -124,8 +125,9 @@
     "n": 0
   },
   "cimke-elso": {
-    "fajta": "css",
-    "selector": ".study-label:not(:has(.study-when))",
+    "fajta": "szoveg",
+    "selector": "small.study-label",
+    "text": "🤖",
     "n": 0
   },
   "kerdes-elso": {
@@ -165,7 +167,7 @@
   "menu-projekt": {
     "fajta": "szoveg",
     "selector": "#starlight__sidebar a",
-    "text": "A projektről",
+    "text": "[[projekt]]",
     "n": 0
   },
   "kereses-talalat": {
@@ -285,7 +287,9 @@
   "ora-nyil": {
     "fajta": "css",
     "selector": ".study-content li:has(> a[id^=\"ora-\"])",
-    "n": 0
+    "n": 0,
+    "reszlet": "→",
+    "vegeig": true
   },
   "leckek-1-elemek": {
     "fajta": "szoveg",
@@ -357,10 +361,18 @@
     "fajta": "css",
     "selector": ".study-content > p",
     "cimke_nelkul": true,
-    "n": 0
+    "n": 0,
+    "ora_forras": true
   },
   "pdf-fejezetek-cim": {
     "fajta": "css",
     "selector": ".study-downloads > summary"
+  },
+  "robot-jel": {
+    "fajta": "szoveg",
+    "selector": ".study-label",
+    "text": "➕",
+    "n": 0,
+    "reszlet": "🤖"
   }
 }

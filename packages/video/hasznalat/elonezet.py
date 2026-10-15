@@ -121,6 +121,7 @@ def candidate_files(local, build, out):
         "build": str(build),
         "out": str(out),
         "browserPath": str(local.cfg.browser),
+        "repo": str(local.repo),
     }
     write(out / "abra-felvetel.json", config)
     subprocess.run(
@@ -132,4 +133,8 @@ def candidate_files(local, build, out):
         check=True,
     )
     figures = read(out / "abra-meres.json")["figures"]
-    return candidates(read(build / "payload.json"), figures)
+    payload = read(build / "payload.json")
+    classroom = read(out / "ora-forrasok.json")
+    for page in payload["pages"]:
+        page["usageClassroomParagraphs"] = classroom.get(page["route"], [])
+    return candidates(payload, figures)

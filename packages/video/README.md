@@ -60,6 +60,16 @@ maradnak láthatók. A H2 kapu a böngészőben mért szótéglalapokkal ellenő
 kivágás széleit, a címke szövegkörnyezetét és a kiemelés nélküli kép fókuszkeretét.
 A magas ábra továbbra is a tetejétől látszik, alul nyitott kiemelőkerettel.
 A lecke jogosultságához tankönyves Óra-sor kell; bizonytalan dátum nem feltétel.
+Az E2 feltételhez címke nélküli törzsbekezdés is kell, amelynek lábjegyzete
+órai forrásra mutat. A jelöltvizsgálat a build privát nyugtájának forráshashével
+ellenőrzött Markdownból, feloldott lábjegyzetlink alapján választ (helyi
+`lesson-notes` lap vagy `sources/` forrás; a lábjegyzet neve nem bizonyíték).
+Az első, a nyilvános DOM-ban is pontosan egyező, címke nélküli bekezdést mutatja.
+Az ellenőrzés csak olvassa a tanulói repót; a privát forráshelyek nem kerülnek a
+weboldalba. Hiányzó vagy elavult bizonyítékkal a lecke nem jelölt.
+A szövegrész-szerepek DOM Range alapján mérik a nyilat követő sort és a robotjelet,
+a dátumlink pedig az előzőleg bemutatott órasor leszármazottja.
+A szóhoz kötött lenyitások előtti állapot külön kontaktképet is kap.
 
 Teszt: `uv run --project ../school-notes2 python -m pytest -q hasznalat/test`; a böngészős
 és felület-szerződés tesztek a study-site `npm test` és a school-notes2 `pytest` részei is.

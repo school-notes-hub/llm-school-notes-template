@@ -102,6 +102,8 @@ def missing_content(lesson):
         )
         if not dom.all(cls=cls)
     ]
+    if not lesson.get("usageClassroomParagraphs"):
+        missing.append("E2: címke nélküli törzsbekezdés órai lábjegyzettel")
     labels = dom.all(cls="study-label")
     missing += [
         text
@@ -188,6 +190,14 @@ def candidates(payload, figures=None):
         found.extend(accepted)
         rejected.extend(excluded)
     found.sort(key=lambda candidate: candidate["sorrend"])
+    # The home page links its project information; a podcast index is also an
+    # info page in the sidebar, so navigation kind alone is not sufficient.
+    projects = [p for p in pages if p.get("navigation") == "info" and p["url"] in links]
+    if len(projects) != 1:
+        raise ValueError("a kezdőlapnak pontosan egy projekt-információs lapra kell hivatkoznia")
+    project = projects[0]
+    for candidate in found:
+        candidate["projekt"] = project
     return found, rejected
 
 

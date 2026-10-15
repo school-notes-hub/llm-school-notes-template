@@ -70,6 +70,11 @@ def scene_contacts(out, scene, by_id, timing, temporary):
     cells, pictures, table = [], {}, []
     for step in scene["lepesek"]:
         measurement = by_id[step["id"]]
+        if measurement.get("before_image"):
+            index = len(cells)
+            before = {**measurement, "image": measurement["before_image"]}
+            pictures[index] = contact_cell(out, step, before, None)
+            cells.append({"kocka": index, "jelenet": scene["id"], "cimke": step["id"] + " · előtte"})
         for cue in step.get("kiemel") or [None]:
             index = len(cells)
             pictures[index] = contact_cell(out, step, measurement, cue)

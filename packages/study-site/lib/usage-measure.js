@@ -43,7 +43,9 @@
     if (actor.fajta === "unio")
       return actor.tagok.flatMap((n) => resolve(n, actors, [...stack, name]));
     let nodes =
-      actor.fajta === "szakasz"
+      actor.fajta === "leszarmazott"
+        ? resolve(actor.szulo, actors, [...stack, name]).flatMap(n => [...n.querySelectorAll(actor.selector)])
+        : actor.fajta === "szakasz"
         ? section(actor.text)
         : [...document.querySelectorAll(actor.selector)];
     if (actor.fajta === "szakasz" && actor.selector) {
@@ -62,6 +64,8 @@
     if (actor.szoveg)
       nodes = nodes.filter((n) => text(n).includes(actor.szoveg));
     if (actor.cimke_nelkul) nodes = nodes.filter(unlabelled);
+    if (actor.ora_forras) nodes = nodes.filter(n =>
+      (actor.forras_szovegek || []).includes(text(n).replace(/\s+/g, ' ').trim()));
     if (actor.elso !== undefined) nodes = nodes.slice(0, actor.elso);
     if (actor.n !== undefined) nodes = nodes.slice(actor.n, actor.n + 1);
     return nodes;
@@ -197,10 +201,11 @@
       leiras: nodes.every((n) => n.matches(".study-desc") && text(n).trim()),
       "ora-sor": nodes[0] === firstLesson,
       "datum-link": nodes.every(
-        (n) => n.matches("a:has(.study-when)") && n.hasAttribute("href"),
+        (n) => n.matches('a[href*="#ora-"]') && n.closest('.study-label')?.textContent.includes('🗓️'),
       ),
       cimke: nodes.every((n) => n.matches(".study-label") && text(n).trim()),
-      "cimke-nelkuli": nodes.every(unlabelled),
+      "cimke-nelkuli": actor.ora_forras && nodes.every(n => unlabelled(n) &&
+        (actor.forras_szovegek || []).includes(text(n).replace(/\s+/g, ' ').trim())),
       abra: nodes.every(figure),
       utmutato: nodes.every(
         (n) =>
@@ -219,7 +224,8 @@
       .forEach((n) => n.removeAttribute(`data-usage-${name}`));
     const actor = actors[name],
       nodes = resolve(name, actors),
-      rects = rectangles(nodes);
+      fragments = nodes.map(n => textFragment(n, actor)),
+      rects = actor.reszlet ? fragments.flatMap(f => f?.rects || []) : rectangles(nodes);
     const count =
       actor.fajta === "szakasz" && !actor.selector
         ? matchingHeadings(actor.text).length
@@ -246,10 +252,29 @@
       uncovered: uncovered(nodes, rects),
       visible_uncovered: uncovered(nodes, visibleRects(rects)),
       hrefs,
-      text: nodes.map(text).join(" ").replace(/\s+/g, " ").trim(),
+      text: (actor.reszlet ? fragments.map(f => f?.text || '') : nodes.map(text)).join(" ").replace(/\s+/g, " ").trim(),
       tooltip: nodes.some(tooltip),
       structures: structures(nodes, actor),
     };
+  }
+
+  // Measure a text range without changing the page's markup or line wrapping.
+  function textFragment(node, actor) {
+    if (!actor.reszlet) return null;
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT), leaves = [];
+    while (walker.nextNode()) leaves.push(walker.currentNode);
+    const full = leaves.map(n => n.textContent).join(''), start = full.indexOf(actor.reszlet);
+    if (start < 0) return null;
+    const end = actor.vegeig ? full.length : start + actor.reszlet.length;
+    const range = document.createRange();
+    let offset = 0;
+    for (const leaf of leaves) {
+      const next = offset + leaf.textContent.length;
+      if (offset <= start && start < next) range.setStart(leaf, start - offset);
+      if (offset < end && end <= next) range.setEnd(leaf, end - offset);
+      offset = next;
+    }
+    return {text: full.slice(start, end), rects: [...range.getClientRects()]};
   }
 
   globalThis.__usageFigures = () =>

@@ -125,10 +125,12 @@ test("every production role resolves on the neutral surface fixture", async () =
     );
     const actors = JSON.parse(
       text
+        .replaceAll("[[projekt]]", "A projektről")
         .replaceAll("[[tantargy]]", "Próba")
         .replaceAll("[[lecke]]", "Minta")
         .replaceAll("[[osszefoglalo]]", "Összefoglaló"),
     );
+    actors["cimke-nelkuli"].forras_szovegek = ["Órai bekezdés."];
     await page.evaluate(domSource);
     const result = await page.evaluate(measure, {
       actors,
@@ -303,4 +305,37 @@ test("usage context keeps inline and separate labels with their prose, and escap
   } finally {
     await session.close();
   }
+});
+
+test('review roles bind the same date, classroom prose and exact text ranges', async () => {
+  const { openBrowser } = await import('../lib/usage-record.mjs');
+  const session = await openBrowser(browserPath);
+  try {
+    const page = await session.browser.newPage();
+    await page.setContent(`<main class="study-content">
+      <p><small class="study-label">🗓️ Óra: <a href="/subject/#ora-first">szept. 29.</a> · Tankönyv</small></p>
+      <p>Unreferenced introduction.</p><p>Book material.</p><p>Classroom material.</p>
+      <p>Explanation.<br><small class="study-label">💡 🤖 gépi magyarázat</small></p>
+      <p>Extra.<br><small class="study-label">➕ 🤖 gépi kiegészítés</small></p>
+      <small class="study-label">🗓️ Óra: <a href="/subject/#ora-later"><span class="study-when">~ősz</span></a></small>
+      <ul><li><a id="ora-first"></a>Lesson title · date<br>→ <a href="/one/">First</a> · <a href="/two/">Second</a></li></ul>
+    </main>`);
+    const actors = JSON.parse(await fs.readFile(new URL('../../video/hasznalat/szereplok.json', import.meta.url), 'utf8'));
+    actors['cimke-nelkuli'].forras_szovegek = ['Classroom material.', 'Explanation.💡 🤖 gépi magyarázat'];
+    await page.evaluate(domSource);
+    const requested = ['ora-sor', 'datum-link', 'cimke-elso', 'cimke-kieg', 'robot-jel', 'ora-elso', 'ora-nyil', 'cimke-nelkuli'];
+    const m = await page.evaluate(({actors, requested}) => globalThis.__usageMeasure({actors, requested}), {actors, requested});
+    assert.equal(m['datum-link'].text, 'szept. 29.');
+    assert.deepEqual(m['datum-link'].context, m['ora-sor'].context);
+    assert.ok(m['datum-link'].structures.includes('datum-link'));
+    assert.equal(m['cimke-elso'].text, '💡 🤖 gépi magyarázat');
+    assert.equal(m['cimke-nelkuli'].text, 'Classroom material.');
+    assert.equal(m['robot-jel'].text, '🤖');
+    assert.ok(m['robot-jel'].box[2] < m['cimke-kieg'].box[2] / 3);
+    assert.equal(m['ora-nyil'].text, '→ First · Second');
+    assert.ok(m['ora-nyil'].box[1] > m['ora-elso'].box[1]);
+    actors['cimke-nelkuli'].forras_szovegek = [];
+    const missing = await page.evaluate(actors => globalThis.__usageMeasure({actors, requested:['cimke-nelkuli']}), actors);
+    assert.equal(missing['cimke-nelkuli'].count, 0);
+  } finally { await session.close(); }
 });
