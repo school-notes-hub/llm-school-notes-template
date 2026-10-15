@@ -73,7 +73,7 @@
             {
               "szereplo": "hogyan-hasznald",
               "horgony": "Hogyan használd",
-              "szerkezet": "utmutato"
+              "kell": "Hogyan használd"
             }
           ],
           "gorget": {
@@ -107,12 +107,12 @@
           "kamera": "elem",
           "kiemel": [
             {
-              "szereplo": "jelmagyarazat-elso",
+              "szereplo": "jelmagyarazat-cimkek",
               "kell": "Magyarázat"
             }
           ],
           "gorget": {
-            "szereplo": "jelmagyarazat-elso",
+            "szereplo": "jelmagyarazat-cimkek",
             "igazit": "felso"
           }
         },
@@ -349,7 +349,7 @@
           "text": "Minden számozott sor egy {kidolgozott lecke}, a tanítás sorrendjében.",
           "szunet": 0.6,
           "lap": "tantargy",
-          "kamera": "elem",
+          "kamera": "teljes",
           "kiemel": [
             {
               "szereplo": "leckek-1",
@@ -491,19 +491,19 @@
         },
         {
           "id": "2-18",
-          "text": "A {Nyomtatható fejezetek} részből egy egész fejezetet letölthetsz PDF-ben.",
+          "text": "A {Nyomtatható fejezetek} részben fejezetenként ott van minden lap PDF-ben: az összefoglaló és a leckék, nyomtatáshoz.",
           "szunet": 0.6,
           "lap": "tantargy",
           "kamera": "elem",
           "kiemel": [
             {
-              "szereplo": "pdf-fejezetek",
+              "szereplo": "pdf-fejezetek-cim",
               "horgony": "Nyomtatható fejezetek",
               "kell": "Nyomtatható fejezetek"
             }
           ],
           "gorget": {
-            "szereplo": "pdf-fejezetek",
+            "szereplo": "pdf-fejezetek-cim",
             "igazit": "felso"
           },
           "allapot": [
@@ -577,14 +577,14 @@
         },
         {
           "id": "3-03",
-          "text": "Itt a fejezet leckéinek {legfontosabb pontjai} állnak, leckénként egy részben.",
+          "text": "Itt leckénként egy rész gyűjti a legfontosabb pontokat; ez a {[[lecke]]} része.",
           "szunet": 0.6,
           "lap": "osszefoglalo",
           "kamera": "tartalom",
           "kiemel": [
             {
               "szereplo": "osszefoglalo-resz-cim",
-              "horgony": "legfontosabb pontjai",
+              "horgony": "[[lecke]]",
               "kell": "[[lecke]]"
             }
           ],
@@ -895,10 +895,21 @@
         },
         {
           "id": "4-15",
-          "text": "A címke nélküli szöveg az órán tanult anyag.",
+          "text": "A {címke nélküli szöveg} az órán tanult anyag.",
           "szunet": 0.6,
           "lap": "lecke",
-          "kamera": "teljes"
+          "kamera": "elem",
+          "kiemel": [
+            {
+              "szereplo": "cimke-nelkuli",
+              "horgony": "címke nélküli szöveg",
+              "szerkezet": "cimke-nelkuli"
+            }
+          ],
+          "gorget": {
+            "szereplo": "cimke-nelkuli",
+            "igazit": "felso"
+          }
         },
         {
           "id": "4-16",
@@ -1060,14 +1071,14 @@
         },
         {
           "id": "4-24",
-          "text": "Az utolsó sorból visszajutsz a {tantárgyhoz}, a fejezethez vagy a kezdőlapra.",
+          "text": "A lap alján ebből a {sorból} visszajutsz a tantárgyhoz, a fejezethez vagy a kezdőlapra.",
           "szunet": 0.6,
           "lap": "lecke",
           "kamera": "elem",
           "kiemel": [
             {
               "szereplo": "lap-alja",
-              "horgony": "tantárgyhoz",
+              "horgony": "sorból",
               "kell": "[[tantargy]]"
             }
           ],
@@ -1191,7 +1202,7 @@
       "lepesek": [
         {
           "id": "6-01",
-          "text": "Röviden: hogy hol tartotok, azt a tantárgyoldal {Hol tartunk} doboza mutatja.",
+          "text": "Tehát: hogy hol tartotok, azt a tantárgyoldal {Hol tartunk} doboza mutatja.",
           "szunet": 0.6,
           "lap": "tantargy",
           "kamera": "tartalom",

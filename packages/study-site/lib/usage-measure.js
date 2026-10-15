@@ -61,8 +61,31 @@
       );
     if (actor.szoveg)
       nodes = nodes.filter((n) => text(n).includes(actor.szoveg));
+    if (actor.cimke_nelkul) nodes = nodes.filter(unlabelled);
+    if (actor.elso !== undefined) nodes = nodes.slice(0, actor.elso);
     if (actor.n !== undefined) nodes = nodes.slice(actor.n, actor.n + 1);
     return nodes;
+  }
+
+  function unlabelled(node) {
+    return node.matches('.study-content > p') && text(node).trim() &&
+      !node.querySelector('.study-label, img, video, audio') &&
+      !node.nextElementSibling?.matches('.study-label, p:has(> .study-label:only-child)') &&
+      !node.matches('.study-kind, .study-desc') &&
+      !text(node).trim().startsWith('🔖');
+  }
+
+  function context(nodes) {
+    return nodes.flatMap((node) => {
+      if (node.matches('.study-label') && !text(node).includes('🗓️')) {
+        const block = node.closest('p, li, blockquote, .study-callout');
+        // Inline footer (<br><small>) and a separate block footer both occur.
+        if (block && text(block).trim() !== text(node).trim()) return [block];
+        const footer = block || node;
+        return [footer.previousElementSibling, footer].filter(Boolean);
+      }
+      return [node.closest('.study-kind, .study-tools, .study-label, li') || node];
+    });
   }
 
   function tooltip(node) {
@@ -177,6 +200,7 @@
         (n) => n.matches("a:has(.study-when)") && n.hasAttribute("href"),
       ),
       cimke: nodes.every((n) => n.matches(".study-label") && text(n).trim()),
+      "cimke-nelkuli": nodes.every(unlabelled),
       abra: nodes.every(figure),
       utmutato: nodes.every(
         (n) =>
@@ -215,6 +239,9 @@
           ? "Nincs nem fejléc img.study-figure ábra a leckén."
           : "",
       box: bounds(rects),
+      context: bounds(rectangles(context(nodes))),
+      label_context: nodes.length > 0 && nodes.every((n) =>
+        n.matches('.study-label') && !text(n).includes('🗓️')),
       visible: rects.length > 0,
       uncovered: uncovered(nodes, rects),
       visible_uncovered: uncovered(nodes, visibleRects(rects)),
@@ -239,6 +266,36 @@
     Object.fromEntries(
       requested.map((name) => [name, measureRole(name, actors)]),
     );
+  // Actual rendered word rectangles, excluding hidden/occluded text. These
+  // describe the captured page; neither the camera nor the gate guesses fonts.
+  globalThis.__usageText = () => {
+    const result = [], walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode, parent = node.parentElement;
+      if (!parent || parent.closest('script, style, svg') ||
+          getComputedStyle(parent).visibility !== 'visible') continue;
+      for (const match of node.textContent.matchAll(/\S+/gu)) {
+        const range = document.createRange();
+        range.setStart(node, match.index);
+        range.setEnd(node, match.index + match[0].length);
+        for (const r of range.getClientRects()) {
+          const x = Math.max(0, r.left), y = Math.max(0, r.top);
+          const right = Math.min(innerWidth, r.right), bottom = Math.min(innerHeight, r.bottom);
+          if (right <= x || bottom <= y) continue;
+          const hit = document.elementFromPoint((x + right) / 2, (y + bottom) / 2);
+          if (hit && (hit === parent || parent.contains(hit)))
+            result.push({ text: match[0], box: bounds([r]) });
+        }
+      }
+    }
+    return result;
+  };
+  globalThis.__usageFocus = () => [...document.querySelectorAll(':focus-visible')]
+    .filter((n) => {
+      const s = getComputedStyle(n), r = n.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && s.visibility === 'visible' &&
+        ((s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) > 0) || s.boxShadow !== 'none');
+    }).map((n) => ({ text: text(n), box: bounds(rectangles([n])) }));
   globalThis.__usageLayout = () => {
     const fixed = [
       ...document.querySelectorAll("header, mobile-starlight-toc nav"),

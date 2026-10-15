@@ -1229,3 +1229,18 @@ def test_k10_tizedes_ket_whisper_egysegre_nem_maradek(text, szavak):
     r = sz.illeszt(text, ws, (0.0, len(szavak) * 0.5), [])
     assert hangok.szam_hibak(r["szavak"]) == [], r["szavak"]
     assert r["szavak"][0]["whisper"] == szavak[0].strip(",.")
+
+
+def test_wrapped_traceback_keeps_scene_filename_and_line():
+    from lanc.render import kivonat
+
+    trace = """│ /a/very/long/output/folder/jele │
+│ netek.py:23 in jelenet_t01      │
+│                               │
+│ ❱ 23 x = values['missing']     │
+KeyError: 'missing'
+"""
+    excerpt = kivonat(trace, 1)
+    assert any('jelenetek.py:23 in jelenet_t01' in line for line in excerpt)
+    assert any("❱ 23 x = values['missing']" in line for line in excerpt)
+    assert len(excerpt) <= 15

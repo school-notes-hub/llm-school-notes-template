@@ -110,7 +110,7 @@ def test_content_camera_uses_the_column_and_mobile_camera_zooms():
     step["kamera"] = "tartalom"
     content = crop(step, measurement)
     step["kamera"] = "elem"
-    assert content != crop(step, measurement)
+    assert content == crop(step, measurement)
     assert content[2] == 792
     step["nezet"] = "telefon"
     measurement["viewport"] = {"width": 390, "height": 844}
@@ -252,3 +252,91 @@ def test_cursor_target_must_be_visible_but_input_adornments_are_allowed():
     assert not any(f["kod"] == "H2" for f in checked(script, measurements)["leletek"])
     measurements[0]["roles"]["input"]["uncovered"][-1] = False
     assert any(f["kod"] == "H2" for f in checked(script, measurements)["leletek"])
+
+
+def test_dated_lesson_is_eligible_without_uncertain_date():
+    payload = fixture()
+    topic = payload['pages'][-1]
+    topic['html'] = topic['html'].replace("<span class='study-when-unsure'>~ősz</span>", "<span class='study-when'>okt. 4.</span>")
+    accepted, rejected = candidates(payload)
+    assert len(accepted) == 1 and not rejected
+    topic['html'] = topic['html'].replace('🔖 Tankönyv', '')
+    assert not candidates(payload)[0]
+    assert 'Óra-sor tankönyvvel' in candidates(payload)[1][0]['hiany']
+
+
+def test_preview_rejects_focus_ring_without_highlight():
+    script, measurements = filled(), measured()
+    steps(script)[0]['kiemel'] = []
+    measurements[0]['focus_visible'] = [{'text': 'Keresés', 'box': [100, 10, 80, 30]}]
+    assert any('fókuszkeret' in f['uzenet'] for f in checked(script, measurements)['leletek'])
+
+
+def test_crop_avoids_sidebar_and_shows_complete_small_target_context():
+    from hasznalat.kamera import cuts_text
+    step, m = steps(filled())[0], measured()[0]
+    step['kamera'] = 'elem'
+    m['layout'] = {'top': 88, 'content': [300, 100, 660, 1800]}
+    m['roles']['roviden'].update(box=[800, 180, 100, 25], context=[300, 160, 660, 60])
+    m['text_rects'] = [{'text': 'sidebar', 'box': [220, 300, 50, 20]},
+                       {'text': 'line', 'box': [320, 460, 150, 22]}]
+    view = crop(step, m)
+    assert 276 <= view[0] <= 296 and 964 <= view[0] + view[2] <= 984
+    assert view[1] + 24 <= 160 and view[1] + view[3] >= 220
+    assert not cuts_text(view, m['text_rects'])
+
+
+def test_gate_rejects_word_cut_at_each_crop_edge():
+    from hasznalat.kamera import cuts_text
+    view = [100, 100, 500, 300]
+    for box in ([90, 200, 20, 20], [590, 200, 20, 20], [200, 90, 20, 20], [200, 390, 20, 20]):
+        assert cuts_text(view, [{'text': 'word', 'box': box}])
+    script, measurements = filled(), measured()
+    steps(script)[0]['kamera'] = 'elem'
+    view = crop(steps(script)[0], measurements[0])
+    measurements[0]['text_rects'] = [{'text': 'broken', 'box': [view[0] - 10, view[1] + 30, 20, 20]}]
+    assert any('ketté' in f['uzenet'] for f in checked(script, measurements)['leletek'])
+
+
+def test_label_camera_keeps_preceding_paragraph_and_label_in_lower_half():
+    step, m = steps(filled())[0], measured()[0]
+    step['kamera'] = 'elem'
+    m['layout'] = {'top': 88, 'content': [300, 100, 660, 1800]}
+    m['roles']['roviden'].update(box=[300, 400, 200, 24], context=[300, 180, 660, 244], label_context=True)
+    view = crop(step, m)
+    assert view[1] <= 180 and view[1] + view[3] >= 424
+    assert 400 > view[1] + view[3] / 2
+
+
+def test_review_narration_uses_filled_lesson_and_visible_guide_name():
+    script, _ = fill(read(ROOT / 'forgatokonyv.json'), candidates(fixture())[0][0])
+    by_id = {s['id']: s for s in steps(script)}
+    assert '{Minta}' in by_id['3-03']['text']
+    assert by_id['3-03']['kiemel'][0]['horgony'] == 'Minta'
+    assert by_id['1-05']['kiemel'][0]['kell'] == 'Hogyan használd'
+    assert 'szerkezet' not in by_id['1-05']['kiemel'][0]
+    assert by_id['4-15']['kiemel'][0]['szerkezet'] == 'cimke-nelkuli'
+
+
+def test_gate_rejects_label_detached_from_its_preceding_prose():
+    script, measurements = filled(), measured()
+    m = measurements[0]
+    m['roles']['roviden'].update(label_context=True, context=[20, -50, 100, 200])
+    assert any('címke fölötti' in f['uzenet'] for f in checked(script, measurements)['leletek'])
+
+
+def test_missing_secondary_role_is_a_gate_finding_with_column_camera():
+    script, measurements = filled(), measured()
+    steps(script)[0]['kamera'] = 'elem'
+    steps(script)[0]['kiemel'].append({'szereplo': 'missing', 'kell': 'Missing'})
+    measurements[0]['layout'] = {'top': 88, 'content': [200, 100, 760, 2000]}
+    report = checked(script, measurements)
+    assert any(f['kod'] == 'H1' and f['szereplo'] == 'missing' for f in report['leletek'])
+
+
+def test_mobile_tooltip_is_not_subject_to_desktop_label_composition():
+    script, measurements = filled(), measured()
+    steps(script)[0]['nezet'] = 'telefon'
+    measurements[0]['viewport'] = {'width': 390, 'height': 844}
+    measurements[0]['roles']['roviden'].update(label_context=True, context=[20, 80, 300, 70])
+    assert not any(f['kod'] == 'H2' for f in checked(script, measurements)['leletek'])

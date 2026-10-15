@@ -90,6 +90,21 @@ def allokep(mappa: Path, media: Path, lepes: str, log_ut: Path, idokorlat_s: flo
 def kivonat(szoveg: str, kod) -> list[str]:
     """Render-összeomlás ≤ 15 sorban: a kivétel, a jelenetek.py/videotar utolsó kerete, LaTeX-nél a hibás sor."""
     sorok = [re.sub(r"[│╭╮╰╯─]+", " ", s).strip() for s in szoveg.splitlines()]
+    # Rich can use a fixed console width despite COLUMNS, even wrapping inside
+    # jelenetek.py. Rejoin path headers up to the blank line before source code.
+    joined, path = [], ""
+    for line in sorok:
+        if path:
+            if line:
+                path += line
+                continue
+            joined.append(path)
+            path = ""
+        if line.startswith("/") and not re.search(r"\.py:\d+", line):
+            path = line
+        else:
+            joined.append(line)
+    sorok = joined + ([path] if path else [])
     sorok = [s for s in sorok if s]
     ki = [f"render-összeomlás (kilépési kód {kod})"]
     keretek = [s for s in sorok if re.search(r"(jelenetek\.py|videotar/\w+\.py)[:\"]?,? ?(line )?\d+", s)]

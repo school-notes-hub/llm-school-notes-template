@@ -45,6 +45,7 @@ export async function recordAction(ctx, action) {
   const loc = locator(page, action.szereplo);
   if (action.muvelet === "esc") {
     await page.keyboard.press("Escape");
+    await page.evaluate(() => document.activeElement?.blur());
     motion.push({ image: await shot("-esc"), seconds: 0.6 });
     return;
   }
@@ -67,15 +68,23 @@ export async function recordAction(ctx, action) {
 }
 
 export async function scroll(ctx, step, boxes) {
-  const box = boxes[step.gorget?.szereplo]?.box;
+  const item = boxes[step.gorget?.szereplo];
+  const box = item?.context || item?.box;
   if (!box) return;
   const { page, shot, motion } = ctx;
   const start = await page.evaluate(() => scrollY);
-  const { top } = await page.evaluate(() => globalThis.__usageLayout());
-  const target =
+  const { top, content } = await page.evaluate(() => globalThis.__usageLayout());
+  let target =
     step.gorget.igazit === "kozep"
       ? (page.viewportSize().height - box[3] + top) / 2
       : top;
+  if (step.kamera !== 'teljes' && step.nezet !== 'telefon' && content) {
+    const height = (content[2] + 32) * 9 / 16;
+    const tall = step.kiemel?.some((c) => c.magas) && box[3] > page.viewportSize().height - top;
+    target = tall ? top : item.label_context
+      ? top + height - box[3] - 40
+      : top + Math.min(80, height * 0.2);
+  }
   const delta = step.gorget.igazit === "teteje" ? -start : box[1] - target;
   const count =
     Math.abs(delta) < 2

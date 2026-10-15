@@ -54,6 +54,13 @@ még nem mért hangot és végleges videót. Hibamentes előnézetnél `zold: tr
 A kész videót az `sn hasznalat` illeszti a kezdőlapra. A részletes kézikönyv az ops-repó
 `docs/helyi/README.md` 3.9 és 5.10 fejezete.
 
+Az asztali részletkamera a fő szöveghasábot és a kis cél teljes sorát/sávját mutatja.
+A címkék fölötti bekezdés is a kép része; magas blokknál az utolsó sorok és a címke
+maradnak láthatók. A H2 kapu a böngészőben mért szótéglalapokkal ellenőrzi a
+kivágás széleit, a címke szövegkörnyezetét és a kiemelés nélküli kép fókuszkeretét.
+A magas ábra továbbra is a tetejétől látszik, alul nyitott kiemelőkerettel.
+A lecke jogosultságához tankönyves Óra-sor kell; bizonytalan dátum nem feltétel.
+
 Teszt: `uv run --project ../school-notes2 python -m pytest -q hasznalat/test`; a böngészős
 és felület-szerződés tesztek a study-site `npm test` és a school-notes2 `pytest` részei is.
 Minden fixture szintetikus, minden hang a meglévő csonkból jön; a teszt nem fizet.

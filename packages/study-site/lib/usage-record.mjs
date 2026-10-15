@@ -115,6 +115,8 @@ async function contentState(page, origin) {
     theme: document.documentElement.dataset.theme,
     content: !!document.querySelector(".study-content")?.innerText.trim(),
     layout: globalThis.__usageLayout(),
+    text_rects: globalThis.__usageText(),
+    focus_visible: globalThis.__usageFocus(),
     broken: [...document.images]
       .filter((i) => !i.complete || !i.naturalWidth)
       .map((i) => i.getAttribute("src")),

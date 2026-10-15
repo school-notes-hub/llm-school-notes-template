@@ -106,3 +106,15 @@ def test_script_explicitly_permits_tall_figure():
     assert figure["kiemel"][0].get("magas") is True
     assert figure["text"] == "Az {ábra} szemlélteti, amiről a szöveg szól."
     validate(script, read(ROOT / "szereplok.json"))
+
+
+def test_tall_column_camera_has_no_sidebar_and_preserves_the_open_bottom():
+    step, measurement = scene()
+    measurement['layout']['content'] = [280, -800, 720, 3000]
+    view = crop(step, measurement)
+    assert view[0] >= 256 and view[0] + view[2] <= 1024
+    assert view[1] == 88
+    assert not findings(step, measurement)
+    assert keret.clipped_sides({'nezet': 'asztal', 'box': measurement['roles']['diagram']['box'], 'crop': view}) == ['also']
+    measurement['roles']['diagram']['box'][1] = 87.984
+    assert not findings(step, measurement)

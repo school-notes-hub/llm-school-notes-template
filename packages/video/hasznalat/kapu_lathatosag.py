@@ -1,6 +1,6 @@
 """H2: ordinary elements fit; explicitly permitted tall elements remain honest."""
 
-from .kamera import crop, camera_box
+from .kamera import crop, camera_box, cuts_text
 from .keret import clipped_sides, open_border
 
 
@@ -60,10 +60,25 @@ def highlight_error(step, measurement, cue, camera):
 
 def h2(step, measurement, add):
     camera = crop(step, measurement) if measurement else [0, 0, 0, 0]
+    if step.get("kamera") != "teljes" and step.get("nezet") != "telefon":
+        cut = cuts_text(camera, measurement.get("text_rects", []))
+        if cut:
+            add("H2", step["id"], "", "a kivágás látható szöveget vág ketté: " + ", ".join(w["text"] for w in cut[:5]))
+    if not step.get("kiemel") and measurement.get("focus_visible"):
+        add("H2", step["id"], "", "kiemelés nélküli lépésben látható fókuszkeret maradt")
     for cue in step.get("kiemel", []):
         message = highlight_error(step, measurement, cue, camera)
         if message:
             add("H2", step["id"], cue["szereplo"], message)
+        item = measurement.get("roles", {}).get(cue["szereplo"], {})
+        if (step.get("nezet") != "telefon" and item.get("label_context")
+                and item.get("context") and item.get("box")):
+            context = camera_box(step, item["context"])
+            label = camera_box(step, item["box"])
+            if (label[1] < camera[1] + camera[3] / 2 or
+                (context[3] <= camera[3] - 48 and not inside(context, camera)) or
+                label[1] - max(camera[1], context[1]) < 24):
+                add("H2", step["id"], cue["szereplo"], "a címke fölötti szöveg és az alsó félben álló címke nem látszik együtt")
     cursor = step.get("kurzor")
     if not cursor:
         return

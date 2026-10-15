@@ -108,11 +108,8 @@ def missing_content(lesson):
         for text in ("📗", "⚠️", "➕", "💡")
         if not any(n.text.strip().startswith(text) for n in labels)
     ]
-    if not any(
-        "🗓️" in n.text and "Tankönyv" in n.text and n.all(cls="study-when-unsure")
-        for n in labels
-    ):
-        missing.append("Óra-sor bizonytalan dátummal és tankönyvvel")
+    if not any("🗓️" in n.text and "Tankönyv" in n.text for n in labels):
+        missing.append("Óra-sor tankönyvvel")
     if not dom.all("details") or "Kérdezd ki magad" not in dom.text:
         missing.append("Kérdezd ki magad")
     if not any("data-footnotes" in n.attrs for n in dom.all("section")):

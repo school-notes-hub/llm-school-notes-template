@@ -40,8 +40,10 @@
     "selector": "starlight-toc"
   },
   "morzsa": {
-    "fajta": "css",
-    "selector": ".study-tools"
+    "fajta": "unio",
+    "tagok": [
+      "morzsa-tagok"
+    ]
   },
   "pdf-lecke": {
     "fajta": "css",
@@ -256,10 +258,9 @@
     "text": "Tantárgyak"
   },
   "hogyan-hasznald": {
-    "fajta": "szakasz",
-    "text": "Hogyan használd",
-    "selector": "ul",
-    "n": 0
+    "fajta": "szoveg",
+    "selector": ".study-content h2",
+    "text": "Hogyan használd"
   },
   "jelmagyarazat": {
     "fajta": "szakasz",
@@ -335,5 +336,31 @@
     "text": "Jelmagyarázat",
     "selector": "li",
     "n": 0
+  },
+  "morzsa-tagok": {
+    "fajta": "css",
+    "selector": ".study-tools > :not(.study-pdf)"
+  },
+  "jelmagyarazat-cimkek": {
+    "fajta": "unio",
+    "tagok": [
+      "jelmagyarazat-negy"
+    ]
+  },
+  "jelmagyarazat-negy": {
+    "fajta": "szakasz",
+    "text": "Jelmagyarázat",
+    "selector": "li",
+    "elso": 4
+  },
+  "cimke-nelkuli": {
+    "fajta": "css",
+    "selector": ".study-content > p",
+    "cimke_nelkul": true,
+    "n": 0
+  },
+  "pdf-fejezetek-cim": {
+    "fajta": "css",
+    "selector": ".study-downloads > summary"
   }
 }

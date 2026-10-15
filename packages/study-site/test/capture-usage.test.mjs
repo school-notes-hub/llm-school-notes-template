@@ -137,6 +137,9 @@ test("every production role resolves on the neutral surface fixture", async () =
     for (const [name, role] of Object.entries(result))
       assert.ok(role.count > 0, name);
     assert.ok(result["mobil-toc"].visible);
+    assert.equal(result.morzsa.text, "Kezdőlap");
+    assert.equal(result["jelmagyarazat-cimkek"].text, "Magyarázat Kiegészítés Javítás A tankönyv alapján");
+    assert.ok(result["cimke-nelkuli"].structures.includes("cimke-nelkuli"));
   } finally {
     await browser.close();
     process.chdir(cwd);
@@ -244,10 +247,59 @@ test("guide role excludes its preceding player and chapters; quiz ignores earlie
       actors,
       requested: ["hogyan-hasznald", "kerdes-elso"],
     });
-    assert.equal(result["hogyan-hasznald"].text, "Leírás");
+    assert.equal(result["hogyan-hasznald"].text, "Hogyan használd");
     assert.ok(result["hogyan-hasznald"].box[3] < 200);
     assert.equal(result["kerdes-elso"].text, "Kérdés");
     assert.ok(result["kerdes-elso"].structures.includes("kerdes"));
+  } finally {
+    await session.close();
+  }
+});
+
+test("usage context keeps inline and separate labels with their prose, and escape clears focus", async () => {
+  const { openBrowser } = await import("../lib/usage-record.mjs");
+  const { recordAction, scroll } = await import("../lib/usage-actions.mjs");
+  const session = await openBrowser(browserPath);
+  try {
+    const page = await session.browser.newPage({ viewport: { width: 1280, height: 720 } });
+    await page.setContent(`<style>
+      header {position:fixed;top:0;height:72px;background:white;width:100%}
+      main {margin-left:300px;width:660px;padding-top:800px}
+      p {font:20px/1.6 sans-serif} small {font:14px sans-serif}
+      button:focus-visible {outline:3px solid orange}
+    </style><header>Header</header><button>Search</button><main class="study-content">
+      <p id="plain">A plain teaching paragraph.</p>
+      <p id="inline">A labelled paragraph with its own explanation.<br><small class="study-label">💡 explanation</small></p>
+      <p id="prose">Another teaching paragraph.</p><p><small class="study-label" id="separate">📗 textbook</small></p>
+      <p style="height:1200px">Next paragraph</p></main>`);
+    await page.evaluate(domSource);
+    const actors = {
+      inline: { fajta: 'css', selector: '#inline small' },
+      separate: { fajta: 'css', selector: '#separate' },
+      plain: { fajta: 'css', selector: '.study-content > p', cimke_nelkul: true, n: 0 },
+    };
+    const get = () => page.evaluate((actors) => globalThis.__usageMeasure({actors, requested: Object.keys(actors)}), actors);
+    let measured = await get();
+    assert.ok(measured.inline.context[1] < measured.inline.box[1]);
+    assert.ok(measured.separate.context[1] < measured.separate.box[1]);
+    assert.equal(measured.plain.text, 'A plain teaching paragraph.');
+    const ctx = {page, motion: [], shot: async () => 'fixture.png'};
+    await scroll(ctx, {nezet:'asztal', kamera:'elem', gorget:{szereplo:'inline', igazit:'felso'}}, measured);
+    measured = await get();
+    assert.ok(measured.inline.context[1] >= 88);
+    assert.ok(measured.inline.box[1] > 300);
+    assert.ok((await page.evaluate(() => globalThis.__usageText())).some(w => w.text === 'labelled'));
+    await page.locator('button').focus();
+    assert.equal((await page.evaluate(() => globalThis.__usageFocus())).length, 1);
+    await recordAction(ctx, {szereplo:'unused', muvelet:'esc'});
+    assert.deepEqual(await page.evaluate(() => globalThis.__usageFocus()), []);
+    await page.locator('#inline').evaluate((n) => {
+      n.firstChild.textContent = 'A long explanation. '.repeat(300);
+    });
+    await scroll(ctx, {nezet:'asztal', kamera:'elem', gorget:{szereplo:'inline', igazit:'felso'}}, await get());
+    measured = await get();
+    assert.ok(measured.inline.context[1] < 88);
+    assert.ok(measured.inline.box[1] > 300 && measured.inline.box[1] + measured.inline.box[3] < 720);
   } finally {
     await session.close();
   }

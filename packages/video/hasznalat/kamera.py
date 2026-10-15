@@ -59,6 +59,9 @@ def crop(step, measurement):
     if step["kamera"] == "teljes" or not boxes:
         return [0, 0, width, height]
     box = camera_box(step, combined(boxes))
+    column = measurement.get("layout", {}).get("content")
+    if not mobile and column:
+        return column_crop(step, measurement, box, column)
     if tall_cues(step, measurement):
         return tall_crop(box, width)
     column = (
@@ -72,6 +75,65 @@ def crop(step, measurement):
         result[1] = max(0, min(result[1], box[1] + box[3] / 2 - result[3] / 2))
         return result
     return fitted(box, width, height, column)
+
+
+def cuts_text(view, words):
+    """Return words crossed by a crop edge, including vertical line cuts."""
+    x, y, w, h = view
+    result = []
+    for word in words:
+        a, b, c, d = word["box"]
+        if min(x + w, a + c) <= max(x, a) or min(y + h, b + d) <= max(y, b):
+            continue
+        if a < x - 0.5 or b < y - 0.5 or a + c > x + w + 0.5 or b + d > y + h + 0.5:
+            result.append(word)
+    return result
+
+
+def column_crop(step, measurement, box, column):
+    """Keep the real text column, context and line boundaries at native scale."""
+    viewport = measurement["viewport"]
+    items = [measurement["roles"].get(c["szereplo"], {}) for c in step.get("kiemel", [])]
+    contexts = [i.get("context") or i["box"] for i in items if i.get("box")]
+    context = combined(contexts) if contexts else box
+    label = any(i.get("label_context") for i in items)
+    tall = bool(tall_cues(step, measurement))
+    top = measurement.get("layout", {}).get("top", 0)
+    if tall and top - 1 <= box[1] < top:
+        top = box[1]  # Fractional browser scroll coordinates are not clipping.
+    words = measurement.get("text_rects", [])
+    valid = []
+    fallback = None
+    # A few pixels of breathing room can vary so both horizontal crop edges
+    # land between actual text lines, without changing the page or its scale.
+    for padding in [*range(16, 3, -1), *range(17, 25)]:
+        left = max(0, column[0] - padding)
+        width = min(viewport["width"] - left, column[2] + padding * 2)
+        height = width * 9 / 16
+        margin = 12 if box[3] > height * 0.4 else 24
+        preferred = top if tall else (box[1] + box[3] + 32 - height if label else context[1] - height * 0.2)
+        fallback = fallback or [left, min(max(top, preferred), viewport["height"] - height), width, height]
+        candidates = [preferred, top, viewport["height"] - height]
+        for word in words:
+            _, y, _, h = word["box"]
+            candidates.extend([y - 1, y + h + 1, y - height - 1, y + h + 1 - height])
+        for y in sorted(set(candidates)):
+            if y < top or y + height > viewport["height"]:
+                continue
+            if not tall and (y > box[1] - margin or y + height < box[1] + box[3] + margin):
+                continue
+            if tall and y > box[1]:
+                continue
+            if label and box[1] < y + height / 2:
+                continue
+            view = [left, y, width, height]
+            if not cuts_text(view, words):
+                lost = max(0, y - context[1]) + max(0, context[1] + context[3] - y - height)
+                valid.append((lost, abs(y - preferred) + abs(16 - padding), view))
+    if valid:
+        return min(valid, key=lambda v: v[:2])[2]
+    # The gate reports impossible layouts rather than hiding text or scaling DOM.
+    return fallback
 
 
 def tall_crop(box, width):
