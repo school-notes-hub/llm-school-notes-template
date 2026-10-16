@@ -35,7 +35,7 @@ vagy parancssorból: `python kapu.py <mappa> [--atadas [--valtozott]]` (kiírja 
 | `idoterv.json` | igen | `fps`, `kocka_osszes`, lépések kockái, `horgonyok` (`kocka`, `szo_s`, `forras`), **`szavak`** (`szo`, `ertek`, `szo_s` abszolút, `forras`) a K2-höz |
 | `szavak.json` | K10-hez | lépésenként a szavak; a **`whisper`** mező (amit a Whisper hallott) nélkül a K10 kimarad |
 | `render_naplo.json` | igen (különben K1-hiba) | a `videotar/naplo-sema.json` szerint; a `bemenet` hash-eit a kapu újraszámolja |
-| `media/…/sections/<Jelenet>.json`, `<Jelenet>.mp4` | igen | K1: szekciónevek, kockaszámok; átadáskor a kockák |
+| `media/…/sections/<Jelenet>.json`, szekció-mp4-k, `<Jelenet>.mp4` | igen | K1: szekciónevek, kockaszámok; kétes átlagos fps-nél a szekció névleges fps-e és hossza is; átadáskor a kockák |
 | `hang.wav` | igen | K1: hossz |
 | `kezi.json` | ha van | a tábla „kézi” sora |
 | `kapu-kivetel.json` | ha van | lásd lent |
@@ -82,6 +82,15 @@ az egyenlő szószámú csere minden eltérő párja
 - `zold`: nincs felül nem bírált hiba. `atadhato`: zöld, vagy minden nyitott hiba „téves hiba?” jelölésű.
 - `allapot`: ✓ nincs lelet, `!` csak figyelmeztetés, ✗ hiba.
 - `jelzesek`: nem lelet, csak a táblában látszik (a 0,7 alatti rövidítés).
+- **K1 szekció-fps:** az `avg_frame_rate` a konténer hosszának kerekítése miatt kissé eltérhet a tervtől.
+  Ha az eltérés 0,01 fps-nél nagyobb, vagy az átlag hiányzik/érvénytelen, a kapu ffprobe-bal megvizsgálja
+  a szekcióindex `video` mezőjében megadott fájlt. Akkor engedi át, ha az `r_frame_rate` legfeljebb
+  0,01 fps-re tér el a tervtől, a mért `nb_frames` egyezik az indexszel, és a mért `duration`
+  legfeljebb egy képkockával tér el a `nb_frames / tervezett fps` hossztól. Így a 82 kockás,
+  2,732357 másodperces, 30/1 fps-es szekció helyes akkor is, ha az átlaga 1259520/41969.
+  A valódi sebesség-, hossz- és kockaszámeltérés továbbra is hiba; az ellenőrizhetetlen adat sem kap zöldet.
+  A terv és a szekciók kockaszámainak pontos ellenőrzése változatlan. A már feleslegessé vált
+  `felulbiral` kivétel „nincs ilyen lelet” jelzést kap; a kapu nem törli a kézzel írt kivételt.
 - **K13 üres kép** (mérce 9., „no empty screen”): a fő render (`media/…/<Jelenet>.mp4`, a nyitó- és
   zárókártya nélkül; azokat és az áttűnésüket a `--vegleges` fűzi elé és mögé, ezért nem lelet) egy
   ffmpeg-menetben, két `blackdetect`-ággal, 480 px magasra kicsinyítve (a 480p-s és az 1080p-s render
@@ -98,6 +107,15 @@ az egyenlő szószámú csere minden eltérő párja
   doboztól legfeljebb 2 px-re, `ERINT_PX`: a vonás a betűkhöz ér; méretvonal a címkén, címke a test élén). A
   `ra` kapcsoló a `vonatkozik`-kal deklarált jelölésen (fókuszkeret, kiemelés, nyíl) csak a saját céljait menti
   fel (amit körülvesz), más feliratot nem; `vonatkozik` nélkül mindent (szám a régióban).
+  Érintkezés nélkül is **figy**, ha a szövegdoboz és egy külön csoportba tartozó vonal között
+  12 px-nél kisebb a rés (`CIMKE_RES_PX`, a napló 1920×1080-as koordinátáiban). A `vonatkozik`-kal
+  deklarált jelölés (például keret, áthúzás, régió vagy nyíl) vonala és egy idegen felirat között 8 px rés elég
+  (`JELOLES_RES_PX`); a jelölések ennél nagyobb, olvasható rése nem figyelmeztetés. A távolságot a
+  tényleges szakaszoktól vagy körvonaltól méri, nem az ábra befoglaló téglalapjától;
+  a lelet a mért rést és a ténylegesen használt küszöböt is kiírja.
+  A saját csoport vonala (például törtvonal), a kiemelés és a `ra` alá tartozó párok mentesek az új
+  résvizsgálattól. A `vonatkozik`-kal megadott jelölés (például aláhúzás vagy fókuszkeret) csak a saját
+  céljai és azok csoportja mellett mentes; idegen címke mellett kell a rés. A korábbi metszésvizsgálat megmarad.
   **K4 fókuszkeret** (`keret` töröttvonallal és `vonatkozik`-kal; a halmazkör nem): két keret rése legalább
   3 px (`KERET_RES_PX`; különben „összeér” vagy „egymásba lóg”; a beágyazott keret nem lelet), és a keret éle
   nem fut 40 px-nél hosszabban 6 px-en belül egy másik, nem jelölt elem vonalán (`PARHUZ_PX`, `PARHUZ_HOSSZ`:
@@ -106,6 +124,22 @@ az egyenlő szószámú csere minden eltérő párja
   **K7 végső hely:** új vonal jelenik meg egy másik elem mozgása alatt, és a vége a mozgó elem végső helyéhez
   igazodik (ugyanabban az oszlopban vagy sorban, 2 px-en és 150 px-en belül, vagy hozzáér), a kiinduló
   helyéhez nem (a mozgást követő nyom nem lelet).
+- **K7 korai címke:** **figy**, ha a címke a `vonatkozik`-kal megadott cél teljes megjelenése előtt
+  indul (egy képkocka tűréssel), vagy az ismert cél nincs a képen. Objektumnév és csoportnév is lehet cél;
+  csoportnál csak a címke lépésében látható és a címke élettartamán belül még érkező tagok számítanak,
+  közülük az utolsó megjelenés végét várja meg. A korábban eltűnt csoporttag nem hiány;
+  a csoport akkor hiányzik, ha egyetlen tagja sem látszik és nem is érkezik. A konkrét objektumnévvel
+  megadott cél eltűnése továbbra is lelet. A korábbi, már eltűnt példány nem számít láthatónak.
+  A címkéhez ajánlott a `jelol(cimke, vonatkozik=[cel])`; így a vizsgálat nem függ a térbeli elrendezéstől.
+  Régi, kapcsolat nélküli kódban is keres: rövid, kérdés- és felkiáltójel nélküli szöveg mellett olyan
+  képletsort, amelyet külön vonal vagy keret is megjelöl. A határokat a `kapu.py` konstansai adják:
+  `CIMKE_SZO_MAX` a szavak száma, `CIMKE_TENGELY_PX` a középvonalak megengedett eltérése,
+  `CIMKE_RES_MIN_PX` és `CIMKE_RES_MAX_PX` a függőleges rés határai, `SOR_MAGAS_PX` a sor legnagyobb magassága.
+  A címke élettartamán és ugyanazon jeleneten belül `ELORE_LEPES` lépést vizsgál, a címke lépését is beleszámítva.
+  A legközelebbi sort választja; a `CIMKE_TENGELY_PX`-en belül egyformán közeli sorok közül az előbb megjelöltet,
+  egyidejű kétértelműségnél nem jelez. A lelet ezt **térbeli becslésként** nevezi meg.
+  Ez nem érti a címke jelentését: a szándékos előzetes címet a lektor ítéli meg. A cél nélküli,
+  távoli vagy más elrendezésű címkékhez továbbra is deklarált kapcsolat és lektori ellenőrzés kell.
 - **K1 kapcsolt jel (figy.):** egy vonal eltűnik, mialatt az elem, amelyhez a vége kapcsolódik (a lépés elején
   3 px-en belül a vonalán, vagy `vonatkozik`), még mozog: a változás előrefut. Nem lelet a keret, a kiemelés, a
   lépésben maga is mozgó (követő) jel és az áttűnéses csere (ugyanolyan fajtájú új elem ugyanakkor).

@@ -20,6 +20,7 @@ import sys
 import tempfile
 import wave
 from collections import Counter
+from fractions import Fraction
 from pathlib import Path
 
 GYOKER = Path(__file__).resolve().parent
@@ -39,9 +40,14 @@ K2B_HATRA_S = 1.0
 KILOG_PX, SAV_X, SAV_Y = 2, 96, 54
 ATFED_PX = 4
 ERINT_PX = 2          # K4: a vonal (a vonás közepe) ennyire a szöveg dobozán kívül még a betűhöz ér
+CIMKE_RES_PX = 12     # K4: a különálló felirat és a vonal között olvasható rés kell
+JELOLES_RES_PX = 8    # K4: a deklarált jelölés (keret, áthúzás, régió) és az idegen felirat közti rés
 KERET_RES_PX = 3      # K4: két fókuszkeret között legalább ennyi rés (különben összeér vagy egymásba lóg)
 PARHUZ_PX, PARHUZ_HOSSZ = 6, 40   # K4: a keret éle ennyi px-en belül, legalább ennyi hosszan fut egy másik vonalon
 IGAZIT_PX, ELMOZDUL_PX, KOZEL_PX = 2, 10, 150   # K7: a mozgó elem végső helyére igazított új vonal
+CIMKE_SZO_MAX, CIMKE_TENGELY_PX = 4, 24   # K7: rövid címke, a képletsorral közös tengelyen
+CIMKE_RES_MIN_PX, CIMKE_RES_MAX_PX, SOR_MAGAS_PX = 12, 420, 140   # K7: közeli, egy sor magas cél
+ELORE_LEPES = 3       # K7: a címke lépése és legfeljebb két következő lépés
 KAPCSOL_PX = 3        # K1: az eltűnő vonal vége ennyire van a mozgó elem vonalától (hozzá kapcsolódik)
 BETU_HIBA, BETU_FIGY = 24, 27
 K8_EGYMAS, K8_HOSSZU = 5, 6
@@ -181,6 +187,42 @@ class Munka:
 
 # --- K1 szinkron (a szinkron.py Kapu.ellenoriz-éből) -------------------------------------
 
+def _arany(x) -> float | None:
+    try:
+        n = float(Fraction(str(x)))
+        return n if n > 0 else None
+    except (ValueError, ZeroDivisionError, OverflowError):
+        return None
+
+
+def _szekcio_fps(s: dict, mappa: Path, fps: float) -> str | None:
+    """Az átlagos fps eltérését a tényleges szekcióval ellenőrizzük. A konténer vége
+    kerekíthet: egy kockán belüli hosszeltérés helyes névleges fps mellett nem hiba."""
+    atlag = _arany(s.get("avg_frame_rate"))
+    if atlag is not None and abs(atlag - fps) <= 0.01:
+        return None
+    p = mappa / s.get("video", "")
+    adat = {}
+    if p.is_file():
+        r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                            "stream=r_frame_rate,nb_frames,duration", "-of", "json", str(p)],
+                           capture_output=True, text=True)
+        try:
+            adat = json.loads(r.stdout).get("streams", [])[0] if r.returncode == 0 else {}
+        except (ValueError, IndexError):
+            pass
+    nevleges = _arany(adat.get("r_frame_rate"))
+    n, hossz = _arany(adat.get("nb_frames")), _arany(adat.get("duration"))
+    if nevleges is not None and abs(nevleges - fps) <= 0.01 and n is not None and hossz is not None and \
+            n == int(s["nb_frames"]) and abs(hossz - n / fps) <= 1 / fps + 1e-6:
+        return None
+    if nevleges is None:
+        return f"a(z) {s['name']} szekció fps-e nem igazolható (átlag: {s.get('avg_frame_rate', 'hiányzik')})"
+    if abs(nevleges - fps) > 0.01:
+        return f"a(z) {s['name']} szekció {adat['r_frame_rate']} fps, a terv {fps:g}"
+    return f"a(z) {s['name']} szekció hossza vagy kockaszáma eltér (mért: {n} kocka, {hossz} s; terv: {fps:g} fps)"
+
+
 def k1(mu: Munka) -> list[dict]:
     out, fps = [], mu.fps
 
@@ -229,9 +271,9 @@ def k1(mu: Munka) -> list[dict]:
         n = int(s["nb_frames"])
         szek.append((s["name"], kezd, n))
         kezd += n
-        r = s.get("avg_frame_rate", f"{fps:g}/1").split("/")
-        if abs(int(r[0]) / int(r[1]) - fps) > 0.01:
-            h(f"a(z) {s['name']} szekció {s['avg_frame_rate']} fps, a terv {fps:g}")
+        fps_hiba = _szekcio_fps(s, idx.parent, fps)
+        if fps_hiba:
+            h(fps_hiba)
     vart_sz = []
     for t in tl:
         vart_sz.append((t["id"], t["kezd_kocka"]))
@@ -444,6 +486,20 @@ def _pont_doboz(q, d) -> float:
     return (dx * dx + dy * dy) ** 0.5
 
 
+def _vonal_doboz_tav(v: dict, d) -> float:
+    """A körvonal és a szövegdoboz legkisebb távolsága; nem a vonal befoglaló dobozáé."""
+    sarkok = [(x, y) for x in (d[0], d[2]) for y in (d[1], d[3])]
+    if v.get("t") == "kor":
+        kozel = _pont_doboz(v["k"], d)
+        tavol = max(((x - v["k"][0]) ** 2 + (y - v["k"][1]) ** 2) ** 0.5 for x, y in sarkok)
+        return max(kozel - v["r"], v["r"] - tavol, 0)
+    if _vonal_metsz(v, d):
+        return 0.0
+    return min((min(_pont_doboz(a, d), _pont_doboz(b, d),
+                    *(_pont_szakasz(q, a, b) for q in sarkok))
+                for vl in _vonalak(v) for a, b in zip(vl, vl[1:])), default=float("inf"))
+
+
 def _bovit(d, px) -> list:
     return [d[0] - px, d[1] - px, d[2] + px, d[3] + px]
 
@@ -500,7 +556,7 @@ def _parhuzamos_hossz(k: dict, o: dict, lepes_px: int = 2) -> int:
 
 
 def k345(mu: Munka) -> list[dict]:
-    out = []
+    out, kozeli = [], []
     for l in mu.lepesek:
         sid = l["id"]
         for kulcs, objs in mu.allapotok(l):
@@ -540,6 +596,8 @@ def k345(mu: Munka) -> list[dict]:
                 van_belso = belso[0] < belso[2] and belso[1] < belso[3]
                 for v in sorted((o for o in objs if o.get("vonal") and o["obj"] != a["obj"] and not _ra_mentes(o, a, objs)),
                                 key=lambda o: o["obj"]):
+                    celok = _celok(v, objs) or set()
+                    kuszob = JELOLES_RES_PX if v.get("vonatkozik") else CIMKE_RES_PX
                     if van_belso and _vonal_metsz(v["vonal"], belso):
                         out.append(lelet(sid, "K4", "figy", a["obj"], f"a(z) {v['obj']} vonala metszi a szöveget{hol}",
                                          doboz=a["doboz"], allapot=kulcs))
@@ -547,8 +605,16 @@ def k345(mu: Munka) -> list[dict]:
                         out.append(lelet(sid, "K4", "figy", a["obj"], f"a(z) {v['obj']} vonala a szöveg szélén fut "
                                          f"(≤ {ERINT_PX} px-re a betűktől) → tedd távolabb{hol}",
                                          doboz=_bovit(a["doboz"], 20), allapot=kulcs))
+                    elif a["csoport"] != v["csoport"] and a["obj"] not in celok and a["csoport"] not in celok and \
+                            v["kat"] != "kiemeles" and (res := _vonal_doboz_tav(v["vonal"], a["doboz"])) < kuszob:
+                        kozeli.append(lelet(sid, "K4", "figy", a["obj"], f"a(z) {v['obj']} vonalához túl közel áll "
+                                            f"(rés {tized(res).removesuffix(',0')} px < {kuszob} px) "
+                                            f"→ hagyj több helyet a címke mellett{hol}",
+                                            doboz=_bovit(a["doboz"], 20), allapot=kulcs))
             out += k4_keretek(sid, kulcs, hol, objs)
-    return out
+    # A rendez lépés/kód/objektum szerint az első figyelmeztetést tartja meg:
+    # a puszta közelség ne fedje el a tényleges érintkezést vagy metszést.
+    return out + kozeli
 
 
 def k4_keretek(sid: str, kulcs: str, hol: str, objs: list[dict]) -> list[dict]:
@@ -636,7 +702,138 @@ def k7(mu: Munka) -> list[dict]:
                                          f"{s['obj']} alatt jelenik meg → jelol(vonatkozik=…), előbb a helyére",
                                          doboz=d, allapot="vege"))
                         break
-    return out + k7_vegso_hely(mu) + k7_ures_keret(mu)
+    return out + k7_vegso_hely(mu) + k7_ures_keret(mu) + k7_korai_cimke(mu)
+
+
+def _cimke_adatok(mu: Munka):
+    """Megjelenések, eltűnések és a lépésenként látható objektumok helyi geometriája."""
+    megj, elt, mintak = {}, {}, []
+    for l in mu.lepesek:
+        for e in l["megjelenik"]:
+            if e.get("ok") != "tartalom":
+                megj.setdefault(e["obj"], []).append(e)
+        for e in l["eltunik"]:
+            elt.setdefault(e["obj"], []).append(e["kocka"])
+        # Az állapot a helyi geometriát adja, nem a videó legutolsó elhelyezését.
+        objs = {o["obj"]: o for _, os_ in mu.allapotok(l) for o in os_}
+        mintak.append(objs)
+    return megj, elt, mintak
+
+
+def _lathato_vege(megj, elt, attr, nev, k, veg):
+    """Az aktuális vagy a címke élettartamán belüli következő megjelenés vége.
+    A már eltűnt objektum régi megjelenése nem bizonyít jelenlétet."""
+    es = sorted(megj.get(nev, []), key=lambda e: e["kocka"])
+    elotte = [e for e in es if e["kocka"] <= k]
+    if elotte:
+        e = elotte[-1]
+        if not any(e["kocka"] <= t <= k for t in elt.get(nev, [])):
+            return e["veg_kocka"]
+    kov = next((e for e in es if k < e["kocka"] < veg), None)
+    if kov:
+        return kov["veg_kocka"]
+    # Naplózott, kezdettől álló elem (nincs megjelenési eseménye).
+    if not es and nev in attr and not any(t <= k for t in elt.get(nev, [])):
+        return 0
+    return None
+
+
+def _deklaralt_celok(attr, minta, a, idok, k):
+    """Konkrét objektum, vagy a csoport most látható és még érkező tagjai.
+    Teljesen hiányzó ismert csoportnál a csoport neve lesz a lelet célja."""
+    celok = set()
+    for ref in a.get("vonatkozik") or []:
+        if ref in attr and ref != a["obj"]:
+            celok.add(ref)
+            continue
+        tagok = {n for n, o in attr.items() if n != a["obj"] and o["csoport"] == ref and not o.get("vonatkozik")}
+        aktualis = {n for n in tagok if idok[n] is not None and (n in minta or idok[n] > k)}
+        if tagok:
+            celok.update(aktualis or {ref})
+    return sorted(celok)
+
+
+def _jelolt_sorok(minta, idok):
+    """Csak külön jelöléssel megerősített, látható vagy még érkező képletsorok."""
+    jelolt = set().union(*(set(o.get("vonatkozik") or []) for o in minta.values() if not _szoveg(o)))
+    csoportok = {}
+    for n, o in minta.items():
+        if o["kat"] in ("keplet", "szam", "eredmeny", "szamlalo") and not o.get("vonatkozik") and idok[n] is not None:
+            csoportok.setdefault(o["csoport"], []).append(o)
+    return {c: os_ for c, os_ in csoportok.items() if c in jelolt or any(o["obj"] in jelolt for o in os_)}
+
+
+def _cimke_sor_res(a, os_):
+    """A közös tengelyen álló, közeli képletsor függőleges rése; más elrendezésnél None."""
+    d = [min(o["doboz"][z] for o in os_) if z < 2 else max(o["doboz"][z] for o in os_) for z in range(4)]
+    ad = a["doboz"]
+    res = max(d[1] - ad[3], ad[1] - d[3])
+    if abs(_kozep(d)[0] - _kozep(ad)[0]) <= CIMKE_TENGELY_PX and \
+            CIMKE_RES_MIN_PX <= res <= CIMKE_RES_MAX_PX and d[3] - d[1] <= SOR_MAGAS_PX:
+        return res
+    return None
+
+
+def _becsult_cel(mu, mintak, i, e, veg, idok):
+    """Rövid szövegcímkéhez közeli megjelölt sort keres; kétértelmű helyzetben nem dönt."""
+    a, l = mintak[i][e["obj"]], mu.lepesek[i]
+    if a["kat"] != "szoveg" or len(a.get("tartalom", "").split()) > CIMKE_SZO_MAX or \
+            any(c in a.get("tartalom", "") for c in "?!"):
+        return []
+    jeloltek = {}
+    for j in range(i, min(i + ELORE_LEPES, len(mu.lepesek))):
+        lj = mu.lepesek[j]
+        if j > i and (lj.get("kezd_kocka", 0) >= veg or e["obj"] not in mintak[j] or
+                      lj["id"].split("-")[0] != l["id"].split("-")[0]):
+            break
+        for c, os_ in _jelolt_sorok(mintak[j], idok).items():
+            res = _cimke_sor_res(a, os_)
+            if res is None:
+                continue
+            regi = jeloltek.get(c)
+            if regi is None or res < regi[0]:
+                jeloltek[c] = (res, {o["obj"] for o in os_}, j)
+            elif res == regi[0]:
+                regi[1].update(o["obj"] for o in os_)
+    if not jeloltek:
+        return []
+    legkozelebb = min(x[0] for x in jeloltek.values())
+    kozeliek = [c for c in jeloltek if jeloltek[c][0] < legkozelebb + CIMKE_TENGELY_PX]
+    elso = min(jeloltek[c][2] for c in kozeliek)
+    kozeliek = [c for c in kozeliek if jeloltek[c][2] == elso]
+    return sorted(jeloltek[kozeliek[0]][1]) if len(kozeliek) == 1 else []
+
+
+def k7_korai_cimke(mu: Munka) -> list[dict]:
+    """A címke csak a célja elkészülte után jelenjen meg. Deklarált cél nélkül a
+    közös tengelyen álló, közeli képletsor csak becslés: külön megnevezzük a leletben."""
+    out = []
+    megj, elt, mintak = _cimke_adatok(mu)
+    for i, l in enumerate(mu.lepesek):
+        for e in sorted(l["megjelenik"], key=lambda e: (e["kocka"], e["obj"])):
+            a = mintak[i].get(e["obj"])
+            if not a or not _szoveg(a) or e.get("ok") == "tartalom":
+                continue
+            k = e["kocka"]
+            veg = min((t for t in elt.get(e["obj"], []) if t > k), default=float("inf"))
+            idok = {n: _lathato_vege(megj, elt, mu.attr, n, k, veg) for n in mu.attr}
+            ref = set(a.get("vonatkozik") or [])
+            if ref:
+                celok = _deklaralt_celok(mu.attr, mintak[i], a, idok, k)
+            else:
+                celok = _becsult_cel(mu, mintak, i, e, veg, idok)
+            kesobb = [(idok[n], n) for n in celok if idok.get(n) is not None and idok[n] > k + 1]
+            hianyzik = [n for n in celok if idok.get(n) is None]
+            if not kesobb and not (ref and hianyzik):
+                continue
+            cel = max(kesobb)[1] if kesobb else hianyzik[0]
+            mikor = f"csak {ido(max(kesobb)[0] / mu.fps)}-kor készül el" if kesobb else "nincs a képen"
+            kapcsolat = "deklarált cél" if ref else "térbeli becslés, nincs vonatkozik"
+            out.append(lelet(l["id"], "K7", "figy", e["obj"],
+                             f"a címke {ido(k / mu.fps)}-kor megjelenik, de a(z) {cel} {mikor} "
+                             f"({kapcsolat}) → előbb az elem, utána a címke; jelol(vonatkozik=…)",
+                             doboz=a["doboz"], allapot="vege"))
+    return out
 
 
 def _elozo_vege(mu: Munka) -> dict[str, dict[str, dict]]:

@@ -33,6 +33,34 @@ kapu-teszt/kapu-teszt.sh [--render]                                  # gate acce
 `videotar-teszt/szintetikus.py`. Every fixture is synthetic: no learner, page, narration or source
 text (the neutrality test of `packages/school-notes2` scans this whole folder).
 
+## A kapu címke- és fps-ellenőrzése
+
+A K4 a vonalhoz tapadó címkét érintkezés nélkül is jelzi: különálló szöveg és vonal
+között legalább 12 px rés kell az 1920×1080-as naplóban. A `vonatkozik`-kal deklarált
+jelölés (keret, áthúzás, régió, nyíl) és egy idegen felirat között 8 px rés elég.
+Az üzenetben a mért rés és az alkalmazott küszöb is szerepel.
+A saját csoport törtvonala és a kiemelés kisebb rése önmagában nem lelet. A deklarált
+aláhúzás és fókuszkeret csak a saját céljai és azok csoportja mellett mentes; idegen címke mellett kell a rés.
+A metszést és érintkezést továbbra is vizsgálja.
+
+A K7 a címke és a cél megjelenési sorrendjét is ellenőrzi. A kapcsolatot így add meg:
+`jelol(cimke, vonatkozik=[cel])`. A címke az egész cél elkészülte után jelenjen meg.
+Csoportnál a most látható és a címke élettartamán belül érkező tagokat várja meg;
+a korábban eltűnt tag nem okoz téves hiányjelzést. A teljesen hiányzó csoport továbbra is lelet.
+Kapcsolat nélküli régi kódban a kapu a közeli, külön megjelölt képletsorból is becsülhet;
+ezt az üzenetben jelzi. A szándékos előzetes címet és a becslés bizonytalanságát a lektor bírálja el.
+
+A K1 eltérő átlagos fps esetén a szekció fájljának névleges fps-ét, kockaszámát és
+hosszát is lekéri. A legfeljebb egy képkockányi konténerkerekítés helyes névleges fps
+és kockaszám mellett nem hiba. A részletes határok és kivételek a
+[kapu interfészében](kapu-interfesz.md) olvashatók.
+
+A regressziós próbák a meglévő `kapu-teszt/test_kapu.py` részei: szűk és megfelelő rés,
+ferde és kör alakú vonal, saját és idegen címke melletti jelölés, a különböző résküszöbök határértékei,
+hét különböző címkeelrendezés deklarált és
+becsült céllal, helyes sorrend, eltűnés és újramegjelenés, a csoport változó tagsága, valamint
+fps-kerekítés és valódi sebesség- vagy hosszeltérés. Fizetős hívást nem használnak.
+
 ## Használati videó (képernyőképekből)
 
 A `hasznalat.sh` és a `hasznalat/` a jegyzetoldal általános bemutatójának gépi lánca.

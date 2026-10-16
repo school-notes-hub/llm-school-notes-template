@@ -463,3 +463,236 @@ def test_szinkron_kapcsolt_jel_eltunik_mozgas_kozben():
         mu = _mu([_l("s06-04", [nyil, kar, tavol]), _l("s06-05", [nyil, e], eltunik=elt, mozog=mozog,
                                                        megjelenik=[{"obj": e["obj"], "kocka": 7241, "veg_kocka": 7295}])])
         assert [(f["lepes"], f["kod"], f["obj"]) for f in kapu.k1_kapcsolt(mu)] == vart
+
+
+# --- Címke–vonal rés, címke–cél sorrend, konténerkerekítés -------------------------
+
+@pytest.mark.parametrize("doboz", [[631, 629, 654, 654], [631, 426, 654, 451], [623, 527, 654, 553]])
+def test_k4_hat_pixeles_res_nem_eleg(doboz):
+    """A három jel nem metszi a vonalat, mégis rátapad. A távolabb tett jel már rendben van."""
+    vonal = _o("el", "vonal", [660, 289, 660, 791], {"t": "szakasz", "p": [[660, 791], [660, 289]]})
+    cimke = _o("jel", "keplet", doboz)
+    assert [(x[0], x[1]) for x in _k4([_l("s01-01", [vonal, cimke])])] == [("s01-01", "jel")]
+    assert "rés 6 px < 12 px" in kapu.k345(_mu([_l("s01-01", [vonal, cimke])]))[0]["uzenet"]
+    cimke["doboz"] = [doboz[0] - 20, doboz[1], doboz[2] - 20, doboz[3]]
+    assert _k4([_l("s01-01", [vonal, cimke])]) == []
+
+
+def test_k4_res_geometria_es_szandekos_jeloles():
+    cimke = _o("jel", "keplet", [500, 500, 530, 530])
+    vonal = _o("el", "vonal", [542, 400, 542, 600], {"t": "szakasz", "p": [[542, 400], [542, 600]]})
+    assert _k4([_l("s01-01", [vonal, cimke])]) == []  # pontosan 12 px
+    vonal["vonal"] = {"t": "szakasz", "p": [[538, 538], [600, 600]]}
+    assert kapu._vonal_doboz_tav(vonal["vonal"], cimke["doboz"]) == pytest.approx(128 ** 0.5)
+    assert _k4([_l("s01-01", [vonal, cimke])])
+    assert "rés 11,3 px < 12 px" in kapu.k345(_mu([_l("s01-01", [vonal, cimke])]))[0]["uzenet"]
+    vonal["vonal"] = {"t": "szakasz", "p": [[539, 539], [600, 600]]}
+    assert _k4([_l("s01-01", [vonal, cimke])]) == []  # a bővített téglalap sarka nem elég
+    kor = {"t": "kor", "k": [500, 500], "r": 40}
+    assert kapu._vonal_doboz_tav(kor, [500, 500, 510, 510]) == pytest.approx(40 - 200 ** 0.5)
+    # Az aláhúzás, a saját csoport törtvonala és a kiemelés kisebb rése szándékos.
+    vonal["vonal"] = {"t": "szakasz", "p": [[500, 536], [530, 536]]}
+    for jel in [dict(vonal, vonatkozik=["jel"]), dict(vonal, csoport="jel"), dict(vonal, kat="kiemeles")]:
+        assert _k4([_l("s01-01", [jel, cimke])]) == []
+    # A kapcsolat csak a közelséget menti fel; a metszés továbbra is lelet.
+    vonal.update(vonatkozik=["jel"], vonal={"t": "szakasz", "p": [[500, 515], [530, 515]]})
+    assert _k4([_l("s01-01", [vonal, cimke])])
+
+
+@pytest.mark.parametrize("cel,vart", [("idegen", True), ("cimke", False), ("sor", False), ("tag", False)])
+def test_k4_deklaralt_jeloles_csak_a_sajat_celjait_menti(cel, vart):
+    """Az idegen címke melletti nyílra is kell rés; a cél és annak csoportja mentes."""
+    cimke = _o("cimke", "keplet", [560, 380, 595, 420], csoport="sor")
+    tag = _o("tag", "keplet", [450, 380, 480, 420], csoport="sor")
+    nyil = _o("nyil", "nyil", [600, 300, 600, 500],
+              {"t": "szakasz", "p": [[600, 300], [600, 500]]}, vonatkozik=[cel])
+    leletek = _k4([_l("s01-01", [nyil, cimke, tag])])
+    assert [x[1] for x in leletek] == (["cimke"] if vart else [])
+
+
+@pytest.mark.parametrize("deklaralt,res,vart", [
+    pytest.param(True, 6, True, id="jeloles-tapad"),
+    pytest.param(True, 8, False, id="jeloles-hatar"),
+    pytest.param(True, 10, False, id="jeloles-olvashato"),
+    pytest.param(True, 12, False, id="jeloles-tag-res"),
+    pytest.param(False, 6, True, id="vonal-tapad"),
+    pytest.param(False, 8, True, id="vonal-nyolc"),
+    pytest.param(False, 10, True, id="vonal-tiz"),
+    pytest.param(False, 12, False, id="vonal-hatar"),
+])
+def test_k4_deklaralt_jeloles_reskuszobe(deklaralt, res, vart):
+    """Idegen címke és jelölés között 8 px elég; önálló vonalnál továbbra is 12 px kell."""
+    cimke = _o("cimke", "keplet", [560, 380, 595, 420])
+    d = [595 + res, 350, 670, 450]
+    vonal = _o("vonal", "keret" if deklaralt else "vonal", d, _teglalap(d),
+               vonatkozik=["masik"] if deklaralt else [])
+    leletek = kapu.rendez(kapu.k345(_mu([_l("s01-01", [vonal, cimke])])))
+    assert [(x["kod"], x["obj"]) for x in leletek] == ([("K4", "cimke")] if vart else [])
+    if vart:
+        assert f"rés {res} px < {8 if deklaralt else 12} px" in leletek[0]["uzenet"]
+
+
+def test_k4_jeloles_nem_fedi_el_a_masik_kozeli_vonalat():
+    """A megengedett jelölésrés mögül előkerül a továbbra is túl közeli önálló vonal."""
+    cimke = _o("cimke", "keplet", [560, 380, 595, 420])
+    d = [605, 350, 670, 450]
+    keret = _o("a_keret", "keret", d, _teglalap(d), vonatkozik=["masik"])
+    vonal = _o("z_vonal", "vonal", [550, 350, 550, 450], {"t": "szakasz", "p": [[550, 350], [550, 450]]})
+    leletek = kapu.rendez(kapu.k345(_mu([_l("s01-01", [keret, vonal, cimke])])))
+    assert len(leletek) == 1
+    assert "z_vonal vonalához túl közel áll (rés 10 px < 12 px)" in leletek[0]["uzenet"]
+
+
+def test_k4_kozelseg_nem_fedi_el_az_erintkezest():
+    cimke = _o("jel", "keplet", [500, 500, 530, 530])
+    kozeli = _o("a_kozeli", "vonal", [536, 400, 536, 600], {"t": "szakasz", "p": [[536, 400], [536, 600]]})
+    erinto = _o("z_erinto", "vonal", [530, 400, 530, 600], {"t": "szakasz", "p": [[530, 400], [530, 600]]})
+    leletek = kapu.rendez(kapu.k345(_mu([_l("s01-01", [cimke, kozeli, erinto])])))
+    assert len(leletek) == 1 and "z_erinto vonala a szöveg szélén" in leletek[0]["uzenet"]
+
+
+def _megj(o, kezd, veg):
+    return {"obj": o["obj"], "kat": o["kat"], "csoport": o["csoport"], "ok": "uj", "kocka": kezd, "veg_kocka": veg}
+
+
+def _cimke_sor(kulon_lepes=0, tagok=2, sor_y=400, cimke_y=780, deklaralt=False, cimke_kezd=0):
+    """Önálló címke, szavanként felépülő sor, majd aláhúzás; nincs tanulói szöveg."""
+    sor = [_o(f"tag{i}", "keplet", [840 + i * 60, sor_y, 880 + i * 60, sor_y + 40], csoport="sor")
+           for i in range(tagok)]
+    kozep = (sor[0]["doboz"][0] + sor[-1]["doboz"][2]) // 2
+    cimke = _o("cimke", "szoveg", [kozep - 80, cimke_y, kozep + 80, cimke_y + 40], tartalom="rövid címke")
+    if deklaralt:
+        cimke["vonatkozik"] = ["sor"]
+    jel = _o("alahuzas", "vonal", [840, sor_y + 60, 1000, sor_y + 60], vonatkozik=["sor"])
+    kezd = kulon_lepes * 120
+    es = [_megj(o, kezd + 30 + i * 20, kezd + 40 + i * 20) for i, o in enumerate(sor)]
+    lepesek = [_l(f"s01-{i+1:02d}", [cimke], kezd_kocka=i*120, veg_kocka=(i+1)*120) for i in range(kulon_lepes)]
+    lepesek.append(_l(f"s01-{kulon_lepes+1:02d}", [cimke, *sor, jel], megjelenik=es,
+                     kezd_kocka=kezd, veg_kocka=kezd+120))
+    lepesek[0]["megjelenik"].append(_megj(cimke, cimke_kezd, cimke_kezd+6))
+    return lepesek
+
+
+@pytest.mark.parametrize("kulon,tagok,sor_y,cimke_y", [
+    pytest.param(2, 4, 150, 70, id="ket-lepessel-elobb"),
+    pytest.param(0, 4, 610, 780, id="negy-tag"),
+    pytest.param(0, 2, 610, 770, id="ket-tag-kozelebb"),
+    pytest.param(0, 1, 610, 780, id="egy-tag"),
+    pytest.param(0, 2, 610, 780, id="ket-tag"),
+    pytest.param(0, 4, 380, 770, id="negy-tag-tavolabb"),
+    pytest.param(0, 2, 380, 770, id="ket-tag-tavolabb"),
+])
+@pytest.mark.parametrize("deklaralt", [False, True], ids=["terbeli", "deklaralt"])
+def test_k7_korai_cimke_elrendezesei(kulon, tagok, sor_y, cimke_y, deklaralt):
+    """A lektori esetek hét különböző elrendezése, deklarált és becsült célkapcsolattal."""
+    ls = _cimke_sor(kulon, tagok, sor_y, cimke_y, deklaralt)
+    lelet = kapu.k7(_mu(ls))
+    assert [(x["lepes"], x["obj"]) for x in lelet] == [("s01-01", "cimke")]
+    assert ("térbeli becslés" in lelet[0]["uzenet"]) is not deklaralt
+    assert f"tag{tagok-1}" in lelet[0]["uzenet"]  # a teljes sor végét várja meg
+
+
+@pytest.mark.parametrize("deklaralt", [False, True])
+@pytest.mark.parametrize("kezd,vart", [(30, True), (59, False), (60, False), (70, False)])
+def test_k7_cimke_csak_a_kesz_sor_utan(deklaralt, kezd, vart):
+    ls = _cimke_sor(deklaralt=deklaralt, cimke_kezd=kezd)
+    assert bool(kapu.k7(_mu(ls))) is vart  # egy kocka tűrés, a cél végéhez mérve
+
+
+def test_k7_becsleshez_jeloles_es_kozeli_sor_kell():
+    ls = _cimke_sor()
+    ls[0]["allapot"]["vege"] = ls[0]["allapot"]["vege"][:-1]
+    assert kapu.k7(_mu(ls)) == []  # a puszta térbeli közelség nem bizonyít kapcsolatot
+    ls = _cimke_sor(sor_y=100)
+    assert kapu.k7(_mu(ls)) == []  # túl messze van
+    ls = _cimke_sor()
+    ls[0]["allapot"]["vege"][0]["tartalom"] = "Mi lesz az eredmény?"
+    assert kapu.k7(_mu(ls)) == []  # a kérdés megelőzheti a választ
+    ls = _cimke_sor()
+    mas = _o("masik", "keplet", [840, 520, 940, 560], csoport="masik")
+    ls[0]["allapot"]["vege"].extend([mas, _o("jel2", "vonal", [840, 570, 940, 570], vonatkozik=["masik"])])
+    ls[0]["allapot"]["vege"][0]["doboz"] = [810, 470, 970, 490]
+    assert kapu.k7(_mu(ls)) == []  # két egyformán közeli sor: a kapu nem találgat
+
+
+def test_k7_eltunt_es_ujra_megjeleno_cel():
+    cel = _o("cel", "keplet", [800, 400, 900, 440])
+    cimke = _o("cimke", "szoveg", [800, 600, 900, 640], vonatkozik=["cel"])
+    ls = [_l("s01-01", [cel], megjelenik=[_megj(cel, 0, 10)]),
+          _l("s01-02", [], eltunik=[{"obj": "cel", "kocka": 100, "veg_kocka": 110}]),
+          _l("s01-03", [cel, cimke], megjelenik=[_megj(cimke, 200, 206), _megj(cel, 230, 240)])]
+    assert [(x["lepes"], x["obj"]) for x in kapu.k7(_mu(ls))] == [("s01-03", "cimke")]
+    ls[-1]["megjelenik"][0] = _megj(cimke, 240, 246)
+    assert kapu.k7(_mu(ls)) == []
+
+
+@pytest.mark.parametrize("cel,marad,erkezik,vart", [
+    pytest.param("sor", True, None, None, id="eltunt-tag-nem-kell"),
+    pytest.param("sor", False, None, "sor nincs a képen", id="ures-csoport"),
+    pytest.param("sor", True, 350, "uj csak", id="uj-tagot-megvarja"),
+    pytest.param("sor", False, 350, "uj csak", id="kesobb-erkezo-csoport"),
+    pytest.param("sor", True, 400, None, id="elettartam-hatara"),
+    pytest.param("sor", True, 500, None, id="kesoi-tag-nem-kell"),
+    pytest.param("sor", False, 500, "sor nincs a képen", id="kesoi-tag-nem-potol"),
+    pytest.param("regi", True, None, "regi nincs a képen", id="konkret-eltunt-cel-kell"),
+])
+def test_k7_csoportnak_csak_az_aktualis_tagjai_kellenek(cel, marad, erkezik, vart):
+    """Az egyszerűsítéskor eltűnt tag nem hiány, de az üres csoport és a korai címke lelet."""
+    tag = _o("tag", "keplet", [800, 400, 840, 440], csoport="sor")
+    regi = _o("regi", "keplet", [850, 400, 890, 440], csoport="sor")
+    uj = _o("uj", "keplet", [900, 400, 940, 440], csoport="sor")
+    cimke = _o("cimke", "szoveg", [800, 500, 900, 540], vonatkozik=[cel])
+    marado = [tag] if marad else []
+    elt = [{"obj": o["obj"], "kocka": 130, "veg_kocka": 140} for o in [regi, *([] if marad else [tag])]]
+    ls = [_l("s01-01", [tag, regi], megjelenik=[_megj(tag, 0, 10), _megj(regi, 10, 20)]),
+          _l("s01-02", marado, eltunik=elt),
+          _l("s01-03", [*marado, cimke], megjelenik=[_megj(cimke, 300, 310)])]
+    if erkezik is not None:
+        ls.append(_l("s01-04", [*marado, uj], megjelenik=[_megj(uj, erkezik, erkezik + 10)],
+                     eltunik=[{"obj": "cimke", "kocka": 400, "veg_kocka": 410}]))
+    leletek = kapu.k7(_mu(ls))
+    if vart is None:
+        assert leletek == []
+    else:
+        assert [(x["lepes"], x["obj"]) for x in leletek] == [("s01-03", "cimke")]
+        assert vart in leletek[0]["uzenet"]
+
+
+@pytest.mark.parametrize("stream,vart", [
+    ({"r_frame_rate": "30/1", "nb_frames": "82", "duration": "2.732357"}, False),
+    ({"r_frame_rate": "25/1", "nb_frames": "82", "duration": "3.28"}, True),
+    ({"r_frame_rate": "30/1", "nb_frames": "82", "duration": "3.28"}, True),
+    ({"r_frame_rate": "30/1", "nb_frames": "81", "duration": "2.732357"}, True),
+    ({"r_frame_rate": "0/0", "nb_frames": "82", "duration": "2.732357"}, True),
+    ({"r_frame_rate": "30/1", "nb_frames": "N/A", "duration": "N/A"}, True),
+])
+def test_k1_kontener_kerekitese_nem_sebesseghiba(tmp_path, monkeypatch, stream, vart):
+    """A valódi regresszió: 82 kocka / 2,732357 s, az átlag 1259520/41969. A hibás fps/hossz továbbra is piros."""
+    from types import SimpleNamespace
+    mu = kapu.Munka(TESZT)
+    index = json.loads((mu.media / "sections" / f"{mu.jelenet}.json").read_text())
+    szekcio = next(s for s in index if s["nb_frames"] == "82")
+    szekcio.update(avg_frame_rate="1259520/41969", duration="2.732357")
+    mu.media = tmp_path
+    (tmp_path / "sections").mkdir()
+    (tmp_path / "sections" / f"{mu.jelenet}.json").write_text(json.dumps(index))
+    (tmp_path / "sections" / szekcio["video"]).touch()
+    eredeti = kapu.subprocess.run
+
+    def probe(args, **kwargs):
+        if args[-1] == str(tmp_path / "sections" / szekcio["video"]):
+            assert args[0] == "ffprobe"
+            return SimpleNamespace(returncode=0, stdout=json.dumps({"streams": [stream]}))
+        return eredeti(args, **kwargs)
+
+    monkeypatch.setattr(kapu.subprocess, "run", probe)
+    hibak = kapu.k1(mu)
+    assert bool(hibak) is vart
+    if vart:
+        assert len(hibak) == 1 and hibak[0]["kod"] == "K1" and hibak[0]["sulyossag"] == "hiba"
+
+
+@pytest.mark.parametrize("atlag", ["0/0", "N/A", "", None, "25/1"])
+def test_k1_ervenytelen_fps_vagy_hianyzo_szekcio_nem_zold(tmp_path, atlag):
+    s = {"name": "s01-01", "nb_frames": "82", "avg_frame_rate": atlag, "video": "nincs.mp4"}
+    assert kapu._szekcio_fps(s, tmp_path, 30) is not None
