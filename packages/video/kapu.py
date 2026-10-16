@@ -1,4 +1,4 @@
-"""A Manim-videó gépi kapuja (K1–K13), a terv-menet.md 3. pontja szerint, a 2. próba súlyosságával.
+"""A Manim-videó gépi kapuja (K1–K14), a kapu-interfesz.md szerinti mérésekkel.
 
 Bemenet a munkamappa: narracio.json, hangido.json, idoterv.json, szavak.json, render_naplo.json,
 hang.wav, a Manim szekcióindexe és mp4-je, és ha van: kezi.json, kapu-kivetel.json.
@@ -26,6 +26,8 @@ from pathlib import Path
 GYOKER = Path(__file__).resolve().parent
 sys.path.insert(0, str(GYOKER))
 from szamnev import ertek as szam_ertek, sima, szoros  # noqa: E402
+from kapu_mozgas import (LATHATO, _szoveg, _vonalak, _pont_szakasz, _pont_doboz, _bovit,
+                         _kozep, _elozo_vege, mozgasi_meresek)  # noqa: E402
 from lanc.szavak import whisper_ertek  # noqa: E402
 from lanc.szavak import elteres as szavak_elteres, hallott_szavak, valtozott_szavak  # noqa: E402
 
@@ -57,13 +59,12 @@ K11_FIGY_S, K11_LEPES, K11_HIBA_S = 390, 80, 480
 K13_PIX, K13_URES, K13_MAJDNEM, K13_S = 0.10, 0.9995, 0.999, 1.0   # K13: ffmpeg blackdetect (pix_th, pic_th, d)
 K13_MAGAS = 480       # K13 mindig 480 px magasan mér: a 480p-s és az 1080p-s render ugyanazt az ítéletet kapja
 ALLO_S = 1.0          # K12 (a mintavideón beállítva: ott a legrövidebb kulcslépés 1,07 s)
-LATHATO = 0.05
 
-KOD_SOR = ["K1", "K2", "K2b", "K3", "K4", "K5", "K6a", "K6b", "K7", "K8", "K8a", "K9", "K10", "K11", "K12", "K13"]
+KOD_SOR = ["K1", "K2", "K2b", "K3", "K4", "K5", "K6a", "K6b", "K7", "K8", "K8a", "K9", "K10", "K11", "K12", "K13", "K14"]
 ALLAPOT = [("szinkron", ("K1",)), ("szám", ("K2",)), ("tag", ("K2b",)), ("egy-változás", ("K9",)),
            ("kilógás", ("K3",)), ("átfedés", ("K4",)), ("betű", ("K5",)), ("szín", ("K6a", "K6b")),
            ("helyére", ("K7",)), ("felirat", ("K8", "K8a")), ("hang", ("K10",)), ("hossz", ("K11",)),
-           ("álló", ("K12",)), ("üres", ("K13",))]
+           ("álló", ("K12",)), ("üres", ("K13",)), ("mozgás", ("K14",))]
 MARKER = {"jelolo", "kiemeles", "keret"}
 
 
@@ -337,8 +338,17 @@ def uj_szamok(e: dict) -> list:
     return sorted(v for v, n in uj.items() for _ in range(max(n, 0)))
 
 
+def _tag_szavai(szavak: list[dict], szo) -> list[dict]:
+    if szo is None:
+        return []
+    s0 = sima(str(szo))  # a kód számot is adhat szónak (szo=6)
+    return [w for w in szavak if sima(w["szo"]) == s0 or _egyezik(w.get("ertek"), szam_ertek(str(szo))) or
+            (len(s0) >= 4 and sima(w["szo"]).startswith(s0[:4]))]
+
+
 def k2(mu: Munka) -> list[dict]:
     out, fps = [], mu.fps
+    latott_kepletek: set[str] = set()
     azonos = round(AZONOS_S * fps)
     for i, l in enumerate(mu.lepesek):
         sid = l["id"]
@@ -399,22 +409,41 @@ def k2(mu: Munka) -> list[dict]:
         _, beszed_veg = mu.beszed(sid) if sid in mu.tmap else (0, 0)
         for e in sorted(l["megjelenik"], key=lambda e: (e["kocka"], e["obj"])):
             a = mu.attr.get(e["obj"], {})
-            szo = e.get("szo") or a.get("szo")
-            f = e["kocka"]
-            if szo:
-                s0 = sima(str(szo))           # a kód számot is adhat szónak (szo=6)
-                cand = [w for w in sz if sima(w["szo"]) == s0 or (len(s0) >= 4 and sima(w["szo"]).startswith(s0[:4]))]
-                if cand:
-                    w = min(cand, key=lambda w: (abs(w["szo_s"] - f / fps), w["szo_s"]))
-                    if f / fps < w["szo_s"] - K2_ELOBB_S:
-                        sul = "figy" if w.get("forras") in ("becsult", "gyanus") else "hiba"
-                        out.append(lelet(sid, "K2b", sul, e["obj"], f"a tag {tized(w['szo_s'] - f / fps)} s-mal a „{w['szo']}” "
-                                         f"előtt látszik (szó {ido(w['szo_s'])}, kép {ido(f / fps)}) → Szora"))
-            elif e["kat"] == "keplet" and not e.get("kotes") and a.get("forras") == "sajat" and e["ok"] == "uj":
+            # K2b képletet vagy külön megnevezett tagot mér. Egy rajz puszta
+            # szakaszkötése a K1-é; ettől még nem válik megnevezett képlettaggá.
+            if e["kat"] != "keplet" and not (e.get("szo") or a.get("szo")):
+                continue
+            szo, f = e.get("szo") or a.get("szo"), e["kocka"]
+            cand = _tag_szavai(sz, szo)
+            kotes = ((e.get("kotes_szo"), f) if e.get("kotes") else _szakasz_kotese(l, f))
+            # A most is kimondott saját szóhoz a tag tényleges megjelenését mérjük.
+            # Más szó kötése nem menti fel az előrefutást. Elavult saját szó esetén
+            # viszont a kötés számít, így a régi szo nem hoz vissza hiányjelzést.
+            if not cand and kotes is not None:
+                szo, f = kotes
+                cand = _tag_szavai(sz, szo)
+            tartalom = "".join((e.get("tartalom") or "").split())
+            uj_keplet = bool(tartalom and tartalom not in latott_kepletek)
+            uj = uj_keplet and not _jelenet_elso(mu, i)
+            if e["kat"] == "keplet":
+                latott_kepletek.add(tartalom)
+            if cand:
+                w = min(cand, key=lambda w: (abs(w["szo_s"] - f / fps), w["szo_s"]))
+                if f / fps < w["szo_s"] - K2_ELOBB_S:
+                    sul = "figy" if w.get("forras") in ("becsult", "gyanus") else "hiba"
+                    out.append(lelet(sid, "K2b", sul, e["obj"], f"a tag {tized(w['szo_s'] - f / fps)} s-mal a „{w['szo']}” "
+                                     f"előtt látszik (szó {ido(w['szo_s'])}, kép {ido(f / fps)}) → Szora"))
+            elif szo and kotes is None:
+                out.append(lelet(sid, "K2b", "figy", e["obj"],
+                                 f"a képlet szava („{szo}”) nincs ebben a lépésben → a megjelenést a saját szavához kösd",
+                                 uj_keplet=uj))
+            elif e["kat"] == "keplet" and kotes is None and a.get("forras") == "sajat":
                 hatra = beszed_veg - f / fps
                 if hatra > K2B_HATRA_S:
+                    # A teljes képlet újdonsága lektori adat; az elfogadott kivételt is kiemeljük a táblában.
                     out.append(lelet(sid, "K2b", "figy", e["obj"], f"kötetlen képlet: megjelenése után még {tized(hatra)} s "
-                                     "beszéd van hátra → Keplet tagonként szóra, vagy jelol(szo=)"))
+                                     "beszéd van hátra → Keplet tagonként szóra, vagy jelol(szo=)",
+                                     **({"uj_keplet": True} if uj else {})))
     return out
 
 
@@ -455,35 +484,11 @@ def _vonal_metsz(v: dict, d) -> bool:
     return any(_szakasz_doboz(a, b, d) for vl in vonalak for a, b in zip(vl, vl[1:]))
 
 
-def _szoveg(o) -> bool:
-    return "font" in o
-
-
-def _vonalak(v: dict | None) -> list[list]:
-    """A napló vonalgeometriája töröttvonalak listájaként (a kör nélkül)."""
-    if not v or v.get("t") == "kor":
-        return []
-    p = v.get("p") or []
-    return [p] if p and isinstance(p[0][0], (int, float)) else p
-
-
-def _pont_szakasz(q, a, b) -> float:
-    dx, dy = b[0] - a[0], b[1] - a[1]
-    n = dx * dx + dy * dy
-    t = 0.0 if n == 0 else max(0.0, min(1.0, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / n))
-    return ((q[0] - a[0] - t * dx) ** 2 + (q[1] - a[1] - t * dy) ** 2) ** 0.5
-
-
 def _pont_vonal(q, v: dict) -> float:
     """A q pont távolsága a vonalgeometriától (töröttvonal vagy kör)."""
     if v.get("t") == "kor":
         return abs(((q[0] - v["k"][0]) ** 2 + (q[1] - v["k"][1]) ** 2) ** 0.5 - v["r"])
     return min((_pont_szakasz(q, a, b) for vl in _vonalak(v) for a, b in zip(vl, vl[1:])), default=float("inf"))
-
-
-def _pont_doboz(q, d) -> float:
-    dx, dy = max(d[0] - q[0], 0, q[0] - d[2]), max(d[1] - q[1], 0, q[1] - d[3])
-    return (dx * dx + dy * dy) ** 0.5
 
 
 def _vonal_doboz_tav(v: dict, d) -> float:
@@ -500,10 +505,6 @@ def _vonal_doboz_tav(v: dict, d) -> float:
                 for vl in _vonalak(v) for a, b in zip(vl, vl[1:])), default=float("inf"))
 
 
-def _bovit(d, px) -> list:
-    return [d[0] - px, d[1] - px, d[2] + px, d[3] + px]
-
-
 def _celok(o: dict, objs: list[dict]) -> set[str] | None:
     """A jelölés céljai (vonatkozik) és azok csoportja; None, ha nincs `vonatkozik`."""
     ref = set(o.get("vonatkozik") or [])
@@ -518,7 +519,22 @@ def _ra_mentes(v: dict, a: dict, objs: list[dict]) -> bool:
     if not v.get("ra"):
         return False
     celok = _celok(v, objs)
-    return celok is None or a["obj"] in celok or a["csoport"] in celok
+    # A vonal általános „ra” indoka (például pont a körön) nem engedélyezi egy
+    # felirat áthúzását. Ehhez a szövegen kell a kivétel, vagy pontos célkapcsolat.
+    if celok is not None:
+        return a["obj"] in celok or a["csoport"] in celok
+    # Régi aláhúzás/áthúzás: ha a teljes jel pontosan egy felirat közvetlen
+    # környezetébe fér, csak azt a feliratot menti. Egy egész ábracsoport nem fér
+    # egyetlen címke köré, akkor sem, ha közös a csoportnevük.
+    d = v["doboz"]
+    jeloltek = []
+    for o in objs:
+        if not _szoveg(o):
+            continue
+        b = _bovit(o["doboz"], CIMKE_RES_PX)
+        if b[0] <= d[0] <= d[2] <= b[2] and b[1] <= d[1] <= d[3] <= b[3]:
+            jeloltek.append(o["obj"])
+    return jeloltek == [a["obj"]]
 
 
 def _keret(o: dict) -> bool:
@@ -836,13 +852,75 @@ def k7_korai_cimke(mu: Munka) -> list[dict]:
     return out
 
 
-def _elozo_vege(mu: Munka) -> dict[str, dict[str, dict]]:
-    """Lépésenként az előző lépés végállapota (obj → objektum): ez a lépés kezdőképe."""
-    ki, elozo = {}, {}
-    for l in mu.lepesek:
-        ki[l["id"]] = elozo
-        elozo = {o["obj"]: o for o in l["allapot"]["vege"] if o.get("atl", 1.0) > LATHATO}
+def _jelenet_elso(mu: Munka, i: int) -> bool:
+    return i == 0 or mu.lepesek[i]["id"].rsplit("-", 1)[0] != mu.lepesek[i - 1]["id"].rsplit("-", 1)[0]
+
+
+def _szakasz_kotese(l: dict, kocka: int) -> tuple[str | None, int] | None:
+    """A legutóbbi kötött play indítja a szakaszt, a következő kötésig.
+    A videótár csak az első play-re írja a szót; a későbbi elemek azt öröklik.
+    Az időeltérést a szakasz indulásához mérjük, nem a későbbi elemekéhez."""
+    kotott = [e for e in l["elemek"] if e["kezd_kocka"] <= kocka and (e.get("szora") or e.get("horgony"))]
+    if not kotott:
+        return None
+    e = max(kotott, key=lambda e: e["kezd_kocka"])
+    return e.get("szora") or e["horgony"], e["kezd_kocka"]
+
+
+def _megjelenes_kotese(l: dict, e: dict, a: dict) -> tuple[str | None, int]:
+    # Az explicit kötést hiányzó szó mellett sem írhatja felül a tartós szo.
+    if e.get("kotes"):
+        return e.get("kotes_szo"), e["kocka"]
+    return _szakasz_kotese(l, e["kocka"]) or (e.get("szo") or a.get("szo"), e["kocka"])
+
+
+def szinkron_adatok(mu: Munka) -> list[dict]:
+    """A rajzok és mozgások kötése, a kötetlen változásokkal együtt, a lektornak."""
+    ki = []
+    for i, l in enumerate(mu.lepesek):
+        if _jelenet_elso(mu, i):
+            continue
+        esemenyek = [(e, e["kocka"], "megjelenés") for e in l["megjelenik"]
+                      if e["kat"] not in ("szoveg", "szam", "keplet", "szamlalo", "eredmeny", "kiemeles")]
+        esemenyek += [(e, e["tol"], "mozgás") for e in l["mozog"]]
+        for e, f, fajta in esemenyek:
+            a = mu.attr.get(e["obj"], {})
+            if a.get("kat") == "kiemeles" or (a.get("kat") in ("keret", "nyil") and a.get("vonatkozik")):
+                continue
+            # A tartós szo a megjelenést nevezi meg; későbbi mozgatásra nem érvényes.
+            szo, kf = (_megjelenes_kotese(l, e, a) if fajta == "megjelenés"
+                       else _szakasz_kotese(l, f) or (None, f))
+            ki.append({"lepes": l["id"], "obj": e["obj"], "kocka": f, "fajta": fajta,
+                       "kotes_szo": szo, "kotes_kocka": kf,
+                       "csoport": e.get("csoport") or a.get("csoport") or e["obj"]})
     return ki
+
+
+def k1_kotetlen(mu: Munka, adatok: list[dict] | None = None) -> list[dict]:
+    """K1 csak kimért időeltérésre. A tagmondat jelentését a videólektor ítéli meg;
+    a kötés vagy a szóidő hiánya nem bizonyít szinkronhibát."""
+    out, csoportok = [], set()
+    for e in szinkron_adatok(mu) if adatok is None else adatok:
+        szo, sid, f = e["kotes_szo"], e["lepes"], e["kotes_kocka"]
+        if not szo:
+            continue
+        s0 = sima(str(szo))
+        szavak = [w for w in mu.szavak(sid) if sima(w["szo"]) == s0 or _egyezik(w.get("ertek"), szam_ertek(str(szo))) or
+                  (len(s0) >= 4 and sima(w["szo"]).startswith(s0))]
+        if not szavak:
+            continue
+        w = min(szavak, key=lambda w: abs(w["szo_s"] - f / mu.fps))
+        d = f / mu.fps - w["szo_s"]
+        csop = (sid, e["csoport"])
+        if -K2_ELOBB_S <= d <= K2_KESIK_S or csop in csoportok:
+            continue
+        a = mu.attr.get(e["obj"], {})
+        out.append(lelet(sid, "K1", "figy", e["obj"],
+                         f"a {e['fajta']} kötött szakasza {tized(abs(d))} s-mal a „{w['szo']}” "
+                         f"{'előtt' if d < 0 else 'után'} indul (kép {ido(f / mu.fps)}, szó {ido(w['szo_s'])}) → Szora",
+                         kocka=f, **({"doboz": a["doboz"]} if a.get("doboz") else {})))
+        csoportok.add(csop)
+    return out
 
 
 def k1_kapcsolt(mu: Munka) -> list[dict]:
@@ -889,10 +967,6 @@ def k1_kapcsolt(mu: Munka) -> list[dict]:
                                      "kimondásra tűnjön el", doboz=o["doboz"], allapot="vege"))
                     break
     return out
-
-
-def _kozep(d) -> tuple[float, float]:
-    return (d[0] + d[2]) / 2, (d[1] + d[3]) / 2
 
 
 def k7_vegso_hely(mu: Munka) -> list[dict]:
@@ -1201,6 +1275,26 @@ def k8a(mp4: Path) -> list[dict]:
     return [lelet(None, "K8a", "hiba", None, "; ".join(baj))] if baj else []
 
 
+def k14(mu: Munka, meresek: list[dict] | None = None) -> list[dict]:
+    out, csoportok = [], set()
+    for m in mozgasi_meresek(mu) if meresek is None else meresek:
+        reszek = []
+        if m.get("fok_s", 0) > m.get("kuszob_fok_s", float("inf")) + 1:
+            reszek.append(f"{tized(m['fok'])}° / {tized(m['ido_s'], 2)} s = {tized(m['fok_s'])}°/s "
+                          f"> {m['kuszob_fok_s']}°/s")
+        # A kért fél másodperc kockára kerekítése nem rövid mozgás (pl. 15 fps: 7 kocka).
+        if "ut_px" in m and (m["ig"] - m["tol"]) + 0.5 < m["min_ido_s"] * mu.fps - 1e-9:
+            reszek.append(f"{tized(m['ut_px'])} px eltolás {tized(m['ido_s'], 2)} s alatt "
+                          f"(< {tized(m['min_ido_s'])} s)")
+        csop = (m["lepes"], m["tol"], m["ig"], mu.attr.get(m["obj"], {}).get("csoport", m["obj"]))
+        if reszek and csop not in csoportok:
+            out.append(lelet(m["lepes"], "K14", "figy", m["obj"], "gyors mozgás: " + "; ".join(reszek) +
+                             " (alsó becslés) → adj több időt a mozgás követésére",
+                             meres=m, kocka=m["tol"]))
+            csoportok.add(csop)
+    return out
+
+
 # --- összesítés, kivételek --------------------------------------------------------
 
 def rendez(leletek: list[dict]) -> list[dict]:
@@ -1257,9 +1351,11 @@ def kapu(mappa: Path, vezerlo: bool = False) -> dict:
 
 
 def kapu_munkan(mu: Munka, vezerlo: bool = False) -> dict:
+    meresek = mozgasi_meresek(mu) if mu.naplo else []
+    szinkron = szinkron_adatok(mu) if mu.naplo else []
     leletek = k1(mu) + k1_kapcsolt(mu)
     if mu.naplo:
-        leletek += k2(mu) + k345(mu) + k6b(mu) + k7(mu) + k8(mu) + k9(mu) + k12(mu) + k13(mu)
+        leletek += k1_kotetlen(mu, szinkron) + k2(mu) + k345(mu) + k6b(mu) + k7(mu) + k8(mu) + k9(mu) + k12(mu) + k13(mu) + k14(mu, meresek)
     leletek += k10(mu) + k11(mu.terv["kocka_osszes"], mu.fps, len(mu.tl))
     leletek = rendez(leletek)
     rossz = kivetelek(mu, leletek, vezerlo)
@@ -1278,7 +1374,9 @@ def kapu_munkan(mu: Munka, vezerlo: bool = False) -> dict:
             "lepesek": len(mu.tl), "kockak": mu.terv["kocka_osszes"], "fps": mu.fps, "bemenet": bemenet,
             "zold": not nyitott, "atadhato": all(x.get("teves_hiba") for x in nyitott),
             "szamok": szam, "allapot": allapotsor(leletek), "leletek": leletek,
-            "ervenytelen_kivetelek": rossz, "jelzesek": jelzes}
+            "ervenytelen_kivetelek": rossz, "jelzesek": jelzes,
+            "mozgas_meres": meresek,
+            "kotetlen_valtozasok": [e for e in szinkron if not e["kotes_szo"]]}
 
 
 def osszefoglalo(k: dict, max_figy: int = 12, max_hiba: int = 6, max_lelet: int = 14) -> list[str]:

@@ -80,6 +80,16 @@ def szo_oszlop(mu: Munka, l: dict) -> str:
     return " · ".join(r) or "–"
 
 
+def kotetlen_oszlop(mu: Munka, l: dict, adatok: list[dict]) -> str:
+    """Lektori adat, nem figyelmeztetés. A kötés jelentését a lektor dönti el."""
+    csoportok = {}
+    for e in adatok:
+        if e["lepes"] == l["id"]:
+            csoportok.setdefault((e["kocka"], e["fajta"], e["csoport"]), []).append(e["obj"])
+    return "; ".join(f"{nevek(ns)} {_rel(f, l['kezd_kocka'], mu.fps)} ({fajta})"
+                     for (f, fajta, _), ns in sorted(csoportok.items()))
+
+
 def ir(mu: Munka, k: dict) -> str:
     fps = mu.fps
     ls = k["leletek"]
@@ -99,6 +109,9 @@ def ir(mu: Munka, k: dict) -> str:
             if felt(x):
                 indok = x.get("teves_hiba") or x.get("felulbiralva") or x.get("elfogadva")
                 fej.append(f"{cim} " + lsor(x) + (f" — indok: {indok}" if indok and cim != "HIBA" and cim != "FIGY" else ""))
+    for x in ls:
+        if x.get("uj_keplet") and x.get("elfogadva"):
+            fej.append(f"új képlet elfogadva: {x['lepes']}/{x['obj']}/{x['elfogadva']}")
     for e in k["ervenytelen_kivetelek"]:
         fej.append(f"ÉRVÉNYTELEN KIVÉTEL ({e['fajta']}) {e['kod']} {e['lepes']} {e['obj']}: {e['ok']}")
     kap: dict[str, list] = {"ra": [], "kivul": [], "szamellenorzes": []}
@@ -117,11 +130,13 @@ def ir(mu: Munka, k: dict) -> str:
         if n:
             bizonytalan.append(f"{sid} " + ", ".join(f"{v} {'becsült' if f == 'becsult' else 'gyanús'}" for f, v in sorted(n.items())))
     fej.append("becsült/gyanús szóidő: " + ("; ".join(bizonytalan) if bizonytalan else "nincs"))
+    if k.get("mozgas_meres"):
+        fej.append("Mozgás: végállapotokból számolt alsó becslés; részletek és nem mért pályák: kapu.json mozgas_meres.")
     if k["jelzesek"]:
         fej.append("rövidítés: " + " · ".join(f"{j['lepes']} {j['uzenet'].split(' (')[0].removeprefix('rövidítés ')}"
                                                   for j in k["jelzesek"]))
     fej.append("Lépésenként: id idő | mondat | szó: kötött vagy számos szó +s a lépés elejétől | kép: +s esemény "
-               "(← vonatkozás, „tartalom”, (szóra)) | álló | leletek")
+               "(← vonatkozás, „tartalom”, (szóra)) | álló | leletek | kötetlen: lektori adat, nem lelet")
     lepes_lelet: dict[str, list] = {}
     for x in ls:
         if x["lepes"]:
@@ -143,6 +158,19 @@ def ir(mu: Munka, k: dict) -> str:
         sorok.append(f"{sid} {ido(t['kezd_kocka'] / fps)}–{ido(t['veg_kocka'] / fps)} | {n.get('text', '')} | "
                      f"szó: {szo_oszlop(mu, l)} | kép: {kep_oszlop(mu, l)} | {allo} | "
                      f"{', '.join(lepes_lelet.get(sid, [])) or '–'}")
+        kotetlen = kotetlen_oszlop(mu, l, k.get("kotetlen_valtozasok", []))
+        if kotetlen:
+            sorok[-1] += " | kötetlen: " + kotetlen
+        mertes = []
+        for m in k.get("mozgas_meres", []):
+            if m["lepes"] != sid:
+                continue
+            if "fok_s" in m:
+                mertes.append(f"{m['obj']} {tized(m['fok'])}°/{tized(m['ido_s'], 2)} s = {tized(m['fok_s'])}°/s")
+            elif "px_s" in m:
+                mertes.append(f"{m['obj']} {tized(m['ut_px'])} px/{tized(m['ido_s'], 2)} s = {tized(m['px_s'])} px/s")
+        if mertes:
+            sorok[-1] += " | mozgás: " + "; ".join(mertes[:3]) + ("; … (kapu.json)" if len(mertes) > 3 else "")
     tabla = "\n".join(fej + ["", *sorok]) + "\n"
     szoveg_ir(mu.m / "tabla.txt", tabla)
     sz_sorok = [f"# {k['jelenet']} – a narráció mondatai", ""]

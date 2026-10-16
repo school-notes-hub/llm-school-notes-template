@@ -1,37 +1,60 @@
-# School Notes video chain
+# School Notes videólánc
 
-The machine steps of a Manim teaching video, run from the tagged release worktree like `sn`
-(`~/.local/share/school-notes/release/current/packages/video/`). The writer agent writes the
-narration and the scene code; this chain does the rest without an LLM: speech (TTS per step),
-word timing (Whisper per step, number reader), frame plan, render, gate (K1-K13), contact sheets,
-final render with opening and closing card, receipt and measurement.
+A Manim tanulóvideók gépi munkalépései. Az `sn`-hez hasonlóan a címkézett kiadásból fut
+(`~/.local/share/school-notes/release/current/packages/video/`). Az író a narrációt és a
+jelenetkódot készíti; a lánc végzi a beszédkészítést, a szóidők meghatározását, a kockatervet,
+a rendert, a kaput (K1–K14), a kontaktlapokat, a nyitó- és zárókép hozzáfűzését és a nyugtázást.
 
-| Path | What it is |
+| Útvonal | Feladat |
 |---|---|
-| `video.sh` | the one command: `video.sh <learner> <subject> <page>-<n> [--atadas [--valtozott] \| --vegleges \| --meres \| --kivagat <step>/<obj> \| --takarit]`; runs `video.py` in this tree's `packages/school-notes2` uv environment |
-| `manim.sh` | Manim from the separate `manim-env` with its own TinyTeX; puts this folder on `PYTHONPATH`, so scene code imports `from videotar import ...` |
-| `video.py`, `lanc/` | the chain: speech, words, render, opening/closing card, measurement |
-| `hang.py`, `idoterv.py` | speech helpers and the frame plan |
-| `kapu.py`, `tabla.py`, `lapok.py`, `szamnev.py` | the gate, its time table, contact sheets and the number reader ([interface](kapu-interfesz.md)) |
-| `videotar/` | the element library for scene code ([API](videotar/API.md)), pinned to Manim 0.22 |
+| `video.sh` | `video.sh <learner> <subject> <page>-<n> [--atadas [--valtozott] \| --vegleges \| --meres \| --kivagat <step>/<obj> \| --takarit]`; a `video.py` a helyi `packages/school-notes2` uv-környezetében fut |
+| `manim.sh` | külön `manim-env`, saját TinyTeX; a jelenetkód `from videotar import ...` sorral használja az elemtárat |
+| `video.py`, `lanc/` | beszéd, szavak, render, nyitó- és zárókép, mérés |
+| `hang.py`, `idoterv.py` | hangsegédek és kockaterv |
+| `kapu.py`, `tabla.py`, `lapok.py`, `szamnev.py` | kapu, időtábla, kontaktlapok és számnévolvasó ([interfész](kapu-interfesz.md)) |
+| `videotar/` | jelenetelemek ([API](videotar/API.md)), Manim 0.22-höz |
 
-Exit codes: 0 green, 1 red, 2 stopped (input, version, lock, budget, time limit), 3 render crash.
-Working folders stay in the learner repository (`.school-notes/out/video/<subject>/<page>-<n>/`),
-the Manim cache under `~/.cache/school-notes/video/`, finished videos under `~/jegyzet/video-kesz/`.
-Paid calls go through the podcast ledger, cache and budget of `school_notes2`.
+Kilépési kód: 0 zöld, 1 piros, 2 megállás (bemenet, verzió, zár, keret vagy időkorlát), 3 renderhiba.
+A munkamappa a tanulói repóban (`.school-notes/out/video/<subject>/<page>-<n>/`), a Manim gyorsítótára
+a `~/.cache/school-notes/video/`, a kész videó a `~/jegyzet/video-kesz/` alatt van.
+A fizetős hívásokat a `school_notes2` podcastnaplója, gyorsítótára és költségkerete kezeli.
 
-## Tests (no paid call)
+## Tesztek (fizetős hívás nélkül)
 
 ```sh
 cd packages/video
-uv run --project ../school-notes2 python -m pytest -q lanc/teszt   # chain, number reader, gate rules; renders the test scenes through video.sh with VIDEO_CSONK=1
-videotar-teszt/render.sh                                             # renders the two test scenes (synthetic sound), then the videotar tests in manim-env
-kapu-teszt/kapu-teszt.sh [--render]                                  # gate acceptance on the test scenes
+uv run --project ../school-notes2 python -m pytest -q lanc/teszt hasznalat/test
+videotar-teszt/render.sh                         # két szintetikus jelenet és elemtártesztek
+kapu-teszt/kapu-teszt.sh [--render]              # a kapu elfogadási és regressziós próbái
 ```
 
-`VIDEO_CSONK=1` with `--mappa <folder>` replaces TTS and Whisper with the synthetic stub of
-`videotar-teszt/szintetikus.py`. Every fixture is synthetic: no learner, page, narration or source
-text (the neutrality test of `packages/school-notes2` scans this whole folder).
+A `VIDEO_CSONK=1` és `--mappa <folder>` a TTS-t és a Whispert szintetikus tesztadatra cseréli.
+A tesztmintákban nincs tanulói adat vagy forrásszöveg; ezt a `packages/school-notes2` semlegességi
+tesztje is ellenőrzi. A teljes kaputeszt: `uv run --project ../school-notes2 python -m pytest -q kapu-teszt`.
+
+## Szóhoz kötött változás, követhető mozgás
+
+A K1 a kötött rajz vagy mozgás mért időeltérésére figyelmeztet. A Szora/Horgony szavát
+a szakasz további elemei öröklik; az explicit kötés megelőzi a régi `szo` attribútumot.
+A kötetlen változás a tábla saját lépéssorában lektori adatként látszik. Hogy melyik tagmondathoz
+tartozik, azt a lektor dönti el (mérce 2. szabály); a kötés hiánya önmagában nem kapulelet.
+Az új teljes képlet K2b-figyelmeztetése indokkal elfogadható. Az ilyen elfogadás külön sorban
+is látszik a tábla fejlécében, hogy a lektor elbírálhassa.
+A K2b a tag saját szavához méri a megjelenést, ha ez a szó elhangzik az adott lépésben.
+Csak az elavult saját szó helyett használja az explicit vagy örökölt szakaszkötést.
+
+A K14 a ledarálás ellenőrzését segíti (mérce 11. szabály, 8. magyarázó elem).
+A diagnózisból átvett figyelmeztetési határ összekapcsolt képrészeknél 60°/s,
+önálló forgatásnál 120°/s. A 24 px fölötti tartalmi eltolásnál a kb. 0,5 s-nál rövidebb
+időre figyelmeztet, a napló 1920×1080-as méretében. Ezek eszközbeállítások, nem új
+mérceszabályok. A tábla a mért utat és időt is kiírja.
+
+A forgásszöget csak a sugár két állása közti kisebb szög adja; a szögív nem növeli ezt.
+A végállapotokból a köztes gyorsulás és a teljes fordulat nem igazolható.
+A hiányos pálya a `kapu.json` mérési adatai között marad, nem figyelmeztetés.
+Az új mérések nem adnak blokkoló hibát. A pontos feltételek és korlátok a
+[kapu interfészében](kapu-interfesz.md), a geometria a `kapu_mozgas.py` modulban,
+a regressziók a `kapu-teszt/test_kapu_masodik.py` és `test_kapu_review.py` fájlban vannak.
 
 ## A kapu címke- és fps-ellenőrzése
 

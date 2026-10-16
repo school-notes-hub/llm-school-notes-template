@@ -9,4 +9,4 @@ if [ "$1" = "--render" ] || [ ! -f "$T/hibasjelenet/render_naplo.json" ] || [ ! 
   "$T/render.sh" > "$D/render.log" 2>&1 || { tail -15 "$D/render.log"; exit 3; }
 fi
 cd "$D" && uv run --quiet --frozen --project "$(dirname "$(dirname "$D")")/school-notes2" \
-  python -m pytest -q -p no:cacheprovider -p no:warnings test_kapu.py
+  python -m pytest -q -p no:cacheprovider -p no:warnings .

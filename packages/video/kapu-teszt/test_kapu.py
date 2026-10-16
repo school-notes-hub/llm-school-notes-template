@@ -358,13 +358,13 @@ def test_k4_meretvonal_a_cimke_szelen():
 
 def test_k4_keret_ra_csak_a_sajat_celjara():
     """Egy kész videó lépése (lektori lelet): a d fókuszkeretének (`ra`) felső éle átfut a „d+b” címkén. A keret `ra`-ja csak
-    a saját céljait (d címke, méretvonal) menti fel, más feliratot nem; a `vonatkozik` nélküli `ra` mindent."""
+    a saját céljait (d címke, méretvonal) menti fel, más feliratot nem; a `vonatkozik` nélküli vonal-`ra` egyetlen feliratot sem."""
     keret = _o("fokusz_37", "keret", [589, 790, 1061, 921], _teglalap([589, 790, 1061, 921]),
                vonatkozik=["d_cimke", "teljes_tavolsag"], ra="a keret körülveszi a már álló méretet")
     vege = [keret, _o("d_cimke", "keplet", [814, 867, 836, 901]), _o("d_plusz_b_2", "keplet", [892, 763, 923, 795])]
     assert _k4([_l("s05-05", vege)]) == [("s05-05", "d_plusz_b_2", "a(z) fokusz_37 vonala metszi a szöveget")]
     keret = dict(keret, vonatkozik=None)
-    assert _k4([_l("s05-05", [keret, *vege[1:]])]) == []
+    assert _k4([_l("s05-05", [keret, *vege[1:]])]) == [("s05-05", "d_plusz_b_2", "a(z) fokusz_37 vonala metszi a szöveget")]
 
 
 def test_k4_cimke_a_test_korvonalan():

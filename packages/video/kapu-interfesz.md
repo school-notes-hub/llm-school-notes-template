@@ -1,6 +1,6 @@
 # A kapu interfésze a láncnak (2a → 2b)
 
-A kapu (K1–K13), a tábla, a lapok és a lépéskulcs a `kapu.py`, `tabla.py`, `lapok.py` és `szamnev.py`
+A kapu (K1–K14), a tábla, a lapok és a lépéskulcs a `kapu.py`, `kapu_mozgas.py`, `tabla.py`, `lapok.py` és `szamnev.py`
 modulban van. Manimot nem importálnak; a standard könyvtár mellett csak a Pillow kell (a lapokhoz),
 ez a `school_notes2` uv-környezetében megvan. Elfogadási próba: `kapu-teszt/kapu-teszt.sh [--render]`.
 
@@ -12,7 +12,8 @@ kod, sorok = kapu.futtat(mappa, atadas=False, valtozott=False)   # kod: 0 zöld,
 ```
 vagy parancssorból: `python kapu.py <mappa> [--atadas [--valtozott]]` (kiírja a sorokat, a kilépési kód ugyanaz).
 
-- **alap mód** (az író 480p-s futása, és minden más futás): `kapu.json`, `tabla.txt`, `szoveg.md`. Kb. 0,1 s.
+- **alap mód** (az író 480p-s futása, és minden más futás): `kapu.json`, `tabla.txt`, `szoveg.md`.
+  Az idő a videó hosszától is függ: a K1 és a K13 a videófájlt is olvassa.
 - **`atadas=True`** (a vezérlő 1080p-s átadása, a render után): ezen felül `kockak/`, `lapok/`, `kivagat/`,
   `lepeskulcs.json`. A kockák a `render_naplo.json` felbontásán, a Manim mp4-jéből jönnek
   (`media/videos/<modul>/<magasság>p<fps>/<Jelenet>.mp4`). Mért idő 1080p-n: 76 s-os videó, 25 kocka 2,9 s;
@@ -77,7 +78,7 @@ az egyenlő szószámú csere minden eltérő párja
               "doboz": [1139, 515, 1321, 565], "allapot": "vege"}],
  "ervenytelen_kivetelek": [], "jelzesek": [{"lepes": "h01-02", "uzenet": "rövidítés 0,44 (< 0,7): …"}]}
 ```
-- A leletek sorrendje: lépés-id (a lépés nélküli, például K11, elöl), kód (K1, K2, K2b, K3 … K12, K13), objektumnév.
+- A leletek sorrendje: lépés-id (a lépés nélküli, például K11, elöl), kód (K1, K2, K2b, K3 … K12, K13, K14), objektumnév.
   `(lépés, kód, objektum)`-onként egy lelet, a súlyosabb. Bájtra azonos futásról futásra (nincs időbélyeg).
 - `zold`: nincs felül nem bírált hiba. `atadhato`: zöld, vagy minden nyitott hiba „téves hiba?” jelölésű.
 - `allapot`: ✓ nincs lelet, `!` csak figyelmeztetés, ✗ hiba.
@@ -106,7 +107,10 @@ az egyenlő szószámú csere minden eltérő párja
 - **K4 vonal és szöveg:** a vonal metszi a szöveget (a doboz 4 px-es belsejében), vagy a szélén fut (a
   doboztól legfeljebb 2 px-re, `ERINT_PX`: a vonás a betűkhöz ér; méretvonal a címkén, címke a test élén). A
   `ra` kapcsoló a `vonatkozik`-kal deklarált jelölésen (fókuszkeret, kiemelés, nyíl) csak a saját céljait menti
-  fel (amit körülvesz), más feliratot nem; `vonatkozik` nélkül mindent (szám a régióban).
+  fel (amit körülvesz), más feliratot nem. Cél nélkül a vonal `ra`-ja csak akkor mentesít egy feliratot,
+  ha a teljes jel pontosan egy felirat 12 px-rel bővített dobozába fér (régi aláhúzás, áthúzás).
+  Egy egész ábracsoport `ra`-ja tehát nem rejtheti el a címkén átmenő szögívet. A szövegre adott
+  `ra` továbbra is a szöveg saját vonalmetszését engedi meg; szöveg–szöveg átfedést soha.
   Érintkezés nélkül is **figy**, ha a szövegdoboz és egy külön csoportba tartozó vonal között
   12 px-nél kisebb a rés (`CIMKE_RES_PX`, a napló 1920×1080-as koordinátáiban). A `vonatkozik`-kal
   deklarált jelölés (például keret, áthúzás, régió vagy nyíl) vonala és egy idegen felirat között 8 px rés elég
@@ -147,6 +151,66 @@ az egyenlő szószámú csere minden eltérő párja
   (kivágaton ellenőrizve), új K7- és K1-lelet nincs; a lektori kapurés-leletek régi változatain mind megjelennek.
 - K8a a `--vegleges` dolga: `kapu.k8a(mp4) -> list[lelet]` (ffprobe: 1 videó- és 1 hangsáv, se fejezet,
   se felirat, se cím-metaadat); üres lista = rendben.
+
+## A változás szava és sebessége
+
+**K2b, új képlet:** a teljes saját képlet első megjelenésekor a kötetlen képlet
+figyelmeztetésén `uj_keplet: true` áll, ha nem a jelenet nyitó lépése. A tartalomcsere és az
+átlátszóság utáni megjelenés is számít. Az újdonságot a szóközöktől eltekintve pontos
+szövegegyezés dönti el; ez nem tartalmi ítélet. Az indokolt `elfogad` kivétel érvényes marad,
+és a tábla fejlécében külön `új képlet elfogadva: lépés/obj/indok` sor hívja fel rá a lektor
+figyelmét. Így a sorváz, tengelynév és visszautalás elfogadása is ellenőrizhető.
+A K2b a tag saját szavához (`e.szo`, ennek hiányában az objektum `szo` attribútuma) méri
+a tényleges megjelenést, ha ez a szó elhangzik az adott lépésben. Egy másik szóhoz kötött
+szakasz ezt nem helyettesíti. Ha a saját szó nem hangzik el, a kapu az explicit `kotes_szo`-t
+vagy az örökölt szakaszkötést használja. Kötött megjelenésnél az elavult saját szó hiánya
+nem figyelmeztetés. A számként megadott szó a kimondott számértékhez is illeszkedik.
+
+**K1, a rajz vagy mozgás időzítése:** a `Szora`/`Horgony` a vele induló szakaszra érvényes,
+a következő kötésig, az adott lépésen belül. A napló csak a szakasz első play-ére írja a kötést;
+a további elemek öröklik. Későbbi kötést a korábbi elem nem örököl. Megjelenésnél a `jelol(szo=…)`
+is megadja a szót; mozgásnál a régi megjelenési szó nem számít. A kapu a kötött szakasz
+indulását méri a szóhoz: 0,3 s-nál nagyobb előrefutás vagy 1 s-nál nagyobb késés **figy**.
+Kötés vagy megtalálható szóidő nélkül nincs mért eltérés, ezért ebből nem keletkezik lelet.
+
+A kötetlen, nem szöveges megjelenések és a mozgások a `kotetlen_valtozasok` listába kerülnek,
+és a tábla saját lépéssorában jelennek meg: például `kötetlen: pont +0,2 (mozgás)`.
+Ez lektori adat. Annak eldöntése, hogy melyik tagmondat szól a változásról, a videólektoré
+(mérce 2. szabály). A semleges nyitó színpad, a kiemelés és a deklarált célra rajzolt keret/nyíl
+nem kerül ebbe a listába. A K9 meglévő változásszám-ellenőrzése ettől független.
+
+**K14, követhető mozgás:** a ledarálásra figyelmeztető mérés a mérce 11. szabályának
+8. magyarázó elemét támogatja. A forgatás határa a diagnózis alapján 60°/s, ha két képrészt
+kell együtt követni, és 120°/s önálló forgatásnál; a kerekítési tűrés 1°/s.
+Ez egy negyedfordulatra 1,5, illetve 0,75 s-ot hagy. Eltolásnál a 24 px fölötti tartalmi
+mozgást jelzi, ha rövidebb kb. 0,5 s-nál. A kockára kerekítés tűrése fél képkocka.
+A tényleges kockaszámból számolt idő számít, nem a kódban kért animációhossz.
+A 24 px-ig terjedő eltolás és a 10° alatti fordulat apró igazításnak számít.
+Ezek figyelmeztetési beállítások, nem új mérceszabályok vagy élettani határok.
+
+A mérce 2. szabálya adja a szinkron követelményét, a 3. az elem és jelölése sorrendjét,
+a 6. a stabil elrendezést, a 9. a semleges színpad és a beszéd viszonyát. A 11. szabályban
+megengedett sorfeljebb lépés is lehet túl rövid; a kapu a mozgás idejét méri, az indokoltságot
+a lektor bírálja el.
+
+A mérés azonos alak eltolását, illetve közös végpontú, azonos hosszú sugár elfordulását
+keresi a két végállapotban. A változatlan szakaszokat nem párosítja más szakaszokkal.
+Forgatásnál csak a sugár két állása közti kisebb szög számít (legfeljebb 180°);
+a szögív alakja és mérete nem növeli a mért fordulatot. A két képrész
+felismerése geometriai becslés: külön futó kis jelek, távolra érő pálya vagy távoli,
+egyidejű másik tartalmi mozgás. Nincs tantárgyra vagy objektumnévre írt kivétel.
+
+Az eredmény **alsó becslés**: a köztes gyorsulást és visszafordulást nem igazolja.
+Azonos sugárállás mellett egy megjelenő teljes kör nem bizonyít teljes fordulatot.
+Több mozgás vagy alakváltozás hiányzó köztes állapota `nem_mert` adatot kap, nem mért
+nullát és nem leletet. Az újonnan megjelenő vagy a végére eltűnő elem két összevethető
+állapot híján ebből a naplóformátumból nem mérhető.
+
+A `kapu.json` `mozgas_meres` listája a határ alatti méréseket is megőrzi (`tol`, `ig`, `ido_s`,
+`fok`, `fok_s`, `kuszob_fok_s`, illetve `ut_px`, `px_s`, `min_ido_s`; hiánynál `nem_mert`).
+A `px_s` tájékoztató adat, az eltolási döntés a `min_ido_s` alapján születik.
+A K14-lelet `meres` mezőjében is ott a bizonyíték, a tábla a lépésnél kiírja a mérést.
+Azonos csoport azonos mozgása egy figyelmeztetést kap. K14 csak **figy**, nem új blokkolás.
 
 ## `kapu-kivetel.json` (az író és a vezérlő írja)
 
